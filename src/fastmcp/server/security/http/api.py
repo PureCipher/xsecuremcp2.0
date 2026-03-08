@@ -45,6 +45,8 @@ if TYPE_CHECKING:
     from fastmcp.server.security.federation.crl import CertificateRevocationList
     from fastmcp.server.security.federation.federation import TrustFederation
     from fastmcp.server.security.gateway.tool_marketplace import ToolMarketplace
+    from fastmcp.server.security.policy.audit import PolicyAuditLog
+    from fastmcp.server.security.policy.engine import PolicyEngine
     from fastmcp.server.security.provenance.ledger import ProvenanceLedger
     from fastmcp.server.security.registry.registry import TrustRegistry
 
@@ -77,6 +79,8 @@ class SecurityAPI:
     federation: TrustFederation | None = None
     crl: CertificateRevocationList | None = None
     event_bus: SecurityEventBus | None = None
+    policy_engine: PolicyEngine | None = None
+    policy_audit_log: PolicyAuditLog | None = None
 
     @classmethod
     def from_context(cls, ctx: Any) -> SecurityAPI:
@@ -104,6 +108,8 @@ class SecurityAPI:
             federation=getattr(ctx, "federation", None),
             crl=getattr(ctx, "crl", None),
             event_bus=getattr(ctx, "event_bus", None),
+            policy_engine=getattr(ctx, "policy_engine", None),
+            policy_audit_log=getattr(ctx, "policy_audit_log", None),
         )
 
     # ── Dashboard ─────────────────────────────────────────────
@@ -276,6 +282,99 @@ class SecurityAPI:
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
+    # ── Policy ────────────────────────────────────────────────
+
+    def get_policy_status(self) -> dict[str, Any]:
+        """Get policy engine status and provider list."""
+        if self.policy_engine is None:
+            return {"error": "Policy engine not configured", "status": 503}
+
+        providers = []
+        for p in self.policy_engine.providers:
+            providers.append({
+                "type": type(p).__name__,
+            })
+
+        return {
+            "evaluation_count": self.policy_engine.evaluation_count,
+            "deny_count": self.policy_engine.deny_count,
+            "fail_closed": self.policy_engine.fail_closed,
+            "allow_hot_swap": self.policy_engine.allow_hot_swap,
+            "provider_count": len(providers),
+            "providers": providers,
+            "has_audit_log": self.policy_audit_log is not None,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    def get_policy_audit(
+        self,
+        actor_id: str | None = None,
+        resource_id: str | None = None,
+        decision: str | None = None,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        """Query the policy audit log."""
+        if self.policy_audit_log is None:
+            return {"error": "Policy audit log not configured", "status": 503}
+
+        from fastmcp.server.security.policy.provider import PolicyDecision
+
+        decision_filter = None
+        if decision is not None:
+            decision_map = {
+                "allow": PolicyDecision.ALLOW,
+                "deny": PolicyDecision.DENY,
+                "defer": PolicyDecision.DEFER,
+            }
+            decision_filter = decision_map.get(decision.lower())
+
+        entries = self.policy_audit_log.query(
+            actor_id=actor_id,
+            resource_id=resource_id,
+            decision=decision_filter,
+            limit=limit,
+        )
+
+        return {
+            "total_entries": len(entries),
+            "entries": [e.to_dict() for e in entries],
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    def get_policy_audit_statistics(self) -> dict[str, Any]:
+        """Get aggregate statistics from the policy audit log."""
+        if self.policy_audit_log is None:
+            return {"error": "Policy audit log not configured", "status": 503}
+
+        return self.policy_audit_log.get_statistics()
+
+    async def simulate_policy(self, scenarios_data: list[dict]) -> dict[str, Any]:
+        """Run a policy simulation against the current engine."""
+        if self.policy_engine is None:
+            return {"error": "Policy engine not configured", "status": 503}
+
+        from fastmcp.server.security.policy.simulation import Scenario, simulate
+
+        scenarios = []
+        for s in scenarios_data:
+            scenarios.append(Scenario(
+                resource_id=s.get("resource_id", "unknown"),
+                action=s.get("action", "call_tool"),
+                actor_id=s.get("actor_id", "sim-actor"),
+                metadata=s.get("metadata", {}),
+                tags=frozenset(s.get("tags", [])),
+                label=s.get("label", ""),
+            ))
+
+        report = await simulate(self.policy_engine, scenarios)
+        return report.to_dict()
+
+    def get_policy_schema(self) -> dict[str, Any]:
+        """Get the declarative policy schema for the editor UI."""
+        from fastmcp.server.security.policy.declarative import dump_policy_schema
+
+        return dump_policy_schema()
+
     # ── Health ────────────────────────────────────────────────
 
     def get_health(self) -> dict[str, Any]:
@@ -298,6 +397,10 @@ class SecurityAPI:
             components["provenance"] = "ok"
         if self.event_bus:
             components["event_bus"] = "ok"
+        if self.policy_engine:
+            components["policy_engine"] = "ok"
+        if self.policy_audit_log:
+            components["policy_audit_log"] = "ok"
 
         return {
             "status": "healthy" if components else "unconfigured",
@@ -398,6 +501,39 @@ def mount_security_routes(
         limit = int(request.query_params.get("limit", "50"))
         return JSONResponse(api.get_provenance(resource_id=resource, actor_id=actor, limit=limit))
 
+    # Policy
+    @server.custom_route(f"{prefix}/policy", methods=["GET"])
+    async def policy_status_endpoint(request: Request) -> JSONResponse:
+        return JSONResponse(api.get_policy_status())
+
+    @server.custom_route(f"{prefix}/policy/audit", methods=["GET"])
+    async def policy_audit_endpoint(request: Request) -> JSONResponse:
+        actor = request.query_params.get("actor")
+        resource = request.query_params.get("resource")
+        decision = request.query_params.get("decision")
+        limit = int(request.query_params.get("limit", "50"))
+        return JSONResponse(api.get_policy_audit(
+            actor_id=actor,
+            resource_id=resource,
+            decision=decision,
+            limit=limit,
+        ))
+
+    @server.custom_route(f"{prefix}/policy/audit/stats", methods=["GET"])
+    async def policy_audit_stats_endpoint(request: Request) -> JSONResponse:
+        return JSONResponse(api.get_policy_audit_statistics())
+
+    @server.custom_route(f"{prefix}/policy/simulate", methods=["POST"])
+    async def policy_simulate_endpoint(request: Request) -> JSONResponse:
+        body = await request.json()
+        scenarios = body.get("scenarios", [])
+        result = await api.simulate_policy(scenarios)
+        return JSONResponse(result)
+
+    @server.custom_route(f"{prefix}/policy/schema", methods=["GET"])
+    async def policy_schema_endpoint(request: Request) -> JSONResponse:
+        return JSONResponse(api.get_policy_schema())
+
     # Health
     @server.custom_route(f"{prefix}/health", methods=["GET"])
     async def health_endpoint(request: Request) -> JSONResponse:
@@ -427,4 +563,6 @@ def _build_api_from_server(server: FastMCP) -> SecurityAPI:
         federation=getattr(ctx, "federation", None),
         crl=getattr(ctx, "crl", None),
         event_bus=getattr(ctx, "event_bus", None),
+        policy_engine=getattr(ctx, "policy_engine", None),
+        policy_audit_log=getattr(ctx, "policy_audit_log", None),
     )

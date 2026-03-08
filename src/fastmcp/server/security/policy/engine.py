@@ -23,6 +23,7 @@ from fastmcp.server.security.policy.provider import (
 
 if TYPE_CHECKING:
     from fastmcp.server.security.alerts.bus import SecurityEventBus
+    from fastmcp.server.security.policy.audit import PolicyAuditLog
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +86,7 @@ class PolicyEngine:
         fail_closed: bool = True,
         allow_hot_swap: bool = True,
         event_bus: SecurityEventBus | None = None,
+        audit_log: PolicyAuditLog | None = None,
     ) -> None:
         if providers is None:
             self._providers: list[PolicyProvider] = [AllowAllPolicy()]
@@ -96,6 +98,7 @@ class PolicyEngine:
         self.fail_closed = fail_closed
         self.allow_hot_swap = allow_hot_swap
         self._event_bus = event_bus
+        self._audit_log = audit_log
         self._swap_lock = asyncio.Lock()
         self._swap_history: list[PolicySwapRecord] = []
         self._evaluation_count: int = 0
@@ -115,6 +118,11 @@ class PolicyEngine:
     def deny_count(self) -> int:
         """Total number of DENY decisions."""
         return self._deny_count
+
+    @property
+    def audit_log(self) -> PolicyAuditLog | None:
+        """The attached audit log, if any."""
+        return self._audit_log
 
     @property
     def swap_history(self) -> list[PolicySwapRecord]:
@@ -137,6 +145,7 @@ class PolicyEngine:
             The aggregate PolicyResult.
         """
         self._evaluation_count += 1
+        start_time = datetime.now(timezone.utc)
 
         results: list[PolicyResult] = []
         for provider in self._providers:
@@ -176,6 +185,7 @@ class PolicyEngine:
                         context.action,
                         context.resource_id,
                     )
+                    self._record_audit(context, result, start_time)
                     return result
 
             except Exception:
@@ -185,42 +195,52 @@ class PolicyEngine:
                 )
                 if self.fail_closed:
                     self._deny_count += 1
-                    return PolicyResult(
+                    fail_result = PolicyResult(
                         decision=PolicyDecision.DENY,
                         reason="Policy evaluation failed (fail-closed)",
                         policy_id="engine-error",
                     )
+                    self._record_audit(context, fail_result, start_time)
+                    return fail_result
 
         # All providers evaluated without DENY
         if not results:
             if self.fail_closed:
                 self._deny_count += 1
-                return PolicyResult(
+                no_prov_result = PolicyResult(
                     decision=PolicyDecision.DENY,
                     reason="No policy providers configured (fail-closed)",
                     policy_id="engine-no-providers",
                 )
-            return PolicyResult(
+                self._record_audit(context, no_prov_result, start_time)
+                return no_prov_result
+            no_prov_allow = PolicyResult(
                 decision=PolicyDecision.ALLOW,
                 reason="No policy providers configured",
                 policy_id="engine-no-providers",
             )
+            self._record_audit(context, no_prov_allow, start_time)
+            return no_prov_allow
 
         # Check if all deferred
         all_deferred = all(r.decision == PolicyDecision.DEFER for r in results)
         if all_deferred:
             if self.fail_closed:
                 self._deny_count += 1
-                return PolicyResult(
+                defer_result = PolicyResult(
                     decision=PolicyDecision.DENY,
                     reason="All providers deferred (fail-closed)",
                     policy_id="engine-all-deferred",
                 )
-            return PolicyResult(
+                self._record_audit(context, defer_result, start_time)
+                return defer_result
+            defer_allow = PolicyResult(
                 decision=PolicyDecision.ALLOW,
                 reason="All providers deferred (fail-open)",
                 policy_id="engine-all-deferred",
             )
+            self._record_audit(context, defer_allow, start_time)
+            return defer_allow
 
         # At least one ALLOW, no DENY → aggregate ALLOW
         allow_result = next(r for r in results if r.decision == PolicyDecision.ALLOW)
@@ -229,12 +249,31 @@ class PolicyEngine:
         for r in results:
             all_constraints.extend(r.constraints)
 
-        return PolicyResult(
+        final_result = PolicyResult(
             decision=PolicyDecision.ALLOW,
             reason=allow_result.reason,
             policy_id=allow_result.policy_id,
             constraints=all_constraints,
         )
+        self._record_audit(context, final_result, start_time)
+        return final_result
+
+    def _record_audit(
+        self,
+        context: PolicyEvaluationContext,
+        result: PolicyResult,
+        start_time: datetime,
+    ) -> None:
+        """Record an evaluation to the audit log if one is attached."""
+        if self._audit_log is None:
+            return
+        elapsed_ms = (
+            datetime.now(timezone.utc) - start_time
+        ).total_seconds() * 1000
+        try:
+            self._audit_log.record(context, result, elapsed_ms=elapsed_ms)
+        except Exception:
+            logger.warning("Failed to record audit entry", exc_info=True)
 
     async def hot_swap(
         self,

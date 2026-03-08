@@ -15,6 +15,7 @@ from fastmcp.server.security.contracts.broker import ContextBroker
 from fastmcp.server.security.contracts.crypto import ContractCryptoHandler
 from fastmcp.server.security.contracts.exchange_log import ExchangeLog
 from fastmcp.server.security.contracts.schema import ContractTerm
+from fastmcp.server.security.policy.audit import PolicyAuditLog
 from fastmcp.server.security.policy.engine import PolicyEngine
 from fastmcp.server.security.policy.invariants import InvariantRegistry
 from fastmcp.server.security.policy.provider import PolicyProvider
@@ -51,6 +52,12 @@ class PolicyConfig:
         fail_closed: Deny on evaluation failure/error.
         allow_hot_swap: Permit runtime policy replacement.
         invariant_registry: Registry for formal verification invariants.
+        audit_log: Pre-built PolicyAuditLog. If None, one is auto-created.
+        audit_max_entries: Max entries for the auto-created audit log.
+        policy_file: Path or dict for declarative policy loading. When set,
+            the loaded policy is prepended to the providers list.
+        enable_versioning: If True, a PolicyVersionManager is created and
+            wired to the engine's hot-swap mechanism.
     """
 
     engine: PolicyEngine | None = None
@@ -58,15 +65,43 @@ class PolicyConfig:
     fail_closed: bool = True
     allow_hot_swap: bool = True
     invariant_registry: InvariantRegistry | None = None
+    audit_log: PolicyAuditLog | None = None
+    audit_max_entries: int = 10_000
+    policy_file: str | dict | None = None
+    enable_versioning: bool = False
+    backend: StorageBackend | None = None
 
-    def get_engine(self) -> PolicyEngine:
-        """Get or create the policy engine."""
+    def get_audit_log(self) -> PolicyAuditLog:
+        """Get or create the policy audit log."""
+        if self.audit_log is not None:
+            return self.audit_log
+        return PolicyAuditLog(max_entries=self.audit_max_entries)
+
+    def get_engine(self, *, audit_log: PolicyAuditLog | None = None) -> PolicyEngine:
+        """Get or create the policy engine.
+
+        Args:
+            audit_log: Optional audit log to attach to the engine.
+        """
         if self.engine is not None:
+            if audit_log is not None and self.engine._audit_log is None:
+                self.engine._audit_log = audit_log
             return self.engine
+
+        providers = list(self.providers) if self.providers else []
+
+        # Load declarative policy file if configured
+        if self.policy_file is not None:
+            from fastmcp.server.security.policy.declarative import load_policy
+
+            declarative_provider = load_policy(self.policy_file)
+            providers.insert(0, declarative_provider)
+
         return PolicyEngine(
-            providers=self.providers,
+            providers=providers or None,
             fail_closed=self.fail_closed,
             allow_hot_swap=self.allow_hot_swap,
+            audit_log=audit_log,
         )
 
 
