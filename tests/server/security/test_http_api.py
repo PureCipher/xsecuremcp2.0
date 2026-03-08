@@ -406,3 +406,68 @@ class TestMountRoutes:
         server = FastMCP("test-server")
         api = mount_security_routes(server)
         assert api is not None
+
+
+# ── from_context tests ──────────────────────────────────────
+
+
+class TestFromContext:
+    """Test SecurityAPI.from_context() factory method."""
+
+    def test_from_full_context(self):
+        from fastmcp.server.security.config import (
+            AlertConfig,
+            ComplianceConfig,
+            CRLConfig,
+            FederationConfig,
+            ProvenanceConfig,
+            RegistryConfig,
+            SecurityConfig,
+            ToolMarketplaceConfig,
+        )
+        from fastmcp.server.security.orchestrator import SecurityOrchestrator
+
+        config = SecurityConfig(
+            alerts=AlertConfig(),
+            provenance=ProvenanceConfig(),
+            registry=RegistryConfig(),
+            tool_marketplace=ToolMarketplaceConfig(),
+            federation=FederationConfig(),
+            crl_config=CRLConfig(),
+            compliance=ComplianceConfig(),
+        )
+        ctx = SecurityOrchestrator.bootstrap(config)
+        api = SecurityAPI.from_context(ctx)
+
+        assert api.dashboard is ctx.dashboard
+        assert api.marketplace is ctx.tool_marketplace
+        assert api.registry is ctx.registry
+        assert api.compliance_reporter is ctx.compliance_reporter
+        assert api.provenance_ledger is ctx.provenance_ledger
+        assert api.federation is ctx.federation
+        assert api.crl is ctx.crl
+        assert api.event_bus is ctx.event_bus
+
+    def test_from_partial_context(self):
+        from fastmcp.server.security.config import RegistryConfig, SecurityConfig
+        from fastmcp.server.security.orchestrator import SecurityOrchestrator
+
+        config = SecurityConfig(registry=RegistryConfig())
+        ctx = SecurityOrchestrator.bootstrap(config)
+        api = SecurityAPI.from_context(ctx)
+
+        assert api.registry is ctx.registry
+        assert api.dashboard is ctx.dashboard
+        assert api.marketplace is None
+        assert api.federation is None
+
+    def test_from_empty_context(self):
+        from fastmcp.server.security.config import SecurityConfig
+        from fastmcp.server.security.orchestrator import SecurityOrchestrator
+
+        ctx = SecurityOrchestrator.bootstrap(SecurityConfig())
+        api = SecurityAPI.from_context(ctx)
+
+        assert api.dashboard is ctx.dashboard
+        assert api.registry is None
+        assert api.marketplace is None

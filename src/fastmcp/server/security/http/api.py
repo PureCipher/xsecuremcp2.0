@@ -78,6 +78,34 @@ class SecurityAPI:
     crl: CertificateRevocationList | None = None
     event_bus: SecurityEventBus | None = None
 
+    @classmethod
+    def from_context(cls, ctx: Any) -> SecurityAPI:
+        """Create a SecurityAPI from a SecurityContext.
+
+        This is the recommended way to construct a SecurityAPI when
+        using the SecurityOrchestrator::
+
+            ctx = SecurityOrchestrator.bootstrap(config)
+            api = SecurityAPI.from_context(ctx)
+            mount_security_routes(server, api=api)
+
+        Args:
+            ctx: A SecurityContext returned by SecurityOrchestrator.bootstrap().
+
+        Returns:
+            A SecurityAPI wired to all components in the context.
+        """
+        return cls(
+            dashboard=getattr(ctx, "dashboard", None),
+            marketplace=getattr(ctx, "tool_marketplace", None),
+            registry=getattr(ctx, "registry", None),
+            compliance_reporter=getattr(ctx, "compliance_reporter", None),
+            provenance_ledger=getattr(ctx, "provenance_ledger", None),
+            federation=getattr(ctx, "federation", None),
+            crl=getattr(ctx, "crl", None),
+            event_bus=getattr(ctx, "event_bus", None),
+        )
+
     # ── Dashboard ─────────────────────────────────────────────
 
     def get_dashboard(self) -> dict[str, Any]:

@@ -395,3 +395,46 @@ class TestImports:
             TimelineType,
         )
         assert SecurityDashboard is not None
+
+
+# ── Snapshot summary marketplace stats tests ─────────────────
+
+
+class TestSnapshotMarketplaceStats:
+    """Verify that snapshot summary correctly captures marketplace
+    published_listings count.  Covers the fix where snapshot.py
+    used stats.get('published') instead of stats.get('published_listings').
+    """
+
+    def test_published_tools_in_summary(self):
+        marketplace = ToolMarketplace()
+        marketplace.publish("tool-a", display_name="Tool A")
+        marketplace.publish("tool-b", display_name="Tool B")
+        marketplace.publish("tool-c", display_name="Tool C")
+
+        dash = SecurityDashboard(marketplace=marketplace)
+        snap = dash.generate_snapshot()
+        assert snap.summary["published_tools"] == 3
+
+    def test_published_tools_zero_when_empty(self):
+        marketplace = ToolMarketplace()
+        dash = SecurityDashboard(marketplace=marketplace)
+        snap = dash.generate_snapshot()
+        assert snap.summary["published_tools"] == 0
+
+    def test_marketplace_health_message_includes_count(self):
+        marketplace = ToolMarketplace()
+        marketplace.publish("tool-x", display_name="Tool X")
+        marketplace.publish("tool-y", display_name="Tool Y")
+
+        dash = SecurityDashboard(marketplace=marketplace)
+        health = dash._check_marketplace_health()
+        assert "2" in health.message
+        assert "published" in health.message.lower()
+
+    def test_total_installs_in_summary(self):
+        marketplace = ToolMarketplace()
+        marketplace.publish("tool-a", display_name="Tool A")
+        dash = SecurityDashboard(marketplace=marketplace)
+        snap = dash.generate_snapshot()
+        assert "total_installs" in snap.summary

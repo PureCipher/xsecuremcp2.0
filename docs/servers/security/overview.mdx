@@ -31,37 +31,43 @@ SecureMCP is organized into composable layers that can be used independently or 
 
 ## Quick Start
 
+The recommended approach uses `SecurityOrchestrator` to bootstrap all components from a declarative config. The orchestrator handles dependency ordering, event bus injection, and cross-wiring automatically.
+
 ```python
 from fastmcp import FastMCP
-from fastmcp.server.security.alerts.bus import SecurityEventBus
-from fastmcp.server.security.compliance.reports import ComplianceReporter
-from fastmcp.server.security.dashboard.snapshot import SecurityDashboard
-from fastmcp.server.security.federation.crl import CertificateRevocationList
-from fastmcp.server.security.federation.federation import TrustFederation
-from fastmcp.server.security.gateway.tool_marketplace import (
-    ToolCategory,
-    ToolMarketplace,
+from fastmcp.server.security.config import (
+    AlertConfig,
+    ComplianceConfig,
+    CRLConfig,
+    FederationConfig,
+    ProvenanceConfig,
+    RegistryConfig,
+    SecurityConfig,
+    ToolMarketplaceConfig,
 )
+from fastmcp.server.security.gateway.tool_marketplace import ToolCategory
 from fastmcp.server.security.http import SecurityAPI, mount_security_routes
-from fastmcp.server.security.provenance.ledger import ProvenanceLedger
-from fastmcp.server.security.registry.registry import TrustRegistry
+from fastmcp.server.security.orchestrator import SecurityOrchestrator
 
 server = FastMCP("my-secure-server")
 
-# Create components
-registry = TrustRegistry()
-event_bus = SecurityEventBus()
-marketplace = ToolMarketplace(trust_registry=registry, event_bus=event_bus)
-provenance = ProvenanceLedger(event_bus=event_bus)
-federation = TrustFederation(event_bus=event_bus)
-crl = CertificateRevocationList()
-compliance = ComplianceReporter()
+# Define what you need — omit any config you don't
+config = SecurityConfig(
+    alerts=AlertConfig(),
+    provenance=ProvenanceConfig(),
+    registry=RegistryConfig(),
+    tool_marketplace=ToolMarketplaceConfig(),
+    federation=FederationConfig(),
+    crl_config=CRLConfig(),
+    compliance=ComplianceConfig(),
+)
 
-# Register a tool
-registry.register("my-tool", tool_version="1.0.0", author="acme")
+# Bootstrap everything in one call
+ctx = SecurityOrchestrator.bootstrap(config, server_name="my-secure-server")
 
-# Publish to marketplace
-marketplace.publish(
+# Register and publish a tool
+ctx.registry.register("my-tool", tool_version="1.0.0", author="acme")
+ctx.tool_marketplace.publish(
     "my-tool",
     display_name="My Tool",
     description="Does useful things.",
@@ -70,31 +76,91 @@ marketplace.publish(
     categories={ToolCategory.UTILITY},
 )
 
-# Mount REST API
-dashboard = SecurityDashboard(
-    registry=registry,
-    marketplace=marketplace,
-    federation=federation,
-    crl=crl,
-    compliance_reporter=compliance,
-    event_bus=event_bus,
-)
-api = SecurityAPI(
-    dashboard=dashboard,
-    marketplace=marketplace,
-    registry=registry,
-    compliance_reporter=compliance,
-    provenance_ledger=provenance,
-    federation=federation,
-    crl=crl,
-    event_bus=event_bus,
-)
+# Mount the REST API (auto-wired from context)
+api = SecurityAPI.from_context(ctx)
 mount_security_routes(server, api=api)
+
+# Install middleware (policy → contracts → provenance → reflexive → consent)
+for mw in ctx.middleware:
+    server.add_middleware(mw)
 
 server.run(transport="streamable-http")
 ```
 
 After starting, visit `http://localhost:8000/security/health` to verify the security layer is active.
+
+## SecurityOrchestrator
+
+`SecurityOrchestrator.bootstrap()` is a stateless factory that reads a `SecurityConfig` and returns a `SecurityContext` with all requested components instantiated, cross-wired, and ready to use.
+
+```python
+ctx = SecurityOrchestrator.bootstrap(config, server_name="my-server")
+```
+
+The bootstrap process follows a fixed dependency order: event bus → policy → contracts → provenance → reflexive → consent → registry → CRL → federation → tool marketplace → compliance → sandbox → certification → gateway → dashboard. Components that depend on others (e.g., federation needs registry + CRL) receive their dependencies automatically.
+
+### SecurityContext
+
+The returned `SecurityContext` gives typed access to every component:
+
+```python
+ctx.event_bus              # SecurityEventBus
+ctx.policy_engine          # PolicyEngine
+ctx.broker                 # ContextBroker
+ctx.provenance_ledger      # ProvenanceLedger
+ctx.behavioral_analyzer    # BehavioralAnalyzer
+ctx.escalation_engine      # EscalationEngine
+ctx.consent_graph          # ConsentGraph
+ctx.registry               # TrustRegistry
+ctx.tool_marketplace       # ToolMarketplace
+ctx.federation             # TrustFederation
+ctx.crl                    # CertificateRevocationList
+ctx.compliance_reporter    # ComplianceReporter
+ctx.sandbox_runner         # SandboxedRunner
+ctx.certification_pipeline # CertificationPipeline
+ctx.dashboard              # SecurityDashboard
+ctx.middleware             # list — ordered middleware instances
+ctx.gateway_tools          # dict — MCP tool callables from gateway
+```
+
+Every field is `None` unless its corresponding config section was provided. The dashboard is always created (even with an empty config) so it can report health for whatever components exist.
+
+## SecurityConfig
+
+`SecurityConfig` is a dataclass that controls which components are created. Each sub-config has a factory method that the orchestrator calls during bootstrap.
+
+| Sub-config | Component created | Key parameters |
+|-----------|-------------------|----------------|
+| `AlertConfig` | `SecurityEventBus` | `propagate_to_components` (inject bus into all layers) |
+| `PolicyConfig` | `PolicyEngine` | `providers` (list of policy providers) |
+| `ContractConfig` | `ContextBroker` | `require_for_list`, `crypto_handler` |
+| `ProvenanceConfig` | `ProvenanceLedger` | `record_list_operations` |
+| `ReflexiveConfig` | `BehavioralAnalyzer` + `EscalationEngine` | `window_size`, rules |
+| `ConsentConfig` | `ConsentGraph` | `resource_owner`, `require_for_list` |
+| `RegistryConfig` | `TrustRegistry` | Pass a pre-built `registry` instance, or let it create one |
+| `ToolMarketplaceConfig` | `ToolMarketplace` | Auto-wired to registry + event bus |
+| `FederationConfig` | `TrustFederation` | `federation_id`; auto-wired to registry + CRL |
+| `CRLConfig` | `CertificateRevocationList` | Pass a pre-built `crl` instance |
+| `ComplianceConfig` | `ComplianceReporter` | `framework` (custom `ComplianceFramework`) |
+| `SandboxConfig` | `SandboxedRunner` | Auto-wired to CRL |
+| `CertificationConfig` | `CertificationPipeline` | Auto-wired to marketplace |
+| `GatewayConfig` | `Marketplace` + `AuditAPI` | `register_tools` |
+
+Each config class also accepts a pre-built component instance. This is useful when you need to configure a component before bootstrap:
+
+```python
+from fastmcp.server.security.config import RegistryConfig, SecurityConfig
+from fastmcp.server.security.registry.registry import TrustRegistry
+
+my_registry = TrustRegistry()
+my_registry.register("pre-existing-tool", tool_version="1.0.0")
+
+config = SecurityConfig(
+    registry=RegistryConfig(registry=my_registry),
+)
+ctx = SecurityOrchestrator.bootstrap(config)
+# ctx.registry is my_registry with "pre-existing-tool" already registered
+```
 
 ## HTTP API Endpoints
 
@@ -108,7 +174,7 @@ All endpoints are mounted under `/security` by default (configurable via the `pr
 | `GET /security/marketplace/{id}` | Single listing detail view |
 | `GET /security/trust` | Trust registry overview with all tool scores |
 | `GET /security/trust/{tool}` | Trust score breakdown for a specific tool |
-| `GET /security/compliance` | Compliance report (supports `?type=full\|summary\|executive`) |
+| `GET /security/compliance` | Compliance report (supports `?type=full|summary|executive`) |
 | `GET /security/federation` | Federation peer status |
 | `GET /security/revocations` | Certificate revocation list |
 | `GET /security/revocations/{tool}` | Check if a specific tool is revoked |
@@ -119,13 +185,20 @@ All endpoints are mounted under `/security` by default (configurable via the `pr
 Each component is optional. If you only need trust scoring, create just a `TrustRegistry`. If you only need provenance, create just a `ProvenanceLedger`. The `SecurityAPI` gracefully returns `503` responses for unconfigured components.
 
 ```python
-# Minimal setup — just trust scoring
 from fastmcp.server.security.registry.registry import TrustRegistry
 
 registry = TrustRegistry()
 registry.register("my-tool", tool_version="1.0.0")
 score = registry.get_trust_score("my-tool")
 print(f"Trust: {score.overall:.2f}")
+```
+
+You can also use the orchestrator with a minimal config — only the components you configure will be created:
+
+```python
+config = SecurityConfig(registry=RegistryConfig())
+ctx = SecurityOrchestrator.bootstrap(config)
+# Only ctx.registry and ctx.dashboard are populated; everything else is None
 ```
 
 ## Event Bus
@@ -147,6 +220,8 @@ bus.subscribe(
 )
 ```
 
+When using the orchestrator, set `AlertConfig(propagate_to_components=True)` to automatically inject the event bus into every component that supports it.
+
 ## React Dashboard
 
 SecureMCP includes two React frontends:
@@ -154,4 +229,13 @@ SecureMCP includes two React frontends:
 - **securemcp-dashboard.jsx** — Health monitoring, trust timeline, compliance overview, component status, and activity feed
 - **securemcp-marketplace.jsx** — Tool discovery with search, category filters, reviews, and install tracking
 
-Both accept a `liveData` prop for real-time backend data and fall back to demo data when no prop is provided.
+Both accept a `liveData` prop for real-time backend data and fall back to demo data when no prop is provided. Generate the `liveData` JSON from the Python backend:
+
+```python
+from fastmcp.server.security.dashboard.data_bridge import DashboardDataBridge
+
+bridge = DashboardDataBridge(dashboard=ctx.dashboard)
+live_data = bridge.export()  # dict ready to pass as liveData prop
+```
+
+The HTTP API's `/security/dashboard` endpoint returns this same JSON, so the React components can fetch it directly.

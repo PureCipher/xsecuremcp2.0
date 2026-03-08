@@ -10,7 +10,12 @@ import json
 
 import pytest
 
-from fastmcp.server.security.compliance.frameworks import ComplianceFramework
+from fastmcp.server.security.compliance.frameworks import (
+    ComplianceFramework,
+    ComplianceRequirement,
+    ComplianceStatus,
+    RequirementCategory,
+)
 from fastmcp.server.security.compliance.reports import ComplianceReporter
 from fastmcp.server.security.dashboard.data_bridge import DashboardDataBridge
 from fastmcp.server.security.dashboard.snapshot import (
@@ -354,3 +359,125 @@ class TestAverageTrust:
         bridge = DashboardDataBridge(dashboard=empty_dashboard)
         data = bridge.export()
         assert data["health_banner"]["avg_trust"] == 0.0
+
+
+# ── Compliance section code-path tests ───────────────────────
+
+
+class TestComplianceSections:
+    """Exercises the data_bridge compliance code path that iterates
+    report.sections and accesses section.name / section.findings.
+
+    The populated_dashboard fixture uses an empty framework so the
+    bridge falls through to the fallback path.  These tests wire up
+    a real framework with requirements so generate_report() produces
+    actual ReportSection objects.
+    """
+
+    @pytest.fixture()
+    def compliance_dashboard(self):
+        fw = ComplianceFramework(name="TestFramework")
+        fw.add_requirement(
+            ComplianceRequirement(
+                requirement_id="req-ac-1",
+                name="Access Control Active",
+                category=RequirementCategory.ACCESS_CONTROL,
+            )
+        )
+        fw.add_requirement(
+            ComplianceRequirement(
+                requirement_id="req-ac-2",
+                name="MFA Enabled",
+                category=RequirementCategory.ACCESS_CONTROL,
+            )
+        )
+        fw.add_requirement(
+            ComplianceRequirement(
+                requirement_id="req-audit-1",
+                name="Audit Logging Active",
+                category=RequirementCategory.AUDIT_LOGGING,
+            )
+        )
+
+        reporter = ComplianceReporter(framework=fw)
+
+        # Register checks: first passes, second fails, third passes
+        reporter.register_check(
+            "req-ac-1",
+            lambda: (ComplianceStatus.COMPLIANT, "OK", {}),
+        )
+        reporter.register_check(
+            "req-ac-2",
+            lambda: (ComplianceStatus.NON_COMPLIANT, "MFA not enabled", {}),
+        )
+        reporter.register_check(
+            "req-audit-1",
+            lambda: (ComplianceStatus.COMPLIANT, "Logging active", {}),
+        )
+
+        return SecurityDashboard(compliance_reporter=reporter)
+
+    def test_sections_returned_not_fallback(self, compliance_dashboard):
+        bridge = DashboardDataBridge(dashboard=compliance_dashboard)
+        data = bridge.build_compliance_data()
+        # Should have 2 sections (Access Control + Audit Logging), not
+        # the single "Overall" fallback entry.
+        assert len(data) == 2
+        names = {d["name"] for d in data}
+        assert "Access Control" in names
+        assert "Audit Logging" in names
+
+    def test_section_scores_computed(self, compliance_dashboard):
+        bridge = DashboardDataBridge(dashboard=compliance_dashboard)
+        data = bridge.build_compliance_data()
+        by_name = {d["name"]: d for d in data}
+
+        ac = by_name["Access Control"]
+        assert ac["total"] == 2
+        assert ac["passed"] == 1
+        assert ac["score"] == 50  # 1/2 = 50%
+
+        audit = by_name["Audit Logging"]
+        assert audit["total"] == 1
+        assert audit["passed"] == 1
+        assert audit["score"] == 100  # 1/1 = 100%
+
+    def test_section_dict_keys(self, compliance_dashboard):
+        bridge = DashboardDataBridge(dashboard=compliance_dashboard)
+        data = bridge.build_compliance_data()
+        for entry in data:
+            assert "name" in entry
+            assert "score" in entry
+            assert "total" in entry
+            assert "passed" in entry
+
+    def test_all_compliant_framework(self):
+        fw = ComplianceFramework(name="AllPass")
+        fw.add_requirement(
+            ComplianceRequirement(
+                requirement_id="r1",
+                name="Check One",
+                category=RequirementCategory.DATA_PROTECTION,
+            )
+        )
+        reporter = ComplianceReporter(framework=fw)
+        reporter.register_check(
+            "r1",
+            lambda: (ComplianceStatus.COMPLIANT, "OK", {}),
+        )
+        dash = SecurityDashboard(compliance_reporter=reporter)
+        bridge = DashboardDataBridge(dashboard=dash)
+        data = bridge.build_compliance_data()
+        assert len(data) == 1
+        assert data[0]["score"] == 100
+        assert data[0]["name"] == "Data Protection"
+
+    def test_empty_framework_uses_fallback(self):
+        fw = ComplianceFramework(name="Empty")
+        reporter = ComplianceReporter(framework=fw)
+        dash = SecurityDashboard(compliance_reporter=reporter)
+        bridge = DashboardDataBridge(dashboard=dash)
+        data = bridge.build_compliance_data()
+        # No requirements → no sections → fallback
+        assert len(data) == 1
+        assert data[0]["name"] == "Overall"

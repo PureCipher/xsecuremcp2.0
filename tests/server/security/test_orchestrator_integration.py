@@ -307,3 +307,192 @@ class TestBuildAPIFromServer:
         assert api.federation is full_ctx.federation
         assert api.crl is full_ctx.crl
         assert api.event_bus is full_ctx.event_bus
+
+
+# ── Component failure isolation tests ────────────────────────
+
+
+class TestComponentIsolation:
+    """Verify that one missing component doesn't break others."""
+
+    def test_federation_without_registry_or_crl(self):
+        """Federation should bootstrap even with no registry or CRL to wire."""
+        config = SecurityConfig(
+            federation=FederationConfig(),
+        )
+        ctx = SecurityOrchestrator.bootstrap(config)
+        assert ctx.federation is not None
+        assert ctx.registry is None
+        assert ctx.crl is None
+        # federation status still works
+        status = ctx.federation.get_federation_status()
+        assert "peer_count" in status
+
+    def test_sandbox_without_crl(self):
+        """SandboxedRunner should work even with no CRL provided."""
+        config = SecurityConfig(sandbox=SandboxConfig())
+        ctx = SecurityOrchestrator.bootstrap(config)
+        assert ctx.sandbox_runner is not None
+        assert ctx.crl is None
+
+    def test_dashboard_with_empty_components(self):
+        """Dashboard should report health even with no real components."""
+        config = SecurityConfig()
+        ctx = SecurityOrchestrator.bootstrap(config)
+        snap = ctx.dashboard.generate_snapshot()
+        assert snap is not None
+        assert snap.overall_health is not None
+
+    def test_dashboard_with_only_registry(self):
+        """Dashboard should include registry health, skip others."""
+        config = SecurityConfig(
+            registry=RegistryConfig(),
+            alerts=AlertConfig(),
+        )
+        ctx = SecurityOrchestrator.bootstrap(config)
+        snap = ctx.dashboard.generate_snapshot()
+        assert snap is not None
+
+    def test_multiple_partial_configs_independent(self):
+        """Two separate bootstraps shouldn't share state."""
+        config_a = SecurityConfig(registry=RegistryConfig())
+        config_b = SecurityConfig(
+            tool_marketplace=ToolMarketplaceConfig(),
+        )
+        ctx_a = SecurityOrchestrator.bootstrap(config_a)
+        ctx_b = SecurityOrchestrator.bootstrap(config_b)
+
+        ctx_a.registry.register("tool-a", tool_version="1.0")
+        assert ctx_a.registry.record_count == 1
+        assert ctx_b.registry is None
+        assert ctx_b.tool_marketplace is not None
+
+
+# ── API graceful degradation tests ───────────────────────────
+
+
+class TestAPIGracefulDegradation:
+    """Verify that SecurityAPI returns 503 for unconfigured components
+    while still serving configured ones."""
+
+    def test_mixed_configured_and_unconfigured(self):
+        """Registry configured but marketplace not → trust works, marketplace 503."""
+        from fastmcp.server.security.http.api import SecurityAPI
+
+        config = SecurityConfig(
+            registry=RegistryConfig(),
+            alerts=AlertConfig(),
+        )
+        ctx = SecurityOrchestrator.bootstrap(config)
+        ctx.registry.register("tool-x", tool_version="1.0")
+
+        api = SecurityAPI(
+            registry=ctx.registry,
+            dashboard=ctx.dashboard,
+            event_bus=ctx.event_bus,
+        )
+
+        # Trust registry works
+        trust_result = api.get_trust_registry()
+        assert trust_result["total_tools"] == 1
+
+        # Marketplace returns 503
+        marketplace_result = api.get_marketplace()
+        assert marketplace_result.get("status") == 503
+
+    def test_health_reports_partial_components(self):
+        """Health endpoint should report configured components as healthy
+        and not crash on missing ones."""
+        from fastmcp.server.security.http.api import SecurityAPI
+
+        config = SecurityConfig(
+            registry=RegistryConfig(),
+            crl_config=CRLConfig(),
+        )
+        ctx = SecurityOrchestrator.bootstrap(config)
+
+        api = SecurityAPI(
+            registry=ctx.registry,
+            crl=ctx.crl,
+            dashboard=ctx.dashboard,
+        )
+        health = api.get_health()
+        assert health["status"] in ("healthy", "degraded", "partial")
+        assert "components" in health
+
+    def test_provenance_503_when_not_configured(self):
+        from fastmcp.server.security.http.api import SecurityAPI
+
+        api = SecurityAPI()
+        result = api.get_provenance()
+        assert result.get("status") == 503
+        assert "not configured" in result.get("error", "").lower()
+
+    def test_compliance_503_when_not_configured(self):
+        from fastmcp.server.security.http.api import SecurityAPI
+
+        api = SecurityAPI()
+        result = api.get_compliance_report()
+        assert result.get("status") == 503
+        assert "not configured" in result.get("error", "").lower()
+
+    def test_federation_503_when_not_configured(self):
+        from fastmcp.server.security.http.api import SecurityAPI
+
+        api = SecurityAPI()
+        result = api.get_federation_status()
+        assert result.get("status") == 503
+        assert "not configured" in result.get("error", "").lower()
+
+    def test_revocations_503_when_not_configured(self):
+        from fastmcp.server.security.http.api import SecurityAPI
+
+        api = SecurityAPI()
+        result = api.get_revocations()
+        assert result.get("status") == 503
+        assert "not configured" in result.get("error", "").lower()
+
+
+# ── Config pre-built instance tests ──────────────────────────
+
+
+class TestPreBuiltInstances:
+    """Verify that passing pre-built instances through config works."""
+
+    def test_pre_built_registry_preserved(self):
+        from fastmcp.server.security.registry.registry import TrustRegistry
+
+        my_registry = TrustRegistry()
+        my_registry.register("pre-existing", tool_version="0.1")
+
+        config = SecurityConfig(
+            registry=RegistryConfig(registry=my_registry),
+        )
+        ctx = SecurityOrchestrator.bootstrap(config)
+        assert ctx.registry is my_registry
+        assert ctx.registry.record_count == 1
+
+    def test_pre_built_crl_preserved(self):
+        from fastmcp.server.security.federation.crl import CertificateRevocationList
+
+        my_crl = CertificateRevocationList()
+        my_crl.revoke("revoked-tool")
+
+        config = SecurityConfig(crl_config=CRLConfig(crl=my_crl))
+        ctx = SecurityOrchestrator.bootstrap(config)
+        assert ctx.crl is my_crl
+        assert ctx.crl.is_revoked("revoked-tool")
+
+    def test_pre_built_compliance_reporter(self):
+        from fastmcp.server.security.compliance.frameworks import ComplianceFramework
+        from fastmcp.server.security.compliance.reports import ComplianceReporter
+
+        fw = ComplianceFramework(name="Custom")
+        reporter = ComplianceReporter(framework=fw)
+
+        config = SecurityConfig(
+            compliance=ComplianceConfig(reporter=reporter),
+        )
+        ctx = SecurityOrchestrator.bootstrap(config)
+        assert ctx.compliance_reporter is reporter
+        assert ctx.compliance_reporter.framework.name == "Custom"
