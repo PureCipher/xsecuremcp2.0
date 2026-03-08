@@ -5,6 +5,7 @@ Includes composable policy operators, built-in policy types, a fluent builder
 API, and policy versioning with rollback.
 """
 
+from fastmcp.server.security.policy.audit import AuditEntry, PolicyAuditLog
 from fastmcp.server.security.policy.builders import PolicyBuilder
 from fastmcp.server.security.policy.composition import AllOf, AnyOf, FirstMatch, Not
 from fastmcp.server.security.policy.declarative import (
@@ -47,6 +48,7 @@ from fastmcp.server.security.policy.versioning import (
 __all__ = [
     "AllOf",
     "AllowlistPolicy",
+    "AuditEntry",
     "AnyOf",
     "AttributeBasedPolicy",
     "DenylistPolicy",
@@ -55,6 +57,7 @@ __all__ = [
     "InvariantVerificationResult",
     "InvariantVerifier",
     "Not",
+    "PolicyAuditLog",
     "PolicyBuilder",
     "PolicyDecision",
     "PolicyEngine",
