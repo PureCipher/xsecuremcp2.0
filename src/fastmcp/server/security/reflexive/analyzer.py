@@ -60,6 +60,9 @@ class BehavioralAnalyzer:
     Args:
         sigma_thresholds: Custom sigma thresholds for severity levels.
         min_samples: Minimum observations before drift detection activates.
+        detectors: Optional list of pluggable AnomalyDetector instances.
+            Each detector is evaluated on every ``observe()`` call and
+            can independently produce drift events.
     """
 
     def __init__(
@@ -70,6 +73,7 @@ class BehavioralAnalyzer:
         analyzer_id: str = "default",
         backend: StorageBackend | None = None,
         event_bus: SecurityEventBus | None = None,
+        detectors: list[Any] | None = None,
     ) -> None:
         self.analyzer_id = analyzer_id
         self._backend = backend
@@ -78,6 +82,7 @@ class BehavioralAnalyzer:
         self._sigma_thresholds = sigma_thresholds or dict(_DEFAULT_SIGMA_THRESHOLDS)
         self._min_samples = min_samples
         self._drift_history: list[DriftEvent] = []
+        self._detectors: list[Any] = list(detectors or [])
 
         # Load persisted state
         if self._backend is not None:
@@ -211,6 +216,64 @@ class BehavioralAnalyzer:
                 baseline_to_dict(baseline),
             )
 
+        # Run pluggable detectors
+        for detector in self._detectors:
+            try:
+                detector_events = detector.observe(
+                    actor_id, metric_name, value, metadata=metadata
+                )
+                for det_event in detector_events:
+                    events.append(det_event)
+                    self._drift_history.append(det_event)
+
+                    # Persist detector drift events
+                    if self._backend is not None:
+                        from fastmcp.server.security.storage.serialization import drift_event_to_dict
+                        self._backend.append_drift_event(
+                            self.analyzer_id, drift_event_to_dict(det_event)
+                        )
+
+                    # Emit alert for detector events
+                    if self._event_bus is not None:
+                        from fastmcp.server.security.alerts.models import (
+                            AlertSeverity,
+                            SecurityEvent,
+                            SecurityEventType,
+                        )
+
+                        det_severity_map = {
+                            DriftSeverity.LOW: AlertSeverity.INFO,
+                            DriftSeverity.MEDIUM: AlertSeverity.WARNING,
+                            DriftSeverity.HIGH: AlertSeverity.WARNING,
+                            DriftSeverity.CRITICAL: AlertSeverity.CRITICAL,
+                        }
+                        self._event_bus.emit(
+                            SecurityEvent(
+                                event_type=SecurityEventType.DRIFT_DETECTED,
+                                severity=det_severity_map.get(
+                                    det_event.severity, AlertSeverity.WARNING
+                                ),
+                                layer="reflexive",
+                                message=det_event.description,
+                                actor_id=actor_id,
+                                resource_id=metric_name,
+                                data={
+                                    "detector": getattr(
+                                        detector, "detector_id", "unknown"
+                                    ),
+                                    "drift_type": det_event.drift_type.value,
+                                    "observed_value": det_event.observed_value,
+                                },
+                            )
+                        )
+            except Exception:
+                logger.exception(
+                    "Detector %s failed for %s/%s",
+                    getattr(detector, "detector_id", "unknown"),
+                    actor_id,
+                    metric_name,
+                )
+
         return events
 
     def _classify_severity(self, deviation: float) -> DriftSeverity | None:
@@ -282,6 +345,29 @@ class BehavioralAnalyzer:
                 for m_name in list(self._baselines.get(actor_id, {}).keys()):
                     self._backend.remove_baseline(self.analyzer_id, actor_id, m_name)
             self._baselines.pop(actor_id, None)
+
+    # ── Detector management ───────────────────────────────────────────
+
+    def add_detector(self, detector: Any) -> None:
+        """Register a pluggable anomaly detector.
+
+        Args:
+            detector: An object implementing the AnomalyDetector protocol.
+        """
+        self._detectors.append(detector)
+
+    def remove_detector(self, detector_id: str) -> bool:
+        """Remove a detector by its ID. Returns True if found."""
+        for i, det in enumerate(self._detectors):
+            if getattr(det, "detector_id", None) == detector_id:
+                self._detectors.pop(i)
+                return True
+        return False
+
+    @property
+    def detectors(self) -> list[Any]:
+        """Currently registered detectors (read-only copy)."""
+        return list(self._detectors)
 
 
 class EscalationEngine:

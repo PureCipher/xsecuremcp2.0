@@ -66,6 +66,13 @@ from fastmcp.server.security.policy.provider import PolicyProvider
 from fastmcp.server.security.provenance.ledger import ProvenanceLedger
 from fastmcp.server.security.provenance.records import ProvenanceAction, ProvenanceRecord
 from fastmcp.server.security.reflexive.analyzer import BehavioralAnalyzer, EscalationEngine
+from fastmcp.server.security.reflexive.detectors import (
+    AnomalyDetector,
+    OperationPattern,
+    PatternDetector,
+    SlidingWindowDetector,
+    WindowConfig,
+)
 from fastmcp.server.security.reflexive.models import (
     BehavioralBaseline,
     DriftEvent,
@@ -74,6 +81,11 @@ from fastmcp.server.security.reflexive.models import (
     EscalationAction,
     EscalationRule,
 )
+from fastmcp.server.security.reflexive.profiles import (
+    ActorProfile,
+    ActorProfileManager,
+)
+from fastmcp.server.security.orchestrator import SecurityContext, SecurityOrchestrator
 from fastmcp.server.security.storage import (
     MemoryBackend,
     SQLiteBackend,
@@ -81,8 +93,11 @@ from fastmcp.server.security.storage import (
 )
 
 __all__ = [
+    "ActorProfile",
+    "ActorProfileManager",
     "AlertConfig",
     "AlertSeverity",
+    "AnomalyDetector",
     "AuditAPI",
     "AuditQuery",
     "AuditQueryType",
@@ -118,7 +133,9 @@ __all__ = [
     "LoggingHandler",
     "Marketplace",
     "MemoryBackend",
+    "OperationPattern",
     "NodeType",
+    "PatternDetector",
     "PolicyDecision",
     "PolicyEngine",
     "PolicyEvaluationContext",
@@ -131,13 +148,17 @@ __all__ = [
     "ReflexiveConfig",
     "SQLiteBackend",
     "SecurityConfig",
+    "SecurityContext",
     "SecurityEvent",
     "SecurityEventBus",
     "SecurityEventType",
+    "SecurityOrchestrator",
     "SecurityStatus",
     "SeverityFilter",
     "ServerCapability",
     "ServerRegistration",
+    "SlidingWindowDetector",
     "StorageBackend",
     "TrustLevel",
+    "WindowConfig",
 ]

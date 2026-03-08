@@ -26,7 +26,8 @@ from fastmcp.server.security.reflexive.analyzer import (
     EscalationAction,
     EscalationEngine,
 )
-from fastmcp.server.security.reflexive.models import DriftEvent
+from fastmcp.server.security.reflexive.models import DriftEvent, DriftSeverity, DriftType
+from fastmcp.server.security.reflexive.profiles import ActorProfileManager
 from fastmcp.tools.tool import Tool, ToolResult
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,8 @@ class ReflexiveMiddleware(Middleware):
         analyzer: The behavioral analyzer for drift detection.
         escalation_engine: Engine for processing drift events.
         bypass_stdio: If True (default), skip monitoring for STDIO transport.
+        profile_manager: Optional ActorProfileManager for scope tracking
+            and threat scoring. If None, one is created automatically.
     """
 
     def __init__(
@@ -54,10 +57,12 @@ class ReflexiveMiddleware(Middleware):
         escalation_engine: EscalationEngine | None = None,
         *,
         bypass_stdio: bool = True,
+        profile_manager: ActorProfileManager | None = None,
     ) -> None:
         self.analyzer = analyzer
         self.escalation_engine = escalation_engine or EscalationEngine()
         self.bypass_stdio = bypass_stdio
+        self.profile_manager = profile_manager or ActorProfileManager()
         self._suspended_actors: set[str] = set()
         self._call_timestamps: dict[str, list[float]] = defaultdict(list)
 
@@ -104,8 +109,11 @@ class ReflexiveMiddleware(Middleware):
         self._call_timestamps[actor_id].append(time.monotonic())
 
     def _process_drift(self, events: list[DriftEvent]) -> None:
-        """Process drift events through escalation engine."""
+        """Process drift events through escalation engine and profile manager."""
         for event in events:
+            # Update actor threat score
+            self.profile_manager.record_drift(event.actor_id, event)
+
             if self.escalation_engine is None:
                 continue
             actions = self.escalation_engine.evaluate(event)
@@ -131,6 +139,10 @@ class ReflexiveMiddleware(Middleware):
         actor_id = self._get_actor_id(context)
         self._check_suspended(actor_id)
 
+        # Track tool scope
+        tool_name = context.params.name if context.params else "unknown"
+        is_new_tool = self.profile_manager.record_tool_access(actor_id, tool_name)
+
         # Record call and compute rate
         self._record_call(actor_id)
         call_rate = self._compute_call_rate(actor_id)
@@ -139,6 +151,18 @@ class ReflexiveMiddleware(Middleware):
         drift_events = self.analyzer.observe(
             actor_id, "calls_per_minute", call_rate
         )
+
+        # Observe scope expansion
+        if is_new_tool:
+            scope_size = self.profile_manager.get_or_create(actor_id).scope_size
+            drift_events.extend(
+                self.analyzer.observe(
+                    actor_id,
+                    "scope_expansion",
+                    float(scope_size),
+                    metadata={"new_tool": tool_name},
+                )
+            )
 
         # Measure latency
         start = time.monotonic()
@@ -190,11 +214,29 @@ class ReflexiveMiddleware(Middleware):
         actor_id = self._get_actor_id(context)
         self._check_suspended(actor_id)
 
+        # Track resource scope
+        resource_uri = str(context.params.uri) if context.params else "unknown"
+        is_new_resource = self.profile_manager.record_resource_access(
+            actor_id, resource_uri
+        )
+
         self._record_call(actor_id)
         call_rate = self._compute_call_rate(actor_id)
         drift_events = self.analyzer.observe(
             actor_id, "calls_per_minute", call_rate
         )
+
+        # Observe scope expansion
+        if is_new_resource:
+            scope_size = self.profile_manager.get_or_create(actor_id).scope_size
+            drift_events.extend(
+                self.analyzer.observe(
+                    actor_id,
+                    "scope_expansion",
+                    float(scope_size),
+                    metadata={"new_resource": resource_uri},
+                )
+            )
 
         try:
             result = await call_next(context)
@@ -235,6 +277,10 @@ class ReflexiveMiddleware(Middleware):
 
         actor_id = self._get_actor_id(context)
         self._check_suspended(actor_id)
+
+        # Track prompt scope
+        prompt_name = context.params.name if context.params else "unknown"
+        self.profile_manager.record_prompt_access(actor_id, prompt_name)
 
         return await call_next(context)
 
