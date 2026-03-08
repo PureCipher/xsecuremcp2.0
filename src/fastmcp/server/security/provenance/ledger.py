@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastmcp.server.security.provenance.merkle import MerkleTree
 from fastmcp.server.security.provenance.records import (
@@ -18,6 +18,9 @@ from fastmcp.server.security.provenance.records import (
     hash_data,
 )
 from fastmcp.server.security.storage.backend import StorageBackend
+
+if TYPE_CHECKING:
+    from fastmcp.server.security.alerts.bus import SecurityEventBus
 
 logger = logging.getLogger(__name__)
 
@@ -59,9 +62,11 @@ class ProvenanceLedger:
         ledger_id: str = "default",
         *,
         backend: StorageBackend | None = None,
+        event_bus: SecurityEventBus | None = None,
     ) -> None:
         self.ledger_id = ledger_id
         self._backend = backend
+        self._event_bus = event_bus
         self._records: list[ProvenanceRecord] = []
         self._record_index: dict[str, int] = {}
         self._merkle_tree = MerkleTree()
@@ -143,6 +148,29 @@ class ProvenanceLedger:
             from fastmcp.server.security.storage.serialization import provenance_record_to_dict
             self._backend.append_provenance_record(
                 self.ledger_id, provenance_record_to_dict(entry)
+            )
+
+        # Emit alert event
+        if self._event_bus is not None:
+            from fastmcp.server.security.alerts.models import (
+                AlertSeverity,
+                SecurityEvent,
+                SecurityEventType,
+            )
+
+            self._event_bus.emit(
+                SecurityEvent(
+                    event_type=SecurityEventType.PROVENANCE_RECORDED,
+                    severity=AlertSeverity.INFO,
+                    layer="provenance",
+                    message=f"Provenance: {action.value} by {actor_id}",
+                    actor_id=actor_id,
+                    resource_id=resource_id,
+                    data={
+                        "action": action.value,
+                        "record_id": entry.record_id,
+                    },
+                )
             )
 
         logger.debug(

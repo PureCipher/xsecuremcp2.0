@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
+from fastmcp.server.security.alerts.bus import SecurityEventBus
 from fastmcp.server.security.contracts.broker import ContextBroker
 from fastmcp.server.security.contracts.crypto import ContractCryptoHandler
 from fastmcp.server.security.contracts.exchange_log import ExchangeLog
@@ -221,6 +222,26 @@ class GatewayConfig:
 
 
 @dataclass
+class AlertConfig:
+    """Configuration for the Real-time Alert System (Phase 9).
+
+    Attributes:
+        event_bus: Pre-built SecurityEventBus instance. If None, one is created.
+        propagate_to_components: If True, the event bus is automatically
+            injected into all configured components.
+    """
+
+    event_bus: SecurityEventBus | None = None
+    propagate_to_components: bool = True
+
+    def get_event_bus(self) -> SecurityEventBus:
+        """Get or create the event bus."""
+        if self.event_bus is not None:
+            return self.event_bus
+        return SecurityEventBus()
+
+
+@dataclass
 class SecurityConfig:
     """Master security configuration for SecureMCP.
 
@@ -255,6 +276,7 @@ class SecurityConfig:
     reflexive: ReflexiveConfig | None = None
     consent: ConsentConfig | None = None
     gateway: GatewayConfig | None = None
+    alerts: AlertConfig | None = None
     enabled: bool = True
     backend: StorageBackend | None = None
 
@@ -294,3 +316,7 @@ class SecurityConfig:
     def is_gateway_enabled(self) -> bool:
         """Check if the gateway layer is configured and active."""
         return self.enabled and self.gateway is not None
+
+    def is_alerts_enabled(self) -> bool:
+        """Check if the alerts layer is configured and active."""
+        return self.enabled and self.alerts is not None

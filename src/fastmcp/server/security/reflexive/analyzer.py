@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from collections import defaultdict
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastmcp.server.security.reflexive.models import (
     BehavioralBaseline,
@@ -20,6 +20,9 @@ from fastmcp.server.security.reflexive.models import (
     EscalationRule,
 )
 from fastmcp.server.security.storage.backend import StorageBackend
+
+if TYPE_CHECKING:
+    from fastmcp.server.security.alerts.bus import SecurityEventBus
 
 logger = logging.getLogger(__name__)
 
@@ -66,9 +69,11 @@ class BehavioralAnalyzer:
         min_samples: int = 10,
         analyzer_id: str = "default",
         backend: StorageBackend | None = None,
+        event_bus: SecurityEventBus | None = None,
     ) -> None:
         self.analyzer_id = analyzer_id
         self._backend = backend
+        self._event_bus = event_bus
         self._baselines: dict[str, dict[str, BehavioralBaseline]] = defaultdict(dict)
         self._sigma_thresholds = sigma_thresholds or dict(_DEFAULT_SIGMA_THRESHOLDS)
         self._min_samples = min_samples
@@ -153,6 +158,38 @@ class BehavioralAnalyzer:
                     from fastmcp.server.security.storage.serialization import drift_event_to_dict
                     self._backend.append_drift_event(
                         self.analyzer_id, drift_event_to_dict(event)
+                    )
+
+                # Emit alert event
+                if self._event_bus is not None:
+                    from fastmcp.server.security.alerts.models import (
+                        AlertSeverity,
+                        SecurityEvent,
+                        SecurityEventType,
+                    )
+
+                    severity_map = {
+                        DriftSeverity.LOW: AlertSeverity.INFO,
+                        DriftSeverity.MEDIUM: AlertSeverity.WARNING,
+                        DriftSeverity.HIGH: AlertSeverity.WARNING,
+                        DriftSeverity.CRITICAL: AlertSeverity.CRITICAL,
+                    }
+                    self._event_bus.emit(
+                        SecurityEvent(
+                            event_type=SecurityEventType.DRIFT_DETECTED,
+                            severity=severity_map.get(severity, AlertSeverity.WARNING),
+                            layer="reflexive",
+                            message=event.description,
+                            actor_id=actor_id,
+                            resource_id=metric_name,
+                            data={
+                                "metric_name": metric_name,
+                                "deviation": deviation,
+                                "observed_value": value,
+                                "baseline_mean": baseline.mean,
+                                "drift_severity": severity.value,
+                            },
+                        )
                     )
 
                 logger.warning(
@@ -282,9 +319,11 @@ class EscalationEngine:
         on_escalation: Any = None,
         engine_id: str = "default",
         backend: StorageBackend | None = None,
+        event_bus: SecurityEventBus | None = None,
     ) -> None:
         self.engine_id = engine_id
         self._backend = backend
+        self._event_bus = event_bus
         self.rules = list(rules or [])
         self._on_escalation = on_escalation
         self._escalation_history: list[tuple[DriftEvent, EscalationRule, EscalationAction]] = []
@@ -353,6 +392,29 @@ class EscalationEngine:
                         "rule": escalation_rule_to_dict(rule),
                         "action": rule.action.value,
                     },
+                )
+
+            # Emit alert event
+            if self._event_bus is not None:
+                from fastmcp.server.security.alerts.models import (
+                    AlertSeverity,
+                    SecurityEvent,
+                    SecurityEventType,
+                )
+
+                self._event_bus.emit(
+                    SecurityEvent(
+                        event_type=SecurityEventType.ESCALATION_TRIGGERED,
+                        severity=AlertSeverity.CRITICAL,
+                        layer="reflexive",
+                        message=f"Escalation: {rule.action.value} for actor {event.actor_id}",
+                        actor_id=event.actor_id,
+                        data={
+                            "action": rule.action.value,
+                            "rule_id": rule.rule_id,
+                            "drift_severity": event.severity.value,
+                        },
+                    )
                 )
 
             logger.warning(

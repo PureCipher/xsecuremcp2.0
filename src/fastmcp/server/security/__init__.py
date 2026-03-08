@@ -4,7 +4,18 @@ Provides pluggable policy engines, contract negotiation, provenance ledgers,
 reflexive analysis, consent graphs, and audit APIs for trust-native AI infrastructure.
 """
 
+from fastmcp.server.security.alerts import (
+    AlertSeverity,
+    BufferedHandler,
+    CallbackHandler,
+    LoggingHandler,
+    SecurityEvent,
+    SecurityEventBus,
+    SecurityEventType,
+    SeverityFilter,
+)
 from fastmcp.server.security.config import (
+    AlertConfig,
     ConsentConfig,
     ContractConfig,
     GatewayConfig,
@@ -70,11 +81,15 @@ from fastmcp.server.security.storage import (
 )
 
 __all__ = [
+    "AlertConfig",
+    "AlertSeverity",
     "AuditAPI",
     "AuditQuery",
     "AuditQueryType",
     "BehavioralAnalyzer",
     "BehavioralBaseline",
+    "BufferedHandler",
+    "CallbackHandler",
     "ConsentConfig",
     "ConsentDecision",
     "ConsentEdge",
@@ -100,6 +115,7 @@ __all__ = [
     "HealthStatus",
     "Invariant",
     "InvariantVerificationResult",
+    "LoggingHandler",
     "Marketplace",
     "MemoryBackend",
     "NodeType",
@@ -115,7 +131,11 @@ __all__ = [
     "ReflexiveConfig",
     "SQLiteBackend",
     "SecurityConfig",
+    "SecurityEvent",
+    "SecurityEventBus",
+    "SecurityEventType",
     "SecurityStatus",
+    "SeverityFilter",
     "ServerCapability",
     "ServerRegistration",
     "StorageBackend",

@@ -11,7 +11,7 @@ import inspect
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastmcp.server.security.policy.provider import (
     AllowAllPolicy,
@@ -20,6 +20,9 @@ from fastmcp.server.security.policy.provider import (
     PolicyProvider,
     PolicyResult,
 )
+
+if TYPE_CHECKING:
+    from fastmcp.server.security.alerts.bus import SecurityEventBus
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +84,7 @@ class PolicyEngine:
         *,
         fail_closed: bool = True,
         allow_hot_swap: bool = True,
+        event_bus: SecurityEventBus | None = None,
     ) -> None:
         if providers is None:
             self._providers: list[PolicyProvider] = [AllowAllPolicy()]
@@ -91,6 +95,7 @@ class PolicyEngine:
 
         self.fail_closed = fail_closed
         self.allow_hot_swap = allow_hot_swap
+        self._event_bus = event_bus
         self._swap_lock = asyncio.Lock()
         self._swap_history: list[PolicySwapRecord] = []
         self._evaluation_count: int = 0
@@ -143,6 +148,27 @@ class PolicyEngine:
 
                 if result.decision == PolicyDecision.DENY:
                     self._deny_count += 1
+                    if self._event_bus is not None:
+                        from fastmcp.server.security.alerts.models import (
+                            AlertSeverity,
+                            SecurityEvent,
+                            SecurityEventType,
+                        )
+
+                        self._event_bus.emit(
+                            SecurityEvent(
+                                event_type=SecurityEventType.POLICY_DENIED,
+                                severity=AlertSeverity.WARNING,
+                                layer="policy",
+                                message=f"Policy denied: {result.reason}",
+                                actor_id=context.actor_id,
+                                resource_id=context.resource_id,
+                                data={
+                                    "policy_id": result.policy_id,
+                                    "action": context.action,
+                                },
+                            )
+                        )
                     logger.info(
                         "Policy DENY from %s: %s (action=%s, resource=%s)",
                         result.policy_id,
@@ -257,6 +283,29 @@ class PolicyEngine:
                 reason=reason,
             )
             self._swap_history.append(record)
+
+            if self._event_bus is not None:
+                from fastmcp.server.security.alerts.models import (
+                    AlertSeverity,
+                    SecurityEvent,
+                    SecurityEventType,
+                )
+
+                self._event_bus.emit(
+                    SecurityEvent(
+                        event_type=SecurityEventType.POLICY_SWAPPED,
+                        severity=AlertSeverity.INFO,
+                        layer="policy",
+                        message=f"Policy swapped: {old_id}@{old_version} → {new_id}@{new_version}",
+                        data={
+                            "old_policy_id": old_id,
+                            "old_version": old_version,
+                            "new_policy_id": new_id,
+                            "new_version": new_version,
+                            "reason": reason,
+                        },
+                    )
+                )
 
             logger.info(
                 "Policy hot-swap: %s@%s -> %s@%s (%s)",

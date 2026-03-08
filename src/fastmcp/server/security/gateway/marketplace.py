@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastmcp.server.security.gateway.models import (
     ServerCapability,
@@ -17,6 +17,9 @@ from fastmcp.server.security.gateway.models import (
     TrustLevel,
 )
 from fastmcp.server.security.storage.backend import StorageBackend
+
+if TYPE_CHECKING:
+    from fastmcp.server.security.alerts.bus import SecurityEventBus
 
 logger = logging.getLogger(__name__)
 
@@ -55,9 +58,11 @@ class Marketplace:
         marketplace_id: str = "default",
         *,
         backend: StorageBackend | None = None,
+        event_bus: SecurityEventBus | None = None,
     ) -> None:
         self.marketplace_id = marketplace_id
         self._backend = backend
+        self._event_bus = event_bus
         self._servers: dict[str, ServerRegistration] = {}
         self._audit_log: list[dict[str, Any]] = []
 
@@ -137,6 +142,25 @@ class Marketplace:
         if self._backend is not None:
             self._backend.append_marketplace_audit(self.marketplace_id, audit_entry)
 
+        # Emit alert event
+        if self._event_bus is not None:
+            from fastmcp.server.security.alerts.models import (
+                AlertSeverity,
+                SecurityEvent,
+                SecurityEventType,
+            )
+
+            self._event_bus.emit(
+                SecurityEvent(
+                    event_type=SecurityEventType.SERVER_REGISTERED,
+                    severity=AlertSeverity.INFO,
+                    layer="gateway",
+                    message=f"Server registered: {name}",
+                    resource_id=reg.server_id,
+                    data={"name": name, "endpoint": endpoint},
+                )
+            )
+
         logger.info("Server registered: %s (%s)", name, reg.server_id)
         return reg
 
@@ -166,6 +190,24 @@ class Marketplace:
         self._audit_log.append(audit_entry)
         if self._backend is not None:
             self._backend.append_marketplace_audit(self.marketplace_id, audit_entry)
+
+        # Emit alert event
+        if self._event_bus is not None:
+            from fastmcp.server.security.alerts.models import (
+                AlertSeverity,
+                SecurityEvent,
+                SecurityEventType,
+            )
+
+            self._event_bus.emit(
+                SecurityEvent(
+                    event_type=SecurityEventType.SERVER_UNREGISTERED,
+                    severity=AlertSeverity.WARNING,
+                    layer="gateway",
+                    message=f"Server unregistered: {server_id}",
+                    resource_id=server_id,
+                )
+            )
 
         return True
 
@@ -226,6 +268,28 @@ class Marketplace:
         self._audit_log.append(audit_entry)
         if self._backend is not None:
             self._backend.append_marketplace_audit(self.marketplace_id, audit_entry)
+
+        # Emit alert event
+        if self._event_bus is not None:
+            from fastmcp.server.security.alerts.models import (
+                AlertSeverity,
+                SecurityEvent,
+                SecurityEventType,
+            )
+
+            self._event_bus.emit(
+                SecurityEvent(
+                    event_type=SecurityEventType.TRUST_CHANGED,
+                    severity=AlertSeverity.WARNING,
+                    layer="gateway",
+                    message=f"Trust level changed: {old_level.value} → {trust_level.value}",
+                    resource_id=server_id,
+                    data={
+                        "old_level": old_level.value,
+                        "new_level": trust_level.value,
+                    },
+                )
+            )
 
         return True
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from collections import defaultdict
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastmcp.server.security.consent.models import (
     ConsentDecision,
@@ -21,6 +21,9 @@ from fastmcp.server.security.consent.models import (
     NodeType,
 )
 from fastmcp.server.security.storage.backend import StorageBackend
+
+if TYPE_CHECKING:
+    from fastmcp.server.security.alerts.bus import SecurityEventBus
 
 logger = logging.getLogger(__name__)
 
@@ -88,9 +91,11 @@ class ConsentGraph:
         graph_id: str = "default",
         *,
         backend: StorageBackend | None = None,
+        event_bus: SecurityEventBus | None = None,
     ) -> None:
         self.graph_id = graph_id
         self._backend = backend
+        self._event_bus = event_bus
         self._nodes: dict[str, ConsentNode] = {}
         # Edges indexed: source_id → list[ConsentEdge]
         self._outgoing: dict[str, list[ConsentEdge]] = defaultdict(list)
@@ -271,6 +276,30 @@ class ConsentGraph:
         if self._backend is not None:
             self._backend.append_consent_audit(self.graph_id, audit_entry)
 
+        # Emit alert event
+        if self._event_bus is not None:
+            from fastmcp.server.security.alerts.models import (
+                AlertSeverity,
+                SecurityEvent,
+                SecurityEventType,
+            )
+
+            self._event_bus.emit(
+                SecurityEvent(
+                    event_type=SecurityEventType.CONSENT_GRANTED,
+                    severity=AlertSeverity.INFO,
+                    layer="consent",
+                    message=f"Consent granted: {source_id} → {target_id}",
+                    actor_id=granted_by or source_id,
+                    resource_id=edge.edge_id,
+                    data={
+                        "source_id": source_id,
+                        "target_id": target_id,
+                        "scopes": list(scopes),
+                    },
+                )
+            )
+
         logger.info(
             "Consent granted: %s → %s (scopes: %s)",
             source_id,
@@ -351,6 +380,31 @@ class ConsentGraph:
         if self._backend is not None:
             self._backend.append_consent_audit(self.graph_id, audit_entry)
 
+        # Emit alert event
+        if self._event_bus is not None:
+            from fastmcp.server.security.alerts.models import (
+                AlertSeverity,
+                SecurityEvent,
+                SecurityEventType,
+            )
+
+            self._event_bus.emit(
+                SecurityEvent(
+                    event_type=SecurityEventType.CONSENT_DELEGATED,
+                    severity=AlertSeverity.INFO,
+                    layer="consent",
+                    message=f"Consent delegated to {new_target_id}",
+                    actor_id=parent.target_id,
+                    resource_id=edge.edge_id,
+                    data={
+                        "parent_edge_id": parent_edge_id,
+                        "new_target_id": new_target_id,
+                        "scopes": list(effective_scopes),
+                        "delegation_depth": edge.delegation_depth,
+                    },
+                )
+            )
+
         return edge
 
     def revoke(self, edge_id: str) -> bool:
@@ -380,6 +434,28 @@ class ConsentGraph:
         self._audit_log.append(audit_entry)
         if self._backend is not None:
             self._backend.append_consent_audit(self.graph_id, audit_entry)
+
+        # Emit alert event
+        if self._event_bus is not None:
+            from fastmcp.server.security.alerts.models import (
+                AlertSeverity,
+                SecurityEvent,
+                SecurityEventType,
+            )
+
+            self._event_bus.emit(
+                SecurityEvent(
+                    event_type=SecurityEventType.CONSENT_REVOKED,
+                    severity=AlertSeverity.WARNING,
+                    layer="consent",
+                    message=f"Consent revoked: edge {edge_id}",
+                    resource_id=edge_id,
+                    data={
+                        "source_id": edge.source_id,
+                        "target_id": edge.target_id,
+                    },
+                )
+            )
 
         logger.info("Consent revoked: edge %s", edge_id)
         return True
