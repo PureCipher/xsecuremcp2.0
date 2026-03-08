@@ -63,6 +63,7 @@ from fastmcp.server.apps import (
 )
 from fastmcp.server.auth import AuthCheck, AuthContext, AuthProvider, run_auth_checks
 from fastmcp.server.security.config import SecurityConfig
+from fastmcp.server.security.orchestrator import SecurityOrchestrator
 from fastmcp.server.lifespan import Lifespan
 from fastmcp.server.low_level import LowLevelServer
 from fastmcp.server.middleware import Middleware, MiddlewareContext
@@ -336,129 +337,33 @@ class FastMCP(
 
         self.middleware: list[Middleware] = list(middleware or [])
 
-        # SecureMCP: Register policy enforcement middleware if configured
+        # SecureMCP: Bootstrap all security layers via orchestrator
         self.security_config: SecurityConfig | None = security_config
-        if security_config is not None and security_config.is_policy_enabled():
-            if fastmcp.settings.security.enabled:
-                from fastmcp.server.security.middleware.policy_enforcement import (
-                    PolicyEnforcementMiddleware,
-                )
+        self._security_context = None
+        if security_config is not None and fastmcp.settings.security.enabled:
+            ctx = SecurityOrchestrator.bootstrap(
+                security_config,
+                server_name=self.name,
+                bypass_stdio=fastmcp.settings.security.policy_bypass_stdio,
+            )
+            self._security_context = ctx
+            self.middleware.extend(ctx.middleware)
 
-                policy_engine = security_config.policy.get_engine()  # type: ignore[union-attr]
-                self.middleware.append(
-                    PolicyEnforcementMiddleware(
-                        policy_engine=policy_engine,
-                        bypass_stdio=fastmcp.settings.security.policy_bypass_stdio,
-                    )
-                )
-
-        # SecureMCP: Register contract validation middleware if configured
-        if security_config is not None and security_config.is_contracts_enabled():
-            if fastmcp.settings.security.enabled:
-                from fastmcp.server.security.middleware.contract_validation import (
-                    ContractValidationMiddleware,
-                )
-
-                contracts_config = security_config.contracts  # type: ignore[union-attr]
-                broker = contracts_config.get_broker(server_id=self.name)
-                self.middleware.append(
-                    ContractValidationMiddleware(
-                        broker=broker,
-                        bypass_stdio=fastmcp.settings.security.policy_bypass_stdio,
-                        require_for_list=contracts_config.require_for_list,
-                    )
-                )
-
-        # SecureMCP: Register provenance recording middleware if configured
-        if security_config is not None and security_config.is_provenance_enabled():
-            if fastmcp.settings.security.enabled:
-                from fastmcp.server.security.middleware.provenance_recording import (
-                    ProvenanceRecordingMiddleware,
-                )
-
-                provenance_config = security_config.provenance  # type: ignore[union-attr]
-                ledger = provenance_config.get_ledger()
-                self._provenance_ledger = ledger
-                self.middleware.append(
-                    ProvenanceRecordingMiddleware(
-                        ledger=ledger,
-                        bypass_stdio=fastmcp.settings.security.policy_bypass_stdio,
-                        record_list_operations=provenance_config.record_list_operations,
-                    )
-                )
-
-        # SecureMCP: Register reflexive monitoring middleware if configured
-        if security_config is not None and security_config.is_reflexive_enabled():
-            if fastmcp.settings.security.enabled:
-                from fastmcp.server.security.middleware.reflexive import (
-                    ReflexiveMiddleware,
-                )
-
-                reflexive_config = security_config.reflexive  # type: ignore[union-attr]
-                analyzer = reflexive_config.get_analyzer()
-                escalation_engine = reflexive_config.get_escalation_engine()
-                self._behavioral_analyzer = analyzer
-                self._escalation_engine = escalation_engine
-                self.middleware.append(
-                    ReflexiveMiddleware(
-                        analyzer=analyzer,
-                        escalation_engine=escalation_engine,
-                        bypass_stdio=fastmcp.settings.security.policy_bypass_stdio,
-                    )
-                )
-
-        # SecureMCP: Register consent enforcement middleware if configured
-        if security_config is not None and security_config.is_consent_enabled():
-            if fastmcp.settings.security.enabled:
-                from fastmcp.server.security.middleware.consent_enforcement import (
-                    ConsentEnforcementMiddleware,
-                )
-
-                consent_config = security_config.consent  # type: ignore[union-attr]
-                graph = consent_config.get_graph()
-                self._consent_graph = graph
-                self.middleware.append(
-                    ConsentEnforcementMiddleware(
-                        graph=graph,
-                        resource_owner=consent_config.resource_owner,
-                        bypass_stdio=fastmcp.settings.security.policy_bypass_stdio,
-                        require_for_list=consent_config.require_for_list,
-                    )
-                )
-
-        # SecureMCP: Set up API Gateway if configured
-        if security_config is not None and security_config.is_gateway_enabled():
-            if fastmcp.settings.security.enabled:
-                from fastmcp.server.security.gateway.audit import AuditAPI
-                from fastmcp.server.security.gateway.tools import (
-                    create_audit_tools,
-                    create_marketplace_tools,
-                )
-
-                gateway_config = security_config.gateway  # type: ignore[union-attr]
-
-                # Build audit API from available layers
-                audit_api = gateway_config.audit_api or AuditAPI(
-                    provenance_ledger=getattr(self, "_provenance_ledger", None),
-                    behavioral_analyzer=getattr(self, "_behavioral_analyzer", None),
-                    consent_graph=getattr(self, "_consent_graph", None),
-                    policy_engine=(
-                        security_config.policy.get_engine()
-                        if security_config.policy is not None
-                        else None
-                    ),
-                )
-                self._audit_api = audit_api
-
-                marketplace = gateway_config.get_marketplace()
-                self._marketplace = marketplace
-
-                # Register gateway tools if requested
-                if gateway_config.register_tools:
-                    self._gateway_tools = {
-                        **create_audit_tools(audit_api),
-                        **create_marketplace_tools(marketplace),
-                    }
+            # Expose component references for backwards compatibility
+            if ctx.provenance_ledger is not None:
+                self._provenance_ledger = ctx.provenance_ledger
+            if ctx.behavioral_analyzer is not None:
+                self._behavioral_analyzer = ctx.behavioral_analyzer
+            if ctx.escalation_engine is not None:
+                self._escalation_engine = ctx.escalation_engine
+            if ctx.consent_graph is not None:
+                self._consent_graph = ctx.consent_graph
+            if ctx.audit_api is not None:
+                self._audit_api = ctx.audit_api
+            if ctx.marketplace is not None:
+                self._marketplace = ctx.marketplace
+            if ctx.gateway_tools:
+                self._gateway_tools = ctx.gateway_tools
 
         if dereference_schemas:
             from fastmcp.server.middleware.dereference import (
