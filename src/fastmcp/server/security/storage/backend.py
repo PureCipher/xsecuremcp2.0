@@ -194,3 +194,17 @@ class StorageBackend(Protocol):
             }
         """
         ...
+
+    # ── Policy Versioning ────────────────────────────────────────
+
+    def save_policy_version(
+        self, policy_set_id: str, data: dict[str, Any]
+    ) -> None:
+        """Persist the full version history for a policy set."""
+        ...
+
+    def load_policy_versions(
+        self, policy_set_id: str
+    ) -> dict[str, Any] | None:
+        """Load version history for a policy set. Returns None if not found."""
+        ...

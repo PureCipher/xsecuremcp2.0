@@ -155,6 +155,12 @@ class SQLiteBackend:
             );
             CREATE INDEX IF NOT EXISTS idx_mp_audit_ns
                 ON marketplace_audit_log(namespace);
+
+            CREATE TABLE IF NOT EXISTS policy_versions (
+                policy_set_id TEXT NOT NULL PRIMARY KEY,
+                data TEXT NOT NULL,
+                updated_at REAL NOT NULL
+            );
         """
         )
         conn.commit()
@@ -489,3 +495,28 @@ class SQLiteBackend:
             "servers": servers,
             "audit_log": audit_log,
         }
+
+    # ── Policy Versioning ────────────────────────────────────────
+
+    def save_policy_version(
+        self, policy_set_id: str, data: dict[str, Any]
+    ) -> None:
+        conn = self._get_conn()
+        conn.execute(
+            "INSERT OR REPLACE INTO policy_versions (policy_set_id, data, updated_at) "
+            "VALUES (?, ?, ?)",
+            (policy_set_id, json.dumps(data), time.time()),
+        )
+        conn.commit()
+
+    def load_policy_versions(
+        self, policy_set_id: str
+    ) -> dict[str, Any] | None:
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT data FROM policy_versions WHERE policy_set_id = ?",
+            (policy_set_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return json.loads(row[0])

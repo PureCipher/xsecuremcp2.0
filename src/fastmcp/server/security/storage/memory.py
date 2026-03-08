@@ -209,3 +209,19 @@ class MemoryBackend:
             "servers": dict(store["servers"]),
             "audit_log": list(store["audit_log"]),
         }
+
+    # ── Policy Versioning ────────────────────────────────────────
+
+    def save_policy_version(
+        self, policy_set_id: str, data: dict[str, Any]
+    ) -> None:
+        if not hasattr(self, "_policy_versions"):
+            self._policy_versions: dict[str, dict[str, Any]] = {}
+        self._policy_versions[policy_set_id] = data
+
+    def load_policy_versions(
+        self, policy_set_id: str
+    ) -> dict[str, Any] | None:
+        if not hasattr(self, "_policy_versions"):
+            self._policy_versions: dict[str, dict[str, Any]] = {}
+        return self._policy_versions.get(policy_set_id)
