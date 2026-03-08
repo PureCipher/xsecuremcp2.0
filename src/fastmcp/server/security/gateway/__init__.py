@@ -16,6 +16,7 @@ from fastmcp.server.security.gateway.models import (
     ServerRegistration,
     TrustLevel,
 )
+from fastmcp.server.security.gateway.marketplace_bridge import MarketplaceDataBridge
 from fastmcp.server.security.gateway.tool_marketplace import (
     InstallRecord,
     PublishStatus,
@@ -39,6 +40,7 @@ __all__ = [
     "HealthStatus",
     "InstallRecord",
     "Marketplace",
+    "MarketplaceDataBridge",
     "PublishStatus",
     "ReviewRating",
     "SecurityStatus",

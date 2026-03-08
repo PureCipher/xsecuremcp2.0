@@ -131,6 +131,15 @@
                   },
                   {
                     "collapsed": true,
+                    "group": "Security",
+                    "icon": "shield-check",
+                    "pages": [
+                      "servers/security/overview"
+                    ],
+                    "tag": "NEW"
+                  },
+                  {
+                    "collapsed": true,
                     "group": "Providers",
                     "icon": "layer-group",
                     "pages": [

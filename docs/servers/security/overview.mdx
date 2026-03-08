@@ -1,0 +1,157 @@
+---
+title: SecureMCP Overview
+description: Trust-native security infrastructure for MCP servers
+---
+
+SecureMCP adds a comprehensive security layer to FastMCP servers. It provides pluggable policy engines, trust registries, marketplace discovery, compliance reporting, provenance auditing, behavioral analysis, and real-time alerting — all wired together through a unified orchestrator.
+
+## Architecture
+
+SecureMCP is organized into composable layers that can be used independently or together:
+
+**Trust & Identity** — `TrustRegistry` maintains trust scores for every tool, combining certification status, behavioral reputation, and age into a normalized 0–1 score. `TrustFederation` extends trust across peer instances with weighted score aggregation.
+
+**Policy & Contracts** — `PolicyEngine` evaluates access decisions through pluggable providers. `ContextBroker` negotiates capability contracts between tools and callers. Both emit events for audit trails.
+
+**Provenance** — `ProvenanceLedger` records every tool call, resource access, and policy decision into a hash-linked, tamper-evident chain. Records include actor IDs, resource IDs, and timestamps.
+
+**Compliance** — `ComplianceReporter` runs automated checks against configurable frameworks and generates reports with findings, severity classifications, and remediation guidance.
+
+**Behavioral Analysis** — `BehavioralAnalyzer` detects drift from established baselines using sliding-window detectors. `EscalationEngine` triggers actions (alerts, blocks, reviews) when thresholds are crossed.
+
+**Consent** — `ConsentGraph` tracks who granted what permissions to whom, with delegation chains and temporal scoping.
+
+**Marketplace** — `ToolMarketplace` provides publishing, discovery, reviews, and install tracking for MCP tools. `MarketplaceDataBridge` exports marketplace state as React-compatible JSON.
+
+**Alerts** — `SecurityEventBus` provides pub/sub with severity-based routing and composable filters. All components emit events to the bus.
+
+**Dashboard** — `SecurityDashboard` aggregates health from all components into snapshots. `DashboardDataBridge` converts snapshots to React-compatible JSON.
+
+**HTTP API** — `SecurityAPI` exposes all the above as REST endpoints, mountable on any FastMCP server via `mount_security_routes()`.
+
+## Quick Start
+
+```python
+from fastmcp import FastMCP
+from fastmcp.server.security.alerts.bus import SecurityEventBus
+from fastmcp.server.security.compliance.reports import ComplianceReporter
+from fastmcp.server.security.dashboard.snapshot import SecurityDashboard
+from fastmcp.server.security.federation.crl import CertificateRevocationList
+from fastmcp.server.security.federation.federation import TrustFederation
+from fastmcp.server.security.gateway.tool_marketplace import (
+    ToolCategory,
+    ToolMarketplace,
+)
+from fastmcp.server.security.http import SecurityAPI, mount_security_routes
+from fastmcp.server.security.provenance.ledger import ProvenanceLedger
+from fastmcp.server.security.registry.registry import TrustRegistry
+
+server = FastMCP("my-secure-server")
+
+# Create components
+registry = TrustRegistry()
+event_bus = SecurityEventBus()
+marketplace = ToolMarketplace(trust_registry=registry, event_bus=event_bus)
+provenance = ProvenanceLedger(event_bus=event_bus)
+federation = TrustFederation(event_bus=event_bus)
+crl = CertificateRevocationList()
+compliance = ComplianceReporter()
+
+# Register a tool
+registry.register("my-tool", tool_version="1.0.0", author="acme")
+
+# Publish to marketplace
+marketplace.publish(
+    "my-tool",
+    display_name="My Tool",
+    description="Does useful things.",
+    version="1.0.0",
+    author="acme",
+    categories={ToolCategory.UTILITY},
+)
+
+# Mount REST API
+dashboard = SecurityDashboard(
+    registry=registry,
+    marketplace=marketplace,
+    federation=federation,
+    crl=crl,
+    compliance_reporter=compliance,
+    event_bus=event_bus,
+)
+api = SecurityAPI(
+    dashboard=dashboard,
+    marketplace=marketplace,
+    registry=registry,
+    compliance_reporter=compliance,
+    provenance_ledger=provenance,
+    federation=federation,
+    crl=crl,
+    event_bus=event_bus,
+)
+mount_security_routes(server, api=api)
+
+server.run(transport="streamable-http")
+```
+
+After starting, visit `http://localhost:8000/security/health` to verify the security layer is active.
+
+## HTTP API Endpoints
+
+All endpoints are mounted under `/security` by default (configurable via the `prefix` parameter).
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /security/health` | Component health check |
+| `GET /security/dashboard` | Full dashboard JSON for the React UI |
+| `GET /security/marketplace` | Marketplace listings with search/filter |
+| `GET /security/marketplace/{id}` | Single listing detail view |
+| `GET /security/trust` | Trust registry overview with all tool scores |
+| `GET /security/trust/{tool}` | Trust score breakdown for a specific tool |
+| `GET /security/compliance` | Compliance report (supports `?type=full\|summary\|executive`) |
+| `GET /security/federation` | Federation peer status |
+| `GET /security/revocations` | Certificate revocation list |
+| `GET /security/revocations/{tool}` | Check if a specific tool is revoked |
+| `GET /security/provenance` | Provenance records (supports `?resource=&actor=&limit=`) |
+
+## Component Independence
+
+Each component is optional. If you only need trust scoring, create just a `TrustRegistry`. If you only need provenance, create just a `ProvenanceLedger`. The `SecurityAPI` gracefully returns `503` responses for unconfigured components.
+
+```python
+# Minimal setup — just trust scoring
+from fastmcp.server.security.registry.registry import TrustRegistry
+
+registry = TrustRegistry()
+registry.register("my-tool", tool_version="1.0.0")
+score = registry.get_trust_score("my-tool")
+print(f"Trust: {score.overall:.2f}")
+```
+
+## Event Bus
+
+The `SecurityEventBus` provides real-time event delivery across all components. Subscribe with filters to receive only the events you care about.
+
+```python
+from fastmcp.server.security.alerts.bus import SecurityEventBus
+from fastmcp.server.security.alerts.filters import SeverityFilter
+from fastmcp.server.security.alerts.models import AlertSeverity
+
+bus = SecurityEventBus()
+
+# Only receive WARNING and above
+bus.subscribe(
+    "my-handler",
+    handler=lambda event: print(f"Alert: {event.message}"),
+    filters=[SeverityFilter(min_severity=AlertSeverity.WARNING)],
+)
+```
+
+## React Dashboard
+
+SecureMCP includes two React frontends:
+
+- **securemcp-dashboard.jsx** — Health monitoring, trust timeline, compliance overview, component status, and activity feed
+- **securemcp-marketplace.jsx** — Tool discovery with search, category filters, reviews, and install tracking
+
+Both accept a `liveData` prop for real-time backend data and fall back to demo data when no prop is provided.

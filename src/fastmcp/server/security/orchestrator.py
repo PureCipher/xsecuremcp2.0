@@ -19,14 +19,22 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from fastmcp.server.security.alerts.bus import SecurityEventBus
+from fastmcp.server.security.certification.pipeline import CertificationPipeline
+from fastmcp.server.security.compliance.reports import ComplianceReporter
 from fastmcp.server.security.config import SecurityConfig
 from fastmcp.server.security.consent.graph import ConsentGraph
 from fastmcp.server.security.contracts.broker import ContextBroker
+from fastmcp.server.security.dashboard.snapshot import SecurityDashboard
+from fastmcp.server.security.federation.crl import CertificateRevocationList
+from fastmcp.server.security.federation.federation import TrustFederation
 from fastmcp.server.security.gateway.audit import AuditAPI
 from fastmcp.server.security.gateway.marketplace import Marketplace
+from fastmcp.server.security.gateway.tool_marketplace import ToolMarketplace
 from fastmcp.server.security.policy.engine import PolicyEngine
 from fastmcp.server.security.provenance.ledger import ProvenanceLedger
 from fastmcp.server.security.reflexive.analyzer import BehavioralAnalyzer, EscalationEngine
+from fastmcp.server.security.registry.registry import TrustRegistry
+from fastmcp.server.security.sandbox.enforcer import SandboxedRunner
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +63,15 @@ class SecurityContext:
         escalation_engine: Escalation rule engine.
         consent_graph: Consent graph for access-rights.
         audit_api: Unified audit query API.
-        marketplace: Server marketplace registry.
+        marketplace: Server marketplace registry (gateway).
+        registry: Trust registry for tool trust scores.
+        tool_marketplace: Tool marketplace for discovery and install.
+        federation: Trust federation for cross-instance trust.
+        crl: Certificate revocation list.
+        compliance_reporter: Compliance reporting engine.
+        sandbox_runner: Sandboxed execution runner.
+        certification_pipeline: Tool certification pipeline.
+        dashboard: Security dashboard for health monitoring.
         middleware: Ordered list of security middleware instances.
         gateway_tools: Dict of MCP tool callables from the gateway layer.
     """
@@ -70,6 +86,14 @@ class SecurityContext:
     consent_graph: ConsentGraph | None = None
     audit_api: AuditAPI | None = None
     marketplace: Marketplace | None = None
+    registry: TrustRegistry | None = None
+    tool_marketplace: ToolMarketplace | None = None
+    federation: TrustFederation | None = None
+    crl: CertificateRevocationList | None = None
+    compliance_reporter: ComplianceReporter | None = None
+    sandbox_runner: SandboxedRunner | None = None
+    certification_pipeline: CertificationPipeline | None = None
+    dashboard: SecurityDashboard | None = None
     middleware: list[Any] = field(default_factory=list)
     gateway_tools: dict[str, Any] = field(default_factory=dict)
 
@@ -241,6 +265,70 @@ class SecurityOrchestrator:
             )
             logger.debug("Consent graph enabled")
 
+        # --- Trust Registry ---
+        if config.is_registry_enabled():
+            assert config.registry is not None
+            registry = config.registry.get_registry(event_bus=bus_for_components)
+            ctx.registry = registry
+            logger.debug("Trust registry enabled")
+
+        # --- CRL ---
+        if config.is_crl_enabled():
+            assert config.crl_config is not None
+            crl = config.crl_config.get_crl()
+            ctx.crl = crl
+            logger.debug("Certificate revocation list enabled")
+
+        # --- Federation ---
+        if config.is_federation_enabled():
+            assert config.federation is not None
+            federation = config.federation.get_federation(
+                local_registry=ctx.registry,
+                local_crl=ctx.crl,
+                event_bus=bus_for_components,
+            )
+            ctx.federation = federation
+            logger.debug("Trust federation enabled")
+
+        # --- Tool Marketplace ---
+        if config.is_tool_marketplace_enabled():
+            assert config.tool_marketplace is not None
+            tool_marketplace = config.tool_marketplace.get_marketplace(
+                trust_registry=ctx.registry,
+                event_bus=bus_for_components,
+            )
+            ctx.tool_marketplace = tool_marketplace
+            logger.debug("Tool marketplace enabled")
+
+        # --- Compliance Reporter ---
+        if config.is_compliance_enabled():
+            assert config.compliance is not None
+            compliance_reporter = config.compliance.get_reporter()
+            ctx.compliance_reporter = compliance_reporter
+            logger.debug("Compliance reporter enabled")
+
+        # --- Sandbox Runner ---
+        if config.is_sandbox_enabled():
+            assert config.sandbox is not None
+            sandbox_runner = config.sandbox.get_runner(crl=ctx.crl)
+            ctx.sandbox_runner = sandbox_runner
+            logger.debug("Sandbox runner enabled")
+
+        # --- Certification Pipeline ---
+        if config.is_certification_enabled():
+            assert config.certification is not None
+            pipeline = config.certification.get_pipeline(
+                marketplace=ctx.tool_marketplace,
+                event_bus=bus_for_components,
+                fallback_crypto=(
+                    config.contracts.crypto_handler
+                    if config.contracts is not None
+                    else None
+                ),
+            )
+            ctx.certification_pipeline = pipeline
+            logger.debug("Certification pipeline enabled")
+
         # --- API Gateway ---
         if config.is_gateway_enabled():
             assert config.gateway is not None
@@ -268,5 +356,17 @@ class SecurityOrchestrator:
                     **create_marketplace_tools(marketplace),
                 }
             logger.debug("API gateway enabled")
+
+        # --- Dashboard (auto-wired from all components) ---
+        ctx.dashboard = SecurityDashboard(
+            registry=ctx.registry,
+            marketplace=ctx.tool_marketplace,
+            federation=ctx.federation,
+            crl=ctx.crl,
+            sandbox_runner=ctx.sandbox_runner,
+            compliance_reporter=ctx.compliance_reporter,
+            event_bus=ctx.event_bus,
+        )
+        logger.debug("Security dashboard created")
 
         return ctx

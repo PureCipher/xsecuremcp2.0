@@ -27,6 +27,13 @@ from fastmcp.server.security.reflexive.models import DriftSeverity, EscalationRu
 from fastmcp.server.security.certification.attestation import CertificationLevel
 from fastmcp.server.security.certification.pipeline import CertificationPipeline
 from fastmcp.server.security.certification.validator import ManifestValidator
+from fastmcp.server.security.compliance.reports import ComplianceFramework, ComplianceReporter
+from fastmcp.server.security.dashboard.snapshot import SecurityDashboard
+from fastmcp.server.security.federation.crl import CertificateRevocationList
+from fastmcp.server.security.federation.federation import TrustFederation
+from fastmcp.server.security.gateway.tool_marketplace import ToolMarketplace
+from fastmcp.server.security.registry.registry import TrustRegistry
+from fastmcp.server.security.sandbox.enforcer import SandboxedRunner
 from fastmcp.server.security.storage.backend import StorageBackend
 
 if TYPE_CHECKING:
@@ -284,6 +291,132 @@ class CertificationConfig:
 
 
 @dataclass
+class RegistryConfig:
+    """Configuration for the Trust Registry.
+
+    Attributes:
+        registry: Pre-built TrustRegistry. If None, one is created.
+    """
+
+    registry: TrustRegistry | None = None
+
+    def get_registry(self, *, event_bus: SecurityEventBus | None = None) -> TrustRegistry:
+        """Get or create the trust registry."""
+        if self.registry is not None:
+            return self.registry
+        return TrustRegistry(event_bus=event_bus)
+
+
+@dataclass
+class ToolMarketplaceConfig:
+    """Configuration for the Tool Marketplace.
+
+    Attributes:
+        marketplace: Pre-built ToolMarketplace. If None, one is created.
+    """
+
+    marketplace: ToolMarketplace | None = None
+
+    def get_marketplace(
+        self,
+        *,
+        trust_registry: TrustRegistry | None = None,
+        event_bus: SecurityEventBus | None = None,
+    ) -> ToolMarketplace:
+        """Get or create the tool marketplace."""
+        if self.marketplace is not None:
+            return self.marketplace
+        return ToolMarketplace(trust_registry=trust_registry, event_bus=event_bus)
+
+
+@dataclass
+class FederationConfig:
+    """Configuration for the Trust Federation.
+
+    Attributes:
+        federation: Pre-built TrustFederation. If None, one is created.
+        federation_id: Identifier for this federation node.
+    """
+
+    federation: TrustFederation | None = None
+    federation_id: str = "default"
+
+    def get_federation(
+        self,
+        *,
+        local_registry: TrustRegistry | None = None,
+        local_crl: CertificateRevocationList | None = None,
+        event_bus: SecurityEventBus | None = None,
+    ) -> TrustFederation:
+        """Get or create the trust federation."""
+        if self.federation is not None:
+            return self.federation
+        return TrustFederation(
+            federation_id=self.federation_id,
+            local_registry=local_registry,
+            local_crl=local_crl,
+            event_bus=event_bus,
+        )
+
+
+@dataclass
+class CRLConfig:
+    """Configuration for the Certificate Revocation List.
+
+    Attributes:
+        crl: Pre-built CertificateRevocationList. If None, one is created.
+    """
+
+    crl: CertificateRevocationList | None = None
+
+    def get_crl(self) -> CertificateRevocationList:
+        """Get or create the CRL."""
+        if self.crl is not None:
+            return self.crl
+        return CertificateRevocationList()
+
+
+@dataclass
+class ComplianceConfig:
+    """Configuration for the Compliance Reporter.
+
+    Attributes:
+        reporter: Pre-built ComplianceReporter. If None, one is created.
+        framework: Compliance framework to use. If None, SecureMCP default.
+    """
+
+    reporter: ComplianceReporter | None = None
+    framework: ComplianceFramework | None = None
+
+    def get_reporter(self) -> ComplianceReporter:
+        """Get or create the compliance reporter."""
+        if self.reporter is not None:
+            return self.reporter
+        return ComplianceReporter(framework=self.framework)
+
+
+@dataclass
+class SandboxConfig:
+    """Configuration for the Sandboxed Execution Runner.
+
+    Attributes:
+        runner: Pre-built SandboxedRunner. If None, one is created.
+    """
+
+    runner: SandboxedRunner | None = None
+
+    def get_runner(
+        self,
+        *,
+        crl: CertificateRevocationList | None = None,
+    ) -> SandboxedRunner:
+        """Get or create the sandboxed runner."""
+        if self.runner is not None:
+            return self.runner
+        return SandboxedRunner(crl=crl)
+
+
+@dataclass
 class SecurityConfig:
     """Master security configuration for SecureMCP.
 
@@ -320,6 +453,12 @@ class SecurityConfig:
     gateway: GatewayConfig | None = None
     alerts: AlertConfig | None = None
     certification: CertificationConfig | None = None
+    registry: RegistryConfig | None = None
+    tool_marketplace: ToolMarketplaceConfig | None = None
+    federation: FederationConfig | None = None
+    crl_config: CRLConfig | None = None
+    compliance: ComplianceConfig | None = None
+    sandbox: SandboxConfig | None = None
     enabled: bool = True
     backend: StorageBackend | None = None
 
@@ -367,3 +506,27 @@ class SecurityConfig:
     def is_certification_enabled(self) -> bool:
         """Check if the certification layer is configured and active."""
         return self.enabled and self.certification is not None
+
+    def is_registry_enabled(self) -> bool:
+        """Check if the trust registry is configured and active."""
+        return self.enabled and self.registry is not None
+
+    def is_tool_marketplace_enabled(self) -> bool:
+        """Check if the tool marketplace is configured and active."""
+        return self.enabled and self.tool_marketplace is not None
+
+    def is_federation_enabled(self) -> bool:
+        """Check if the trust federation is configured and active."""
+        return self.enabled and self.federation is not None
+
+    def is_crl_enabled(self) -> bool:
+        """Check if the CRL is configured and active."""
+        return self.enabled and self.crl_config is not None
+
+    def is_compliance_enabled(self) -> bool:
+        """Check if the compliance reporter is configured and active."""
+        return self.enabled and self.compliance is not None
+
+    def is_sandbox_enabled(self) -> bool:
+        """Check if the sandbox runner is configured and active."""
+        return self.enabled and self.sandbox is not None

@@ -1,0 +1,402 @@
+"""Security HTTP API — Starlette-based endpoints for the SecureMCP platform.
+
+Registers JSON routes on a FastMCP server to serve dashboard, marketplace,
+compliance, audit, trust, and provenance data to frontends.
+
+Usage with FastMCP::
+
+    from fastmcp import FastMCP
+    from fastmcp.server.security.http import mount_security_routes
+
+    server = FastMCP("my-server", security_config=config)
+    mount_security_routes(server)
+    # Now GET /security/dashboard, /security/marketplace, etc. are live.
+
+Standalone usage::
+
+    api = SecurityAPI(
+        dashboard=security_dashboard,
+        marketplace=marketplace,
+        registry=registry,
+        compliance_reporter=reporter,
+        provenance_ledger=ledger,
+        event_bus=bus,
+    )
+    data = api.get_dashboard()
+    data = api.get_marketplace()
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Any
+
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+
+if TYPE_CHECKING:
+    from fastmcp import FastMCP
+    from fastmcp.server.security.alerts.bus import SecurityEventBus
+    from fastmcp.server.security.compliance.reports import ComplianceReporter
+    from fastmcp.server.security.dashboard.snapshot import SecurityDashboard
+    from fastmcp.server.security.federation.crl import CertificateRevocationList
+    from fastmcp.server.security.federation.federation import TrustFederation
+    from fastmcp.server.security.gateway.tool_marketplace import ToolMarketplace
+    from fastmcp.server.security.provenance.ledger import ProvenanceLedger
+    from fastmcp.server.security.registry.registry import TrustRegistry
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class SecurityAPI:
+    """Facade for all SecureMCP HTTP API endpoints.
+
+    Each method returns a plain dict (ready for JSON serialization).
+    The ``mount_security_routes`` helper wires these to Starlette routes.
+
+    Attributes:
+        dashboard: SecurityDashboard for snapshot generation.
+        marketplace: ToolMarketplace for listing/search.
+        registry: TrustRegistry for trust score lookups.
+        compliance_reporter: ComplianceReporter for report generation.
+        provenance_ledger: ProvenanceLedger for audit trail queries.
+        federation: TrustFederation for peer status.
+        crl: CertificateRevocationList for revocation queries.
+        event_bus: SecurityEventBus for recent events.
+    """
+
+    dashboard: SecurityDashboard | None = None
+    marketplace: ToolMarketplace | None = None
+    registry: TrustRegistry | None = None
+    compliance_reporter: ComplianceReporter | None = None
+    provenance_ledger: ProvenanceLedger | None = None
+    federation: TrustFederation | None = None
+    crl: CertificateRevocationList | None = None
+    event_bus: SecurityEventBus | None = None
+
+    # ── Dashboard ─────────────────────────────────────────────
+
+    def get_dashboard(self) -> dict[str, Any]:
+        """Generate full dashboard JSON for the React frontend."""
+        if self.dashboard is None:
+            return {"error": "Dashboard not configured", "status": 503}
+
+        from fastmcp.server.security.dashboard.data_bridge import DashboardDataBridge
+
+        bridge = DashboardDataBridge(dashboard=self.dashboard)
+        return bridge.export()
+
+    # ── Marketplace ───────────────────────────────────────────
+
+    def get_marketplace(
+        self,
+        query: str | None = None,
+        category: str | None = None,
+    ) -> dict[str, Any]:
+        """Generate marketplace JSON for the React frontend."""
+        if self.marketplace is None:
+            return {"error": "Marketplace not configured", "status": 503}
+
+        from fastmcp.server.security.gateway.marketplace_bridge import (
+            MarketplaceDataBridge,
+        )
+
+        bridge = MarketplaceDataBridge(
+            marketplace=self.marketplace,
+            trust_registry=self.registry,
+        )
+        return bridge.export()
+
+    def get_marketplace_listing(self, listing_id: str) -> dict[str, Any]:
+        """Get detail view for a single marketplace listing."""
+        if self.marketplace is None:
+            return {"error": "Marketplace not configured", "status": 503}
+
+        from fastmcp.server.security.gateway.marketplace_bridge import (
+            MarketplaceDataBridge,
+        )
+
+        bridge = MarketplaceDataBridge(
+            marketplace=self.marketplace,
+            trust_registry=self.registry,
+        )
+        detail = bridge.build_listing_detail(listing_id)
+        if detail is None:
+            return {"error": "Listing not found", "status": 404}
+        return detail
+
+    # ── Compliance ────────────────────────────────────────────
+
+    def get_compliance_report(
+        self, report_type: str = "full"
+    ) -> dict[str, Any]:
+        """Generate a compliance report."""
+        if self.compliance_reporter is None:
+            return {"error": "Compliance reporter not configured", "status": 503}
+
+        from fastmcp.server.security.compliance.reports import ReportType
+
+        type_map = {
+            "full": ReportType.FULL,
+            "summary": ReportType.SUMMARY,
+            "findings": ReportType.FINDINGS_ONLY,
+            "executive": ReportType.EXECUTIVE,
+        }
+        rt = type_map.get(report_type, ReportType.FULL)
+        report = self.compliance_reporter.generate_report(report_type=rt)
+        return report.to_dict()
+
+    # ── Trust Registry ────────────────────────────────────────
+
+    def get_trust_registry(self) -> dict[str, Any]:
+        """Get trust registry overview."""
+        if self.registry is None:
+            return {"error": "Registry not configured", "status": 503}
+
+        records = self.registry.get_all()
+        tools = []
+        for record in records:
+            tools.append(
+                {
+                    "tool_name": record.tool_name,
+                    "trust_score": round(record.trust_score.overall, 3),
+                    "is_certified": record.is_certified,
+                    "registered_at": record.registered_at.isoformat(),
+                    "tags": sorted(record.tags) if record.tags else [],
+                }
+            )
+        tools.sort(key=lambda t: t["trust_score"], reverse=True)
+
+        return {
+            "total_tools": self.registry.record_count,
+            "tools": tools,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    def get_trust_score(self, tool_name: str) -> dict[str, Any]:
+        """Get trust score for a specific tool."""
+        if self.registry is None:
+            return {"error": "Registry not configured", "status": 503}
+
+        score = self.registry.get_trust_score(tool_name)
+        if score is None:
+            return {"error": f"Tool '{tool_name}' not found", "status": 404}
+
+        return {
+            "tool_name": tool_name,
+            "overall": round(score.overall, 3),
+            "certification_component": round(score.certification_component, 3),
+            "reputation_component": round(score.reputation_component, 3),
+            "age_component": round(score.age_component, 3),
+        }
+
+    # ── Federation ────────────────────────────────────────────
+
+    def get_federation_status(self) -> dict[str, Any]:
+        """Get federation peer status."""
+        if self.federation is None:
+            return {"error": "Federation not configured", "status": 503}
+
+        return self.federation.get_federation_status()
+
+    # ── CRL ───────────────────────────────────────────────────
+
+    def get_revocations(self) -> dict[str, Any]:
+        """Get certificate revocation list."""
+        if self.crl is None:
+            return {"error": "CRL not configured", "status": 503}
+
+        entries = self.crl.get_all_entries()
+        return {
+            "total_entries": len(entries),
+            "entries": [e.to_dict() for e in entries],
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    def is_revoked(self, tool_name: str) -> dict[str, Any]:
+        """Check if a tool is revoked."""
+        if self.crl is None:
+            return {"error": "CRL not configured", "status": 503}
+
+        revoked = self.crl.is_revoked(tool_name)
+        return {"tool_name": tool_name, "is_revoked": revoked}
+
+    # ── Provenance ────────────────────────────────────────────
+
+    def get_provenance(
+        self,
+        resource_id: str | None = None,
+        actor_id: str | None = None,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        """Query provenance records."""
+        if self.provenance_ledger is None:
+            return {"error": "Provenance ledger not configured", "status": 503}
+
+        records = self.provenance_ledger.get_records(
+            resource_id=resource_id,
+            actor_id=actor_id,
+            limit=limit,
+        )
+        return {
+            "total_records": len(records),
+            "records": [r.to_dict() for r in records],
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    # ── Health ────────────────────────────────────────────────
+
+    def get_health(self) -> dict[str, Any]:
+        """Quick health check for the security layer."""
+        components: dict[str, str] = {}
+
+        if self.dashboard:
+            components["dashboard"] = "ok"
+        if self.marketplace:
+            components["marketplace"] = "ok"
+        if self.registry:
+            components["registry"] = "ok"
+        if self.compliance_reporter:
+            components["compliance"] = "ok"
+        if self.federation:
+            components["federation"] = "ok"
+        if self.crl:
+            components["crl"] = "ok"
+        if self.provenance_ledger:
+            components["provenance"] = "ok"
+        if self.event_bus:
+            components["event_bus"] = "ok"
+
+        return {
+            "status": "healthy" if components else "unconfigured",
+            "components": components,
+            "component_count": len(components),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+
+# ── Route mounting ──────────────────────────────────────────────
+
+
+def mount_security_routes(
+    server: FastMCP,
+    *,
+    api: SecurityAPI | None = None,
+    prefix: str = "/security",
+) -> SecurityAPI:
+    """Mount SecureMCP HTTP routes on a FastMCP server.
+
+    If no ``api`` is provided, one is auto-constructed from the server's
+    SecurityContext (if ``security_config`` was set on the server).
+
+    Args:
+        server: The FastMCP server instance.
+        prefix: URL prefix for all security routes (default ``/security``).
+        api: Optional pre-configured SecurityAPI. If None, built from
+            the server's security context.
+
+    Returns:
+        The SecurityAPI instance (for further customization).
+
+    Example::
+
+        from fastmcp import FastMCP
+        from fastmcp.server.security.http import mount_security_routes
+
+        server = FastMCP("secure-server", security_config=config)
+        api = mount_security_routes(server)
+        server.run(transport="streamable-http")
+    """
+    if api is None:
+        api = _build_api_from_server(server)
+
+    # Dashboard
+    @server.custom_route(f"{prefix}/dashboard", methods=["GET"])
+    async def dashboard_endpoint(request: Request) -> JSONResponse:
+        return JSONResponse(api.get_dashboard())
+
+    # Marketplace
+    @server.custom_route(f"{prefix}/marketplace", methods=["GET"])
+    async def marketplace_endpoint(request: Request) -> JSONResponse:
+        query = request.query_params.get("q")
+        category = request.query_params.get("category")
+        return JSONResponse(api.get_marketplace(query=query, category=category))
+
+    @server.custom_route(f"{prefix}/marketplace/{{listing_id}}", methods=["GET"])
+    async def marketplace_detail_endpoint(request: Request) -> JSONResponse:
+        lid = request.path_params.get("listing_id", "")
+        return JSONResponse(api.get_marketplace_listing(lid))
+
+    # Compliance
+    @server.custom_route(f"{prefix}/compliance", methods=["GET"])
+    async def compliance_endpoint(request: Request) -> JSONResponse:
+        report_type = request.query_params.get("type", "full")
+        return JSONResponse(api.get_compliance_report(report_type=report_type))
+
+    # Trust registry
+    @server.custom_route(f"{prefix}/trust", methods=["GET"])
+    async def trust_registry_endpoint(request: Request) -> JSONResponse:
+        return JSONResponse(api.get_trust_registry())
+
+    @server.custom_route(f"{prefix}/trust/{{tool_name}}", methods=["GET"])
+    async def trust_score_endpoint(request: Request) -> JSONResponse:
+        name = request.path_params.get("tool_name", "")
+        return JSONResponse(api.get_trust_score(name))
+
+    # Federation
+    @server.custom_route(f"{prefix}/federation", methods=["GET"])
+    async def federation_endpoint(request: Request) -> JSONResponse:
+        return JSONResponse(api.get_federation_status())
+
+    # CRL
+    @server.custom_route(f"{prefix}/revocations", methods=["GET"])
+    async def revocations_endpoint(request: Request) -> JSONResponse:
+        return JSONResponse(api.get_revocations())
+
+    @server.custom_route(f"{prefix}/revocations/{{tool_name}}", methods=["GET"])
+    async def revocation_check_endpoint(request: Request) -> JSONResponse:
+        name = request.path_params.get("tool_name", "")
+        return JSONResponse(api.is_revoked(name))
+
+    # Provenance
+    @server.custom_route(f"{prefix}/provenance", methods=["GET"])
+    async def provenance_endpoint(request: Request) -> JSONResponse:
+        resource = request.query_params.get("resource")
+        actor = request.query_params.get("actor")
+        limit = int(request.query_params.get("limit", "50"))
+        return JSONResponse(api.get_provenance(resource_id=resource, actor_id=actor, limit=limit))
+
+    # Health
+    @server.custom_route(f"{prefix}/health", methods=["GET"])
+    async def health_endpoint(request: Request) -> JSONResponse:
+        return JSONResponse(api.get_health())
+
+    logger.info("SecureMCP HTTP routes mounted at %s/*", prefix)
+    return api
+
+
+def _build_api_from_server(server: FastMCP) -> SecurityAPI:
+    """Auto-construct a SecurityAPI from a FastMCP server's security context."""
+    ctx = getattr(server, "_security_context", None)
+    if ctx is None:
+        logger.warning("No security context found on server; API will be empty")
+        return SecurityAPI()
+
+    # The SecurityContext has real fields for all components.
+    # Use ctx.dashboard (auto-created by bootstrap) or build one.
+    dashboard = getattr(ctx, "dashboard", None)
+
+    return SecurityAPI(
+        dashboard=dashboard,
+        marketplace=getattr(ctx, "tool_marketplace", None),
+        registry=getattr(ctx, "registry", None),
+        compliance_reporter=getattr(ctx, "compliance_reporter", None),
+        provenance_ledger=getattr(ctx, "provenance_ledger", None),
+        federation=getattr(ctx, "federation", None),
+        crl=getattr(ctx, "crl", None),
+        event_bus=getattr(ctx, "event_bus", None),
+    )
