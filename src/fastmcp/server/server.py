@@ -387,6 +387,26 @@ class FastMCP(
                     )
                 )
 
+        # SecureMCP: Register reflexive monitoring middleware if configured
+        if security_config is not None and security_config.is_reflexive_enabled():
+            if fastmcp.settings.security.enabled:
+                from fastmcp.server.security.middleware.reflexive import (
+                    ReflexiveMiddleware,
+                )
+
+                reflexive_config = security_config.reflexive  # type: ignore[union-attr]
+                analyzer = reflexive_config.get_analyzer()
+                escalation_engine = reflexive_config.get_escalation_engine()
+                self._behavioral_analyzer = analyzer
+                self._escalation_engine = escalation_engine
+                self.middleware.append(
+                    ReflexiveMiddleware(
+                        analyzer=analyzer,
+                        escalation_engine=escalation_engine,
+                        bypass_stdio=fastmcp.settings.security.policy_bypass_stdio,
+                    )
+                )
+
         if dereference_schemas:
             from fastmcp.server.middleware.dereference import (
                 DereferenceRefsMiddleware,

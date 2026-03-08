@@ -18,6 +18,8 @@ from fastmcp.server.security.policy.engine import PolicyEngine
 from fastmcp.server.security.policy.invariants import InvariantRegistry
 from fastmcp.server.security.policy.provider import PolicyProvider
 from fastmcp.server.security.provenance.ledger import ProvenanceLedger
+from fastmcp.server.security.reflexive.analyzer import BehavioralAnalyzer, EscalationEngine
+from fastmcp.server.security.reflexive.models import DriftSeverity, EscalationRule
 
 if TYPE_CHECKING:
     pass
@@ -119,6 +121,47 @@ class ProvenanceConfig:
 
 
 @dataclass
+class ReflexiveConfig:
+    """Configuration for the Reflexive Core layer (Phase 4).
+
+    Attributes:
+        analyzer: Pre-built BehavioralAnalyzer instance. If None, one is created.
+        escalation_engine: Pre-built EscalationEngine. If None, one is created
+            from the escalation_rules list.
+        escalation_rules: Rules for the escalation engine (ignored if
+            escalation_engine is set).
+        sigma_thresholds: Custom sigma thresholds for drift severity classification.
+        min_samples: Minimum observations before drift detection activates.
+        on_escalation: Optional async callback invoked on each escalation.
+    """
+
+    analyzer: BehavioralAnalyzer | None = None
+    escalation_engine: EscalationEngine | None = None
+    escalation_rules: list[EscalationRule] | None = None
+    sigma_thresholds: dict[DriftSeverity, float] | None = None
+    min_samples: int = 10
+    on_escalation: Any = None
+
+    def get_analyzer(self) -> BehavioralAnalyzer:
+        """Get or create the behavioral analyzer."""
+        if self.analyzer is not None:
+            return self.analyzer
+        return BehavioralAnalyzer(
+            sigma_thresholds=self.sigma_thresholds,
+            min_samples=self.min_samples,
+        )
+
+    def get_escalation_engine(self) -> EscalationEngine:
+        """Get or create the escalation engine."""
+        if self.escalation_engine is not None:
+            return self.escalation_engine
+        return EscalationEngine(
+            rules=self.escalation_rules,
+            on_escalation=self.on_escalation,
+        )
+
+
+@dataclass
 class SecurityConfig:
     """Master security configuration for SecureMCP.
 
@@ -141,12 +184,14 @@ class SecurityConfig:
         policy: Policy Kernel configuration (Phase 1).
         contracts: Context Broker configuration (Phase 2).
         provenance: Provenance Ledger configuration (Phase 3).
+        reflexive: Reflexive Core configuration (Phase 4).
         enabled: Master switch to enable/disable all security layers.
     """
 
     policy: PolicyConfig | None = None
     contracts: ContractConfig | None = None
     provenance: ProvenanceConfig | None = None
+    reflexive: ReflexiveConfig | None = None
     enabled: bool = True
 
     def is_policy_enabled(self) -> bool:
@@ -160,3 +205,7 @@ class SecurityConfig:
     def is_provenance_enabled(self) -> bool:
         """Check if the provenance layer is configured and active."""
         return self.enabled and self.provenance is not None
+
+    def is_reflexive_enabled(self) -> bool:
+        """Check if the reflexive layer is configured and active."""
+        return self.enabled and self.reflexive is not None

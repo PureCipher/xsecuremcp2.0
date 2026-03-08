@@ -9,9 +9,13 @@ from fastmcp.server.security.middleware.policy_enforcement import (
 from fastmcp.server.security.middleware.provenance_recording import (
     ProvenanceRecordingMiddleware,
 )
+from fastmcp.server.security.middleware.reflexive import (
+    ReflexiveMiddleware,
+)
 
 __all__ = [
     "ContractValidationMiddleware",
     "PolicyEnforcementMiddleware",
     "ProvenanceRecordingMiddleware",
+    "ReflexiveMiddleware",
 ]
