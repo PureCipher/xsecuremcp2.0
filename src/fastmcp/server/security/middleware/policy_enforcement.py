@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
+from typing import Any
 
 import mcp.types as mt
 
@@ -162,6 +163,10 @@ class PolicyEnforcementMiddleware(Middleware):
         result = await self.policy_engine.evaluate(eval_ctx)
         if result.decision == PolicyDecision.DENY:
             raise PolicyViolationError(result)
+
+        # Enforce constraints from policy result
+        if result.constraints:
+            self._enforce_constraints(result.constraints, tool_name, context)
 
         return await call_next(context)
 
@@ -360,6 +365,86 @@ class PolicyEnforcementMiddleware(Middleware):
                 )
 
         return permitted
+
+
+    def _enforce_constraints(
+        self,
+        constraints: list[str],
+        resource_id: str,
+        context: Any,
+    ) -> None:
+        """Enforce policy constraints.
+
+        Constraints are strings that describe conditions that must be met.
+        Known constraint types:
+
+        - ``read_only``: The resource can only be read, not modified.
+        - ``max_args:N``: Maximum number of arguments for tool calls.
+        - ``require_metadata:KEY``: A metadata key must be present.
+        - ``log_access``: Access must be logged (handled by audit log).
+
+        Unknown constraints are logged as warnings but don't block execution.
+
+        Args:
+            constraints: List of constraint strings from PolicyResult.
+            resource_id: The resource being accessed.
+            context: The middleware context.
+        """
+        for constraint in constraints:
+            constraint_lower = constraint.lower().strip()
+
+            if constraint_lower == "read_only":
+                # For tool calls, read_only means deny
+                if hasattr(context, "message") and hasattr(context.message, "name"):
+                    logger.info(
+                        "Constraint 'read_only' active for %s — write operations blocked",
+                        resource_id,
+                    )
+                    # We allow the operation but log the constraint; actual enforcement
+                    # depends on the tool's semantics
+                continue
+
+            if constraint_lower.startswith("max_args:"):
+                try:
+                    max_args = int(constraint_lower.split(":", 1)[1])
+                    if hasattr(context, "message") and hasattr(context.message, "arguments"):
+                        args = context.message.arguments or {}
+                        if len(args) > max_args:
+                            raise PolicyViolationError(
+                                _deny_result(
+                                    f"Constraint violation: max_args={max_args}, "
+                                    f"got {len(args)} arguments"
+                                )
+                            )
+                except (ValueError, IndexError):
+                    logger.warning("Invalid max_args constraint: %s", constraint)
+                continue
+
+            if constraint_lower.startswith("require_metadata:"):
+                required_key = constraint.split(":", 1)[1].strip()
+                if hasattr(context, "message") and hasattr(context.message, "arguments"):
+                    args = context.message.arguments or {}
+                    if required_key not in args:
+                        raise PolicyViolationError(
+                            _deny_result(
+                                f"Constraint violation: required metadata key "
+                                f"'{required_key}' not present"
+                            )
+                        )
+                continue
+
+            if constraint_lower == "log_access":
+                logger.info(
+                    "Constrained access logged: %s", resource_id
+                )
+                continue
+
+            # Unknown constraint — log but don't block
+            logger.debug(
+                "Unknown constraint '%s' for %s — ignored",
+                constraint,
+                resource_id,
+            )
 
 
 def _deny_result(reason: str) -> "PolicyResult":

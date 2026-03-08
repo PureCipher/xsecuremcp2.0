@@ -32,6 +32,9 @@ from fastmcp.server.security.gateway.marketplace import Marketplace
 from fastmcp.server.security.gateway.tool_marketplace import ToolMarketplace
 from fastmcp.server.security.policy.audit import PolicyAuditLog
 from fastmcp.server.security.policy.engine import PolicyEngine
+from fastmcp.server.security.policy.governance import PolicyGovernor
+from fastmcp.server.security.policy.monitoring import PolicyMonitor
+from fastmcp.server.security.policy.validator import PolicyValidator
 from fastmcp.server.security.policy.versioning.manager import PolicyVersionManager
 from fastmcp.server.security.provenance.ledger import ProvenanceLedger
 from fastmcp.server.security.reflexive.analyzer import BehavioralAnalyzer, EscalationEngine
@@ -83,6 +86,9 @@ class SecurityContext:
     policy_engine: PolicyEngine | None = None
     policy_audit_log: PolicyAuditLog | None = None
     policy_version_manager: PolicyVersionManager | None = None
+    policy_validator: PolicyValidator | None = None
+    policy_monitor: PolicyMonitor | None = None
+    policy_governor: PolicyGovernor | None = None
     broker: ContextBroker | None = None
     provenance_ledger: ProvenanceLedger | None = None
     behavioral_analyzer: BehavioralAnalyzer | None = None
@@ -182,6 +188,33 @@ class SecurityOrchestrator:
                 engine._event_bus = bus_for_components
             ctx.policy_engine = engine
 
+            # Validator
+            validator = config.policy.get_validator()
+            if validator is not None:
+                engine._validator = validator
+                ctx.policy_validator = validator
+
+            # Invariant registry
+            if config.policy.invariant_registry is not None:
+                engine._invariant_registry = config.policy.invariant_registry
+
+            # Monitor
+            monitor = config.policy.get_monitor(
+                audit_log=audit_log,
+                event_bus=bus_for_components,
+            )
+            if monitor is not None:
+                engine._monitor = monitor
+                ctx.policy_monitor = monitor
+
+            # Governor
+            governor = config.policy.get_governor(
+                engine,
+                validator=validator,
+            )
+            if governor is not None:
+                ctx.policy_governor = governor
+
             from fastmcp.server.security.middleware.policy_enforcement import (
                 PolicyEnforcementMiddleware,
             )
@@ -193,9 +226,13 @@ class SecurityOrchestrator:
                 )
             )
             logger.debug(
-                "Policy kernel enabled (audit_log=%s, versioning=%s)",
+                "Policy kernel enabled (audit_log=%s, versioning=%s, "
+                "monitor=%s, governor=%s, validator=%s)",
                 audit_log is not None,
                 version_manager is not None,
+                monitor is not None,
+                governor is not None,
+                validator is not None,
             )
 
         # --- Context Broker (Contracts) ---

@@ -17,9 +17,12 @@ from fastmcp.server.security.contracts.exchange_log import ExchangeLog
 from fastmcp.server.security.contracts.schema import ContractTerm
 from fastmcp.server.security.policy.audit import PolicyAuditLog
 from fastmcp.server.security.policy.engine import PolicyEngine
-from fastmcp.server.security.policy.versioning.manager import PolicyVersionManager
+from fastmcp.server.security.policy.governance import PolicyGovernor
 from fastmcp.server.security.policy.invariants import InvariantRegistry
+from fastmcp.server.security.policy.monitoring import PolicyMonitor
 from fastmcp.server.security.policy.provider import PolicyProvider
+from fastmcp.server.security.policy.validator import PolicyValidator
+from fastmcp.server.security.policy.versioning.manager import PolicyVersionManager
 from fastmcp.server.security.consent.graph import ConsentGraph
 from fastmcp.server.security.gateway.audit import AuditAPI
 from fastmcp.server.security.gateway.marketplace import Marketplace
@@ -70,6 +73,11 @@ class PolicyConfig:
     audit_max_entries: int = 10_000
     policy_file: str | dict | None = None
     enable_versioning: bool = False
+    enable_monitoring: bool = False
+    enable_governance: bool = False
+    enable_validation: bool = True
+    validator: PolicyValidator | None = None
+    monitor: PolicyMonitor | None = None
     backend: StorageBackend | None = None
 
     def get_audit_log(self) -> PolicyAuditLog:
@@ -102,6 +110,41 @@ class PolicyConfig:
         return PolicyVersionManager(
             policy_set_id=policy_set_id,
             backend=backend,
+        )
+
+    def get_validator(self) -> PolicyValidator | None:
+        """Get or create the policy validator."""
+        if not self.enable_validation:
+            return None
+        if self.validator is not None:
+            return self.validator
+        return PolicyValidator()
+
+    def get_monitor(
+        self,
+        *,
+        audit_log: PolicyAuditLog | None = None,
+        event_bus: Any = None,
+    ) -> PolicyMonitor | None:
+        """Get or create the policy monitor."""
+        if not self.enable_monitoring:
+            return None
+        if self.monitor is not None:
+            return self.monitor
+        return PolicyMonitor(audit_log=audit_log, event_bus=event_bus)
+
+    def get_governor(
+        self,
+        engine: PolicyEngine,
+        *,
+        validator: PolicyValidator | None = None,
+    ) -> PolicyGovernor | None:
+        """Create a PolicyGovernor if governance is enabled."""
+        if not self.enable_governance:
+            return None
+        return PolicyGovernor(
+            engine=engine,
+            validator=validator,
         )
 
     def get_engine(

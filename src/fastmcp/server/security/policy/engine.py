@@ -24,6 +24,9 @@ from fastmcp.server.security.policy.provider import (
 if TYPE_CHECKING:
     from fastmcp.server.security.alerts.bus import SecurityEventBus
     from fastmcp.server.security.policy.audit import PolicyAuditLog
+    from fastmcp.server.security.policy.invariants import InvariantRegistry
+    from fastmcp.server.security.policy.monitoring import PolicyMonitor
+    from fastmcp.server.security.policy.validator import PolicyValidator
     from fastmcp.server.security.policy.versioning.manager import PolicyVersionManager
 
 logger = logging.getLogger(__name__)
@@ -102,6 +105,9 @@ class PolicyEngine:
         self._event_bus = event_bus
         self._audit_log = audit_log
         self._version_manager = version_manager
+        self._invariant_registry: InvariantRegistry | None = None
+        self._monitor: PolicyMonitor | None = None
+        self._validator: PolicyValidator | None = None
         self._swap_lock = asyncio.Lock()
         self._swap_history: list[PolicySwapRecord] = []
         self._evaluation_count: int = 0
@@ -136,6 +142,21 @@ class PolicyEngine:
     def version_manager(self) -> PolicyVersionManager | None:
         """The attached version manager, if any."""
         return self._version_manager
+
+    @property
+    def monitor(self) -> PolicyMonitor | None:
+        """The attached policy monitor, if any."""
+        return self._monitor
+
+    @property
+    def invariant_registry(self) -> InvariantRegistry | None:
+        """The attached invariant registry, if any."""
+        return self._invariant_registry
+
+    @property
+    def validator(self) -> PolicyValidator | None:
+        """The attached policy validator, if any."""
+        return self._validator
 
     async def evaluate(
         self, context: PolicyEvaluationContext
@@ -272,16 +293,28 @@ class PolicyEngine:
         result: PolicyResult,
         start_time: datetime,
     ) -> None:
-        """Record an evaluation to the audit log if one is attached."""
-        if self._audit_log is None:
-            return
-        elapsed_ms = (
-            datetime.now(timezone.utc) - start_time
-        ).total_seconds() * 1000
-        try:
-            self._audit_log.record(context, result, elapsed_ms=elapsed_ms)
-        except Exception:
-            logger.warning("Failed to record audit entry", exc_info=True)
+        """Record an evaluation to the audit log and monitor."""
+        if self._audit_log is not None:
+            elapsed_ms = (
+                datetime.now(timezone.utc) - start_time
+            ).total_seconds() * 1000
+            try:
+                self._audit_log.record(context, result, elapsed_ms=elapsed_ms)
+            except Exception:
+                logger.warning("Failed to record audit entry", exc_info=True)
+
+        # Feed the monitor for anomaly detection
+        if self._monitor is not None:
+            try:
+                self._monitor.record_decision(
+                    decision=result.decision.value,
+                    resource_id=context.resource_id,
+                    actor_id=context.actor_id,
+                )
+                # Check anomalies after each decision (lightweight)
+                self._monitor.check_anomalies()
+            except Exception:
+                logger.debug("Failed to record monitor decision", exc_info=True)
 
     async def hot_swap(
         self,
@@ -374,6 +407,28 @@ class PolicyEngine:
                         },
                     )
                 )
+
+            # Run invariant verification after swap
+            if self._invariant_registry is not None:
+                try:
+                    invariant_context = {
+                        "provider_count": len(self._providers),
+                        "providers": self._providers,
+                        "swap_reason": reason,
+                        "old_policy_id": old_id,
+                        "new_policy_id": new_id,
+                    }
+                    # Fire-and-forget: don't block swap on invariant check
+                    import asyncio
+
+                    asyncio.ensure_future(
+                        self._invariant_registry.verify_all(invariant_context)
+                    )
+                except Exception:
+                    logger.debug(
+                        "Failed to run invariant verification after hot-swap",
+                        exc_info=True,
+                    )
 
             logger.info(
                 "Policy hot-swap: %s@%s -> %s@%s (%s)",

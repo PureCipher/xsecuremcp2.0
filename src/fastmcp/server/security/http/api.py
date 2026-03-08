@@ -47,6 +47,9 @@ if TYPE_CHECKING:
     from fastmcp.server.security.gateway.tool_marketplace import ToolMarketplace
     from fastmcp.server.security.policy.audit import PolicyAuditLog
     from fastmcp.server.security.policy.engine import PolicyEngine
+    from fastmcp.server.security.policy.governance import PolicyGovernor
+    from fastmcp.server.security.policy.monitoring import PolicyMonitor
+    from fastmcp.server.security.policy.validator import PolicyValidator
     from fastmcp.server.security.policy.versioning.manager import PolicyVersionManager
     from fastmcp.server.security.provenance.ledger import ProvenanceLedger
     from fastmcp.server.security.registry.registry import TrustRegistry
@@ -83,6 +86,9 @@ class SecurityAPI:
     policy_engine: PolicyEngine | None = None
     policy_audit_log: PolicyAuditLog | None = None
     policy_version_manager: PolicyVersionManager | None = None
+    policy_validator: PolicyValidator | None = None
+    policy_monitor: PolicyMonitor | None = None
+    policy_governor: PolicyGovernor | None = None
 
     @classmethod
     def from_context(cls, ctx: Any) -> SecurityAPI:
@@ -113,6 +119,9 @@ class SecurityAPI:
             policy_engine=getattr(ctx, "policy_engine", None),
             policy_audit_log=getattr(ctx, "policy_audit_log", None),
             policy_version_manager=getattr(ctx, "policy_version_manager", None),
+            policy_validator=getattr(ctx, "policy_validator", None),
+            policy_monitor=getattr(ctx, "policy_monitor", None),
+            policy_governor=getattr(ctx, "policy_governor", None),
         )
 
     # ── Dashboard ─────────────────────────────────────────────
@@ -452,6 +461,86 @@ class SecurityAPI:
             "diff": diff,
         }
 
+    # ── Validation ─────────────────────────────────────────────
+
+    def validate_policy(self, config: dict) -> dict[str, Any]:
+        """Validate a declarative policy config.
+
+        Args:
+            config: The policy dict to validate.
+
+        Returns:
+            ValidationResult as a dict.
+        """
+        if self.policy_validator is None:
+            return {"error": "Policy validator not configured", "status": 503}
+
+        result = self.policy_validator.validate_declarative(config)
+        return result.to_dict()
+
+    def validate_providers(self) -> dict[str, Any]:
+        """Validate the current engine providers for semantic issues."""
+        if self.policy_validator is None:
+            return {"error": "Policy validator not configured", "status": 503}
+        if self.policy_engine is None:
+            return {"error": "Policy engine not configured", "status": 503}
+
+        result = self.policy_validator.validate_providers(
+            self.policy_engine.providers
+        )
+        return result.to_dict()
+
+    # ── Monitoring ────────────────────────────────────────────
+
+    def get_policy_metrics(self) -> dict[str, Any]:
+        """Get current policy monitoring metrics."""
+        if self.policy_monitor is None:
+            return {"error": "Policy monitor not configured", "status": 503}
+
+        return self.policy_monitor.get_metrics()
+
+    def get_policy_alerts(self, limit: int = 50) -> dict[str, Any]:
+        """Get recent monitoring alerts.
+
+        Args:
+            limit: Maximum number of alerts to return.
+        """
+        if self.policy_monitor is None:
+            return {"error": "Policy monitor not configured", "status": 503}
+
+        alerts = self.policy_monitor.get_recent_alerts(limit=limit)
+        return {
+            "total_alerts": len(alerts),
+            "alerts": alerts,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    # ── Governance ────────────────────────────────────────────
+
+    def get_governance_proposals(self) -> dict[str, Any]:
+        """List all governance proposals."""
+        if self.policy_governor is None:
+            return {"error": "Policy governance not configured", "status": 503}
+
+        proposals = self.policy_governor.proposals
+        return {
+            "total_proposals": len(proposals),
+            "pending_count": len(self.policy_governor.pending_proposals),
+            "proposals": [p.to_dict() for p in proposals],
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    def get_governance_proposal(self, proposal_id: str) -> dict[str, Any]:
+        """Get a single proposal by ID."""
+        if self.policy_governor is None:
+            return {"error": "Policy governance not configured", "status": 503}
+
+        proposal = self.policy_governor.get_proposal(proposal_id)
+        if proposal is None:
+            return {"error": f"Proposal not found: {proposal_id}", "status": 404}
+
+        return proposal.to_dict()
+
     # ── Health ────────────────────────────────────────────────
 
     def get_health(self) -> dict[str, Any]:
@@ -480,6 +569,12 @@ class SecurityAPI:
             components["policy_audit_log"] = "ok"
         if self.policy_version_manager:
             components["policy_versioning"] = "ok"
+        if self.policy_validator:
+            components["policy_validator"] = "ok"
+        if self.policy_monitor:
+            components["policy_monitor"] = "ok"
+        if self.policy_governor:
+            components["policy_governor"] = "ok"
 
         return {
             "status": "healthy" if components else "unconfigured",
@@ -631,6 +726,37 @@ def mount_security_routes(
         v2 = int(request.query_params.get("v2", "0"))
         return JSONResponse(api.diff_policy_versions(v1, v2))
 
+    # Validation
+    @server.custom_route(f"{prefix}/policy/validate", methods=["POST"])
+    async def policy_validate_endpoint(request: Request) -> JSONResponse:
+        body = await request.json()
+        config = body.get("config", {})
+        return JSONResponse(api.validate_policy(config))
+
+    @server.custom_route(f"{prefix}/policy/validate/providers", methods=["GET"])
+    async def policy_validate_providers_endpoint(request: Request) -> JSONResponse:
+        return JSONResponse(api.validate_providers())
+
+    # Monitoring
+    @server.custom_route(f"{prefix}/policy/metrics", methods=["GET"])
+    async def policy_metrics_endpoint(request: Request) -> JSONResponse:
+        return JSONResponse(api.get_policy_metrics())
+
+    @server.custom_route(f"{prefix}/policy/alerts", methods=["GET"])
+    async def policy_alerts_endpoint(request: Request) -> JSONResponse:
+        limit = int(request.query_params.get("limit", "50"))
+        return JSONResponse(api.get_policy_alerts(limit=limit))
+
+    # Governance
+    @server.custom_route(f"{prefix}/policy/governance", methods=["GET"])
+    async def policy_governance_endpoint(request: Request) -> JSONResponse:
+        return JSONResponse(api.get_governance_proposals())
+
+    @server.custom_route(f"{prefix}/policy/governance/{{proposal_id}}", methods=["GET"])
+    async def policy_governance_detail_endpoint(request: Request) -> JSONResponse:
+        pid = request.path_params.get("proposal_id", "")
+        return JSONResponse(api.get_governance_proposal(pid))
+
     # Health
     @server.custom_route(f"{prefix}/health", methods=["GET"])
     async def health_endpoint(request: Request) -> JSONResponse:
@@ -663,4 +789,7 @@ def _build_api_from_server(server: FastMCP) -> SecurityAPI:
         policy_engine=getattr(ctx, "policy_engine", None),
         policy_audit_log=getattr(ctx, "policy_audit_log", None),
         policy_version_manager=getattr(ctx, "policy_version_manager", None),
+        policy_validator=getattr(ctx, "policy_validator", None),
+        policy_monitor=getattr(ctx, "policy_monitor", None),
+        policy_governor=getattr(ctx, "policy_governor", None),
     )
