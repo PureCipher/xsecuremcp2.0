@@ -898,6 +898,30 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
         return self._policy_api().diff_policy_versions(v1, v2)
 
+    def export_policy_snapshot(
+        self,
+        *,
+        version_number: int | None = None,
+    ) -> dict[str, Any]:
+        """Export the live policy chain or a saved version as JSON."""
+
+        return self._policy_api().export_policy_snapshot(version_number=version_number)
+
+    async def import_policy_snapshot(
+        self,
+        snapshot: dict[str, Any] | list[Any],
+        *,
+        description_prefix: str = "Imported policy snapshot",
+        author: str = "registry-admin",
+    ) -> dict[str, Any]:
+        """Import policy JSON by creating governance proposals."""
+
+        return await self._policy_api().import_policy_snapshot(
+            snapshot,
+            description_prefix=description_prefix,
+            author=author,
+        )
+
     def list_verified_tools(
         self,
         *,
@@ -1598,6 +1622,72 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     status_code=403,
                 )
             return JSONResponse(self._policy_api().get_policy_schema())
+
+        @self.custom_route(f"{prefix}/policy/export", methods=["GET"])
+        async def registry_policy_export(request: Request) -> JSONResponse:
+            session = self._session_from_request(request)
+            allowed_roles = {RegistryRole.REVIEWER, RegistryRole.ADMIN}
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            if self.auth_enabled and not self._has_roles(session, allowed_roles):
+                return JSONResponse(
+                    {
+                        "error": "Reviewer or admin role required.",
+                        "status": 403,
+                    },
+                    status_code=403,
+                )
+            raw_version = request.query_params.get("version")
+            try:
+                version_number = int(raw_version) if raw_version is not None else None
+            except ValueError:
+                return JSONResponse(
+                    {"error": "Invalid `version` query parameter.", "status": 400},
+                    status_code=400,
+                )
+            payload = self.export_policy_snapshot(version_number=version_number)
+            return JSONResponse(payload, status_code=_status_code_from_payload(payload))
+
+        @self.custom_route(f"{prefix}/policy/import", methods=["POST"])
+        async def registry_policy_import(request: Request) -> JSONResponse:
+            session = self._session_from_request(request)
+            allowed_roles = {RegistryRole.REVIEWER, RegistryRole.ADMIN}
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            if self.auth_enabled and not self._has_roles(session, allowed_roles):
+                return JSONResponse(
+                    {
+                        "error": "Reviewer or admin role required.",
+                        "status": 403,
+                    },
+                    status_code=403,
+                )
+            try:
+                body = await request.json()
+            except Exception:
+                return JSONResponse(
+                    {"error": "Invalid JSON body", "status": 400},
+                    status_code=400,
+                )
+            snapshot = body.get("snapshot", body) if isinstance(body, dict) else body
+            description_prefix = (
+                str(body.get("description_prefix", "Imported policy snapshot"))
+                if isinstance(body, dict)
+                else "Imported policy snapshot"
+            )
+
+            payload = await self.import_policy_snapshot(
+                snapshot,
+                description_prefix=description_prefix,
+                author=session.username if session is not None else "registry-admin",
+            )
+            return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
         @self.custom_route(f"{prefix}/policy/versions", methods=["GET"])
         async def registry_policy_versions(request: Request) -> JSONResponse:

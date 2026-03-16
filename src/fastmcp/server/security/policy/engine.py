@@ -523,6 +523,33 @@ class PolicyEngine:
             logger.info("Removed policy provider: %s", pid)
             return removed
 
+    async def replace_providers(
+        self,
+        providers: list[PolicyProvider],
+        *,
+        reason: str = "Manual replace",
+        author: str = "policy-engine",
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        """Replace the full provider chain as one atomic, versioned change."""
+        async with self._swap_lock:
+            self._providers = list(providers)
+            self._record_version_snapshot(
+                author=author,
+                description=f"Replaced provider chain ({reason})",
+                metadata={
+                    "operation": "replace_chain",
+                    "provider_count": len(self._providers),
+                    "reason": reason,
+                    **dict(metadata or {}),
+                },
+            )
+            logger.info(
+                "Replaced policy provider chain with %d providers (%s)",
+                len(self._providers),
+                reason,
+            )
+
     async def restore_version(
         self,
         policy_data: dict[str, Any],
