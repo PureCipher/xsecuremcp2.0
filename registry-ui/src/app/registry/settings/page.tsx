@@ -13,8 +13,8 @@ export default async function RegistrySettingsPage() {
           </p>
           <h1 className="text-2xl font-semibold text-emerald-50">Policy overview</h1>
           <p className="max-w-xl text-[11px] text-emerald-100/80">
-            Read‑only view of how this SecureMCP registry is configured. Policy changes are managed via
-            environment and infrastructure, not from this UI.
+            Read-only view of how this SecureMCP registry is configured. Use the dedicated Policy
+            page to manage live access rules and rollbacks.
           </p>
         </header>
 
@@ -67,7 +67,11 @@ export default async function RegistrySettingsPage() {
         )}
 
         <p className="text-[10px] text-emerald-300/80">
-          For a live snapshot of counts and status, see{" "}
+          Policy changes now live in{" "}
+          <Link href="/registry/policy" className="underline">
+            Policy
+          </Link>
+          . For a live snapshot of counts and status, see{" "}
           <Link href="/registry/health" className="underline">
             Health
           </Link>
@@ -77,4 +81,3 @@ export default async function RegistrySettingsPage() {
     </main>
   );
 }
-

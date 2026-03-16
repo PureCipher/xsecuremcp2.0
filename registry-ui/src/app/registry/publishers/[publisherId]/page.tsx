@@ -1,5 +1,9 @@
 import Link from "next/link";
-import { getPublisherProfile } from "@/lib/registryClient";
+import {
+  getPublisherProfile,
+  type PublisherSummary,
+  type RegistryToolListing,
+} from "@/lib/registryClient";
 
 export default async function PublisherProfilePage(props: { params: Promise<{ publisherId: string }> }) {
   const { publisherId } = await props.params;
@@ -40,8 +44,8 @@ export default async function PublisherProfilePage(props: { params: Promise<{ pu
     );
   }
 
-  const summary = profile.summary ?? {};
-  const listings: any[] = profile.listings ?? [];
+  const summary: PublisherSummary = profile.summary ?? { publisher_id: decodedId };
+  const listings: RegistryToolListing[] = profile.listings ?? [];
 
   return (
     <main className="px-4 py-8 text-sm text-emerald-50">
@@ -142,4 +146,3 @@ export default async function PublisherProfilePage(props: { params: Promise<{ pu
     </main>
   );
 }
-

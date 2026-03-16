@@ -1,4 +1,7 @@
-import { getReviewQueue } from "@/lib/registryClient";
+import {
+  getReviewQueue,
+  type ReviewQueueItem,
+} from "@/lib/registryClient";
 import { ReviewActions } from "./ReviewActions";
 
 function sectionLabel(key: string): string {
@@ -23,7 +26,7 @@ export default async function ReviewPage() {
     );
   }
 
-  const sections: Record<string, any[]> = queue.sections ?? {};
+  const sections: Record<string, ReviewQueueItem[]> = queue.sections ?? {};
 
   return (
     <main className="px-4 py-8 text-sm text-emerald-50">
@@ -109,4 +112,3 @@ export default async function ReviewPage() {
     </main>
   );
 }
-

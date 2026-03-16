@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getRegistrySession, listVerifiedTools } from "@/lib/registryClient";
+import {
+  getRegistrySession,
+  listVerifiedTools,
+  type RegistryToolListing,
+} from "@/lib/registryClient";
 
 export default async function RegistryAppPage() {
   const sessionPayload = await getRegistrySession();
@@ -11,7 +15,7 @@ export default async function RegistryAppPage() {
   }
 
   const catalog = (await listVerifiedTools()) ?? { tools: [], count: 0 };
-  const tools: any[] = catalog.tools ?? [];
+  const tools: RegistryToolListing[] = catalog.tools ?? [];
 
   return (
     <main className="min-h-screen bg-emerald-950/95 px-4 py-10 text-sm text-emerald-50">
@@ -88,5 +92,4 @@ export default async function RegistryAppPage() {
     </main>
   );
 }
-
 

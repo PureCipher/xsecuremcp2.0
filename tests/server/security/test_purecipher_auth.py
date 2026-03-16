@@ -68,7 +68,7 @@ class TestPureCipherRegistryAuth:
             login_page = client.get("/registry/login?next=/registry/review")
 
             assert login_page.status_code == 200
-            assert "Sign in to the registry" in login_page.text
+            assert "PureCipher Secured MCP Registry" in login_page.text
             assert "Sign In" in login_page.text
 
             login = client.post(
@@ -134,7 +134,7 @@ class TestPureCipherRegistryAuth:
 
             catalog = client.get("/registry", follow_redirects=False)
             assert catalog.status_code == 200
-            assert "Sign in to the registry" in catalog.text
+            assert "PureCipher Secured MCP Registry" in catalog.text
 
             publish_page = client.get("/registry/publish", follow_redirects=False)
             assert publish_page.status_code == 303
@@ -215,6 +215,79 @@ class TestPureCipherRegistryAuth:
             assert (
                 "Publisher, reviewer, or admin role required" in submit.json()["error"]
             )
+
+    def test_policy_routes_require_reviewer_or_admin(self):
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            auth_settings=_auth_settings(),
+        )
+        app = registry.http_app()
+
+        with TestClient(app) as client:
+            unauthenticated = client.get("/registry/policy")
+            assert unauthenticated.status_code == 401
+
+            viewer_login = client.post(
+                "/registry/login",
+                json={"username": "viewer", "password": "viewer123"},
+            )
+            assert viewer_login.status_code == 200
+
+            forbidden = client.get("/registry/policy")
+            assert forbidden.status_code == 403
+
+    def test_reviewer_can_manage_policy_chain(self):
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            auth_settings=_auth_settings(),
+        )
+        app = registry.http_app()
+
+        with TestClient(app) as client:
+            login = client.post(
+                "/registry/login",
+                json={"username": "reviewer", "password": "reviewer123"},
+            )
+            assert login.status_code == 200
+
+            status = client.get("/registry/policy")
+            assert status.status_code == 200
+            payload = status.json()
+            assert payload["policy"]["provider_count"] == 1
+            assert payload["versions"]["version_count"] == 1
+
+            add_response = client.post(
+                "/registry/policy/providers",
+                json={
+                    "config": {"type": "denylist", "denied": ["admin-*"]},
+                    "reason": "Protect admin tools",
+                },
+            )
+            assert add_response.status_code == 200
+            assert add_response.json()["policy"]["provider_count"] == 2
+
+            update_response = client.put(
+                "/registry/policy/providers/1",
+                json={
+                    "config": {"type": "allowlist", "allowed": ["tool:*"]},
+                    "reason": "Swap rule type",
+                },
+            )
+            assert update_response.status_code == 200
+            assert (
+                update_response.json()["policy"]["providers"][1]["config"]["type"]
+                == "allowlist"
+            )
+
+            rollback_response = client.post(
+                "/registry/policy/versions/rollback",
+                json={
+                    "version_number": 1,
+                    "reason": "Back to baseline",
+                },
+            )
+            assert rollback_response.status_code == 200
+            assert rollback_response.json()["policy"]["provider_count"] == 1
 
     def test_reviewer_can_approve_but_admin_is_required_to_suspend(self):
         registry = PureCipherRegistry(

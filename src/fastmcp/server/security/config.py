@@ -81,6 +81,8 @@ class PolicyConfig:
     enable_versioning: bool = False
     enable_monitoring: bool = False
     enable_governance: bool = False
+    governance_require_simulation: bool = True
+    governance_require_approval: bool = True
     enable_validation: bool = True
     validator: PolicyValidator | None = None
     monitor: PolicyMonitor | None = None
@@ -151,6 +153,8 @@ class PolicyConfig:
         return PolicyGovernor(
             engine=engine,
             validator=validator,
+            require_simulation=self.governance_require_simulation,
+            require_approval=self.governance_require_approval,
         )
 
     def get_engine(
@@ -168,8 +172,8 @@ class PolicyConfig:
         if self.engine is not None:
             if audit_log is not None and self.engine._audit_log is None:
                 self.engine._audit_log = audit_log
-            if version_manager is not None and self.engine._version_manager is None:
-                self.engine._version_manager = version_manager
+            if version_manager is not None and self.engine.version_manager is None:
+                self.engine.attach_version_manager(version_manager)
             return self.engine
 
         providers = list(self.providers) if self.providers else []

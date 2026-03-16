@@ -39,6 +39,10 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from fastmcp.server.security.integration import get_security_context
+from fastmcp.server.security.policy.serialization import (
+    describe_policy_provider,
+    policy_provider_from_config,
+)
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -422,12 +426,28 @@ class SecurityAPI:
             return {"error": "Policy engine not configured", "status": 503}
 
         providers = []
-        for p in self.policy_engine.providers:
-            providers.append(
-                {
-                    "type": type(p).__name__,
-                }
-            )
+        for index, provider in enumerate(self.policy_engine.providers):
+            providers.append(describe_policy_provider(provider, index=index))
+
+        versioning: dict[str, Any] | None = None
+        if self.policy_version_manager is not None:
+            current = self.policy_version_manager.current_version
+            versioning = {
+                "enabled": True,
+                "policy_set_id": self.policy_version_manager.policy_set_id,
+                "version_count": self.policy_version_manager.version_count,
+                "current_version": current.version_number if current else None,
+            }
+
+        governance: dict[str, Any] | None = None
+        if self.policy_governor is not None:
+            governance = {
+                "enabled": True,
+                "proposal_count": len(self.policy_governor.proposals),
+                "pending_count": len(self.policy_governor.pending_proposals),
+                "require_simulation": self.policy_governor.require_simulation,
+                "require_approval": self.policy_governor.require_approval,
+            }
 
         return {
             "evaluation_count": self.policy_engine.evaluation_count,
@@ -437,6 +457,8 @@ class SecurityAPI:
             "provider_count": len(providers),
             "providers": providers,
             "has_audit_log": self.policy_audit_log is not None,
+            "versioning": versioning,
+            "governance": governance,
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -533,7 +555,7 @@ class SecurityAPI:
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
-    def rollback_policy_version(
+    async def rollback_policy_version(
         self, version_number: int, reason: str = ""
     ) -> dict[str, Any]:
         """Rollback to a specific policy version.
@@ -557,9 +579,135 @@ class SecurityAPI:
         except ValueError as e:
             return {"error": str(e), "status": 400}
 
+        if self.policy_engine is None:
+            return {"error": "Policy engine not configured", "status": 503}
+
+        try:
+            await self.policy_engine.restore_version(version.policy_data, reason=reason)
+        except Exception as e:
+            return {"error": str(e), "status": 400}
+
         return {
             "status": "rolled_back",
             "version": policy_version_to_dict(version),
+            "policy": self.get_policy_status(),
+        }
+
+    async def add_policy_provider(
+        self,
+        config: dict[str, Any],
+        *,
+        reason: str = "",
+        author: str = "api",
+    ) -> dict[str, Any]:
+        """Add a new live policy provider from a config object."""
+
+        if self.policy_engine is None:
+            return {"error": "Policy engine not configured", "status": 503}
+
+        validation_error = self._validate_policy_mutation(
+            action="add",
+            config=config,
+            target_index=None,
+        )
+        if validation_error is not None:
+            return validation_error
+
+        provider = policy_provider_from_config(config)
+        await self.policy_engine.add_provider(
+            provider,
+            reason=reason or "API add",
+            author=author,
+        )
+        providers = self.get_policy_status().get("providers", [])
+        created = providers[-1] if providers else None
+        return {
+            "status": "created",
+            "provider": created,
+            "policy": self.get_policy_status(),
+        }
+
+    async def update_policy_provider(
+        self,
+        index: int,
+        config: dict[str, Any],
+        *,
+        reason: str = "",
+        author: str = "api",
+    ) -> dict[str, Any]:
+        """Replace a live provider at a specific index."""
+
+        if self.policy_engine is None:
+            return {"error": "Policy engine not configured", "status": 503}
+
+        validation_error = self._validate_policy_mutation(
+            action="swap",
+            config=config,
+            target_index=index,
+        )
+        if validation_error is not None:
+            return validation_error
+
+        provider = policy_provider_from_config(config)
+        try:
+            record = await self.policy_engine.hot_swap(
+                index,
+                provider,
+                reason=reason or "API edit",
+                author=author,
+            )
+        except IndexError as e:
+            return {"error": str(e), "status": 400}
+
+        provider_payload = self.get_policy_status().get("providers", [])
+        updated = provider_payload[index] if index < len(provider_payload) else None
+        return {
+            "status": "updated",
+            "swap": {
+                "old_policy_id": record.old_policy_id,
+                "old_version": record.old_version,
+                "new_policy_id": record.new_policy_id,
+                "new_version": record.new_version,
+                "reason": record.reason,
+                "swapped_at": record.swapped_at.isoformat(),
+            },
+            "provider": updated,
+            "policy": self.get_policy_status(),
+        }
+
+    async def delete_policy_provider(
+        self,
+        index: int,
+        *,
+        reason: str = "",
+        author: str = "api",
+    ) -> dict[str, Any]:
+        """Remove a live provider by index."""
+
+        if self.policy_engine is None:
+            return {"error": "Policy engine not configured", "status": 503}
+
+        validation_error = self._validate_policy_mutation(
+            action="remove",
+            config=None,
+            target_index=index,
+        )
+        if validation_error is not None:
+            return validation_error
+
+        try:
+            removed = await self.policy_engine.remove_provider(
+                index,
+                reason=reason or "API delete",
+                author=author,
+            )
+        except IndexError as e:
+            return {"error": str(e), "status": 400}
+
+        return {
+            "status": "deleted",
+            "provider": describe_policy_provider(removed, index=index),
+            "policy": self.get_policy_status(),
         }
 
     def diff_policy_versions(self, v1: int, v2: int) -> dict[str, Any]:
@@ -599,6 +747,70 @@ class SecurityAPI:
 
         result = self.policy_validator.validate_declarative(config)
         return result.to_dict()
+
+    def _validate_policy_mutation(
+        self,
+        *,
+        action: str,
+        config: dict[str, Any] | None,
+        target_index: int | None,
+    ) -> dict[str, Any] | None:
+        """Validate a proposed live mutation before applying it."""
+
+        if self.policy_engine is None:
+            return {"error": "Policy engine not configured", "status": 503}
+
+        current = list(self.policy_engine.providers)
+        action_name = action.strip().lower()
+
+        new_provider = None
+        if config is not None:
+            if (
+                self.policy_validator is not None
+                and config.get("type") != "python_class"
+            ):
+                result = self.policy_validator.validate_declarative(config)
+                if not result.valid:
+                    return {
+                        "error": "Policy config failed validation.",
+                        "status": 400,
+                        "validation": result.to_dict(),
+                    }
+            try:
+                new_provider = policy_provider_from_config(config)
+            except Exception as exc:
+                return {"error": str(exc), "status": 400}
+
+        try:
+            if action_name == "add":
+                assert new_provider is not None
+                current.append(new_provider)
+            elif action_name == "swap":
+                if target_index is None:
+                    raise ValueError("Missing target index for swap.")
+                assert new_provider is not None
+                current[target_index] = new_provider
+            elif action_name == "remove":
+                if target_index is None:
+                    raise ValueError("Missing target index for remove.")
+                current.pop(target_index)
+            else:
+                raise ValueError(f"Unsupported mutation action: {action}")
+        except (IndexError, ValueError) as exc:
+            return {"error": str(exc), "status": 400}
+
+        if self.policy_validator is None:
+            return None
+
+        semantic_result = self.policy_validator.validate_providers(current)
+        if semantic_result.valid:
+            return None
+
+        return {
+            "error": "Policy set failed semantic validation.",
+            "status": 400,
+            "validation": semantic_result.to_dict(),
+        }
 
     def validate_providers(self) -> dict[str, Any]:
         """Validate the current engine providers for semantic issues."""
@@ -919,7 +1131,7 @@ def mount_security_routes(
         body = await request.json()
         version_number = body.get("version_number", 0)
         reason = body.get("reason", "")
-        return JSONResponse(api.rollback_policy_version(version_number, reason))
+        return JSONResponse(await api.rollback_policy_version(version_number, reason))
 
     @server.custom_route(f"{prefix}/policy/versions/diff", methods=["GET"])
     async def policy_diff_endpoint(request: Request) -> JSONResponse:

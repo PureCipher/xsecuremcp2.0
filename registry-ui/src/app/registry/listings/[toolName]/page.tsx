@@ -1,6 +1,23 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { getInstallRecipes, getRegistrySession, getToolDetail, verifyTool } from "@/lib/registryClient";
+import {
+  getInstallRecipes,
+  getRegistrySession,
+  getToolDetail,
+  verifyTool,
+  type InstallRecipe,
+  type RegistryDataFlow,
+  type RegistryToolListing,
+} from "@/lib/registryClient";
+
+function isToolDetail(detail: unknown): detail is RegistryToolListing {
+  return (
+    typeof detail === "object" &&
+    detail !== null &&
+    "tool_name" in detail &&
+    typeof detail.tool_name === "string"
+  );
+}
 
 export default async function ListingDetailPage(props: { params: Promise<{ toolName: string }> }) {
   const { toolName } = await props.params;
@@ -17,11 +34,13 @@ export default async function ListingDetailPage(props: { params: Promise<{ toolN
     verifyTool(decodedName),
   ]);
 
-  if (!detail || detail.status === 404 || detail.error) {
+  if (!isToolDetail(detail)) {
     return notFound();
   }
 
-  const recipes: any[] = install?.recipes ?? [];
+  const tool = detail;
+
+  const recipes: InstallRecipe[] = install?.recipes ?? [];
   const primaryRecipe = recipes[0];
   const secondaryRecipes = recipes.slice(1);
 
@@ -50,30 +69,30 @@ export default async function ListingDetailPage(props: { params: Promise<{ toolN
                 Tools
               </Link>
               <span>/</span>
-              {detail.publisher_id ? (
+              {tool.publisher_id ? (
                 <>
                   <Link
-                    href={`/registry/publishers/${encodeURIComponent(detail.publisher_id)}`}
+                    href={`/registry/publishers/${encodeURIComponent(tool.publisher_id)}`}
                     className="hover:text-emerald-100"
                   >
-                    {detail.publisher_id}
+                    {tool.publisher_id}
                   </Link>
                   <span>/</span>
                 </>
               ) : null}
               <span className="text-emerald-100">
-                {detail.display_name ?? detail.tool_name}
+                {tool.display_name ?? tool.tool_name}
               </span>
             </div>
             <h1 className="text-2xl font-semibold text-emerald-50">
-              {detail.display_name ?? detail.tool_name}
+              {tool.display_name ?? tool.tool_name}
             </h1>
             <p className="mt-1 text-[11px] text-emerald-200/90">
-              {detail.tool_name} · v{detail.version} · {detail.author}
+              {tool.tool_name} · v{tool.version} · {tool.author}
             </p>
           </div>
           <span className="rounded-full bg-emerald-900/80 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-200">
-            {detail.certification_level?.toUpperCase?.() ?? "UNRATED"}
+            {tool.certification_level?.toUpperCase?.() ?? "UNRATED"}
           </span>
         </div>
 
@@ -83,11 +102,11 @@ export default async function ListingDetailPage(props: { params: Promise<{ toolN
               Overview
             </h2>
             <p className="text-[13px] leading-relaxed text-emerald-100/90">
-              {detail.description ?? "No description provided."}
+              {tool.description ?? "No description provided."}
             </p>
             <div className="flex flex-wrap gap-2 pt-1 text-[10px] text-emerald-200/90">
-              {Array.isArray(detail.categories)
-                ? detail.categories.map((cat: string) => (
+              {Array.isArray(tool.categories)
+                ? tool.categories.map((cat: string) => (
                     <span
                       key={cat}
                       className="rounded-full bg-emerald-950/70 px-2 py-0.5 text-[10px] font-medium text-emerald-100"
@@ -97,13 +116,13 @@ export default async function ListingDetailPage(props: { params: Promise<{ toolN
                   ))
                 : null}
             </div>
-            {detail.manifest ? (
+            {tool.manifest ? (
               <div className="mt-3 space-y-2 rounded-2xl bg-emerald-950/70 p-3 text-[11px] ring-1 ring-emerald-700/70">
                 <p className="font-semibold text-emerald-50">Data flows</p>
-                {Array.isArray(detail.manifest.data_flows) &&
-                detail.manifest.data_flows.length > 0 ? (
+                {Array.isArray(tool.manifest.data_flows) &&
+                tool.manifest.data_flows.length > 0 ? (
                   <ul className="space-y-1 text-[10px] text-emerald-200/90">
-                    {detail.manifest.data_flows.map((flow: any, idx: number) => (
+                    {tool.manifest.data_flows.map((flow: RegistryDataFlow, idx: number) => (
                       <li key={idx}>
                         <span className="font-semibold">
                           {flow.classification ?? "internal"}:
@@ -207,7 +226,7 @@ export default async function ListingDetailPage(props: { params: Promise<{ toolN
   );
 }
 
-function RecipeGroup({ title, recipes }: { title: string; recipes: any[] }) {
+function RecipeGroup({ title, recipes }: { title: string; recipes: InstallRecipe[] }) {
   return (
     <div className="space-y-2">
       <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-200">
@@ -229,5 +248,3 @@ function RecipeGroup({ title, recipes }: { title: string; recipes: any[] }) {
     </div>
   );
 }
-
-

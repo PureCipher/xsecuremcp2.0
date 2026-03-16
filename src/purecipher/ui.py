@@ -4128,7 +4128,7 @@ def create_login_html(
               <ul class="login-points">
                 <li>Verified manifests and attested listings.</li>
                 <li>Role-based access for publishers and reviewers.</li>
-                <li>Copy‑ready setup for clients, Docker, and CI.</li>
+                <li>Copy-ready setup for clients, Docker, and CI.</li>
               </ul>
             </div>
             <div class="login-form-wrapper">

@@ -209,3 +209,4 @@ known-first-party = ["fastmcp", "purecipher", "securemcp"]
 
 [tool.codespell]
 ignore-words-list = "asend,shttp,te"
+skip = "registry-ui/package-lock.json"

@@ -20,6 +20,10 @@ from fastmcp.server.security.policy.provider import (
     PolicyProvider,
     PolicyResult,
 )
+from fastmcp.server.security.policy.serialization import (
+    policy_snapshot,
+    providers_from_snapshot,
+)
 
 if TYPE_CHECKING:
     from fastmcp.server.security.alerts.bus import SecurityEventBus
@@ -102,7 +106,7 @@ class PolicyEngine:
         self.allow_hot_swap = allow_hot_swap
         self._event_bus = event_bus
         self._audit_log = audit_log
-        self._version_manager = version_manager
+        self._version_manager: PolicyVersionManager | None = None
         self._invariant_registry: InvariantRegistry | None = None
         self._monitor: PolicyMonitor | None = None
         self._validator: PolicyValidator | None = None
@@ -111,6 +115,9 @@ class PolicyEngine:
         self._invariant_tasks: set[asyncio.Task[Any]] = set()
         self._evaluation_count: int = 0
         self._deny_count: int = 0
+
+        if version_manager is not None:
+            self.attach_version_manager(version_manager)
 
     @property
     def providers(self) -> list[PolicyProvider]:
@@ -141,6 +148,32 @@ class PolicyEngine:
     def version_manager(self) -> PolicyVersionManager | None:
         """The attached version manager, if any."""
         return self._version_manager
+
+    def attach_version_manager(self, version_manager: PolicyVersionManager) -> None:
+        """Attach a version manager and sync the live provider state to it."""
+
+        self._version_manager = version_manager
+        current_version = version_manager.current_version
+        if current_version is not None and current_version.policy_data:
+            try:
+                self._providers = providers_from_snapshot(current_version.policy_data)
+                logger.info(
+                    "Restored policy engine '%s' from version %d",
+                    version_manager.policy_set_id,
+                    current_version.version_number,
+                )
+                return
+            except Exception:
+                logger.warning(
+                    "Failed to restore policy engine from version history",
+                    exc_info=True,
+                )
+
+        self._record_version_snapshot(
+            author="policy-engine",
+            description="Initial policy state",
+            metadata={"operation": "initial"},
+        )
 
     @property
     def monitor(self) -> PolicyMonitor | None:
@@ -320,6 +353,7 @@ class PolicyEngine:
         new_provider: PolicyProvider,
         *,
         reason: str = "Manual hot-swap",
+        author: str = "policy-engine",
     ) -> PolicySwapRecord:
         """Atomically replace a policy provider at runtime.
 
@@ -350,28 +384,23 @@ class PolicyEngine:
             new_id = await self._resolve_async(new_provider.get_policy_id())
             new_version = await self._resolve_async(new_provider.get_policy_version())
 
-            # Snapshot the pre-swap state if versioning is enabled
-            if self._version_manager is not None:
-                try:
-                    self._version_manager.create_version(
-                        policy_data={
-                            "swapped_index": index,
-                            "old_policy_id": old_id,
-                            "old_version": old_version,
-                            "new_policy_id": new_id,
-                            "new_version": new_version,
-                            "provider_count": len(self._providers),
-                        },
-                        author="policy-engine",
-                        description=f"Hot-swap: {old_id}@{old_version} → {new_id}@{new_version} ({reason})",
-                    )
-                except Exception:
-                    logger.warning(
-                        "Failed to create version snapshot for hot-swap",
-                        exc_info=True,
-                    )
-
             self._providers[index] = new_provider
+            self._record_version_snapshot(
+                author=author,
+                description=(
+                    f"Hot-swap: {old_id}@{old_version} → "
+                    f"{new_id}@{new_version} ({reason})"
+                ),
+                metadata={
+                    "operation": "hot_swap",
+                    "swapped_index": index,
+                    "old_policy_id": old_id,
+                    "old_version": old_version,
+                    "new_policy_id": new_id,
+                    "new_version": new_version,
+                    "reason": reason,
+                },
+            )
 
             record = PolicySwapRecord(
                 old_policy_id=old_id,
@@ -440,14 +469,37 @@ class PolicyEngine:
             )
             return record
 
-    async def add_provider(self, provider: PolicyProvider) -> None:
+    async def add_provider(
+        self,
+        provider: PolicyProvider,
+        *,
+        reason: str = "Manual add",
+        author: str = "policy-engine",
+    ) -> None:
         """Add a new policy provider to the evaluation chain."""
         async with self._swap_lock:
             self._providers.append(provider)
             pid = await self._resolve_async(provider.get_policy_id())
+            version = await self._resolve_async(provider.get_policy_version())
+            self._record_version_snapshot(
+                author=author,
+                description=f"Added provider: {pid}@{version} ({reason})",
+                metadata={
+                    "operation": "add",
+                    "policy_id": pid,
+                    "policy_version": version,
+                    "reason": reason,
+                },
+            )
             logger.info("Added policy provider: %s", pid)
 
-    async def remove_provider(self, index: int) -> PolicyProvider:
+    async def remove_provider(
+        self,
+        index: int,
+        *,
+        reason: str = "Manual remove",
+        author: str = "policy-engine",
+    ) -> PolicyProvider:
         """Remove a policy provider by index."""
         async with self._swap_lock:
             if index < 0 or index >= len(self._providers):
@@ -456,8 +508,37 @@ class PolicyEngine:
                 )
             removed = self._providers.pop(index)
             pid = await self._resolve_async(removed.get_policy_id())
+            version = await self._resolve_async(removed.get_policy_version())
+            self._record_version_snapshot(
+                author=author,
+                description=f"Removed provider: {pid}@{version} ({reason})",
+                metadata={
+                    "operation": "remove",
+                    "removed_index": index,
+                    "policy_id": pid,
+                    "policy_version": version,
+                    "reason": reason,
+                },
+            )
             logger.info("Removed policy provider: %s", pid)
             return removed
+
+    async def restore_version(
+        self,
+        policy_data: dict[str, Any],
+        *,
+        reason: str = "Rollback",
+    ) -> None:
+        """Restore the live provider chain from a saved version snapshot."""
+
+        providers = providers_from_snapshot(policy_data)
+        async with self._swap_lock:
+            self._providers = providers
+            logger.info(
+                "Restored %d policy providers from version snapshot (%s)",
+                len(providers),
+                reason,
+            )
 
     @staticmethod
     async def _resolve_async(value: Any) -> Any:
@@ -465,3 +546,27 @@ class PolicyEngine:
         if inspect.isawaitable(value):
             return await value
         return value
+
+    def _record_version_snapshot(
+        self,
+        *,
+        author: str,
+        description: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        """Persist the current provider chain as a policy version."""
+
+        if self._version_manager is None:
+            return
+
+        try:
+            self._version_manager.create_version(
+                policy_data=policy_snapshot(self._providers, metadata=metadata),
+                author=author,
+                description=description,
+            )
+        except Exception:
+            logger.warning(
+                "Failed to create policy version snapshot",
+                exc_info=True,
+            )

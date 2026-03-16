@@ -58,10 +58,12 @@ from securemcp import SecureMCP
 from securemcp.config import (
     AlertConfig,
     CertificationConfig,
+    PolicyConfig,
     RegistryConfig,
     SecurityConfig,
     ToolMarketplaceConfig,
 )
+from securemcp.http import SecurityAPI
 
 
 @dataclass
@@ -358,6 +360,13 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
         return SecurityConfig(
             alerts=AlertConfig(),
+            policy=PolicyConfig(
+                enable_versioning=True,
+                enable_governance=True,
+                governance_require_simulation=False,
+                enable_validation=True,
+                backend=backend,
+            ),
             registry=RegistryConfig(registry=registry),
             tool_marketplace=ToolMarketplaceConfig(marketplace=marketplace),
             certification=CertificationConfig(
@@ -417,6 +426,12 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 "Certification pipeline is not attached to this registry."
             )
         return ctx.certification_pipeline
+
+    def _policy_api(self) -> SecurityAPI:
+        api = self.security_api
+        if api is not None:
+            return api
+        return SecurityAPI.from_context(self._required_context())
 
     def _trust_overall(self, listing: ToolListing) -> float | None:
         ctx = self._required_context()
@@ -610,6 +625,87 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             "pending_review": len(pending),
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
+
+    def get_policy_management(self) -> dict[str, Any]:
+        """Return the current policy-management state for the registry UI."""
+
+        api = self._policy_api()
+        status = api.get_policy_status()
+        versions = api.get_policy_versions()
+        schema = api.get_policy_schema()
+        proposals = api.get_governance_proposals()
+        return {
+            "policy": status,
+            "versions": versions,
+            "schema": schema,
+            "governance": proposals,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    async def add_policy_provider(
+        self,
+        config: dict[str, Any],
+        *,
+        reason: str = "",
+        author: str = "registry-admin",
+    ) -> dict[str, Any]:
+        """Add a policy provider to the live engine."""
+
+        return await self._policy_api().add_policy_provider(
+            config,
+            reason=reason,
+            author=author,
+        )
+
+    async def update_policy_provider(
+        self,
+        index: int,
+        config: dict[str, Any],
+        *,
+        reason: str = "",
+        author: str = "registry-admin",
+    ) -> dict[str, Any]:
+        """Replace a policy provider at a given index."""
+
+        return await self._policy_api().update_policy_provider(
+            index,
+            config,
+            reason=reason,
+            author=author,
+        )
+
+    async def delete_policy_provider(
+        self,
+        index: int,
+        *,
+        reason: str = "",
+        author: str = "registry-admin",
+    ) -> dict[str, Any]:
+        """Remove a policy provider from the live engine."""
+
+        return await self._policy_api().delete_policy_provider(
+            index,
+            reason=reason,
+            author=author,
+        )
+
+    async def rollback_policy_version(
+        self,
+        version_number: int,
+        *,
+        reason: str = "",
+    ) -> dict[str, Any]:
+        """Rollback the live policy engine to a saved version."""
+
+        return await self._policy_api().rollback_policy_version(
+            version_number,
+            reason,
+        )
+
+    def diff_policy_versions(self, v1: int, v2: int) -> dict[str, Any]:
+        """Diff two saved policy versions."""
+
+        return self._policy_api().diff_policy_versions(v1, v2)
 
     def list_verified_tools(
         self,
@@ -1273,6 +1369,221 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     "session": self._session_payload(session),
                 }
             )
+
+        @self.custom_route(f"{prefix}/policy", methods=["GET"])
+        async def registry_policy(request: Request) -> JSONResponse:
+            session = self._session_from_request(request)
+            allowed_roles = {RegistryRole.REVIEWER, RegistryRole.ADMIN}
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            if self.auth_enabled and not self._has_roles(session, allowed_roles):
+                return JSONResponse(
+                    {
+                        "error": "Reviewer or admin role required.",
+                        "status": 403,
+                    },
+                    status_code=403,
+                )
+            return JSONResponse(self.get_policy_management())
+
+        @self.custom_route(f"{prefix}/policy/schema", methods=["GET"])
+        async def registry_policy_schema(request: Request) -> JSONResponse:
+            session = self._session_from_request(request)
+            allowed_roles = {RegistryRole.REVIEWER, RegistryRole.ADMIN}
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            if self.auth_enabled and not self._has_roles(session, allowed_roles):
+                return JSONResponse(
+                    {
+                        "error": "Reviewer or admin role required.",
+                        "status": 403,
+                    },
+                    status_code=403,
+                )
+            return JSONResponse(self._policy_api().get_policy_schema())
+
+        @self.custom_route(f"{prefix}/policy/versions", methods=["GET"])
+        async def registry_policy_versions(request: Request) -> JSONResponse:
+            session = self._session_from_request(request)
+            allowed_roles = {RegistryRole.REVIEWER, RegistryRole.ADMIN}
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            if self.auth_enabled and not self._has_roles(session, allowed_roles):
+                return JSONResponse(
+                    {
+                        "error": "Reviewer or admin role required.",
+                        "status": 403,
+                    },
+                    status_code=403,
+                )
+            return JSONResponse(self._policy_api().get_policy_versions())
+
+        @self.custom_route(f"{prefix}/policy/versions/diff", methods=["GET"])
+        async def registry_policy_diff(request: Request) -> JSONResponse:
+            session = self._session_from_request(request)
+            allowed_roles = {RegistryRole.REVIEWER, RegistryRole.ADMIN}
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            if self.auth_enabled and not self._has_roles(session, allowed_roles):
+                return JSONResponse(
+                    {
+                        "error": "Reviewer or admin role required.",
+                        "status": 403,
+                    },
+                    status_code=403,
+                )
+            v1 = int(request.query_params.get("v1", "0"))
+            v2 = int(request.query_params.get("v2", "0"))
+            payload = self.diff_policy_versions(v1, v2)
+            return JSONResponse(payload, status_code=_status_code_from_payload(payload))
+
+        @self.custom_route(f"{prefix}/policy/providers", methods=["POST"])
+        async def registry_policy_add_provider(request: Request) -> JSONResponse:
+            session = self._session_from_request(request)
+            allowed_roles = {RegistryRole.REVIEWER, RegistryRole.ADMIN}
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            if self.auth_enabled and not self._has_roles(session, allowed_roles):
+                return JSONResponse(
+                    {
+                        "error": "Reviewer or admin role required.",
+                        "status": 403,
+                    },
+                    status_code=403,
+                )
+            try:
+                body = await request.json()
+            except Exception:
+                return JSONResponse(
+                    {"error": "Invalid JSON body", "status": 400},
+                    status_code=400,
+                )
+            config = body.get("config")
+            if not isinstance(config, dict):
+                return JSONResponse(
+                    {"error": "`config` must be an object", "status": 400},
+                    status_code=400,
+                )
+            payload = await self.add_policy_provider(
+                config,
+                reason=str(body.get("reason", "")),
+                author=session.username if session is not None else "registry-admin",
+            )
+            return JSONResponse(payload, status_code=_status_code_from_payload(payload))
+
+        @self.custom_route(f"{prefix}/policy/providers/{{index}}", methods=["PUT"])
+        async def registry_policy_update_provider(request: Request) -> JSONResponse:
+            session = self._session_from_request(request)
+            allowed_roles = {RegistryRole.REVIEWER, RegistryRole.ADMIN}
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            if self.auth_enabled and not self._has_roles(session, allowed_roles):
+                return JSONResponse(
+                    {
+                        "error": "Reviewer or admin role required.",
+                        "status": 403,
+                    },
+                    status_code=403,
+                )
+            try:
+                body = await request.json()
+            except Exception:
+                return JSONResponse(
+                    {"error": "Invalid JSON body", "status": 400},
+                    status_code=400,
+                )
+            config = body.get("config")
+            if not isinstance(config, dict):
+                return JSONResponse(
+                    {"error": "`config` must be an object", "status": 400},
+                    status_code=400,
+                )
+            index = int(request.path_params.get("index", "0"))
+            payload = await self.update_policy_provider(
+                index,
+                config,
+                reason=str(body.get("reason", "")),
+                author=session.username if session is not None else "registry-admin",
+            )
+            return JSONResponse(payload, status_code=_status_code_from_payload(payload))
+
+        @self.custom_route(f"{prefix}/policy/providers/{{index}}", methods=["DELETE"])
+        async def registry_policy_delete_provider(request: Request) -> JSONResponse:
+            session = self._session_from_request(request)
+            allowed_roles = {RegistryRole.REVIEWER, RegistryRole.ADMIN}
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            if self.auth_enabled and not self._has_roles(session, allowed_roles):
+                return JSONResponse(
+                    {
+                        "error": "Reviewer or admin role required.",
+                        "status": 403,
+                    },
+                    status_code=403,
+                )
+            try:
+                body = await request.json()
+            except Exception:
+                body = {}
+            index = int(request.path_params.get("index", "0"))
+            payload = await self.delete_policy_provider(
+                index,
+                reason=str(body.get("reason", "")),
+                author=session.username if session is not None else "registry-admin",
+            )
+            return JSONResponse(payload, status_code=_status_code_from_payload(payload))
+
+        @self.custom_route(f"{prefix}/policy/versions/rollback", methods=["POST"])
+        async def registry_policy_rollback(request: Request) -> JSONResponse:
+            session = self._session_from_request(request)
+            allowed_roles = {RegistryRole.REVIEWER, RegistryRole.ADMIN}
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            if self.auth_enabled and not self._has_roles(session, allowed_roles):
+                return JSONResponse(
+                    {
+                        "error": "Reviewer or admin role required.",
+                        "status": 403,
+                    },
+                    status_code=403,
+                )
+            try:
+                body = await request.json()
+            except Exception:
+                return JSONResponse(
+                    {"error": "Invalid JSON body", "status": 400},
+                    status_code=400,
+                )
+            version_number = int(body.get("version_number", 0))
+            payload = await self.rollback_policy_version(
+                version_number,
+                reason=str(body.get("reason", "")),
+            )
+            return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
         @self.custom_route(f"{prefix}/login", methods=["GET"])
         async def registry_login_page(request: Request):
