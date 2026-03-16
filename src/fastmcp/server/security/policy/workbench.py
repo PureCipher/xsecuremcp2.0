@@ -330,8 +330,12 @@ def summarize_policy_chain_delta(
                     "index": index,
                     "from": describe_policy_config(source),
                     "to": describe_policy_config(target),
-                    "from_type": str(source.get("type") or source.get("composition") or ""),
-                    "to_type": str(target.get("type") or target.get("composition") or ""),
+                    "from_type": str(
+                        source.get("type") or source.get("composition") or ""
+                    ),
+                    "to_type": str(
+                        target.get("type") or target.get("composition") or ""
+                    ),
                 }
             )
 
@@ -464,20 +468,34 @@ def build_environment_recommendations(
 
     if environment_id == "production":
         if "rbac" not in types and "role_based" not in types:
-            recommendations.append("Add an RBAC rule before promoting this chain to production.")
+            recommendations.append(
+                "Add an RBAC rule before promoting this chain to production."
+            )
         if "rate_limit" not in types:
-            recommendations.append("Introduce a rate-limit rule before production rollout.")
+            recommendations.append(
+                "Introduce a rate-limit rule before production rollout."
+            )
         if "allow_all" in types:
-            recommendations.append("Replace allow-all access with explicit allowlists or resource-scoped rules.")
+            recommendations.append(
+                "Replace allow-all access with explicit allowlists or resource-scoped rules."
+            )
     elif environment_id == "staging":
         if "denylist" not in types:
-            recommendations.append("Add a denylist for sensitive resources before staging validation.")
+            recommendations.append(
+                "Add a denylist for sensitive resources before staging validation."
+            )
         if "time_based" not in types and "temporal" not in types:
-            recommendations.append("Consider time-based controls if reviewers only manage changes in staffed hours.")
+            recommendations.append(
+                "Consider time-based controls if reviewers only manage changes in staffed hours."
+            )
     elif environment_id == "development":
         if "allow_all" in types:
-            recommendations.append("Keep allow-all rules short-lived and pair them with a migration plan to staging.")
+            recommendations.append(
+                "Keep allow-all rules short-lived and pair them with a migration plan to staging."
+            )
 
     if not recommendations:
-        recommendations.append("This chain already lines up well with the selected environment profile.")
+        recommendations.append(
+            "This chain already lines up well with the selected environment profile."
+        )
     return recommendations

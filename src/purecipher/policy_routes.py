@@ -433,9 +433,7 @@ def mount_registry_policy_routes(
 
     @registry.custom_route(f"{prefix}/policy/versions/rollback", methods=["POST"])
     async def registry_policy_rollback(request: Request) -> JSONResponse:
-        session, error_response = _require_policy_access(
-            registry, request, allowed_roles
-        )
+        _, error_response = _require_policy_access(registry, request, allowed_roles)
         if error_response is not None:
             return error_response
         body = await _load_json_body(request, default=None)
