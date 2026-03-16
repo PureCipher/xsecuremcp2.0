@@ -45,6 +45,10 @@ class PublisherCheckResult:
         }
 
 
+def _render_artifact_payload(payload: dict[str, Any]) -> str:
+    return json.dumps(payload, indent=2) + "\n"
+
+
 def build_manifest_payload(config: PublisherProjectConfig) -> dict[str, Any]:
     """Generate a starter ``manifest.json`` payload from project config."""
 
@@ -90,9 +94,16 @@ def build_runtime_payload(config: PublisherProjectConfig) -> dict[str, Any]:
     return payload
 
 
-def _sync_json_artifact(path: Path, payload: dict[str, Any]) -> bool:
-    rendered = json.dumps(payload, indent=2) + "\n"
+def _sync_json_artifact(
+    path: Path,
+    payload: dict[str, Any],
+    *,
+    overwrite: bool,
+) -> bool:
+    rendered = _render_artifact_payload(payload)
     previous = path.read_text() if path.exists() else None
+    if previous is not None and not overwrite:
+        return False
     path.write_text(rendered)
     return previous != rendered
 
@@ -100,6 +111,8 @@ def _sync_json_artifact(path: Path, payload: dict[str, Any]) -> bool:
 def sync_project_artifacts(
     project_root: str | Path,
     config: PublisherProjectConfig,
+    *,
+    overwrite: bool = True,
 ) -> tuple[bool, bool]:
     """Write ``manifest.json`` and ``runtime.json`` from config."""
 
@@ -107,12 +120,43 @@ def sync_project_artifacts(
     manifest_updated = _sync_json_artifact(
         root / "manifest.json",
         build_manifest_payload(config),
+        overwrite=overwrite,
     )
     runtime_updated = _sync_json_artifact(
         root / "runtime.json",
         build_runtime_payload(config),
+        overwrite=overwrite,
     )
     return manifest_updated, runtime_updated
+
+
+def _build_artifact_issues(
+    *,
+    project_root: Path,
+    config: PublisherProjectConfig,
+) -> list[str]:
+    issues: list[str] = []
+    generated = {
+        "manifest.json": _render_artifact_payload(build_manifest_payload(config)),
+        "runtime.json": _render_artifact_payload(build_runtime_payload(config)),
+    }
+
+    for filename, rendered in generated.items():
+        path = project_root / filename
+        if not path.exists():
+            issues.append(
+                f"Missing generated artifact: {filename}. Run "
+                "`purecipher-publisher check --refresh-artifacts` to restore it."
+            )
+            continue
+        if path.read_text() != rendered:
+            issues.append(
+                f"{filename} no longer matches purecipher.toml. Update "
+                "purecipher.toml or rerun `purecipher-publisher check "
+                "--refresh-artifacts`."
+            )
+
+    return issues
 
 
 def _looks_placeholder(value: str) -> bool:
@@ -163,8 +207,12 @@ def _build_next_steps(
     steps = [
         "Edit purecipher.toml with your real publisher metadata.",
         "Update the generated tool implementation in tools/ and app.py.",
-        "Run `purecipher-publisher check` again after your edits.",
+        "Run `purecipher-publisher check --refresh-artifacts` after metadata edits.",
     ]
+    if any("manifest.json" in issue or "runtime.json" in issue for issue in issues):
+        steps.append(
+            "Refresh the generated JSON snapshots once purecipher.toml is correct."
+        )
     if not issues:
         steps.append(
             f"Next publisher phase: package and publish {config.project.display_name} to {config.registry.base_url}."
@@ -172,14 +220,23 @@ def _build_next_steps(
     return steps
 
 
-def check_project(project_root: str | Path = ".") -> PublisherCheckResult:
+def check_project(
+    project_root: str | Path = ".",
+    *,
+    refresh_artifacts: bool = False,
+) -> PublisherCheckResult:
     """Load a project, sync artifacts, and return a readiness summary."""
 
     root = Path(project_root).resolve()
     config_path = root / "purecipher.toml"
     config = load_publisher_config(config_path)
-    manifest_updated, runtime_updated = sync_project_artifacts(root, config)
+    manifest_updated, runtime_updated = sync_project_artifacts(
+        root,
+        config,
+        overwrite=refresh_artifacts,
+    )
     issues = _build_issues(project_root=root, config=config)
+    issues.extend(_build_artifact_issues(project_root=root, config=config))
 
     return PublisherCheckResult(
         project_root=root,

@@ -813,6 +813,10 @@ class ToolMarketplace:
         Returns:
             The created or updated ToolListing.
         """
+        effective_status = status
+        if self._require_moderation and status == PublishStatus.PUBLISHED:
+            effective_status = PublishStatus.PENDING_REVIEW
+
         existing_id = self._name_index.get(tool_name)
 
         if existing_id is not None:
@@ -828,7 +832,7 @@ class ToolMarketplace:
                 listing.manifest = manifest
             if attestation is not None:
                 listing.attestation = attestation
-            listing.status = status
+            listing.status = effective_status
             listing.homepage_url = homepage_url or listing.homepage_url
             listing.source_url = source_url or listing.source_url
             listing.license = tool_license or listing.license
@@ -858,11 +862,6 @@ class ToolMarketplace:
             self._emit_event("TOOL_UPDATED", listing)
             logger.info("Tool listing updated: %s (v%s)", tool_name, version)
             return listing
-
-        # Determine initial status
-        effective_status = status
-        if self._require_moderation and status == PublishStatus.PUBLISHED:
-            effective_status = PublishStatus.PENDING_REVIEW
 
         listing = ToolListing(
             tool_name=tool_name,

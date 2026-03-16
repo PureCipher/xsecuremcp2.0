@@ -9,7 +9,7 @@ Demonstrates:
 
 Run::
 
-    uv run python examples/securemcp/quickstart.py
+    uv run securemcp run examples/securemcp/quickstart.py
 
 Then visit:
     http://localhost:8000/security/health

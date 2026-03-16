@@ -375,6 +375,99 @@ class TestPureCipherRegistry:
             assert unsuspend.status_code == 200
             assert unsuspend.json()["listing"]["status"] == "published"
 
+    def test_http_registry_public_routes_only_expose_published_listings(self):
+        registry = PureCipherRegistry(
+            signing_secret="test-secret",
+            require_moderation=True,
+        )
+        result = registry.submit_tool(
+            _manifest(tool_name="pending-tool"),
+            display_name="Pending Tool",
+            categories={ToolCategory.NETWORK},
+            metadata=_runtime_metadata(),
+            requested_level=CertificationLevel.BASIC,
+        )
+        assert result.accepted is True
+        assert result.listing is not None
+
+        app = registry.http_app()
+
+        with TestClient(app) as client:
+            pending_detail = client.get("/registry/tools/pending-tool")
+            pending_install = client.get("/registry/install/pending-tool")
+            pending_listing = client.get("/registry/listings/pending-tool")
+            pending_verify = client.post(
+                "/registry/verify",
+                json={"tool_name": "pending-tool"},
+            )
+
+            assert pending_detail.status_code == 404
+            assert pending_install.status_code == 404
+            assert pending_listing.status_code == 404
+            assert pending_verify.status_code == 404
+
+            approve = client.post(
+                f"/registry/review/{result.listing.listing_id}/approve",
+                json={"moderator_id": "reviewer", "reason": "Looks good."},
+            )
+            assert approve.status_code == 200
+
+            published_detail = client.get("/registry/tools/pending-tool")
+            assert published_detail.status_code == 200
+            assert published_detail.json()["status"] == "published"
+
+            suspend = client.post(
+                f"/registry/review/{result.listing.listing_id}/suspend",
+                json={"moderator_id": "admin", "reason": "Temporarily paused."},
+            )
+            assert suspend.status_code == 200
+
+            suspended_detail = client.get("/registry/tools/pending-tool")
+            suspended_install = client.get("/registry/install/pending-tool")
+
+            assert suspended_detail.status_code == 404
+            assert suspended_install.status_code == 404
+
+    def test_submit_tool_requeues_existing_listing_when_moderation_is_enabled(self):
+        registry = PureCipherRegistry(
+            signing_secret="test-secret",
+            require_moderation=True,
+        )
+        first = registry.submit_tool(
+            _manifest(tool_name="weather-lookup", version="1.0.0"),
+            display_name="Weather Lookup",
+            categories={ToolCategory.NETWORK},
+            metadata=_runtime_metadata(),
+            requested_level=CertificationLevel.BASIC,
+        )
+
+        assert first.accepted is True
+        assert first.listing is not None
+        assert first.listing.status.value == "pending_review"
+
+        approved = registry.moderate_listing(
+            first.listing.listing_id,
+            action_name="approve",
+            moderator_id="reviewer-1",
+            reason="Initial version approved.",
+        )
+        assert approved["listing"]["status"] == "published"
+
+        second = registry.submit_tool(
+            _manifest(tool_name="weather-lookup", version="1.1.0"),
+            display_name="Weather Lookup",
+            categories={ToolCategory.NETWORK},
+            metadata=_runtime_metadata(),
+            requested_level=CertificationLevel.BASIC,
+        )
+
+        assert second.accepted is True
+        assert second.listing is not None
+        assert second.listing.status.value == "pending_review"
+
+        detail = registry.get_verified_tool("weather-lookup")
+        assert detail["status"] == 404
+
     def test_http_registry_ui_route(self):
         registry = PureCipherRegistry(signing_secret="test-secret")
         app = registry.http_app()

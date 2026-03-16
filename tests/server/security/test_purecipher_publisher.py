@@ -8,10 +8,12 @@ from starlette.testclient import TestClient
 from purecipher import PureCipherRegistry, RegistryAuthSettings
 from purecipher.publisher import (
     check_project,
+    load_auth_tokens,
     load_publisher_config,
     login_to_registry,
     package_project,
     publish_project,
+    sync_project_artifacts,
     write_publisher_config,
 )
 from purecipher.publisher.cli import build_parser, init_project, main
@@ -27,6 +29,7 @@ class TestPureCipherPublisherCLI:
         config.runtime.endpoint = "https://mcp.acme.dev/weather-lookup"
         config.runtime.docker_image = "ghcr.io/acme/weather-lookup:0.1.0"
         write_publisher_config(project_root / "purecipher.toml", config)
+        sync_project_artifacts(project_root, config)
         return config
 
     @staticmethod
@@ -197,6 +200,63 @@ class TestPureCipherPublisherCLI:
         assert result.session["role"] == "publisher"
         saved = json.loads(auth_file.read_text())
         assert saved["registries"]["http://testserver"]["token"] == result.token
+
+    def test_login_to_registry_recovers_from_corrupt_auth_file(self, tmp_path):
+        registry = PureCipherRegistry(
+            signing_secret="test-secret",
+            auth_settings=self._auth_settings(),
+        )
+        app = registry.http_app()
+        auth_file = tmp_path / "publisher-auth.json"
+        auth_file.write_text("{broken")
+
+        with TestClient(app) as client:
+            result = login_to_registry(
+                base_url="http://testserver",
+                username="publisher",
+                password="publisher123",
+                auth_file=auth_file,
+                client=client,
+            )
+
+        saved = load_auth_tokens(auth_file)
+        assert saved["registries"]["http://testserver"]["token"] == result.token
+
+    def test_check_project_preserves_manual_artifact_edits_until_refresh(
+        self, tmp_path
+    ):
+        project_root = tmp_path / "weather-lookup"
+        init_project(
+            project_name="weather-lookup",
+            template_name="http",
+            project_root=project_root,
+        )
+        self._make_ready_project(project_root)
+
+        manifest_path = project_root / "manifest.json"
+        manifest_payload = json.loads(manifest_path.read_text())
+        manifest_payload["description"] = "Hand-edited manifest description."
+        manifest_path.write_text(json.dumps(manifest_payload, indent=2) + "\n")
+
+        result = check_project(project_root)
+
+        assert result.ready_to_publish is False
+        assert any(
+            "manifest.json no longer matches purecipher.toml" in issue
+            for issue in result.issues
+        )
+        preserved_payload = json.loads(manifest_path.read_text())
+        assert preserved_payload["description"] == "Hand-edited manifest description."
+
+        refreshed = check_project(project_root, refresh_artifacts=True)
+        refreshed_payload = json.loads(manifest_path.read_text())
+
+        assert refreshed.manifest_updated is True
+        assert refreshed.ready_to_publish is True
+        assert (
+            refreshed_payload["description"]
+            == "Weather Lookup built with the PureCipher publisher accelerator."
+        )
 
     def test_publish_project_submits_to_registry(self, tmp_path):
         project_root = tmp_path / "weather-lookup"
@@ -370,3 +430,69 @@ class TestPureCipherPublisherCLI:
         assert result.next_url == result.review_url
         assert queue.status_code == 200
         assert queue.json()["counts"]["pending_review"] == 1
+
+    def test_publish_project_requeues_existing_listing_for_moderated_registry(
+        self,
+        tmp_path,
+    ):
+        project_root = tmp_path / "weather-lookup"
+        init_project(
+            project_name="weather-lookup",
+            template_name="stdio",
+            project_root=project_root,
+        )
+        config = self._make_ready_project(project_root)
+
+        registry = PureCipherRegistry(
+            signing_secret="test-secret",
+            require_moderation=True,
+            auth_settings=self._auth_settings(),
+        )
+        app = registry.http_app()
+        auth_file = tmp_path / "publisher-auth.json"
+
+        with TestClient(app) as client:
+            login_to_registry(
+                base_url="http://testserver",
+                username="publisher",
+                password="publisher123",
+                auth_file=auth_file,
+                client=client,
+            )
+
+            first = publish_project(
+                project_root,
+                base_url="http://testserver",
+                auth_file=auth_file,
+                client=client,
+            )
+            assert first.listing_status == "pending_review"
+
+            reviewer_login = login_to_registry(
+                base_url="http://testserver",
+                username="reviewer",
+                password="reviewer123",
+                client=client,
+            )
+            listing_id = first.response_payload["listing"]["listing_id"]
+            approve = client.post(
+                f"/registry/review/{listing_id}/approve",
+                headers={"authorization": f"Bearer {reviewer_login.token}"},
+                json={"moderator_id": "reviewer-1", "reason": "Approved."},
+            )
+            assert approve.status_code == 200
+
+            config.project.version = "0.2.0"
+            write_publisher_config(project_root / "purecipher.toml", config)
+
+            second = publish_project(
+                project_root,
+                base_url="http://testserver",
+                auth_file=auth_file,
+                refresh_artifacts=True,
+                client=client,
+            )
+
+        assert second.accepted is True
+        assert second.listing_status == "pending_review"
+        assert second.review_url == "http://testserver/registry/review"

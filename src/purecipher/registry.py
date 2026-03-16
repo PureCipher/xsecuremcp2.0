@@ -425,6 +425,22 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         )
         return score.overall if score is not None else None
 
+    def _is_public_listing(self, listing: ToolListing) -> bool:
+        if listing.status != PublishStatus.PUBLISHED:
+            return False
+        if not listing.is_certified:
+            return False
+        level_order = list(CertificationLevel)
+        return level_order.index(listing.certification_level) >= level_order.index(
+            self.minimum_certification
+        )
+
+    def _get_public_listing(self, tool_name: str) -> ToolListing | None:
+        listing = self._marketplace().get_by_name(tool_name)
+        if listing is None or not self._is_public_listing(listing):
+            return None
+        return listing
+
     def _serialize_listing_detail(self, listing: ToolListing) -> dict[str, Any]:
         ctx = self._required_context()
         score = (
@@ -627,7 +643,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
     def get_verified_tool(self, tool_name: str) -> dict[str, Any]:
         """Return detail for a single verified tool."""
 
-        listing = self._marketplace().get_by_name(tool_name)
+        listing = self._get_public_listing(tool_name)
         if listing is None:
             return {"error": f"Tool '{tool_name}' not found", "status": 404}
 
@@ -672,7 +688,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
     ) -> dict[str, Any]:
         """Return generated install recipes for a verified tool listing."""
 
-        listing = self._marketplace().get_by_name(tool_name)
+        listing = self._get_public_listing(tool_name)
         if listing is None:
             return {"error": f"Tool '{tool_name}' not found", "status": 404}
 
@@ -901,9 +917,8 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
     ) -> dict[str, Any]:
         """Verify a registered tool's attestation."""
 
-        marketplace = self._marketplace()
         certification_pipeline = self._certification_pipeline()
-        listing = marketplace.get_by_name(tool_name)
+        listing = self._get_public_listing(tool_name)
         if listing is None:
             return {"error": f"Tool '{tool_name}' not found", "status": 404}
         if listing.attestation is None:

@@ -74,6 +74,7 @@ def publish_project(
     token: str | None = None,
     allow_incomplete: bool = False,
     output_dir: str | Path | None = None,
+    refresh_artifacts: bool = False,
     client: Any | None = None,
 ) -> PublisherPublishResult:
     """Run registry preflight and publish a project."""
@@ -81,7 +82,11 @@ def publish_project(
     root = Path(project_root).resolve()
     config = load_publisher_config(root / "purecipher.toml")
     normalized_base_url = normalize_base_url(base_url or config.registry.base_url)
-    packaged = package_project(root, output_dir=output_dir)
+    packaged = package_project(
+        root,
+        output_dir=output_dir,
+        refresh_artifacts=refresh_artifacts,
+    )
 
     if packaged.check.issues and not allow_incomplete:
         issue_summary = " ".join(packaged.check.issues)

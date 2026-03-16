@@ -84,6 +84,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print the check result as JSON.",
     )
+    check_parser.add_argument(
+        "--refresh-artifacts",
+        action="store_true",
+        help="Regenerate manifest.json and runtime.json from purecipher.toml.",
+    )
     check_parser.set_defaults(handler=_handle_check)
 
     package_parser = subparsers.add_parser(
@@ -105,6 +110,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--json",
         action="store_true",
         help="Print the package result as JSON.",
+    )
+    package_parser.add_argument(
+        "--refresh-artifacts",
+        action="store_true",
+        help="Regenerate manifest.json and runtime.json before packaging.",
     )
     package_parser.set_defaults(handler=_handle_package)
 
@@ -179,6 +189,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--json",
         action="store_true",
         help="Print the publish result as JSON.",
+    )
+    publish_parser.add_argument(
+        "--refresh-artifacts",
+        action="store_true",
+        help="Regenerate manifest.json and runtime.json before packaging and publish.",
     )
     publish_parser.set_defaults(handler=_handle_publish)
 
@@ -294,13 +309,13 @@ def _handle_init(args: argparse.Namespace) -> int:
     print(f"- cd {destination}")
     print("- Edit purecipher.toml with your real publisher metadata.")
     print(
-        "- Run `purecipher-publisher check` to refresh manifest.json and runtime.json."
+        "- Run `purecipher-publisher check --refresh-artifacts` to refresh the generated JSON snapshots."
     )
     return 0
 
 
 def _handle_check(args: argparse.Namespace) -> int:
-    result = check_project(args.path)
+    result = check_project(args.path, refresh_artifacts=args.refresh_artifacts)
     if args.json:
         print(json.dumps(result.to_dict(), indent=2))
     else:
@@ -309,7 +324,11 @@ def _handle_check(args: argparse.Namespace) -> int:
 
 
 def _handle_package(args: argparse.Namespace) -> int:
-    result = package_project(args.path, output_dir=args.output_dir)
+    result = package_project(
+        args.path,
+        output_dir=args.output_dir,
+        refresh_artifacts=args.refresh_artifacts,
+    )
     if args.json:
         print(json.dumps(result.to_dict(), indent=2))
         return 0
@@ -371,6 +390,7 @@ def _handle_publish(args: argparse.Namespace) -> int:
         token=args.token,
         allow_incomplete=args.allow_incomplete,
         output_dir=args.output_dir,
+        refresh_artifacts=args.refresh_artifacts,
     )
     if args.json:
         print(json.dumps(result.to_dict(), indent=2))

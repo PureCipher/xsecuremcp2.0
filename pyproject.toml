@@ -1,7 +1,7 @@
 [project]
 name = "fastmcp"
 dynamic = ["version"]
-description = "The fast, Pythonic way to build MCP servers and clients."
+description = "SecureMCP platform built on FastMCP for secure MCP servers, trusted registries, and publisher tooling."
 authors = [{ name = "Jeremiah Lowin" }]
 dependencies = [
     "python-dotenv>=1.1.0",
@@ -38,6 +38,10 @@ keywords = [
     "mcp client",
     "model context protocol",
     "fastmcp",
+    "securemcp",
+    "purecipher",
+    "mcp registry",
+    "secure ai tooling",
     "llm",
     "agent",
 ]
@@ -94,13 +98,14 @@ dev = [
 
 [project.scripts]
 fastmcp = "fastmcp.cli:app"
+securemcp = "securemcp.cli:app"
 purecipher-registry = "purecipher.cli:main"
 purecipher-publisher = "purecipher.publisher.cli:main"
 
 [project.urls]
-Homepage = "https://gofastmcp.com"
-Repository = "https://github.com/PrefectHQ/fastmcp"
-Documentation = "https://gofastmcp.com"
+Homepage = "https://github.com/PureCipher/xsecuremcp2.0"
+Repository = "https://github.com/PureCipher/xsecuremcp2.0"
+Documentation = "https://github.com/PureCipher/xsecuremcp2.0/tree/main/docs/servers/security"
 
 [build-system]
 requires = ["hatchling", "uv-dynamic-versioning>=0.7.0"]

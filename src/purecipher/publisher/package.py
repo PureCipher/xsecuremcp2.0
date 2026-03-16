@@ -95,12 +95,13 @@ def package_project(
     project_root: str | Path = ".",
     *,
     output_dir: str | Path | None = None,
+    refresh_artifacts: bool = False,
 ) -> PublisherPackageResult:
     """Generate package-ready publisher artifacts."""
 
     root = Path(project_root).resolve()
     config = load_publisher_config(root / "purecipher.toml")
-    check = check_project(root)
+    check = check_project(root, refresh_artifacts=refresh_artifacts)
 
     package_root = (
         Path(output_dir).resolve()

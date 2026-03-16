@@ -9,7 +9,7 @@ For a manual-wiring variant see ``quickstart.py``.
 
 Run::
 
-    uv run python examples/securemcp/quickstart_orchestrator.py
+    uv run securemcp run examples/securemcp/quickstart_orchestrator.py
 
 Then visit:
     http://localhost:8000/security/health

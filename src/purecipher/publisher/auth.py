@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import httpx
 from platformdirs import user_config_dir
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -51,7 +55,11 @@ def load_auth_tokens(auth_file: str | Path | None = None) -> dict[str, Any]:
     path = default_auth_file(auth_file)
     if not path.exists():
         return {"registries": {}}
-    payload = json.loads(path.read_text())
+    try:
+        payload = json.loads(path.read_text())
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        logger.debug("Ignoring invalid publisher auth file: %s", path, exc_info=True)
+        return {"registries": {}}
     if not isinstance(payload, dict):
         return {"registries": {}}
     registries = payload.get("registries")
@@ -69,6 +77,8 @@ def save_auth_tokens(
     path = default_auth_file(auth_file)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2) + "\n")
+    with suppress(OSError, PermissionError):
+        os.chmod(path, 0o600)
     return path
 
 
