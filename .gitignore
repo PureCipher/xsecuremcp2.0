@@ -67,11 +67,14 @@ dmypy.json
 # Claude worktree management
 .claude-wt/worktrees
 
-# Agents
+# Agents and local AI/editor config (do not commit)
 /PLAN.md
 /TODO.md
 /STATUS.md
 plans/
+.cursor/
+.claude/
+.agents/
 
 # Common FastMCP test files
 /test.py
