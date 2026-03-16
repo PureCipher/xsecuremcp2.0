@@ -70,6 +70,7 @@ class ProposalAction(Enum):
     ADD = "add"
     SWAP = "swap"
     REMOVE = "remove"
+    REPLACE_CHAIN = "replace_chain"
 
 
 @dataclass(frozen=True)
@@ -117,6 +118,7 @@ class PolicyProposal:
     proposal_id: str
     action: ProposalAction
     new_provider: PolicyProvider | None
+    replacement_providers: list[PolicyProvider] | None
     target_index: int | None
     author: str
     description: str
@@ -156,6 +158,8 @@ class PolicyProposal:
             data["simulation"] = self.simulation_report.to_dict()
         if self.new_provider is not None:
             data["new_provider_type"] = type(self.new_provider).__name__
+        if self.replacement_providers is not None:
+            data["replacement_provider_count"] = len(self.replacement_providers)
         data["target_index"] = self.target_index
         return data
 
@@ -231,6 +235,7 @@ class PolicyGovernor:
             proposal_id=str(uuid.uuid4()),
             action=ProposalAction.ADD,
             new_provider=provider,
+            replacement_providers=None,
             target_index=None,
             author=author,
             description=description,
@@ -280,6 +285,7 @@ class PolicyGovernor:
             proposal_id=str(uuid.uuid4()),
             action=ProposalAction.SWAP,
             new_provider=new_provider,
+            replacement_providers=None,
             target_index=index,
             author=author,
             description=description,
@@ -328,6 +334,7 @@ class PolicyGovernor:
             proposal_id=str(uuid.uuid4()),
             action=ProposalAction.REMOVE,
             new_provider=None,
+            replacement_providers=None,
             target_index=index,
             author=author,
             description=description,
@@ -345,6 +352,40 @@ class PolicyGovernor:
             "Policy proposal created: %s (REMOVE index %d by %s)",
             proposal.proposal_id,
             index,
+            author,
+        )
+        return proposal
+
+    def propose_replace_chain(
+        self,
+        providers: list[PolicyProvider],
+        *,
+        author: str = "unknown",
+        description: str = "",
+    ) -> PolicyProposal:
+        """Propose replacing the full provider chain atomically."""
+        proposal = PolicyProposal(
+            proposal_id=str(uuid.uuid4()),
+            action=ProposalAction.REPLACE_CHAIN,
+            new_provider=None,
+            replacement_providers=list(providers),
+            target_index=None,
+            author=author,
+            description=description,
+            base_version_number=self._current_version_number(),
+        )
+        proposal.decision_trail.append(
+            PolicyProposalEvent(
+                event="proposed",
+                actor=author,
+                note=description,
+            )
+        )
+        self._proposals[proposal.proposal_id] = proposal
+        logger.info(
+            "Policy proposal created: %s (REPLACE_CHAIN with %d providers by %s)",
+            proposal.proposal_id,
+            len(providers),
             author,
         )
         return proposal
@@ -377,19 +418,7 @@ class PolicyGovernor:
                 f"Cannot validate proposal in {proposal.status.value} status"
             )
 
-        # Build the hypothetical provider list after the change
-        hypothetical = list(self._engine.providers)
-
-        if proposal.action == ProposalAction.ADD:
-            assert proposal.new_provider is not None
-            hypothetical.append(proposal.new_provider)
-        elif proposal.action == ProposalAction.SWAP:
-            assert proposal.new_provider is not None
-            assert proposal.target_index is not None
-            hypothetical[proposal.target_index] = proposal.new_provider
-        elif proposal.action == ProposalAction.REMOVE:
-            assert proposal.target_index is not None
-            hypothetical.pop(proposal.target_index)
+        hypothetical = self._build_hypothetical_providers(proposal)
 
         result = self._validator.validate_providers(hypothetical)
         proposal.validation_result = result
@@ -451,19 +480,7 @@ class PolicyGovernor:
                 "Must pass validation first."
             )
 
-        # Build hypothetical provider list
-        hypothetical = list(self._engine.providers)
-
-        if proposal.action == ProposalAction.ADD:
-            assert proposal.new_provider is not None
-            hypothetical.append(proposal.new_provider)
-        elif proposal.action == ProposalAction.SWAP:
-            assert proposal.new_provider is not None
-            assert proposal.target_index is not None
-            hypothetical[proposal.target_index] = proposal.new_provider
-        elif proposal.action == ProposalAction.REMOVE:
-            assert proposal.target_index is not None
-            hypothetical.pop(proposal.target_index)
+        hypothetical = self._build_hypothetical_providers(proposal)
 
         report = await simulate(
             hypothetical,
@@ -709,6 +726,22 @@ class PolicyGovernor:
                 "removed_type": type(removed).__name__,
             }
 
+        elif proposal.action == ProposalAction.REPLACE_CHAIN:
+            assert proposal.replacement_providers is not None
+            await self._engine.replace_providers(
+                proposal.replacement_providers,
+                reason=proposal.description or "Imported policy snapshot",
+                author=proposal.author,
+                metadata={
+                    "proposal_id": proposal.proposal_id,
+                    "operation": "replace_chain",
+                },
+            )
+            proposal.deployment_record = {
+                "action": "replace_chain",
+                "provider_count": len(proposal.replacement_providers),
+            }
+
         proposal.deployed_at = datetime.now(timezone.utc)
         proposal.status = ProposalStatus.DEPLOYED
         proposal.decision_trail.append(
@@ -729,6 +762,29 @@ class PolicyGovernor:
         if proposal is None:
             raise KeyError(f"Proposal not found: {proposal_id}")
         return proposal
+
+    def _build_hypothetical_providers(
+        self,
+        proposal: PolicyProposal,
+    ) -> list[PolicyProvider]:
+        """Return the provider chain that would exist after this proposal."""
+        hypothetical = list(self._engine.providers)
+
+        if proposal.action == ProposalAction.ADD:
+            assert proposal.new_provider is not None
+            hypothetical.append(proposal.new_provider)
+        elif proposal.action == ProposalAction.SWAP:
+            assert proposal.new_provider is not None
+            assert proposal.target_index is not None
+            hypothetical[proposal.target_index] = proposal.new_provider
+        elif proposal.action == ProposalAction.REMOVE:
+            assert proposal.target_index is not None
+            hypothetical.pop(proposal.target_index)
+        elif proposal.action == ProposalAction.REPLACE_CHAIN:
+            assert proposal.replacement_providers is not None
+            hypothetical = list(proposal.replacement_providers)
+
+        return hypothetical
 
     def _current_version_number(self) -> int | None:
         """Return the active live policy version, if versioning is enabled."""

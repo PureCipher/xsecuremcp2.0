@@ -195,9 +195,20 @@ export type PolicyVersionDiffResponse = RegistryErrorResponse & {
   diff?: Record<string, unknown>;
 };
 
+export type PolicySchemaFieldMap = Record<string, string>;
+
+export type PolicySchemaType = {
+  description?: string;
+  aliases?: string[];
+  fields?: PolicySchemaFieldMap;
+  extra_fields?: PolicySchemaFieldMap;
+};
+
 export type PolicySchemaResponse = RegistryErrorResponse & {
-  definitions?: Record<string, unknown>;
-  properties?: Record<string, unknown>;
+  description?: string;
+  policy_types?: Record<string, PolicySchemaType>;
+  compositions?: Record<string, PolicySchemaType>;
+  common_fields?: PolicySchemaFieldMap;
 };
 
 export type PolicyValidationFinding = {
@@ -238,8 +249,10 @@ export type PolicyProposalItem = {
   rejection_reason?: string | null;
   target_index?: number | null;
   new_provider_type?: string;
+  replacement_provider_count?: number;
   validation?: PolicyValidationSummary;
   provider?: PolicyProviderItem;
+  provider_set?: PolicyProviderItem[];
   simulation?: PolicySimulationReport;
   decision_trail?: PolicyProposalEvent[];
 };
@@ -292,6 +305,36 @@ export type PolicyManagementResponse = RegistryErrorResponse & {
   governance?: PolicyGovernanceResponse;
   simulation_defaults?: PolicySimulationScenario[];
   generated_at?: string;
+};
+
+export type PolicySnapshot = {
+  format?: string;
+  providers?: PolicyConfig[];
+  metadata?: Record<string, unknown>;
+  captured_at?: string;
+};
+
+export type PolicyExportResponse = RegistryErrorResponse & {
+  kind?: string;
+  version_number?: number | null;
+  snapshot?: PolicySnapshot;
+  suggested_filename?: string;
+  generated_at?: string;
+};
+
+export type PolicyImportResponse = RegistryErrorResponse & {
+  status?: string;
+  summary?: {
+    created?: number;
+    added?: number;
+    changed?: number;
+    removed?: number;
+    imported_provider_count?: number;
+    current_provider_count?: number;
+  };
+  proposal?: PolicyProposalItem;
+  governance?: PolicyGovernanceResponse;
+  validation?: PolicyValidationSummary;
 };
 
 function backendBase() {

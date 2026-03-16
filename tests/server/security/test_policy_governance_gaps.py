@@ -318,6 +318,21 @@ class TestGovernorWorkflow:
         proposal = gov.propose_remove(1, author="test-user")
         assert proposal.action == ProposalAction.REMOVE
 
+    def test_propose_replace_chain(self) -> None:
+        engine = self._make_versioned_engine()
+        gov = PolicyGovernor(engine=engine, require_simulation=False)
+        proposal = gov.propose_replace_chain(
+            [
+                DenylistPolicy(denied={"admin-*"}),
+                AllowlistPolicy(allowed={"tool:*"}),
+            ],
+            author="test-user",
+            description="Import a reviewed chain",
+        )
+        assert proposal.action == ProposalAction.REPLACE_CHAIN
+        assert proposal.replacement_providers is not None
+        assert len(proposal.replacement_providers) == 2
+
     def test_validate_catches_errors(self) -> None:
         engine = PolicyEngine(providers=[AllowAllPolicy()])
         gov = PolicyGovernor(engine=engine, require_simulation=False)
@@ -797,7 +812,13 @@ class TestSecurityAPIGovernance:
         from fastmcp.server.security.http.api import SecurityAPI
 
         engine = PolicyEngine(providers=[AllowAllPolicy()])
+        version_manager = PolicyVersionManager(
+            policy_set_id="test-policy-api",
+            backend=MemoryBackend(),
+        )
+        engine.attach_version_manager(version_manager)
         api = SecurityAPI(policy_engine=engine)
+        api.policy_version_manager = version_manager
 
         if validator:
             api.policy_validator = PolicyValidator()
@@ -808,6 +829,24 @@ class TestSecurityAPIGovernance:
             api.policy_governor = gov
 
         return api
+
+    def test_export_policy_snapshot(self) -> None:
+        api = self._make_api()
+
+        exported = api.export_policy_snapshot()
+
+        assert exported["status"] == "exported"
+        assert exported["kind"] == "live"
+        assert exported["snapshot"]["format"] == "securemcp-policy-set/v1"
+        assert len(exported["snapshot"]["providers"]) == 1
+
+        version_export = api.export_policy_snapshot(version_number=1)
+        assert version_export["status"] == "exported"
+        assert version_export["kind"] == "version"
+        assert version_export["version_number"] == 1
+        assert (
+            version_export["snapshot"]["providers"] == exported["snapshot"]["providers"]
+        )
 
     def test_validate_policy_success(self) -> None:
         api = self._make_api()
@@ -911,6 +950,41 @@ class TestSecurityAPIGovernance:
         assert trail[-1]["note"] == "Deploying after reviewer sign-off."
 
     @pytest.mark.anyio
+    async def test_approve_and_deploy_replace_chain_proposal(self) -> None:
+        api = self._make_api()
+
+        created = await api.import_policy_snapshot(
+            {
+                "format": "securemcp-policy-set/v1",
+                "providers": [
+                    {"type": "denylist", "denied": ["admin-*"]},
+                    {"type": "allowlist", "allowed": ["tool:*"]},
+                ],
+            },
+            author="reviewer",
+            description_prefix="Imported reviewed chain",
+        )
+        proposal_id = created["proposal"]["proposal_id"]
+
+        approved = api.approve_governance_proposal(
+            proposal_id,
+            approver="admin",
+            note="Batch import looks safe.",
+        )
+        assert approved["status"] == "approved"
+
+        deployed = await api.deploy_governance_proposal(
+            proposal_id,
+            actor="admin",
+            note="Applying imported chain.",
+        )
+        assert deployed["status"] == "deployed"
+        assert deployed["proposal"]["action"] == "replace_chain"
+        assert deployed["proposal"]["replacement_provider_count"] == 2
+        assert deployed["policy"]["provider_count"] == 2
+        assert deployed["versions"]["current_version"] == 2
+
+    @pytest.mark.anyio
     async def test_simulate_governance_proposal(self) -> None:
         api = self._make_api()
         created = await api.create_governance_proposal(
@@ -940,6 +1014,60 @@ class TestSecurityAPIGovernance:
         assert simulated["proposal"]["status"] == "simulated"
         assert simulated["simulation"]["total"] == 2
         assert simulated["simulation"]["denied"] == 1
+
+    @pytest.mark.anyio
+    async def test_import_policy_snapshot_creates_replace_chain_proposal(self) -> None:
+        api = self._make_api()
+
+        baseline = api.export_policy_snapshot()
+        no_change = await api.import_policy_snapshot(
+            baseline["snapshot"],
+            author="reviewer",
+            description_prefix="Imported baseline",
+        )
+        assert no_change["status"] == "no_changes"
+
+        imported_snapshot = {
+            "format": "securemcp-policy-set/v1",
+            "providers": [
+                {"type": "allow_all"},
+                {"type": "denylist", "denied": ["admin-*"]},
+            ],
+        }
+        imported = await api.import_policy_snapshot(
+            imported_snapshot,
+            author="reviewer",
+            description_prefix="Imported denylist",
+        )
+
+        assert imported["status"] == "imported"
+        assert imported["summary"]["created"] == 1
+        assert imported["summary"]["added"] == 1
+        assert imported["proposal"]["action"] == "replace_chain"
+        assert imported["proposal"]["replacement_provider_count"] == 2
+        assert imported["proposal"]["description"].startswith("Imported denylist")
+
+    @pytest.mark.anyio
+    async def test_import_policy_snapshot_allows_multi_change_batch(self) -> None:
+        api = self._make_api()
+
+        imported = await api.import_policy_snapshot(
+            {
+                "format": "securemcp-policy-set/v1",
+                "providers": [
+                    {"type": "denylist", "denied": ["admin-*"]},
+                    {"type": "allowlist", "allowed": ["tool:*"]},
+                ],
+            },
+            author="reviewer",
+            description_prefix="Large import",
+        )
+
+        assert imported["status"] == "imported"
+        assert imported["proposal"]["action"] == "replace_chain"
+        assert imported["summary"]["created"] == 1
+        assert imported["summary"]["changed"] == 1
+        assert imported["summary"]["added"] == 1
 
     @pytest.mark.anyio
     async def test_reject_governance_proposal(self) -> None:

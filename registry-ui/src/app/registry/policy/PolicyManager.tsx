@@ -1,17 +1,25 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ChangeEvent } from "react";
 import type {
   PolicyConfig,
+  PolicyExportResponse,
   PolicyGovernanceResponse,
+  PolicyImportResponse,
   PolicyManagementResponse,
   PolicyProposalEvent,
   PolicyProposalItem,
-  PolicyProviderItem,
+  PolicySchemaResponse,
   PolicySimulationScenario,
   PolicyVersionDiffResponse,
-  PolicyVersionItem,
 } from "@/lib/registryClient";
+import {
+  downloadJsonFile,
+  parseImportedPolicyJson,
+  schemaCommonFields,
+  schemaCompositionEntries,
+  schemaTypeEntries,
+} from "./policyTransfer";
 
 type PolicyTemplateName =
   | "allowlist"
@@ -22,9 +30,10 @@ type PolicyTemplateName =
 
 type PolicyState = NonNullable<PolicyManagementResponse["policy"]>;
 type PolicyVersionsState = NonNullable<PolicyManagementResponse["versions"]>;
+type PolicySchemaState = NonNullable<PolicyManagementResponse["schema"]>;
 type PolicyManagerData = Pick<
   PolicyManagementResponse,
-  "policy" | "versions" | "governance" | "simulation_defaults"
+  "policy" | "versions" | "governance" | "schema" | "simulation_defaults"
 >;
 
 const POLICY_TEMPLATES: Record<PolicyTemplateName, PolicyConfig> = {
@@ -138,6 +147,8 @@ function actionLabel(action: string | undefined): string {
       return "Change rule";
     case "remove":
       return "Remove rule";
+    case "replace_chain":
+      return "Replace policy chain";
     default:
       return "Policy change";
   }
@@ -166,6 +177,7 @@ export function PolicyManager({
 }) {
   const policy: PolicyState = initialData?.policy ?? {};
   const versionsState: PolicyVersionsState = initialData?.versions ?? {};
+  const schema: PolicySchemaState = initialData?.schema ?? {};
   const governance: PolicyGovernanceResponse = initialData?.governance ?? {};
   const simulationDefaults: PolicySimulationScenario[] =
     initialData?.simulation_defaults ?? [];
@@ -192,6 +204,11 @@ export function PolicyManager({
   const versionNumbers = sortedVersions.map((version) => version.version_number);
   const requireApproval = governance.require_approval !== false;
   const requireSimulation = governance.require_simulation === true;
+  const policyTypeEntries = schemaTypeEntries(schema as PolicySchemaResponse);
+  const compositionEntries = schemaCompositionEntries(
+    schema as PolicySchemaResponse,
+  );
+  const commonFieldEntries = schemaCommonFields(schema as PolicySchemaResponse);
 
   const [banner, setBanner] = useState<{ tone: "success" | "error"; message: string } | null>(
     null,
@@ -217,6 +234,18 @@ export function PolicyManager({
   const [diffTo, setDiffTo] = useState<number | "">(versionNumbers[0] ?? "");
   const [diffLoading, setDiffLoading] = useState(false);
   const [versionDiff, setVersionDiff] = useState<PolicyVersionDiffResponse | null>(null);
+  const [importText, setImportText] = useState("");
+  const [importDescriptionPrefix, setImportDescriptionPrefix] = useState(
+    "Imported policy snapshot",
+  );
+
+  const importPreview = useMemo(() => {
+    try {
+      return parseImportedPolicyJson(importText);
+    } catch (error) {
+      return error instanceof Error ? error : new Error("Invalid JSON");
+    }
+  }, [importText]);
 
   const stats = useMemo(
     () => [
@@ -651,6 +680,159 @@ export function PolicyManager({
     }
   }
 
+  async function handleExportPolicy(versionNumber?: number) {
+    const busyId = versionNumber === undefined ? "export-live" : `export-${versionNumber}`;
+    setBanner(null);
+    setBusyKey(busyId);
+    try {
+      const query =
+        versionNumber === undefined ? "" : `?version=${encodeURIComponent(String(versionNumber))}`;
+      const response = await fetch(`/api/policy/export${query}`, {
+        cache: "no-store",
+      });
+      const payload = (await response.json().catch(() => ({}))) as PolicyExportResponse;
+      if (!response.ok || !payload.snapshot) {
+        throw new Error(payload.error ?? "Unable to export policy JSON.");
+      }
+
+      downloadJsonFile(
+        payload.suggested_filename ?? "securemcp-policy.json",
+        payload.snapshot,
+      );
+      setBanner({
+        tone: "success",
+        message:
+          versionNumber === undefined
+            ? "Live policy JSON downloaded."
+            : `Version ${versionNumber} JSON downloaded.`,
+      });
+    } catch (error) {
+      setBanner({
+        tone: "error",
+        message:
+          error instanceof Error ? error.message : "Unable to export policy JSON.",
+      });
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  function handleLoadIntoDraft() {
+    if (!(importPreview && !(importPreview instanceof Error))) {
+      setBanner({
+        tone: "error",
+        message: "Paste a single policy rule JSON object before loading it into the draft editor.",
+      });
+      return;
+    }
+
+    const config = importPreview.snapshot.providers?.[0];
+    if (!config || importPreview.kind !== "single_provider") {
+      setBanner({
+        tone: "error",
+        message: "Only a single policy rule can be loaded directly into the draft editor.",
+      });
+      return;
+    }
+
+    setCreateConfigText(prettyJson(config));
+    setCreateDescription(importDescriptionPrefix);
+    setBanner({
+      tone: "success",
+      message: "Loaded the imported rule into the draft editor.",
+    });
+  }
+
+  async function handleImportPolicy() {
+    if (!importText.trim()) {
+      setBanner({
+        tone: "error",
+        message: "Paste policy JSON before importing it.",
+      });
+      return;
+    }
+    if (importPreview instanceof Error) {
+      setBanner({
+        tone: "error",
+        message: importPreview.message,
+      });
+      return;
+    }
+    if (!importPreview) {
+      setBanner({
+        tone: "error",
+        message: "Paste policy JSON before importing it.",
+      });
+      return;
+    }
+
+    setBanner(null);
+    setBusyKey("import-policy");
+    try {
+      const response = await fetch("/api/policy/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          snapshot: importPreview.snapshot,
+          description_prefix: importDescriptionPrefix,
+        }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as PolicyImportResponse;
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Unable to import policy JSON.");
+      }
+
+      if (payload.status === "no_changes") {
+        setBanner({
+          tone: "success",
+          message: "Imported JSON already matches the live policy chain. No proposals were created.",
+        });
+        return;
+      }
+
+      const created = payload.summary?.created ?? 0;
+      setBanner({
+        tone: "success",
+        message:
+          created === 1
+            ? "Imported JSON created 1 batch proposal."
+            : `Imported JSON created ${created} proposals.`,
+      });
+      window.location.reload();
+    } catch (error) {
+      setBanner({
+        tone: "error",
+        message:
+          error instanceof Error ? error.message : "Unable to import policy JSON.",
+      });
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function handleImportFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      setImportText(text);
+      setBanner({
+        tone: "success",
+        message: `Loaded ${file.name}. Review the preview before importing it.`,
+      });
+    } catch {
+      setBanner({
+        tone: "error",
+        message: "Unable to read the selected JSON file.",
+      });
+    } finally {
+      event.target.value = "";
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6">
       {banner ? (
@@ -693,6 +875,29 @@ export function PolicyManager({
                 These rules are live today. Draft a change or removal first, then approve
                 and apply it from the proposal lane.
               </p>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void handleExportPolicy()}
+                disabled={busyKey === "export-live"}
+                className="rounded-full border border-emerald-600/80 px-3 py-1 text-[10px] font-semibold text-emerald-100 transition hover:bg-emerald-700/30 disabled:opacity-60"
+              >
+                {busyKey === "export-live" ? "Downloading…" : "Export live JSON"}
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  downloadJsonFile(
+                    "securemcp-policy-schema.json",
+                    schema,
+                  )
+                }
+                className="rounded-full border border-emerald-600/80 px-3 py-1 text-[10px] font-semibold text-emerald-100 transition hover:bg-emerald-700/30"
+              >
+                Download schema
+              </button>
             </div>
 
             <div className="mt-5 flex flex-col gap-4">
@@ -907,6 +1112,14 @@ export function PolicyManager({
                               Drafted for v{proposal.base_version_number ?? "?"} · live v
                               {proposal.live_version_number ?? "?"}
                             </p>
+                            {proposal.replacement_provider_count ? (
+                              <p className="text-[10px] text-emerald-200/90">
+                                Imported chain: {proposal.replacement_provider_count}{" "}
+                                {proposal.replacement_provider_count === 1
+                                  ? "step"
+                                  : "steps"}
+                              </p>
+                            ) : null}
                             {proposal.provider?.summary ? (
                               <p className="text-[10px] text-emerald-200/90">
                                 Draft: {proposal.provider.summary}
@@ -1145,6 +1358,40 @@ export function PolicyManager({
                         </div>
                       ) : null}
 
+                      {proposal.provider_set?.length ? (
+                        <div className="mt-3 rounded-2xl bg-emerald-900/20 p-3 ring-1 ring-emerald-700/40">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+                              Imported chain preview
+                            </p>
+                            <p className="text-[10px] text-emerald-200/90">
+                              {proposal.provider_set.length}{" "}
+                              {proposal.provider_set.length === 1 ? "step" : "steps"}
+                            </p>
+                          </div>
+                          <ul className="mt-3 space-y-2">
+                            {proposal.provider_set.slice(0, 4).map((providerItem) => (
+                              <li
+                                key={`${proposalId}-provider-set-${providerItem.index}`}
+                                className="rounded-2xl bg-emerald-950/60 p-3 ring-1 ring-emerald-700/30"
+                              >
+                                <p className="text-[11px] font-semibold text-emerald-50">
+                                  Step {providerItem.index + 1}: {providerItem.type}
+                                </p>
+                                <p className="mt-1 text-[10px] text-emerald-300/90">
+                                  {providerItem.summary}
+                                </p>
+                              </li>
+                            ))}
+                            {proposal.provider_set.length > 4 ? (
+                              <li className="text-[10px] text-emerald-200/90">
+                                +{proposal.provider_set.length - 4} more imported steps
+                              </li>
+                            ) : null}
+                          </ul>
+                        </div>
+                      ) : null}
+
                       {simulationSummary ? (
                         <div className="mt-3 rounded-2xl bg-emerald-900/20 p-3 ring-1 ring-emerald-700/40">
                           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1283,17 +1530,40 @@ export function PolicyManager({
                           </p>
                         </div>
                         {!isCurrent ? (
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => void handleExportPolicy(version.version_number)}
+                              disabled={busyKey === `export-${version.version_number}`}
+                              className="rounded-full border border-emerald-600/80 px-3 py-1 text-[10px] font-semibold text-emerald-100 transition hover:bg-emerald-700/30 disabled:opacity-60"
+                            >
+                              {busyKey === `export-${version.version_number}`
+                                ? "Downloading…"
+                                : "Export JSON"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleRollback(version.version_number)}
+                              disabled={busyKey === `rollback-${version.version_number}`}
+                              className="rounded-full border border-emerald-600/80 px-3 py-1 text-[10px] font-semibold text-emerald-100 transition hover:bg-emerald-700/30 disabled:opacity-60"
+                            >
+                              {busyKey === `rollback-${version.version_number}`
+                                ? "Rolling back…"
+                                : "Roll back"}
+                            </button>
+                          </div>
+                        ) : (
                           <button
                             type="button"
-                            onClick={() => void handleRollback(version.version_number)}
-                            disabled={busyKey === `rollback-${version.version_number}`}
+                            onClick={() => void handleExportPolicy(version.version_number)}
+                            disabled={busyKey === `export-${version.version_number}`}
                             className="rounded-full border border-emerald-600/80 px-3 py-1 text-[10px] font-semibold text-emerald-100 transition hover:bg-emerald-700/30 disabled:opacity-60"
                           >
-                            {busyKey === `rollback-${version.version_number}`
-                              ? "Rolling back…"
-                              : "Roll back"}
+                            {busyKey === `export-${version.version_number}`
+                              ? "Downloading…"
+                              : "Export JSON"}
                           </button>
-                        ) : null}
+                        )}
                       </div>
                     </article>
                   );
@@ -1382,6 +1652,87 @@ export function PolicyManager({
           <div className="rounded-3xl bg-emerald-900/40 p-5 ring-1 ring-emerald-700/60">
             <div className="space-y-1">
               <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-300">
+                Schema guide
+              </p>
+              <h2 className="text-xl font-semibold text-emerald-50">
+                See the supported JSON shape
+              </h2>
+              <p className="text-[11px] text-emerald-100/80">
+                Use this guide when you hand-edit JSON, prepare imports, or want a quick
+                reminder of the fields each policy type supports.
+              </p>
+            </div>
+
+            <div className="mt-4 rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/70">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+                Common fields
+              </p>
+              <ul className="mt-2 space-y-1 text-[11px] text-emerald-100/90">
+                {commonFieldEntries.map(([fieldName, description]) => (
+                  <li key={fieldName}>
+                    <span className="font-semibold text-emerald-50">{fieldName}</span>:{" "}
+                    {description}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="mt-4 grid gap-3">
+              {policyTypeEntries.map(([typeName, definition]) => (
+                <div
+                  key={typeName}
+                  className="rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/70"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-[11px] font-semibold capitalize text-emerald-50">
+                      {typeName.replaceAll("_", " ")}
+                    </p>
+                    {definition.aliases?.length ? (
+                      <span className="text-[10px] text-emerald-300/90">
+                        Aliases: {definition.aliases.join(", ")}
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="mt-2 text-[11px] text-emerald-100/90">
+                    {definition.description}
+                  </p>
+                  <ul className="mt-2 space-y-1 text-[10px] text-emerald-200/90">
+                    {Object.entries(definition.fields ?? {}).map(([fieldName, description]) => (
+                      <li key={`${typeName}-${fieldName}`}>
+                        <span className="font-semibold text-emerald-100">{fieldName}</span>:{" "}
+                        {description}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4 rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/70">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+                Composition helpers
+              </p>
+              <ul className="mt-2 space-y-2 text-[11px] text-emerald-100/90">
+                {compositionEntries.map(([name, definition]) => (
+                  <li key={name}>
+                    <span className="font-semibold text-emerald-50">
+                      {name.replaceAll("_", " ")}
+                    </span>
+                    : {definition.description}
+                    {definition.extra_fields
+                      ? ` Extra fields: ${Object.entries(definition.extra_fields)
+                          .map(([fieldName, description]) => `${fieldName} (${description})`)
+                          .join(", ")}`
+                      : ""}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          <div className="rounded-3xl bg-emerald-900/40 p-5 ring-1 ring-emerald-700/60">
+            <div className="space-y-1">
+              <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-300">
                 New proposal
               </p>
               <h2 className="text-xl font-semibold text-emerald-50">
@@ -1444,6 +1795,101 @@ export function PolicyManager({
             >
               {creating ? "Creating proposal…" : "Create proposal"}
             </button>
+          </div>
+
+          <div className="rounded-3xl bg-emerald-900/40 p-5 ring-1 ring-emerald-700/60">
+            <div className="space-y-1">
+              <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-300">
+                Import and export
+              </p>
+              <h2 className="text-xl font-semibold text-emerald-50">
+                Move policy JSON in and out safely
+              </h2>
+              <p className="text-[11px] text-emerald-100/80">
+                Export the live chain or a saved version, then import a snapshot, provider
+                list, or single rule. Imports become batch proposals that still go through
+                validation, simulation, approval, and deploy.
+              </p>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void handleExportPolicy()}
+                disabled={busyKey === "export-live"}
+                className="rounded-full border border-emerald-600/80 px-3 py-1 text-[10px] font-semibold text-emerald-100 transition hover:bg-emerald-700/30 disabled:opacity-60"
+              >
+                {busyKey === "export-live" ? "Downloading…" : "Export live JSON"}
+              </button>
+              <label className="rounded-full border border-emerald-600/80 px-3 py-1 text-[10px] font-semibold text-emerald-100 transition hover:bg-emerald-700/30 cursor-pointer">
+                Load JSON file
+                <input
+                  type="file"
+                  accept="application/json,.json"
+                  onChange={(event) => void handleImportFile(event)}
+                  className="sr-only"
+                />
+              </label>
+            </div>
+
+            <textarea
+              value={importText}
+              onChange={(event) => setImportText(event.target.value)}
+              placeholder="Paste a policy snapshot, provider list, or single policy rule JSON."
+              className="mt-4 min-h-[220px] w-full rounded-2xl border border-emerald-700/70 bg-emerald-950 px-4 py-3 font-mono text-[11px] leading-6 text-emerald-50 outline-none focus:border-emerald-400"
+            />
+
+            <input
+              value={importDescriptionPrefix}
+              onChange={(event) => setImportDescriptionPrefix(event.target.value)}
+              placeholder="Imported policy snapshot"
+              className="mt-3 w-full rounded-full border border-emerald-700/70 bg-emerald-950 px-4 py-2 text-[11px] text-emerald-50 outline-none focus:border-emerald-400"
+            />
+
+            <div className="mt-3 rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/70">
+              {importPreview instanceof Error ? (
+                <p className="text-[11px] text-rose-100">{importPreview.message}</p>
+              ) : importPreview ? (
+                <div className="space-y-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+                    Import preview
+                  </p>
+                  <p className="text-[11px] text-emerald-100/90">
+                    {importPreview.label} · {importPreview.providerCount}{" "}
+                    {importPreview.providerCount === 1 ? "provider" : "providers"}
+                  </p>
+                  <p className="text-[10px] text-emerald-300/90">
+                    The import will stage a batch proposal against the current live chain
+                    instead of changing it directly.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-[11px] text-emerald-100/90">
+                  Paste JSON to see what kind of policy import it is before staging it.
+                </p>
+              )}
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void handleImportPolicy()}
+                disabled={busyKey === "import-policy"}
+                className="rounded-full bg-emerald-500 px-4 py-2 text-[11px] font-semibold text-emerald-950 transition hover:bg-emerald-400 disabled:opacity-60"
+              >
+                {busyKey === "import-policy" ? "Importing…" : "Stage import as proposals"}
+              </button>
+              {importPreview && !(importPreview instanceof Error) ? (
+                <button
+                  type="button"
+                  onClick={() => handleLoadIntoDraft()}
+                  disabled={importPreview.kind !== "single_provider"}
+                  className="rounded-full border border-emerald-600/80 px-4 py-2 text-[11px] font-semibold text-emerald-100 transition hover:bg-emerald-700/30 disabled:opacity-60"
+                >
+                  Load single rule into draft
+                </button>
+              ) : null}
+            </div>
           </div>
         </aside>
       </section>

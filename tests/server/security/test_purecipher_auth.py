@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any, cast
 
 from starlette.testclient import TestClient
@@ -227,6 +228,15 @@ class TestPureCipherRegistryAuth:
             unauthenticated = client.get("/registry/policy")
             assert unauthenticated.status_code == 401
 
+            unauthenticated_export = client.get("/registry/policy/export")
+            assert unauthenticated_export.status_code == 401
+
+            unauthenticated_import = client.post(
+                "/registry/policy/import",
+                json={"snapshot": {"providers": []}},
+            )
+            assert unauthenticated_import.status_code == 401
+
             viewer_login = client.post(
                 "/registry/login",
                 json={"username": "viewer", "password": "viewer123"},
@@ -235,6 +245,15 @@ class TestPureCipherRegistryAuth:
 
             forbidden = client.get("/registry/policy")
             assert forbidden.status_code == 403
+
+            forbidden_export = client.get("/registry/policy/export")
+            assert forbidden_export.status_code == 403
+
+            forbidden_import = client.post(
+                "/registry/policy/import",
+                json={"snapshot": {"providers": []}},
+            )
+            assert forbidden_import.status_code == 403
 
     def test_reviewer_can_manage_policy_chain(self):
         registry = PureCipherRegistry(
@@ -315,6 +334,70 @@ class TestPureCipherRegistryAuth:
             )
             assert rollback_response.status_code == 200
             assert rollback_response.json()["policy"]["provider_count"] == 1
+
+    def test_reviewer_can_export_and_import_policy_json(self):
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            auth_settings=_auth_settings(),
+        )
+        app = registry.http_app()
+
+        with TestClient(app) as client:
+            login = client.post(
+                "/registry/login",
+                json={"username": "reviewer", "password": "reviewer123"},
+            )
+            assert login.status_code == 200
+
+            export_live = client.get("/registry/policy/export")
+            assert export_live.status_code == 200
+            live_snapshot = export_live.json()["snapshot"]
+            assert live_snapshot["format"] == "securemcp-policy-set/v1"
+            assert len(live_snapshot["providers"]) == 1
+
+            export_version = client.get("/registry/policy/export?version=1")
+            assert export_version.status_code == 200
+            assert export_version.json()["version_number"] == 1
+            assert (
+                export_version.json()["snapshot"]["providers"]
+                == live_snapshot["providers"]
+            )
+
+            no_change_import = client.post(
+                "/registry/policy/import",
+                json={
+                    "snapshot": live_snapshot,
+                    "description_prefix": "Imported baseline",
+                },
+            )
+            assert no_change_import.status_code == 200
+            assert no_change_import.json()["status"] == "no_changes"
+
+            imported_snapshot = json.loads(json.dumps(live_snapshot))
+            imported_snapshot["providers"].append(
+                {
+                    "type": "denylist",
+                    "policy_id": "imported-denylist",
+                    "version": "1.0.0",
+                    "denied": ["admin-*"],
+                }
+            )
+
+            import_response = client.post(
+                "/registry/policy/import",
+                json={
+                    "snapshot": imported_snapshot,
+                    "description_prefix": "Imported denylist",
+                },
+            )
+            assert import_response.status_code == 200
+            import_payload = import_response.json()
+            assert import_payload["status"] == "imported"
+            assert import_payload["summary"]["created"] == 1
+            proposal = import_payload["proposal"]
+            assert proposal["action"] == "replace_chain"
+            assert proposal["replacement_provider_count"] == 2
+            assert proposal["description"].startswith("Imported denylist")
 
     def test_reviewer_can_approve_but_admin_is_required_to_suspend(self):
         registry = PureCipherRegistry(

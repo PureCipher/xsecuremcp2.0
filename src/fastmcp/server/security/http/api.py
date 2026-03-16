@@ -42,6 +42,8 @@ from fastmcp.server.security.integration import get_security_context
 from fastmcp.server.security.policy.serialization import (
     describe_policy_provider,
     policy_provider_from_config,
+    policy_snapshot,
+    providers_from_snapshot,
 )
 
 if TYPE_CHECKING:
@@ -521,6 +523,68 @@ class SecurityAPI:
 
         return dump_policy_schema()
 
+    def export_policy_snapshot(
+        self,
+        *,
+        version_number: int | None = None,
+    ) -> dict[str, Any]:
+        """Export the live policy chain or a saved version as JSON."""
+        if version_number is not None:
+            if self.policy_version_manager is None:
+                return {"error": "Policy versioning not configured", "status": 503}
+
+            for version in self.policy_version_manager.list_versions():
+                if version.version_number == version_number:
+                    return {
+                        "status": "exported",
+                        "kind": "version",
+                        "version_number": version.version_number,
+                        "snapshot": version.policy_data,
+                        "suggested_filename": (
+                            f"securemcp-policy-v{version.version_number}.json"
+                        ),
+                        "generated_at": datetime.now(timezone.utc).isoformat(),
+                    }
+
+            return {
+                "error": f"Policy version not found: {version_number}",
+                "status": 404,
+            }
+
+        if self.policy_engine is None:
+            return {"error": "Policy engine not configured", "status": 503}
+
+        current_version = (
+            self.policy_version_manager.current_version
+            if self.policy_version_manager is not None
+            else None
+        )
+        snapshot = policy_snapshot(
+            list(self.policy_engine.providers),
+            metadata={
+                "source": "policy_export",
+                "current_version": (
+                    current_version.version_number
+                    if current_version is not None
+                    else None
+                ),
+            },
+        )
+        return {
+            "status": "exported",
+            "kind": "live",
+            "version_number": (
+                current_version.version_number if current_version is not None else None
+            ),
+            "snapshot": snapshot,
+            "suggested_filename": (
+                "securemcp-policy-live.json"
+                if current_version is None
+                else f"securemcp-policy-live-v{current_version.version_number}.json"
+            ),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
     # ── Policy Versioning ────────────────────────────────────
 
     def get_policy_versions(self) -> dict[str, Any]:
@@ -719,6 +783,106 @@ class SecurityAPI:
             "diff": diff,
         }
 
+    async def import_policy_snapshot(
+        self,
+        snapshot: dict[str, Any] | list[Any],
+        *,
+        author: str = "api",
+        description_prefix: str = "Imported policy snapshot",
+    ) -> dict[str, Any]:
+        """Import policy JSON by creating one batch governance proposal."""
+        if self.policy_engine is None:
+            return {"error": "Policy engine not configured", "status": 503}
+        if self.policy_governor is None:
+            return {"error": "Policy governance not configured", "status": 503}
+
+        normalized = self._normalize_import_snapshot(snapshot)
+        if normalized.get("status") == 400:
+            return normalized
+
+        try:
+            imported_providers = providers_from_snapshot(normalized)
+        except (TypeError, ValueError) as exc:
+            return {"error": str(exc), "status": 400}
+
+        raw_providers = normalized.get("providers", [])
+        if not isinstance(raw_providers, list):
+            return {
+                "error": "Imported snapshot is missing a provider list.",
+                "status": 400,
+            }
+
+        imported_configs: list[dict[str, Any]] = []
+        for raw_provider in raw_providers:
+            if not isinstance(raw_provider, dict):
+                return {
+                    "error": "Each imported provider must be a JSON object.",
+                    "status": 400,
+                }
+            if (
+                self.policy_validator is not None
+                and raw_provider.get("type") != "python_class"
+            ):
+                result = self.policy_validator.validate_declarative(raw_provider)
+                if not result.valid:
+                    return {
+                        "error": "Imported policy snapshot failed validation.",
+                        "status": 400,
+                        "validation": result.to_dict(),
+                    }
+            imported_configs.append(raw_provider)
+        current_configs = [
+            describe_policy_provider(provider, index=index)["config"]
+            for index, provider in enumerate(self.policy_engine.providers)
+        ]
+
+        if current_configs == imported_configs:
+            return {
+                "status": "no_changes",
+                "summary": {
+                    "created": 0,
+                    "added": 0,
+                    "changed": 0,
+                    "removed": 0,
+                    "imported_provider_count": len(imported_providers),
+                    "current_provider_count": len(current_configs),
+                },
+                "governance": self.get_governance_proposals(),
+            }
+
+        try:
+            proposal = self.policy_governor.propose_replace_chain(
+                imported_providers,
+                author=author,
+                description=description_prefix,
+            )
+            validation = self.policy_governor.validate_proposal(proposal.proposal_id)
+        except (IndexError, KeyError, ValueError) as exc:
+            return {"error": str(exc), "status": 400}
+
+        added = max(0, len(imported_configs) - len(current_configs))
+        removed = max(0, len(current_configs) - len(imported_configs))
+        changed = sum(
+            1
+            for index in range(min(len(current_configs), len(imported_configs)))
+            if current_configs[index] != imported_configs[index]
+        )
+
+        return {
+            "status": "imported",
+            "summary": {
+                "created": 1,
+                "added": added,
+                "changed": changed,
+                "removed": removed,
+                "imported_provider_count": len(imported_providers),
+                "current_provider_count": len(current_configs),
+            },
+            "proposal": self._serialize_governance_proposal(proposal),
+            "validation": validation.to_dict(),
+            "governance": self.get_governance_proposals(),
+        }
+
     # ── Validation ─────────────────────────────────────────────
 
     def validate_policy(self, config: dict) -> dict[str, Any]:
@@ -735,6 +899,55 @@ class SecurityAPI:
 
         result = self.policy_validator.validate_declarative(config)
         return result.to_dict()
+
+    def _normalize_import_snapshot(
+        self,
+        snapshot: dict[str, Any] | list[Any],
+    ) -> dict[str, Any]:
+        """Normalize imported JSON into the stored policy snapshot format."""
+        if isinstance(snapshot, list):
+            if not all(isinstance(item, dict) for item in snapshot):
+                return {
+                    "error": "Imported provider lists must contain only objects.",
+                    "status": 400,
+                }
+            return {
+                "format": "securemcp-policy-set/v1",
+                "providers": snapshot,
+                "metadata": {"source": "policy_import"},
+            }
+
+        if not isinstance(snapshot, dict):
+            return {
+                "error": "Imported policy must be a JSON object or provider list.",
+                "status": 400,
+            }
+
+        if isinstance(snapshot.get("policy_data"), dict):
+            policy_data = snapshot["policy_data"]
+            if isinstance(policy_data.get("providers"), list):
+                return policy_data
+
+        if isinstance(snapshot.get("providers"), list):
+            normalized = dict(snapshot)
+            normalized.setdefault("format", "securemcp-policy-set/v1")
+            normalized.setdefault("metadata", {"source": "policy_import"})
+            return normalized
+
+        if "type" in snapshot or "composition" in snapshot:
+            return {
+                "format": "securemcp-policy-set/v1",
+                "providers": [snapshot],
+                "metadata": {"source": "policy_import", "shape": "single_provider"},
+            }
+
+        return {
+            "error": (
+                "Imported JSON must be a policy snapshot, a provider list, "
+                "or a single policy config."
+            ),
+            "status": 400,
+        }
 
     def _validate_policy_mutation(
         self,
@@ -941,6 +1154,20 @@ class SecurityAPI:
                     raise ValueError("`target_index` is required for remove proposals.")
                 proposal = self.policy_governor.propose_remove(
                     target_index,
+                    author=author,
+                    description=description,
+                )
+            elif action_name == "replace_chain":
+                if config is None:
+                    raise ValueError(
+                        "`config` is required for replace_chain proposals."
+                    )
+                normalized = self._normalize_import_snapshot(config)
+                if normalized.get("status") == 400:
+                    return normalized
+                providers = providers_from_snapshot(normalized)
+                proposal = self.policy_governor.propose_replace_chain(
+                    providers,
                     author=author,
                     description=description,
                 )
@@ -1155,6 +1382,11 @@ class SecurityAPI:
                 if proposal.target_index is not None
                 else -1,
             )
+        if proposal.replacement_providers is not None:
+            payload["provider_set"] = [
+                describe_policy_provider(provider, index=index)
+                for index, provider in enumerate(proposal.replacement_providers)
+            ]
         return payload
 
     @staticmethod
@@ -1423,6 +1655,45 @@ def mount_security_routes(
     @server.custom_route(f"{prefix}/policy/schema", methods=["GET"])
     async def policy_schema_endpoint(request: Request) -> JSONResponse:
         return JSONResponse(api.get_policy_schema())
+
+    @server.custom_route(f"{prefix}/policy/export", methods=["GET"])
+    async def policy_export_endpoint(request: Request) -> JSONResponse:
+        raw_version = request.query_params.get("version")
+        try:
+            version_number = int(raw_version) if raw_version is not None else None
+        except ValueError:
+            return JSONResponse(
+                {"error": "Invalid `version` query parameter.", "status": 400},
+                status_code=400,
+            )
+        payload = api.export_policy_snapshot(version_number=version_number)
+        status_code = (
+            payload["status"] if isinstance(payload.get("status"), int) else 200
+        )
+        return JSONResponse(payload, status_code=status_code)
+
+    @server.custom_route(f"{prefix}/policy/import", methods=["POST"])
+    async def policy_import_endpoint(request: Request) -> JSONResponse:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        snapshot = body.get("snapshot", body) if isinstance(body, dict) else body
+        author = str(body.get("author", "api")) if isinstance(body, dict) else "api"
+        description_prefix = (
+            str(body.get("description_prefix", "Imported policy snapshot"))
+            if isinstance(body, dict)
+            else "Imported policy snapshot"
+        )
+        payload = await api.import_policy_snapshot(
+            snapshot,
+            author=author,
+            description_prefix=description_prefix,
+        )
+        status_code = (
+            payload["status"] if isinstance(payload.get("status"), int) else 200
+        )
+        return JSONResponse(payload, status_code=status_code)
 
     # Policy Versioning
     @server.custom_route(f"{prefix}/policy/versions", methods=["GET"])
