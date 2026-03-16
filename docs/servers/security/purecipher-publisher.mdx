@@ -1,0 +1,168 @@
+---
+title: PureCipher Publisher Accelerator
+description: Scaffold and validate SecureMCP projects before publishing them to PureCipher Registry.
+---
+
+PureCipher Publisher Accelerator is the publisher-side companion to PureCipher Registry. It helps a publisher go from a blank folder to a SecureMCP-based MCP server with the right project files, starter metadata, local readiness checks, and a direct path into the registry.
+
+## What It Does Today
+
+- creates a starter SecureMCP project from a built-in template
+- writes `purecipher.toml` as the source-of-truth publisher config
+- generates `manifest.json` and `runtime.json`
+- checks a project for placeholder metadata before publish time
+- packages publish-ready artifacts into `dist/purecipher/...`
+- writes package summaries for humans and CI-friendly automation
+- stores registry login tokens locally for repeatable publish flows
+- supports direct bearer-token publish flows for CI
+- runs registry preflight and submits directly to PureCipher Registry
+- reports whether a published listing is live immediately or waiting for review
+- keeps the generated artifacts in sync with the config
+
+## CLI
+
+The accelerator ships as a separate CLI:
+
+```bash
+uv run purecipher-publisher templates
+uv run purecipher-publisher init weather-lookup --template http
+uv run purecipher-publisher check weather-lookup
+uv run purecipher-publisher package weather-lookup
+uv run purecipher-publisher login --project-path weather-lookup --username publisher
+uv run purecipher-publisher publish weather-lookup
+```
+
+## Supported Templates
+
+- `http`: streamable HTTP server with a public endpoint placeholder
+- `stdio`: local process launched directly from a client
+- `docker`: container-ready HTTP server with a Docker image placeholder
+
+## Scaffold Example
+
+```bash
+uv run purecipher-publisher init weather-lookup --template http --publisher acme
+```
+
+That creates a project with:
+
+```text
+weather-lookup/
+  app.py
+  pyproject.toml
+  purecipher.toml
+  manifest.json
+  runtime.json
+  Dockerfile
+  README.md
+  tools/
+  tests/
+```
+
+The generated `purecipher.toml` is the main file publishers should edit first. `check` will regenerate `manifest.json` and `runtime.json` from that config.
+
+## Local Check
+
+Run a local check at any time:
+
+```bash
+uv run purecipher-publisher check weather-lookup
+```
+
+The current output tells you:
+
+- whether the project is ready to publish
+- which generated artifacts were refreshed
+- what still looks like placeholder metadata
+- what to update next
+
+For automation or future CI integration, you can also ask for JSON output:
+
+```bash
+uv run purecipher-publisher check weather-lookup --json
+```
+
+## Package Artifacts
+
+Package the project into a publish-ready output directory:
+
+```bash
+uv run purecipher-publisher package weather-lookup
+```
+
+By default, that writes artifacts under:
+
+```text
+weather-lookup/dist/purecipher/weather-lookup/
+  manifest.json
+  runtime.json
+  submission.json
+  install-recipes.json
+  package-summary.json
+  package-summary.md
+```
+
+`submission.json` matches the payload shape sent to `/registry/submit`, and `install-recipes.json` previews the setup blocks that will appear on the registry page.
+
+The summary files are useful for automation and release notes:
+
+- `package-summary.json`: machine-readable readiness and artifact summary
+- `package-summary.md`: a small human-readable packaging recap
+
+## Login
+
+If the registry has auth enabled, sign in once and store a local token:
+
+```bash
+uv run purecipher-publisher login \
+  --project-path weather-lookup \
+  --username publisher
+```
+
+The token is stored in a local auth file under the PureCipher user config directory, or in `PURECIPHER_PUBLISHER_AUTH_FILE` if you set it explicitly.
+
+For CI or other non-interactive flows, you can also skip the local auth file and provide a bearer token directly:
+
+```bash
+PURECIPHER_PUBLISHER_TOKEN=your-registry-token \
+uv run purecipher-publisher publish weather-lookup
+```
+
+An explicit CLI token takes precedence over the environment variable:
+
+```bash
+uv run purecipher-publisher publish weather-lookup --token your-registry-token
+```
+
+## Publish
+
+Once the project is ready, publish directly to the registry:
+
+```bash
+uv run purecipher-publisher publish weather-lookup
+```
+
+The publish flow:
+
+1. reruns the local check
+2. refreshes package artifacts
+3. calls `/registry/preflight`
+4. submits to `/registry/submit`
+5. returns the listing status and the best next URL for the publisher
+
+If the project still contains placeholder metadata, publish is blocked by default. Use `purecipher-publisher check` first, fix the reported issues, and then rerun `publish`.
+
+If the target registry requires moderation, publish still succeeds but the returned status is `pending_review` and the CLI points the publisher to the review queue instead of the public listing page.
+
+## Current Scope
+
+This phase now covers:
+
+- scaffold
+- local validation
+- package artifact generation with summary files
+- registry login
+- CI-friendly token-based publish
+- registry publish with moderation-aware feedback
+
+The next logical phase is publisher polish: release-oriented metadata, CI examples, and a smoother handoff from local packaging into team workflows.

@@ -64,7 +64,7 @@ class TestPureCipherRegistryAuth:
 
             assert login_page.status_code == 200
             assert "Sign in to the registry" in login_page.text
-            assert "Registry Login" in login_page.text
+            assert "Sign In" in login_page.text
 
             login = client.post(
                 "/registry/login",
@@ -129,7 +129,27 @@ class TestPureCipherRegistryAuth:
 
             catalog = client.get("/registry")
             assert catalog.status_code == 200
-            assert "Sign in to publish" in catalog.text
+            assert "Share A Tool" in catalog.text
+            assert (
+                "You can preview the form now. Sign in when you're ready to share."
+                in catalog.text
+            )
+
+            publish_page = client.get("/registry/publish")
+            assert publish_page.status_code == 200
+            assert "Check Results" in publish_page.text
+
+            preflight = client.post(
+                "/registry/preflight",
+                json={
+                    "manifest": _manifest().to_dict(),
+                    "display_name": "Weather Lookup",
+                    "categories": ["network"],
+                    "requested_level": "basic",
+                },
+            )
+            assert preflight.status_code == 200
+            assert preflight.json()["effective_certification_level"] == "basic"
 
     def test_publisher_can_submit_but_cannot_access_review_queue(self):
         registry = PureCipherRegistry(

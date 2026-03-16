@@ -45,8 +45,10 @@ from purecipher.publishers import (
 )
 from purecipher.ui import (
     SAMPLE_MANIFEST_JSON,
+    SAMPLE_RUNTIME_METADATA_JSON,
     create_listing_detail_html,
     create_login_html,
+    create_publish_html,
     create_publisher_index_html,
     create_publisher_profile_html,
     create_registry_ui_html,
@@ -86,6 +88,40 @@ class RegistrySubmissionResult:
         if self.listing is not None:
             payload["listing"] = self.listing.to_dict()
         return payload
+
+
+@dataclass
+class RegistryPreflightResult:
+    """Outcome of a non-publishing submission validation pass."""
+
+    ready_for_publish: bool
+    summary: str
+    requested_level: str
+    effective_certification_level: str
+    minimum_required_level: str
+    meets_minimum: bool
+    manifest_digest: str
+    install_ready: bool
+    install_recipes: list[dict[str, Any]]
+    report: Any
+    attestation: Any
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the preflight result for HTTP responses."""
+
+        return {
+            "ready_for_publish": self.ready_for_publish,
+            "summary": self.summary,
+            "requested_level": self.requested_level,
+            "effective_certification_level": self.effective_certification_level,
+            "minimum_required_level": self.minimum_required_level,
+            "meets_minimum": self.meets_minimum,
+            "manifest_digest": self.manifest_digest,
+            "install_ready": self.install_ready,
+            "install_recipes": list(self.install_recipes),
+            "report": self.report.to_dict(),
+            "attestation": self.attestation.to_dict(),
+        }
 
 
 def _parse_manifest(data: dict[str, Any]) -> SecurityManifest:
@@ -165,6 +201,20 @@ def _split_multi_value(request: Request, key: str) -> list[str]:
 def _status_code_from_payload(payload: dict[str, Any]) -> int:
     status = payload.get("status")
     return status if isinstance(status, int) else 200
+
+
+def _parse_csv_set(raw_value: str) -> set[str]:
+    return {value.strip() for value in raw_value.split(",") if value.strip()}
+
+
+def _parse_optional_json_object(raw_value: str, *, field_name: str) -> dict[str, Any]:
+    value = raw_value.strip()
+    if not value:
+        return {}
+    parsed = json.loads(value)
+    if not isinstance(parsed, dict):
+        raise ValueError(f"`{field_name}` must be a JSON object.")
+    return dict(parsed)
 
 
 def _wants_json(request: Request) -> bool:
@@ -686,37 +736,23 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
     ) -> RegistrySubmissionResult:
         """Certify and publish a tool into the PureCipher registry."""
 
-        ctx = self._required_context()
-        result = ctx.certification_pipeline.certify(
+        preflight = self.preflight_submission(
             manifest,
+            display_name=display_name,
+            categories=categories,
+            metadata=metadata,
             requested_level=requested_level,
         )
-        level_order = list(CertificationLevel)
-        meets_minimum = level_order.index(
-            result.certification_level
-        ) >= level_order.index(self.minimum_certification)
-
-        if not meets_minimum:
+        if not preflight.ready_for_publish:
             return RegistrySubmissionResult(
                 accepted=False,
-                reason=(
-                    "Tool does not meet the minimum certification level required "
-                    f"by the registry ({self.minimum_certification.value})."
-                ),
-                report=result.report,
-                attestation=result.attestation,
-                manifest_digest=result.manifest_digest,
+                reason=preflight.summary,
+                report=preflight.report,
+                attestation=preflight.attestation,
+                manifest_digest=preflight.manifest_digest,
             )
 
-        if not result.is_certified:
-            return RegistrySubmissionResult(
-                accepted=False,
-                reason="Tool certification did not produce a valid attestation.",
-                report=result.report,
-                attestation=result.attestation,
-                manifest_digest=result.manifest_digest,
-            )
-
+        ctx = self._required_context()
         listing = ctx.tool_marketplace.publish(
             manifest.tool_name,
             display_name=display_name or manifest.tool_name,
@@ -725,7 +761,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             author=manifest.author,
             categories=categories,
             manifest=manifest,
-            attestation=result.attestation,
+            attestation=preflight.attestation,
             homepage_url=homepage_url,
             source_url=source_url,
             tool_license=tool_license,
@@ -741,10 +777,95 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         return RegistrySubmissionResult(
             accepted=True,
             reason="Accepted into the PureCipher verified registry.",
+            report=preflight.report,
+            attestation=preflight.attestation,
+            manifest_digest=preflight.manifest_digest,
+            listing=listing,
+        )
+
+    def preflight_submission(
+        self,
+        manifest: SecurityManifest,
+        *,
+        display_name: str = "",
+        categories: set[ToolCategory] | None = None,
+        metadata: dict[str, Any] | None = None,
+        requested_level: CertificationLevel | None = None,
+    ) -> RegistryPreflightResult:
+        """Validate a submission without publishing it."""
+
+        ctx = self._required_context()
+        result = ctx.certification_pipeline.certify(
+            manifest,
+            requested_level=requested_level,
+        )
+        level_order = list(CertificationLevel)
+        meets_minimum = level_order.index(
+            result.certification_level
+        ) >= level_order.index(self.minimum_certification)
+
+        preview_listing = ToolListing(
+            tool_name=manifest.tool_name,
+            display_name=display_name or manifest.tool_name,
+            description=manifest.description,
+            version=manifest.version,
+            author=manifest.author,
+            categories=categories or set(),
+            manifest=manifest,
+            attestation=result.attestation if result.is_certified else None,
+            metadata={
+                "issuer_id": self._issuer_id,
+                "verified_registry": "purecipher",
+                **(metadata or {}),
+            },
+        )
+        install_recipes = build_install_recipes(
+            preview_listing,
+            registry_prefix=self._registry_prefix,
+        )
+        runtime_recipe_ids = {
+            recipe.recipe_id
+            for recipe in install_recipes
+            if recipe.recipe_id not in {"registry_reference", "verify_attestation"}
+        }
+
+        finding_count = len(result.report.findings)
+        if not meets_minimum:
+            summary = (
+                "Submission is below the registry minimum certification level "
+                f"({self.minimum_certification.value})."
+            )
+        elif not result.is_certified:
+            summary = (
+                "Certification failed. Resolve validation blockers before publishing."
+            )
+        elif finding_count:
+            suffix = "s" if finding_count != 1 else ""
+            summary = (
+                f"Ready to publish with {finding_count} validation finding{suffix}."
+            )
+        else:
+            summary = "Ready to publish."
+
+        return RegistryPreflightResult(
+            ready_for_publish=result.is_certified and meets_minimum,
+            summary=summary,
+            requested_level=(requested_level or self.minimum_certification).value,
+            effective_certification_level=result.certification_level.value,
+            minimum_required_level=self.minimum_certification.value,
+            meets_minimum=meets_minimum,
+            manifest_digest=result.manifest_digest,
+            install_ready=bool(runtime_recipe_ids),
+            install_recipes=[
+                {
+                    "recipe_id": recipe.recipe_id,
+                    "title": recipe.title,
+                    "format": recipe.format,
+                }
+                for recipe in install_recipes
+            ],
             report=result.report,
             attestation=result.attestation,
-            manifest_digest=result.manifest_digest,
-            listing=listing,
         )
 
     def verify_tool(
@@ -833,6 +954,98 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             page_notice_is_error=page_notice_is_error,
         )
 
+    def _render_publish_ui(
+        self,
+        *,
+        prefix: str,
+        session: RegistrySession | None = None,
+        manifest_text: str = SAMPLE_MANIFEST_JSON,
+        runtime_metadata_text: str = SAMPLE_RUNTIME_METADATA_JSON,
+        display_name: str = "Weather Lookup",
+        categories: str = "network,utility",
+        tags: str = "weather,api",
+        requested_level: str = CertificationLevel.BASIC.value,
+        source_url: str = "https://github.com/acme/weather-lookup",
+        homepage_url: str = "",
+        tool_license: str = "MIT",
+        preflight: dict[str, Any] | None = None,
+        submission_title: str | None = None,
+        submission_body: str | None = None,
+        submission_is_error: bool = False,
+        page_notice_title: str | None = None,
+        page_notice_body: str | None = None,
+        page_notice_is_error: bool = False,
+    ) -> str:
+        return create_publish_html(
+            server_name=self.name,
+            registry_prefix=prefix,
+            auth_enabled=self.auth_enabled,
+            session=self._session_payload(session),
+            manifest_text=manifest_text,
+            runtime_metadata_text=runtime_metadata_text,
+            display_name=display_name,
+            categories=categories,
+            tags=tags,
+            requested_level=requested_level,
+            source_url=source_url,
+            homepage_url=homepage_url,
+            tool_license=tool_license,
+            preflight=preflight,
+            submission_title=submission_title,
+            submission_body=submission_body,
+            submission_is_error=submission_is_error,
+            page_notice_title=page_notice_title,
+            page_notice_body=page_notice_body,
+            page_notice_is_error=page_notice_is_error,
+        )
+
+    @staticmethod
+    def _publish_form_state(form: Any) -> dict[str, str]:
+        return {
+            "manifest_text": str(form.get("manifest", SAMPLE_MANIFEST_JSON)),
+            "runtime_metadata_text": str(form.get("runtime_metadata", "")),
+            "display_name": str(form.get("display_name", "")),
+            "categories": str(form.get("categories", "")),
+            "tags": str(form.get("tags", "")),
+            "requested_level": str(form.get("requested_level", "basic")),
+            "source_url": str(form.get("source_url", "")),
+            "homepage_url": str(form.get("homepage_url", "")),
+            "tool_license": str(form.get("tool_license", "")),
+            "submission_action": str(form.get("submission_action", "publish")),
+        }
+
+    def _parse_publish_inputs(
+        self,
+        *,
+        manifest_text: str,
+        runtime_metadata_text: str,
+        categories_text: str,
+        tags_text: str,
+        requested_level_text: str,
+    ) -> tuple[
+        SecurityManifest,
+        set[ToolCategory] | None,
+        set[str] | None,
+        CertificationLevel | None,
+        dict[str, Any],
+    ]:
+        manifest_data = json.loads(manifest_text)
+        if not isinstance(manifest_data, dict):
+            raise ValueError("`manifest` must be a JSON object.")
+
+        manifest = _parse_manifest(manifest_data)
+        metadata = _parse_optional_json_object(
+            runtime_metadata_text,
+            field_name="runtime_metadata",
+        )
+        categories = _coerce_categories(list(_parse_csv_set(categories_text))) or None
+        tags = _parse_csv_set(tags_text) or None
+        requested_level = _coerce_level(
+            requested_level_text,
+            default=self.minimum_certification,
+        )
+        return manifest, categories, tags, requested_level, metadata
+
     def _render_review_queue_ui(
         self,
         *,
@@ -861,6 +1074,116 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
         if self._registry_api_mounted:
             return self
+
+        async def _handle_publish_form(request: Request):
+            session = self._session_from_request(request)
+            form = await request.form()
+            state = self._publish_form_state(form)
+            submission_action = (
+                state.pop("submission_action", "publish").strip().lower() or "publish"
+            )
+
+            try:
+                manifest, categories, tags, requested_level, metadata = (
+                    self._parse_publish_inputs(
+                        manifest_text=state["manifest_text"],
+                        runtime_metadata_text=state["runtime_metadata_text"],
+                        categories_text=state["categories"],
+                        tags_text=state["tags"],
+                        requested_level_text=state["requested_level"],
+                    )
+                )
+            except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+                return create_secure_html_response(
+                    self._render_publish_ui(
+                        prefix=prefix,
+                        session=session,
+                        submission_title="Publish form is invalid",
+                        submission_body=str(exc),
+                        submission_is_error=True,
+                        **state,
+                    ),
+                    status_code=400,
+                )
+
+            preflight = self.preflight_submission(
+                manifest,
+                display_name=state["display_name"],
+                categories=categories,
+                metadata=metadata,
+                requested_level=requested_level,
+            )
+
+            if submission_action == "preview":
+                return create_secure_html_response(
+                    self._render_publish_ui(
+                        prefix=prefix,
+                        session=session,
+                        preflight=preflight.to_dict(),
+                        submission_title="Preflight complete",
+                        submission_body=preflight.summary,
+                        submission_is_error=not preflight.ready_for_publish,
+                        **state,
+                    )
+                )
+
+            if self.auth_enabled and not self._has_roles(
+                session,
+                {
+                    RegistryRole.PUBLISHER,
+                    RegistryRole.REVIEWER,
+                    RegistryRole.ADMIN,
+                },
+            ):
+                status_code = 401 if session is None else 403
+                message = (
+                    "Sign in with a publisher, reviewer, or admin account "
+                    "before publishing listings."
+                )
+                return create_secure_html_response(
+                    self._render_publish_ui(
+                        prefix=prefix,
+                        session=session,
+                        preflight=preflight.to_dict(),
+                        page_notice_title="Publishing blocked",
+                        page_notice_body=message,
+                        page_notice_is_error=True,
+                        **state,
+                    ),
+                    status_code=status_code,
+                )
+
+            result = self.submit_tool(
+                manifest,
+                display_name=state["display_name"],
+                categories=categories,
+                homepage_url=state["homepage_url"],
+                source_url=state["source_url"],
+                tool_license=state["tool_license"],
+                tags=tags,
+                metadata=metadata,
+                requested_level=requested_level,
+            )
+
+            status_code = 200 if result.accepted else 400
+            submission_body = (
+                f"Listing: {result.listing.tool_name} · "
+                f"Certification: {result.attestation.certification_level.value}"
+                if result.listing is not None
+                else result.reason
+            )
+            return create_secure_html_response(
+                self._render_publish_ui(
+                    prefix=prefix,
+                    session=session,
+                    preflight=preflight.to_dict(),
+                    submission_title=result.reason,
+                    submission_body=submission_body,
+                    submission_is_error=not result.accepted,
+                    **state,
+                ),
+                status_code=status_code,
+            )
 
         @self.custom_route(f"{prefix}/health", methods=["GET"])
         async def registry_health(request: Request) -> JSONResponse:
@@ -1026,6 +1349,19 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                         "",
                     ),
                     selected_tool=request.query_params.get("tool", ""),
+                    session=session,
+                    page_notice_title=request.query_params.get("notice") or None,
+                    page_notice_body=request.query_params.get("detail") or None,
+                    page_notice_is_error=request.query_params.get("tone") == "error",
+                )
+            )
+
+        @self.custom_route(f"{prefix}/publish", methods=["GET"])
+        async def registry_publish_page(request: Request):
+            session = self._session_from_request(request)
+            return create_secure_html_response(
+                self._render_publish_ui(
+                    prefix=prefix,
                     session=session,
                     page_notice_title=request.query_params.get("notice") or None,
                     page_notice_body=request.query_params.get("detail") or None,
@@ -1330,102 +1666,11 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
         @self.custom_route(prefix, methods=["POST"])
         async def registry_ui_submit(request: Request):
-            session = self._session_from_request(request)
-            form = await request.form()
-            manifest_text = str(form.get("manifest", SAMPLE_MANIFEST_JSON))
-            display_name = str(form.get("display_name", ""))
-            categories = str(form.get("categories", ""))
-            requested_level = str(
-                form.get("requested_level", self.minimum_certification.value)
-            )
+            return await _handle_publish_form(request)
 
-            if self.auth_enabled and not self._has_roles(
-                session,
-                {
-                    RegistryRole.PUBLISHER,
-                    RegistryRole.REVIEWER,
-                    RegistryRole.ADMIN,
-                },
-            ):
-                status_code = 401 if session is None else 403
-                message = (
-                    "Sign in with a publisher, reviewer, or admin account "
-                    "before submitting listings."
-                )
-                return create_secure_html_response(
-                    self._render_registry_ui(
-                        prefix=prefix,
-                        manifest_text=manifest_text,
-                        display_name=display_name,
-                        categories=categories,
-                        requested_level=requested_level,
-                        session=session,
-                        page_notice_title="Submission blocked",
-                        page_notice_body=message,
-                        page_notice_is_error=True,
-                    ),
-                    status_code=status_code,
-                )
-
-            try:
-                manifest_data = json.loads(manifest_text)
-                if not isinstance(manifest_data, dict):
-                    raise ValueError("`manifest` must be a JSON object.")
-
-                manifest = _parse_manifest(manifest_data)
-                result = self.submit_tool(
-                    manifest,
-                    display_name=display_name,
-                    categories=_coerce_categories(
-                        [
-                            value.strip()
-                            for value in categories.split(",")
-                            if value.strip()
-                        ]
-                    )
-                    or None,
-                    requested_level=_coerce_level(
-                        requested_level,
-                        default=self.minimum_certification,
-                    ),
-                )
-            except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
-                return create_secure_html_response(
-                    self._render_registry_ui(
-                        prefix=prefix,
-                        manifest_text=manifest_text,
-                        display_name=display_name,
-                        categories=categories,
-                        requested_level=requested_level,
-                        submission_title="Submission failed",
-                        submission_body=str(exc),
-                        submission_is_error=True,
-                        session=session,
-                    ),
-                    status_code=400,
-                )
-
-            selected_tool = (
-                result.listing.tool_name if result.listing is not None else ""
-            )
-            return create_secure_html_response(
-                self._render_registry_ui(
-                    prefix=prefix,
-                    selected_tool=selected_tool,
-                    manifest_text=manifest_text,
-                    display_name=display_name,
-                    categories=categories,
-                    requested_level=requested_level,
-                    session=session,
-                    submission_title=result.reason,
-                    submission_body=(
-                        f"Listing: {selected_tool or 'n/a'} · "
-                        f"Certification: {result.attestation.certification_level.value}"
-                    ),
-                    submission_is_error=not result.accepted,
-                ),
-                status_code=200 if result.accepted else 400,
-            )
+        @self.custom_route(f"{prefix}/publish", methods=["POST"])
+        async def registry_publish_submit(request: Request):
+            return await _handle_publish_form(request)
 
         @self.custom_route(f"{prefix}/tools", methods=["GET"])
         async def registry_tools(request: Request) -> JSONResponse:
@@ -1525,6 +1770,42 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 payload,
                 status_code=201 if result.accepted else 400,
             )
+
+        @self.custom_route(f"{prefix}/preflight", methods=["POST"])
+        async def registry_preflight(request: Request) -> JSONResponse:
+            try:
+                body = await request.json()
+            except Exception:
+                return JSONResponse(
+                    {"error": "Invalid JSON body", "status": 400},
+                    status_code=400,
+                )
+
+            manifest_data = body.get("manifest")
+            if not isinstance(manifest_data, dict):
+                return JSONResponse(
+                    {"error": "`manifest` must be an object", "status": 400},
+                    status_code=400,
+                )
+
+            try:
+                manifest = _parse_manifest(manifest_data)
+                categories = _coerce_categories(body.get("categories")) or None
+                metadata = dict(body.get("metadata", {}))
+                preflight = self.preflight_submission(
+                    manifest,
+                    display_name=body.get("display_name", ""),
+                    categories=categories,
+                    metadata=metadata,
+                    requested_level=_coerce_level(body.get("requested_level")),
+                )
+            except (KeyError, TypeError, ValueError) as exc:
+                return JSONResponse(
+                    {"error": str(exc), "status": 400},
+                    status_code=400,
+                )
+
+            return JSONResponse(preflight.to_dict())
 
         @self.custom_route(f"{prefix}/verify", methods=["POST"])
         async def registry_verify(request: Request) -> JSONResponse:

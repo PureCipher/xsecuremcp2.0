@@ -94,6 +94,7 @@ The MVP exposes a narrow HTTP surface:
 | `GET /registry/health` | Service health, counts, and minimum certification policy |
 | `GET /registry/session` | Current browser/API session plus auth status |
 | `GET /registry/login` | Server-rendered login page for JWT registry auth |
+| `GET /registry/publish` | Server-rendered publisher launchpad with presets, runtime metadata, and preflight UI |
 | `GET /registry/listings/{tool_name}` | Server-rendered listing page with install and attestation detail |
 | `GET /registry/install/{tool_name}` | Generated install recipes for a verified listing |
 | `GET /registry/publishers` | Public publisher summaries for published listings |
@@ -104,10 +105,11 @@ The MVP exposes a narrow HTTP surface:
 | `POST /registry/review/{listing_id}/{action_name}` | Apply moderation actions such as `approve`, `reject`, `suspend`, or `unsuspend` |
 | `GET /registry/tools` | Search the published verified catalog |
 | `GET /registry/tools/{tool_name}` | Full verified listing detail |
+| `POST /registry/preflight` | Validate a draft manifest and runtime metadata without publishing |
 | `POST /registry/submit` | Certify and publish a manifest into the registry |
 | `POST /registry/verify` | Verify a listing's attestation against its manifest |
 
-`GET /registry` serves the catalog, dashboard, and submission UI. Each listing opens as its own browser page under `/registry/listings/{tool_name}` with install recipes, manifest detail, and attestation detail. Publisher pages, the publisher directory, the login page, and the moderation queue are also server-rendered so the whole product layer can run without a frontend build step.
+`GET /registry` serves the catalog, discovery homepage, and launchpad entry point. The homepage is designed to help end users find a good fit, understand who published a tool, and jump into setup-ready listings without leading with protocol details. The dedicated publisher workflow lives at `GET /registry/publish`, where publishers can load presets, add runtime metadata, run preflight validation, and then publish. Each listing opens as its own browser page under `/registry/listings/{tool_name}` with a guided "start here" setup section, install recipes, and the deeper manifest and attestation detail further down the page. Publisher pages, the publisher directory, the login page, and the moderation queue are also server-rendered so the whole product layer can run without a frontend build step.
 
 ## CLI Launch
 
@@ -253,6 +255,17 @@ The registry will:
 2. issue a signed attestation
 3. reject the submission if it fails certification or misses the minimum required level
 4. publish accepted tools into the verified catalog
+
+## Publisher Launchpad
+
+The browser publisher flow now lives under `GET /registry/publish`.
+
+It gives publishers:
+
+- starter presets for remote HTTP, local stdio, and Dockerized MCP servers
+- separate runtime metadata input so install recipes can be generated from the UI
+- preflight validation through `POST /registry/preflight` before a listing is published
+- the same payload model used by the JSON API, so browser and CI workflows stay aligned
 
 If you want install recipes to appear on the listing page, include runtime metadata when you submit:
 

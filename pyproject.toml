@@ -94,6 +94,7 @@ dev = [
 [project.scripts]
 fastmcp = "fastmcp.cli:app"
 purecipher-registry = "purecipher.cli:main"
+purecipher-publisher = "purecipher.publisher.cli:main"
 
 [project.urls]
 Homepage = "https://gofastmcp.com"

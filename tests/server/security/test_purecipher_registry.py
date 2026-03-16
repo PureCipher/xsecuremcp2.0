@@ -67,6 +67,7 @@ class TestPureCipherRegistry:
         assert "/registry/session" in paths
         assert "/registry/login" in paths
         assert "/registry/logout" in paths
+        assert "/registry/publish" in paths
         assert "/registry/listings/{tool_name}" in paths
         assert "/registry/install/{tool_name}" in paths
         assert "/registry/publishers" in paths
@@ -76,6 +77,7 @@ class TestPureCipherRegistry:
         assert "/registry/review/{listing_id}/{action_name}" in paths
         assert "/registry/tools" in paths
         assert "/registry/submit" in paths
+        assert "/registry/preflight" in paths
 
     def test_submit_tool_accepts_certified_manifest(self):
         registry = PureCipherRegistry(signing_secret="test-secret")
@@ -229,11 +231,15 @@ class TestPureCipherRegistry:
 
             assert response.status_code == 200
             assert "text/html" in response.headers["content-type"]
-            assert "Install Recipes" in response.text
+            assert "Ways To Use This Tool" in response.text
+            assert "Why People Choose It" in response.text
+            assert "Start Here" in response.text
             assert "/registry/install/weather-lookup" in response.text
-            assert "MCP Client Config (HTTP)" in response.text
-            assert "Back to catalog" in response.text
-            assert "Publisher profile" in response.text
+            assert "Connect From Another App" in response.text
+            assert "Copy all setup steps" in response.text
+            assert "Copy tool JSON" in response.text
+            assert "Back to browse" in response.text
+            assert ">Publisher<" in response.text
 
     def test_http_registry_publisher_page(self):
         registry = PureCipherRegistry(signing_secret="test-secret")
@@ -284,12 +290,12 @@ class TestPureCipherRegistry:
             assert "Publisher Profile" in response.text
             assert "Weather Lookup" in response.text
             assert "Forecast Archive" in response.text
-            assert "Published Listings" in response.text
+            assert "Live Tools" in response.text
 
             directory = client.get("/registry/publishers?view=html")
             assert directory.status_code == 200
-            assert "Registry Publishers" in directory.text
-            assert "Featured Publisher Set" in directory.text
+            assert "People and teams behind the tools" in directory.text
+            assert "Featured Publishers" in directory.text
 
     def test_http_registry_review_queue_and_actions(self):
         registry = PureCipherRegistry(
@@ -325,8 +331,8 @@ class TestPureCipherRegistry:
 
             review_page = client.get("/registry/review")
             assert review_page.status_code == 200
-            assert "Registry Review Queue" in review_page.text
-            assert "Pending Review" in review_page.text
+            assert "Review shared tools" in review_page.text
+            assert "Waiting For Approval" in review_page.text
 
             approve = client.post(
                 f"/registry/review/{result.listing.listing_id}/approve",
@@ -375,10 +381,11 @@ class TestPureCipherRegistry:
             assert "text/html" in response.headers["content-type"]
             assert "PureCipher Secured MCP Registry" in response.text
             assert "/registry/tools" in response.text
-            assert "Verified Catalog" in response.text
-            assert "Registry Dashboard" in response.text
+            assert "Browse Tools" in response.text
+            assert "Start Here" in response.text
+            assert "Overview" in response.text
             assert "Featured Publishers" in response.text
-            assert "Submit Manifest" in response.text
+            assert "Share A Tool" in response.text
 
     def test_http_registry_ui_form_submission(self):
         registry = PureCipherRegistry(signing_secret="test-secret")
@@ -386,19 +393,82 @@ class TestPureCipherRegistry:
 
         with TestClient(app) as client:
             response = client.post(
-                "/registry",
+                "/registry/publish",
                 data={
                     "manifest": json.dumps(_manifest().to_dict(), indent=2),
+                    "runtime_metadata": json.dumps(_runtime_metadata(), indent=2),
                     "display_name": "Weather Lookup",
                     "categories": "network,utility",
+                    "tags": "weather,api",
+                    "source_url": "https://github.com/acme/weather-lookup",
+                    "tool_license": "MIT",
                     "requested_level": "basic",
+                    "submission_action": "publish",
                 },
             )
 
             assert response.status_code == 200
             assert "Accepted into the PureCipher verified registry." in response.text
-            assert "weather-lookup" in response.text
-            assert "Open full listing" in response.text
+            assert "Share Form" in response.text
+            assert "Check Results" in response.text
+            assert "Ready To Share" in response.text
+
+    def test_http_registry_publish_page_and_preflight(self):
+        registry = PureCipherRegistry(signing_secret="test-secret")
+        app = registry.http_app()
+
+        with TestClient(app) as client:
+            page = client.get("/registry/publish")
+
+            assert page.status_code == 200
+            assert "Share your tool" in page.text
+            assert "Share Form" in page.text
+            assert "Check Results" in page.text
+            assert "Use this starting point" in page.text
+
+            preview = client.post(
+                "/registry/publish",
+                data={
+                    "manifest": json.dumps(_manifest().to_dict(), indent=2),
+                    "runtime_metadata": json.dumps(_runtime_metadata(), indent=2),
+                    "display_name": "Weather Lookup",
+                    "categories": "network,utility",
+                    "tags": "weather,api",
+                    "source_url": "https://github.com/acme/weather-lookup",
+                    "tool_license": "MIT",
+                    "requested_level": "basic",
+                    "submission_action": "preview",
+                },
+            )
+
+            assert preview.status_code == 200
+            assert "Preflight complete" in preview.text
+            assert "What People Will See" in preview.text
+            assert "Things To Fix" in preview.text
+
+    def test_http_registry_preflight_api(self):
+        registry = PureCipherRegistry(signing_secret="test-secret")
+        app = registry.http_app()
+
+        with TestClient(app) as client:
+            response = client.post(
+                "/registry/preflight",
+                json={
+                    "manifest": _manifest().to_dict(),
+                    "display_name": "Weather Lookup",
+                    "categories": ["network", "utility"],
+                    "requested_level": "basic",
+                    "metadata": _runtime_metadata(),
+                },
+            )
+
+            assert response.status_code == 200
+            payload = response.json()
+            assert payload["ready_for_publish"] is True
+            assert payload["install_ready"] is True
+            recipe_ids = {recipe["recipe_id"] for recipe in payload["install_recipes"]}
+            assert "mcp_client_http" in recipe_ids
+            assert "docker_compose" in recipe_ids
 
     def test_http_registry_tools_search(self):
         registry = PureCipherRegistry(signing_secret="test-secret")

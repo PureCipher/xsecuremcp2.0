@@ -119,10 +119,10 @@ def build_install_recipes(
     recipes = [
         InstallRecipe(
             recipe_id="registry_reference",
-            title="Registry Reference",
+            title="Tool Details",
             description=(
-                "Canonical listing metadata, attestation issuer, and verification "
-                "endpoints for this PureCipher entry."
+                "A simple record of this tool, who published it, and where to find "
+                "more details in PureCipher."
             ),
             format="json",
             content=json.dumps(
@@ -159,10 +159,9 @@ def build_install_recipes(
         recipes.append(
             InstallRecipe(
                 recipe_id="mcp_client_http",
-                title="MCP Client Config (HTTP)",
+                title="Connect From Another App",
                 description=(
-                    "Client configuration for connecting to the publisher's "
-                    "streamable HTTP or SSE endpoint."
+                    "Connection details for apps that talk to this tool over the web."
                 ),
                 format="json",
                 content=json.dumps(payload, indent=2),
@@ -179,10 +178,9 @@ def build_install_recipes(
         recipes.append(
             InstallRecipe(
                 recipe_id="mcp_client_stdio",
-                title="MCP Client Config (stdio)",
+                title="Run On This Computer",
                 description=(
-                    "Client configuration for launching the published tool as a "
-                    "local stdio MCP server."
+                    "The local launch details for running this tool on your own machine."
                 ),
                 format="json",
                 content=json.dumps(
@@ -197,10 +195,10 @@ def build_install_recipes(
         recipes.append(
             InstallRecipe(
                 recipe_id="docker_compose",
-                title="Docker Compose",
+                title="Run With Docker",
                 description=(
-                    "Minimal container runtime for the published tool. Pair this "
-                    "with the client config recipe that matches the tool's transport."
+                    "A small Docker setup for this tool. Pair it with the connection "
+                    "steps that match how the tool runs."
                 ),
                 format="yaml",
                 content=_docker_compose_content(
@@ -217,10 +215,10 @@ def build_install_recipes(
     recipes.append(
         InstallRecipe(
             recipe_id="verify_attestation",
-            title="Verify Attestation",
+            title="Check PureCipher Proof",
             description=(
-                "Confirm the listing attestation against the stored manifest before "
-                "you wire it into a client or runtime."
+                "Confirm that PureCipher's saved record still matches this tool "
+                "before you connect it."
             ),
             format="bash",
             content=(

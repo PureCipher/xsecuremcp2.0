@@ -136,7 +136,8 @@
                     "pages": [
                       "servers/security/overview",
                       "servers/security/settings",
-                      "servers/security/purecipher-registry"
+                      "servers/security/purecipher-registry",
+                      "servers/security/purecipher-publisher"
                     ],
                     "tag": "NEW"
                   },
