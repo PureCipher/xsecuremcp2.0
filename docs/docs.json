@@ -206,6 +206,7 @@
                   "apps/overview",
                   "apps/prefab",
                   "apps/patterns",
+                  "apps/development",
                   "apps/low-level"
                 ]
               },
@@ -379,6 +380,7 @@
                     "group": "fastmcp.cli",
                     "pages": [
                       "python-sdk/fastmcp-cli-__init__",
+                      "python-sdk/fastmcp-cli-apps_dev",
                       "python-sdk/fastmcp-cli-auth",
                       "python-sdk/fastmcp-cli-cimd",
                       "python-sdk/fastmcp-cli-cli",
@@ -506,6 +508,7 @@
                     "group": "fastmcp.server",
                     "pages": [
                       "python-sdk/fastmcp-server-__init__",
+                      "python-sdk/fastmcp-server-app",
                       "python-sdk/fastmcp-server-apps",
                       {
                         "group": "auth",

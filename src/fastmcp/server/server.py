@@ -241,6 +241,7 @@ class FastMCP(
         session_state_store: AsyncKeyValue | None = None,
         sampling_handler: SamplingHandler | None = None,
         sampling_handler_behavior: Literal["always", "fallback"] | None = None,
+        client_log_level: mcp.types.LoggingLevel | None = None,
         **kwargs: Any,
     ):
         _check_removed_kwargs(kwargs)
@@ -331,6 +332,12 @@ class FastMCP(
             strict_input_validation
             if strict_input_validation is not None
             else fastmcp.settings.strict_input_validation
+        )
+
+        self.client_log_level: mcp.types.LoggingLevel | None = (
+            client_log_level
+            if client_log_level is not None
+            else fastmcp.settings.client_log_level
         )
 
         self.middleware: list[Middleware] = list(middleware or [])
@@ -1087,7 +1094,26 @@ class FastMCP(
             with server_span(
                 f"tools/call {name}", "tools/call", self.name, "tool", name
             ) as span:
+                # Try normal provider resolution first (applies transforms,
+                # visibility, auth).  Fall back to the global key registry
+                # so that FastMCPApp CallTool references survive namespace
+                # transforms.  Global keys contain a UUID suffix, so they
+                # won't collide with human-written tool names.
                 tool = await self.get_tool(name, version=version)
+                if tool is None:
+                    from fastmcp.server.app import get_global_tool
+
+                    tool = get_global_tool(name)
+                    if tool is not None:
+                        # Auth still applies to global-key tools
+                        skip_auth, token = _get_auth_context()
+                        if not skip_auth and tool.auth is not None:
+                            try:
+                                ctx = AuthContext(token=token, component=tool)
+                                if not await run_auth_checks(tool.auth, ctx):
+                                    raise NotFoundError(f"Unknown tool: {name!r}")
+                            except AuthorizationError:
+                                raise NotFoundError(f"Unknown tool: {name!r}") from None
                 if tool is None:
                     raise NotFoundError(f"Unknown tool: {name!r}")
                 span.set_attributes(tool.get_span_attributes())

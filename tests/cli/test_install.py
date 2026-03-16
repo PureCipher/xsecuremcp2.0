@@ -1,6 +1,9 @@
 from pathlib import Path
 
+import pytest
+
 from fastmcp.cli.install import install_app
+from fastmcp.cli.install.shared import validate_server_name
 from fastmcp.cli.install.stdio import install_stdio
 
 
@@ -455,3 +458,37 @@ class TestInstallCommandParsing:
             command, bound, _ = install_app.parse_args(cmd_args)
             assert command is not None
             assert str(bound.arguments["project"]) == str(Path("/path/to/project"))
+
+
+class TestServerNameValidation:
+    """Test server name validation rejects shell metacharacters."""
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "my-server",
+            "my_server",
+            "My Server",
+            "server.v2",
+            "test123",
+        ],
+    )
+    def test_valid_names(self, name: str):
+        assert validate_server_name(name) == name
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "test&calc",
+            "test|whoami",
+            "test;ls",
+            "test$(id)",
+            "test`id`",
+            'test"quoted',
+            "test>file",
+            "test<file",
+        ],
+    )
+    def test_rejects_shell_metacharacters(self, name: str):
+        with pytest.raises(SystemExit):
+            validate_server_name(name)

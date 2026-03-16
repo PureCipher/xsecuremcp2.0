@@ -22,7 +22,7 @@ import hashlib
 import secrets
 import time
 from base64 import urlsafe_b64encode
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlencode, urlparse, urlunparse
 
 import httpx
@@ -86,6 +86,7 @@ from fastmcp.server.auth.oauth_proxy.models import (
     _hash_token,
 )
 from fastmcp.server.auth.oauth_proxy.ui import create_error_html
+from fastmcp.utilities.auth import parse_scopes
 from fastmcp.utilities.logging import get_logger
 
 logger = get_logger(__name__)
@@ -232,7 +233,7 @@ class OAuthProxy(OAuthProvider, ConsentMixin):
         upstream_authorization_endpoint: str,
         upstream_token_endpoint: str,
         upstream_client_id: str,
-        upstream_client_secret: str,
+        upstream_client_secret: str | None = None,
         upstream_revocation_endpoint: str | None = None,
         # Token validation
         token_verifier: TokenVerifier,
@@ -257,7 +258,7 @@ class OAuthProxy(OAuthProvider, ConsentMixin):
         # JWT signing key
         jwt_signing_key: str | bytes | None = None,
         # Consent screen configuration
-        require_authorization_consent: bool = True,
+        require_authorization_consent: bool | Literal["external"] = True,
         consent_csp_policy: str | None = None,
         # Token expiry fallback
         fallback_access_token_expiry_seconds: int | None = None,
@@ -270,7 +271,9 @@ class OAuthProxy(OAuthProvider, ConsentMixin):
             upstream_authorization_endpoint: URL of upstream authorization endpoint
             upstream_token_endpoint: URL of upstream token endpoint
             upstream_client_id: Client ID registered with upstream server
-            upstream_client_secret: Client secret for upstream server
+            upstream_client_secret: Client secret for upstream server. Optional for
+                PKCE public clients or when using alternative credentials (e.g.,
+                managed identity). When omitted, jwt_signing_key must be provided.
             upstream_revocation_endpoint: Optional upstream revocation endpoint
             token_verifier: Token verifier for validating access tokens
             base_url: Public URL of the server that exposes this FastMCP server; redirect path is
@@ -305,7 +308,9 @@ class OAuthProxy(OAuthProvider, ConsentMixin):
             require_authorization_consent: Whether to require user consent before authorizing clients (default True).
                 When True, users see a consent screen before being redirected to the upstream IdP.
                 When False, authorization proceeds directly without user confirmation.
-                SECURITY WARNING: Only disable for local development or testing environments.
+                When "external", the built-in consent screen is skipped but no warning is
+                logged, indicating that consent is handled externally (e.g. by the upstream IdP).
+                SECURITY WARNING: Only set to False for local development or testing environments.
             consent_csp_policy: Content Security Policy for the consent page.
                 If None (default), uses the built-in CSP policy with appropriate directives.
                 If empty string "", disables CSP entirely (no meta tag is rendered).
@@ -346,8 +351,10 @@ class OAuthProxy(OAuthProvider, ConsentMixin):
         self._upstream_authorization_endpoint: str = upstream_authorization_endpoint
         self._upstream_token_endpoint: str = upstream_token_endpoint
         self._upstream_client_id: str = upstream_client_id
-        self._upstream_client_secret: SecretStr = SecretStr(
-            secret_value=upstream_client_secret
+        self._upstream_client_secret: SecretStr | None = (
+            SecretStr(secret_value=upstream_client_secret)
+            if upstream_client_secret is not None
+            else None
         )
         self._upstream_revocation_endpoint: str | None = upstream_revocation_endpoint
         self._default_scope_str: str = " ".join(self.required_scopes or [])
@@ -379,9 +386,15 @@ class OAuthProxy(OAuthProvider, ConsentMixin):
         self._token_endpoint_auth_method: str | None = token_endpoint_auth_method
 
         # Consent screen configuration
-        self._require_authorization_consent: bool = require_authorization_consent
+        self._require_authorization_consent: bool | Literal["external"] = (
+            require_authorization_consent
+        )
         self._consent_csp_policy: str | None = consent_csp_policy
-        if not require_authorization_consent:
+        if require_authorization_consent == "external":
+            logger.info(
+                "Built-in consent screen disabled; consent is handled externally."
+            )
+        elif not require_authorization_consent:
             logger.warning(
                 "Authorization consent screen disabled - only use for local development or testing. "
                 + "In production, this screen protects against confused deputy attacks."
@@ -397,6 +410,11 @@ class OAuthProxy(OAuthProvider, ConsentMixin):
         )
 
         if jwt_signing_key is None:
+            if upstream_client_secret is None:
+                raise ValueError(
+                    "jwt_signing_key is required when upstream_client_secret is not provided. "
+                    "The JWT signing key cannot be derived without a client secret."
+                )
             jwt_signing_key = derive_jwt_key(
                 high_entropy_material=upstream_client_secret,
                 salt="fastmcp-jwt-signing-key",
@@ -573,6 +591,29 @@ class OAuthProxy(OAuthProvider, ConsentMixin):
                 "before token operations."
             )
         return self._jwt_issuer
+
+    # -------------------------------------------------------------------------
+    # Upstream OAuth Client
+    # -------------------------------------------------------------------------
+
+    def _create_upstream_oauth_client(self) -> AsyncOAuth2Client:
+        """Create an OAuth2 client for communicating with the upstream IdP.
+
+        This is the single point for constructing the client used in token
+        exchange, refresh, and other upstream interactions. Subclasses can
+        override this to provide alternative authentication methods (e.g.,
+        managed-identity client assertions instead of a static client secret).
+        """
+        return AsyncOAuth2Client(
+            client_id=self._upstream_client_id,
+            client_secret=(
+                self._upstream_client_secret.get_secret_value()
+                if self._upstream_client_secret is not None
+                else None
+            ),
+            token_endpoint_auth_method=self._token_endpoint_auth_method,
+            timeout=HTTP_TIMEOUT_SECONDS,
+        )
 
     # -------------------------------------------------------------------------
     # PKCE Helper Methods
@@ -786,8 +827,8 @@ class OAuthProxy(OAuthProvider, ConsentMixin):
             ttl=15 * 60,  # Auto-expire after 15 minutes
         )
 
-        # If consent is disabled, skip consent screen and go directly to upstream IdP
-        if not self._require_authorization_consent:
+        # If consent is disabled or handled externally, skip consent screen
+        if self._require_authorization_consent is not True:
             upstream_url = self._build_upstream_authorize_url(
                 txn_id, transaction.model_dump()
             )
@@ -890,6 +931,16 @@ class OAuthProxy(OAuthProvider, ConsentMixin):
         # Get stored upstream tokens
         idp_tokens = code_model.idp_tokens
 
+        # Use IdP-granted scopes when available (RFC 6749 §5.1: the IdP MUST
+        # include a scope parameter when the granted scope differs from the
+        # requested scope).  Fall back to requested scopes only when the IdP
+        # omits scope, meaning it granted exactly what was requested.
+        granted_scopes: list[str] = (
+            parse_scopes(idp_tokens["scope"]) or []
+            if "scope" in idp_tokens
+            else list(authorization_code.scopes)
+        )
+
         # Clean up client code (one-time use)
         await self._code_store.delete(key=authorization_code.code)
 
@@ -931,7 +982,9 @@ class OAuthProxy(OAuthProvider, ConsentMixin):
         refresh_expires_in = None
         refresh_token_expires_at = None
         if idp_tokens.get("refresh_token"):
-            if "refresh_expires_in" in idp_tokens:
+            if "refresh_expires_in" in idp_tokens and int(
+                idp_tokens["refresh_expires_in"]
+            ):
                 refresh_expires_in = int(idp_tokens["refresh_expires_in"])
                 refresh_token_expires_at = time.time() + refresh_expires_in
                 logger.debug(
@@ -956,7 +1009,7 @@ class OAuthProxy(OAuthProvider, ConsentMixin):
             refresh_token_expires_at=refresh_token_expires_at,
             expires_at=time.time() + expires_in,
             token_type=idp_tokens.get("token_type", "Bearer"),
-            scope=" ".join(authorization_code.scopes),
+            scope=" ".join(granted_scopes),
             client_id=client.client_id or "",
             created_at=time.time(),
             raw_token_data=idp_tokens,
@@ -978,7 +1031,7 @@ class OAuthProxy(OAuthProvider, ConsentMixin):
             raise TokenError("invalid_client", "Client ID is required")
         fastmcp_access_token = self.jwt_issuer.issue_access_token(
             client_id=client.client_id,
-            scopes=authorization_code.scopes,
+            scopes=granted_scopes,
             jti=access_jti,
             expires_in=expires_in,
             upstream_claims=upstream_claims,
@@ -990,7 +1043,7 @@ class OAuthProxy(OAuthProvider, ConsentMixin):
         if refresh_jti and refresh_expires_in:
             fastmcp_refresh_token = self.jwt_issuer.issue_refresh_token(
                 client_id=client.client_id,
-                scopes=authorization_code.scopes,
+                scopes=granted_scopes,
                 jti=refresh_jti,
                 expires_in=refresh_expires_in,
                 upstream_claims=upstream_claims,
@@ -1023,7 +1076,7 @@ class OAuthProxy(OAuthProvider, ConsentMixin):
                 key=_hash_token(fastmcp_refresh_token),
                 value=RefreshTokenMetadata(
                     client_id=client.client_id,
-                    scopes=authorization_code.scopes,
+                    scopes=granted_scopes,
                     expires_at=int(time.time()) + refresh_expires_in,
                     created_at=time.time(),
                 ),
@@ -1043,7 +1096,7 @@ class OAuthProxy(OAuthProvider, ConsentMixin):
             token_type="Bearer",
             expires_in=expires_in,
             refresh_token=fastmcp_refresh_token,
-            scope=" ".join(authorization_code.scopes),
+            scope=" ".join(granted_scopes),
         )
 
     # -------------------------------------------------------------------------
@@ -1155,7 +1208,9 @@ class OAuthProxy(OAuthProvider, ConsentMixin):
         """
         # Verify FastMCP refresh token
         try:
-            refresh_payload = self.jwt_issuer.verify_token(refresh_token.token)
+            refresh_payload = self.jwt_issuer.verify_token(
+                refresh_token.token, expected_token_use="refresh"
+            )
             refresh_jti = refresh_payload["jti"]
         except Exception as e:
             logger.debug("FastMCP refresh token validation failed: %s", e)
@@ -1182,12 +1237,7 @@ class OAuthProxy(OAuthProvider, ConsentMixin):
             raise TokenError("invalid_grant", "Refresh not supported for this token")
 
         # Refresh upstream token using authlib
-        oauth_client = AsyncOAuth2Client(
-            client_id=self._upstream_client_id,
-            client_secret=self._upstream_client_secret.get_secret_value(),
-            token_endpoint_auth_method=self._token_endpoint_auth_method,
-            timeout=HTTP_TIMEOUT_SECONDS,
-        )
+        oauth_client = self._create_upstream_oauth_client()
 
         # Allow child classes to transform scopes before sending to upstream
         # This enables provider-specific scope formatting (e.g., Azure prefixing)
@@ -1230,6 +1280,14 @@ class OAuthProxy(OAuthProvider, ConsentMixin):
         upstream_token_set.access_token = token_response["access_token"]
         upstream_token_set.expires_at = time.time() + new_expires_in
 
+        # Prefer IdP-granted scopes from refresh response (RFC 6749 §5.1)
+        refreshed_scopes: list[str] = (
+            parse_scopes(token_response["scope"]) or []
+            if "scope" in token_response
+            else scopes
+        )
+        upstream_token_set.scope = " ".join(refreshed_scopes)
+
         # Handle upstream refresh token rotation and expiry
         new_refresh_expires_in = None
         if new_upstream_refresh := token_response.get("refresh_token"):
@@ -1238,7 +1296,9 @@ class OAuthProxy(OAuthProvider, ConsentMixin):
                 logger.debug("Upstream refresh token rotated")
 
             # Update refresh token expiry if provided
-            if "refresh_expires_in" in token_response:
+            if "refresh_expires_in" in token_response and int(
+                token_response["refresh_expires_in"]
+            ):
                 new_refresh_expires_in = int(token_response["refresh_expires_in"])
                 upstream_token_set.refresh_token_expires_at = (
                     time.time() + new_refresh_expires_in
@@ -1288,7 +1348,7 @@ class OAuthProxy(OAuthProvider, ConsentMixin):
         new_access_jti = secrets.token_urlsafe(32)
         new_fastmcp_access = self.jwt_issuer.issue_access_token(
             client_id=client.client_id,
-            scopes=scopes,
+            scopes=refreshed_scopes,
             jti=new_access_jti,
             expires_in=new_expires_in,
             upstream_claims=upstream_claims,
@@ -1310,7 +1370,7 @@ class OAuthProxy(OAuthProvider, ConsentMixin):
         new_refresh_jti = secrets.token_urlsafe(32)
         new_fastmcp_refresh = self.jwt_issuer.issue_refresh_token(
             client_id=client.client_id,
-            scopes=scopes,
+            scopes=refreshed_scopes,
             jti=new_refresh_jti,
             expires_in=new_refresh_expires_in
             or 60 * 60 * 24 * 30,  # Fallback to 30 days
@@ -1340,7 +1400,7 @@ class OAuthProxy(OAuthProvider, ConsentMixin):
             key=_hash_token(new_fastmcp_refresh),
             value=RefreshTokenMetadata(
                 client_id=client.client_id,
-                scopes=scopes,
+                scopes=refreshed_scopes,
                 expires_at=int(time.time()) + refresh_ttl,
                 created_at=time.time(),
             ),
@@ -1363,7 +1423,7 @@ class OAuthProxy(OAuthProvider, ConsentMixin):
             token_type="Bearer",
             expires_in=new_expires_in,
             refresh_token=new_fastmcp_refresh,  # NEW refresh token (rotated)
-            scope=" ".join(scopes),
+            scope=" ".join(refreshed_scopes),
         )
 
     # -------------------------------------------------------------------------
@@ -1380,6 +1440,22 @@ class OAuthProxy(OAuthProvider, ConsentMixin):
         that issue opaque access tokens).
         """
         return upstream_token_set.access_token
+
+    def _uses_alternate_verification(self) -> bool:
+        """Whether this provider verifies a different token than the access token.
+
+        When True, ``load_access_token`` patches the validated result with
+        the upstream access token, scopes, and expiry so that the returned
+        ``AccessToken`` reflects the access token rather than the
+        verification token.
+
+        The default implementation compares token values, but subclasses
+        should override this to use an intent-based flag so the patch is
+        applied even when the verification token and access token happen to
+        carry the same value (e.g., some OIDC providers issue identical
+        JWTs for both).
+        """
+        return False
 
     async def load_access_token(self, token: str) -> AccessToken | None:  # type: ignore[override]
         """Validate FastMCP JWT by swapping for upstream token.
@@ -1429,11 +1505,14 @@ class OAuthProxy(OAuthProvider, ConsentMixin):
                 logger.debug("Upstream token validation failed")
                 return None
 
-            # When the verification token differs from the access token
-            # (e.g., id_token verification), ensure the returned AccessToken
+            # When alternate verification is in use (e.g., id_token
+            # verification in OIDCProxy), ensure the returned AccessToken
             # carries the upstream access token and its scopes, not the
-            # verification token's values.
-            if verification_token != upstream_token_set.access_token:
+            # verification token's values.  We use an intent-based check
+            # rather than value equality because some IdPs issue identical
+            # JWTs for both access_token and id_token, which would cause
+            # the scope patch to be skipped even though it's needed.
+            if self._uses_alternate_verification():
                 validated = validated.model_copy(
                     update={
                         "token": upstream_token_set.access_token,
@@ -1474,13 +1553,26 @@ class OAuthProxy(OAuthProvider, ConsentMixin):
                 async with httpx.AsyncClient(
                     timeout=HTTP_TIMEOUT_SECONDS
                 ) as http_client:
+                    revocation_data: dict[str, str] = {"token": token.token}
+                    request_kwargs: dict[str, Any] = {"data": revocation_data}
+
+                    # Use the factory method when available (supports alternative auth like
+                    # client assertions for managed identity), falling back to basic auth
+                    # or client_id-only for public clients per RFC 7009
+                    oauth_client = self._create_upstream_oauth_client()
+                    if oauth_client.client_secret is not None:
+                        # Client secret is available, use HTTP Basic auth
+                        request_kwargs["auth"] = (
+                            self._upstream_client_id,
+                            oauth_client.client_secret,
+                        )
+                    else:
+                        # No secret; public client must still identify itself per RFC 7009
+                        revocation_data["client_id"] = self._upstream_client_id
+
                     await http_client.post(
                         self._upstream_revocation_endpoint,
-                        data={"token": token.token},
-                        auth=(
-                            self._upstream_client_id,
-                            self._upstream_client_secret.get_secret_value(),
-                        ),
+                        **request_kwargs,
                     )
                     logger.debug("Successfully revoked token with upstream server")
             except Exception as e:
@@ -1674,7 +1766,7 @@ class OAuthProxy(OAuthProvider, ConsentMixin):
             # When consent is enabled, the browser that approved consent receives
             # a signed cookie. A different browser (e.g., a victim lured to the
             # IdP URL) won't have this cookie and will be rejected.
-            if self._require_authorization_consent:
+            if self._require_authorization_consent is True:
                 consent_token = transaction_model.consent_token
                 if not consent_token:
                     logger.error("Transaction %s missing consent_token", txn_id)
@@ -1705,12 +1797,7 @@ class OAuthProxy(OAuthProvider, ConsentMixin):
             transaction = transaction_model.model_dump()
 
             # Exchange IdP code for tokens (server-side)
-            oauth_client = AsyncOAuth2Client(
-                client_id=self._upstream_client_id,
-                client_secret=self._upstream_client_secret.get_secret_value(),
-                token_endpoint_auth_method=self._token_endpoint_auth_method,
-                timeout=HTTP_TIMEOUT_SECONDS,
-            )
+            oauth_client = self._create_upstream_oauth_client()
 
             try:
                 idp_redirect_uri = (
