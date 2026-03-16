@@ -64,7 +64,11 @@ class TestPureCipherCLI:
 
         assert isinstance(registry, PureCipherRegistry)
         assert registry.name == "pc-registry"
-        paths = {route.path for route in registry._additional_http_routes}
+        paths = {
+            path
+            for route in registry._additional_http_routes
+            if (path := getattr(route, "path", None)) is not None
+        }
         assert "/launchpad" in paths
         assert "/launchpad/tools" in paths
 

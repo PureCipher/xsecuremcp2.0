@@ -12,7 +12,7 @@ Example::
         layer="reflexive",
         actor_id="agent-1",
         resource_id="tool:database",
-        message="Behavioral drift detected: call_frequency deviation 3.5σ",
+        message="Behavioral drift detected: call_frequency deviation 3.5 sigma",
         data={"metric": "call_frequency", "deviation": 3.5},
     )
 """

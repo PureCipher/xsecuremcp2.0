@@ -40,7 +40,7 @@ class TestPolicyVersion:
     def test_frozen(self):
         v = PolicyVersion()
         with pytest.raises(AttributeError):
-            v.version_number = 5
+            setattr(v, "version_number", 5)
 
 
 class TestPolicyVersionSerialization:
@@ -172,6 +172,7 @@ class TestPolicyVersionManagerMemory:
         mgr.create_version(policy_data={"v": 2})
         rolled = mgr.rollback_to(1)
         assert rolled.version_number == v1.version_number
+        assert mgr.current_version is not None
         assert mgr.current_version.policy_data == {"v": 1}
 
     def test_list_versions(self):
@@ -200,6 +201,7 @@ class TestPolicyVersionManagerMemory:
         # Create new manager with same backend
         mgr2 = PolicyVersionManager(policy_set_id="test", backend=backend)
         assert mgr2.version_count == 2
+        assert mgr2.current_version is not None
         assert mgr2.current_version.policy_data == {"v": 2}
 
     def test_empty_on_new_set(self):
@@ -233,6 +235,7 @@ class TestPolicyVersionManagerSQLite:
         b2 = SQLiteBackend(db)
         mgr2 = PolicyVersionManager(policy_set_id="prod", backend=b2)
         assert mgr2.version_count == 2
+        assert mgr2.current_version is not None
         assert mgr2.current_version.description == "Added viewer role"
         assert mgr2.current_version.policy_data["roles"]["viewer"] == ["read"]
         b2.close()
@@ -249,6 +252,7 @@ class TestPolicyVersionManagerSQLite:
 
         b2 = SQLiteBackend(db)
         mgr2 = PolicyVersionManager(policy_set_id="prod", backend=b2)
+        assert mgr2.current_version is not None
         assert mgr2.current_version.policy_data == {"v": 1}
         b2.close()
 
@@ -262,6 +266,8 @@ class TestPolicyVersionManagerSQLite:
         mgr_a.create_version(policy_data={"set": "a"})
         mgr_b.create_version(policy_data={"set": "b"})
 
+        assert mgr_a.current_version is not None
+        assert mgr_b.current_version is not None
         assert mgr_a.current_version.policy_data == {"set": "a"}
         assert mgr_b.current_version.policy_data == {"set": "b"}
         backend.close()

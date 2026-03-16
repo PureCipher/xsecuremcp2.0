@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 from pathlib import Path
 from typing import Any
@@ -150,7 +151,7 @@ def load_publisher_config(config_path: str | Path) -> PublisherProjectConfig:
     text = path.read_text()
 
     try:
-        import tomllib
+        tomllib = importlib.import_module("tomllib")
     except ModuleNotFoundError:
         payload = _fallback_parse_toml(text)
     else:

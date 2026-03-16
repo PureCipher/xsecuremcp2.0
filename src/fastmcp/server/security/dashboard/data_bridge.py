@@ -144,8 +144,6 @@ class DashboardDataBridge:
         compliance requirement category.
         """
         snap = self._ensure_snapshot()
-        summary = snap.summary
-
         # If compliance reporter is wired up, use report sections
         if self.dashboard._compliance_reporter:
             from fastmcp.server.security.compliance.reports import ReportType

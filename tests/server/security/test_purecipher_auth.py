@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any, cast
+
 from starlette.testclient import TestClient
 
 from fastmcp.server.security.certification.attestation import CertificationLevel
@@ -13,8 +15,8 @@ from fastmcp.server.security.certification.manifest import (
 from purecipher import PureCipherRegistry, RegistryAuthSettings, ToolCategory
 
 
-def _manifest(**overrides) -> SecurityManifest:
-    defaults = dict(
+def _manifest(**overrides: Any) -> SecurityManifest:
+    defaults: dict[str, Any] = dict(
         tool_name="weather-lookup",
         version="1.0.0",
         author="acme",
@@ -39,7 +41,7 @@ def _manifest(**overrides) -> SecurityManifest:
         tags={"weather", "api"},
     )
     defaults.update(overrides)
-    return SecurityManifest(**defaults)
+    return SecurityManifest(**cast(Any, defaults))
 
 
 def _auth_settings() -> RegistryAuthSettings:

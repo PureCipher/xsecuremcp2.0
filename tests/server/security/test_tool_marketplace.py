@@ -603,8 +603,10 @@ class TestTrustRegistryIntegration:
         registry = TrustRegistry()
         mp = _make_marketplace(trust_registry=registry)
         _publish_tool(mp, "my-tool")
+        listing = mp.get_by_name("my-tool")
+        assert listing is not None
         mp.add_review(
-            mp.get_by_name("my-tool").listing_id,
+            listing.listing_id,
             reviewer_id="u1",
             rating=ReviewRating.FIVE,
         )
@@ -627,6 +629,7 @@ class TestTrustRegistryIntegration:
         _publish_tool(mp, "my-tool")
         att = _make_attestation(CertificationLevel.STRICT)
         listing = mp.get_by_name("my-tool")
+        assert listing is not None
         mp.update_attestation(listing.listing_id, att)
         record = registry.get("my-tool")
         assert record is not None

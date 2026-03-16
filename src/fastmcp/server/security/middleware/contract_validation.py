@@ -77,16 +77,10 @@ class ContractValidationMiddleware(Middleware):
         context: MiddlewareContext,
     ) -> str | None:
         """Extract agent ID from middleware context."""
-        fastmcp_ctx = context.fastmcp_context
-        if fastmcp_ctx is None:
-            return None
-        try:
-            token = fastmcp_ctx.access_token
-            if token is not None:
-                return token.token[:8] + "..."
-        except Exception:
-            pass
-        return None
+        from fastmcp.server.dependencies import get_access_token
+
+        token = get_access_token()
+        return token.token[:8] + "..." if token is not None else None
 
     def _find_valid_contract(self, agent_id: str | None) -> Contract | None:
         """Find a valid active contract for the agent."""

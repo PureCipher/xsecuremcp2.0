@@ -36,7 +36,11 @@ class MerkleProof:
     def verify(self) -> bool:
         """Verify this proof against the root hash."""
         current = self.leaf_hash
-        for sibling, direction in zip(self.proof_hashes, self.directions):
+        for sibling, direction in zip(
+            self.proof_hashes,
+            self.directions,
+            strict=False,
+        ):
             if direction == "left":
                 current = _hash_pair(sibling, current)
             else:

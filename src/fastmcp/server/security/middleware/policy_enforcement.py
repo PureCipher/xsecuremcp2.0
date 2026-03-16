@@ -26,7 +26,10 @@ from fastmcp.server.security.policy.engine import (
     PolicyEngine,
     PolicyViolationError,
 )
-from fastmcp.server.security.policy.provider import PolicyEvaluationContext
+from fastmcp.server.security.policy.provider import (
+    PolicyEvaluationContext,
+    PolicyResult,
+)
 from fastmcp.tools.tool import Tool, ToolResult
 
 logger = logging.getLogger(__name__)
@@ -80,14 +83,11 @@ class PolicyEnforcementMiddleware(Middleware):
         tags: frozenset[str] = frozenset()
 
         # Try to extract actor from access token
-        fastmcp_ctx = middleware_context.fastmcp_context
-        if fastmcp_ctx is not None:
-            try:
-                token = fastmcp_ctx.access_token
-                if token is not None:
-                    actor_id = token.token[:8] + "..."  # Redacted token prefix
-            except Exception:
-                pass
+        from fastmcp.server.dependencies import get_access_token
+
+        token = get_access_token()
+        if token is not None:
+            actor_id = token.token[:8] + "..."  # Redacted token prefix
 
         metadata: dict = extra_metadata or {}
         metadata["method"] = middleware_context.method
@@ -450,7 +450,6 @@ class PolicyEnforcementMiddleware(Middleware):
 
 def _deny_result(reason: str) -> PolicyResult:
     """Create a DENY PolicyResult for error paths."""
-    from fastmcp.server.security.policy.provider import PolicyResult
 
     return PolicyResult(
         decision=PolicyDecision.DENY,

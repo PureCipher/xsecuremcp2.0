@@ -335,6 +335,7 @@ class TestComponentIsolation:
         """Dashboard should report health even with no real components."""
         config = SecurityConfig()
         ctx = SecurityOrchestrator.bootstrap(config)
+        assert ctx.dashboard is not None
         snap = ctx.dashboard.generate_snapshot()
         assert snap is not None
         assert snap.overall_health is not None
@@ -346,6 +347,7 @@ class TestComponentIsolation:
             alerts=AlertConfig(),
         )
         ctx = SecurityOrchestrator.bootstrap(config)
+        assert ctx.dashboard is not None
         snap = ctx.dashboard.generate_snapshot()
         assert snap is not None
 
@@ -358,6 +360,7 @@ class TestComponentIsolation:
         ctx_a = SecurityOrchestrator.bootstrap(config_a)
         ctx_b = SecurityOrchestrator.bootstrap(config_b)
 
+        assert ctx_a.registry is not None
         ctx_a.registry.register("tool-a", tool_version="1.0")
         assert ctx_a.registry.record_count == 1
         assert ctx_b.registry is None
@@ -380,6 +383,7 @@ class TestAPIGracefulDegradation:
             alerts=AlertConfig(),
         )
         ctx = SecurityOrchestrator.bootstrap(config)
+        assert ctx.registry is not None
         ctx.registry.register("tool-x", tool_version="1.0")
 
         api = SecurityAPI(

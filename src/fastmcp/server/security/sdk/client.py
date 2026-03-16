@@ -261,15 +261,18 @@ class SecureMCPClient:
         if not self._provenance:
             return None
 
+        try:
+            provenance_action = ProvenanceAction(action)
+        except ValueError:
+            provenance_action = ProvenanceAction.CUSTOM
+
         record = self._provenance.record(
-            ProvenanceAction(
-                tool_name=tool_name,
-                action=action,
-                actor_id=actor_id,
-                input_hash=input_hash,
-                output_hash=output_hash,
-                metadata=metadata or {},
-            )
+            action=provenance_action,
+            actor_id=actor_id,
+            resource_id=tool_name,
+            input_data=input_hash or None,
+            output_data=output_hash or None,
+            metadata={"action_name": action, **(metadata or {})},
         )
         return record.record_id
 
@@ -287,9 +290,9 @@ class SecureMCPClient:
         """Check if a tool is revoked in any CRL."""
         if self._crl and self._crl.is_revoked(tool_name):
             return True
-        if self._federation and self._federation.local_crl.is_revoked(tool_name):
-            return True
-        return False
+        return bool(
+            self._federation and self._federation.local_crl.is_revoked(tool_name)
+        )
 
     def is_tool_certified(self, tool_name: str) -> bool:
         """Check if a tool has valid certification."""
@@ -331,7 +334,7 @@ class SecureMCPClient:
             profile.is_revoked = self._federation.local_crl.is_revoked(tool_name)
 
         if self._provenance:
-            records = self._provenance.query(tool_name=tool_name)
+            records = self._provenance.get_records(resource_id=tool_name)
             profile.provenance_records = len(records)
 
         return profile

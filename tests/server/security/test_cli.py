@@ -182,6 +182,7 @@ class TestPublish:
         )
         assert result.success
         listing = cli.marketplace.get_by_name("test-tool")
+        assert listing is not None
         assert ToolCategory.SEARCH in listing.categories
 
     def test_publish_with_tags(self):
@@ -192,6 +193,7 @@ class TestPublish:
         )
         assert result.success
         listing = cli.marketplace.get_by_name("test-tool")
+        assert listing is not None
         assert "ml" in listing.tags
 
     def test_publish_result_serialization(self):

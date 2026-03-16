@@ -436,6 +436,7 @@ class TestGovernorWorkflow:
         p2 = gov.propose_add(AllowlistPolicy(allowed={"b"}))
         gov.reject(p1.proposal_id, reason="no")
         assert len(gov.pending_proposals) == 1
+        assert gov.pending_proposals[0].proposal_id == p2.proposal_id
 
     def test_proposal_to_dict(self) -> None:
         engine = PolicyEngine(providers=[AllowAllPolicy()])

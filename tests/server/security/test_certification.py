@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from typing import Any, cast
 
 from fastmcp.server.security.certification.attestation import (
     AttestationStatus,
@@ -39,15 +40,15 @@ from fastmcp.server.security.contracts.crypto import (
 # ── Helpers ──────────────────────────────────────────────────────────
 
 
-def _good_manifest(**overrides) -> SecurityManifest:
+def _good_manifest(**overrides: Any) -> SecurityManifest:
     """Create a well-formed manifest for testing."""
-    defaults = dict(
-        tool_name="test-tool",
-        version="1.0.0",
-        author="test-author",
-        description="A test tool for validation",
-        permissions={PermissionScope.READ_RESOURCE},
-        data_flows=[
+    defaults: dict[str, Any] = {
+        "tool_name": "test-tool",
+        "version": "1.0.0",
+        "author": "test-author",
+        "description": "A test tool for validation",
+        "permissions": {PermissionScope.READ_RESOURCE},
+        "data_flows": [
             DataFlowDeclaration(
                 source="input.query",
                 destination="output.result",
@@ -55,16 +56,16 @@ def _good_manifest(**overrides) -> SecurityManifest:
                 description="Query → results",
             ),
         ],
-        resource_access=[
+        "resource_access": [
             ResourceAccessDeclaration(
                 resource_pattern="docs://*",
                 access_type="read",
                 description="Read documents",
             ),
         ],
-    )
+    }
     defaults.update(overrides)
-    return SecurityManifest(**defaults)
+    return SecurityManifest(**cast(Any, defaults))
 
 
 def _crypto() -> ContractCryptoHandler:

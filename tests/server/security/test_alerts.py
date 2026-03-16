@@ -255,7 +255,7 @@ class TestSecurityEventBus:
     def test_subscription_count(self):
         bus = SecurityEventBus()
         s1 = bus.subscribe(handler=lambda e: None)
-        s2 = bus.subscribe(handler=lambda e: None)
+        bus.subscribe(handler=lambda e: None)
         assert bus.subscription_count == 2
         bus.unsubscribe(s1)
         assert bus.subscription_count == 1

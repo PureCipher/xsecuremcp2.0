@@ -20,6 +20,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Awaitable
 from dataclasses import dataclass, field
+from typing import cast
 
 from fastmcp.server.security.policy.provider import (
     PolicyDecision,
@@ -61,7 +62,7 @@ class ResourceScopedPolicy:
             result = policy.evaluate(context)
             if isinstance(result, Awaitable):
                 result = await result
-            return result
+            return cast(PolicyResult, result)
 
         # Try prefix match
         if self.prefix_match:
@@ -70,14 +71,14 @@ class ResourceScopedPolicy:
                     result = policy.evaluate(context)
                     if isinstance(result, Awaitable):
                         result = await result
-                    return result
+                    return cast(PolicyResult, result)
 
         # Fallback to default
         if self.default_policy is not None:
             result = self.default_policy.evaluate(context)
             if isinstance(result, Awaitable):
                 result = await result
-            return result
+            return cast(PolicyResult, result)
 
         return PolicyResult(
             decision=PolicyDecision.DEFER,

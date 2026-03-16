@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 
 from fastmcp.server.security.config import (
@@ -22,6 +24,7 @@ from fastmcp.server.security.policy.provider import (
     DenyAllPolicy,
     PolicyDecision,
     PolicyEvaluationContext,
+    PolicyProvider,
 )
 
 # ── Engine + AuditLog wiring ────────────────────────────────────────
@@ -104,7 +107,9 @@ class TestEngineAuditLogWiring:
 
         audit = PolicyAuditLog()
         engine = PolicyEngine(
-            providers=[BrokenPolicy()], audit_log=audit, fail_closed=True
+            providers=[cast(PolicyProvider, BrokenPolicy())],
+            audit_log=audit,
+            fail_closed=True,
         )
         ctx = PolicyEvaluationContext(
             actor_id="x", action="call_tool", resource_id="tool-a"
@@ -158,6 +163,7 @@ class TestOrchestratorPolicyWiring:
         ctx = SecurityOrchestrator.bootstrap(config)
 
         assert ctx.policy_audit_log is custom_audit
+        assert ctx.policy_engine is not None
         assert ctx.policy_engine.audit_log is custom_audit
 
     @pytest.mark.anyio
@@ -168,6 +174,8 @@ class TestOrchestratorPolicyWiring:
             ),
         )
         ctx = SecurityOrchestrator.bootstrap(config)
+        assert ctx.policy_engine is not None
+        assert ctx.policy_audit_log is not None
 
         eval_ctx = PolicyEvaluationContext(
             actor_id="agent-1", action="call_tool", resource_id="blocked"
@@ -185,6 +193,7 @@ class TestOrchestratorPolicyWiring:
         ctx = SecurityOrchestrator.bootstrap(config)
 
         assert ctx.event_bus is not None
+        assert ctx.policy_engine is not None
         assert ctx.policy_engine._event_bus is ctx.event_bus
         assert ctx.policy_audit_log is not None
 
@@ -215,6 +224,7 @@ class TestOrchestratorPolicyWiring:
         ctx = SecurityOrchestrator.bootstrap(config)
 
         # Declarative provider is prepended, so there should be 2 providers
+        assert ctx.policy_engine is not None
         assert len(ctx.policy_engine.providers) == 2
 
 
@@ -399,6 +409,7 @@ class TestEndToEnd:
         )
         ctx = SecurityOrchestrator.bootstrap(config)
         api = SecurityAPI.from_context(ctx)
+        assert ctx.policy_engine is not None
 
         # Evaluate some requests
         for rid in ["safe-tool", "blocked-tool", "safe-other", "unknown"]:
@@ -460,6 +471,8 @@ class TestEndToEnd:
             ),
         )
         ctx = SecurityOrchestrator.bootstrap(config)
+        assert ctx.policy_engine is not None
+        assert ctx.policy_audit_log is not None
 
         # safe-tool → allowed
         r1 = await ctx.policy_engine.evaluate(

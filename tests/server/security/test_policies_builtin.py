@@ -198,7 +198,7 @@ class TestTimeBasedPolicy:
         assert result.decision == PolicyDecision.ALLOW
 
     def test_utc_offset(self):
-        # 10:00 UTC = 15:30 IST (UTC+5:30... but we use integer offset so UTC+5)
+        # 10:00 UTC = 15:30 India time (UTC+5:30, but we use integer offset so UTC+5)
         ts = datetime(2026, 3, 9, 10, 0, tzinfo=timezone.utc)
         policy = TimeBasedPolicy(
             allowed_start_time=time(14, 0),

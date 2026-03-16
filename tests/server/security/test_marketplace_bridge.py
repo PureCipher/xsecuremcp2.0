@@ -174,7 +174,7 @@ class TestPopulatedMarketplace:
         listings = bridge.build_listings()
         # Default search returns only published
         assert len(listings) == 3
-        names = {l["name"] for l in listings}
+        names = {listing["name"] for listing in listings}
         assert "draft-tool" not in names
 
     def test_listing_card_structure(self, populated_marketplace, registry):
@@ -352,7 +352,7 @@ class TestRatingLabel:
             marketplace=populated_marketplace, trust_registry=registry
         )
         listings = bridge.build_listings()
-        gw = next(l for l in listings if l["name"] == "api-gateway")
+        gw = next(listing for listing in listings if listing["name"] == "api-gateway")
         assert gw["rating"] > 0
         assert gw["rating_label"] != "No ratings"
 
@@ -361,7 +361,7 @@ class TestRatingLabel:
             marketplace=populated_marketplace, trust_registry=registry
         )
         listings = bridge.build_listings()
-        pg = next(l for l in listings if l["name"] == "pg-connector")
+        pg = next(listing for listing in listings if listing["name"] == "pg-connector")
         assert pg["rating"] == 0.0
         assert pg["rating_label"] == "No ratings"
 

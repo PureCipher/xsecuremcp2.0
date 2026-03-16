@@ -25,7 +25,7 @@ class TestBehavioralAnalyzerBasics:
         analyzer = BehavioralAnalyzer(min_samples=10)
         # Build baseline with consistent values
         for _ in range(15):
-            events = analyzer.observe("a1", "calls", 10.0)
+            analyzer.observe("a1", "calls", 10.0)
         # Normal variation should not trigger drift
         assert analyzer.total_drift_count == 0
 

@@ -500,7 +500,23 @@ class PolicyValidator:
         # Validate each child
         for i, child in enumerate(children):
             child_path = f"{path}.policies[{i}]" if path else f"policies[{i}]"
-            self._validate_node(child, result, path=child_path, depth=depth + 1)
+            if not isinstance(child, dict):
+                result.findings.append(
+                    ValidationFinding(
+                        severity=ValidationSeverity.ERROR,
+                        message="Policy composition children must be objects",
+                        path=child_path,
+                        code="E_CHILD_NOT_OBJECT",
+                    )
+                )
+                continue
+            child_config = {str(key): value for key, value in child.items()}
+            self._validate_node(
+                child_config,
+                result,
+                path=child_path,
+                depth=depth + 1,
+            )
 
     # ── Semantic validation ────────────────────────────────────
 
@@ -545,7 +561,7 @@ class PolicyValidator:
         has_allow_all = False
         has_deny_all = False
 
-        for i, provider in enumerate(providers):
+        for provider in providers:
             from fastmcp.server.security.policy.provider import (
                 AllowAllPolicy,
                 DenyAllPolicy,

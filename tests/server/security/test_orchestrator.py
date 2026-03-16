@@ -322,6 +322,12 @@ class TestFullStackBootstrap:
         ctx = SecurityOrchestrator.bootstrap(cfg)
         bus = ctx.event_bus
         assert bus is not None
+        assert ctx.policy_engine is not None
+        assert ctx.provenance_ledger is not None
+        assert ctx.behavioral_analyzer is not None
+        assert ctx.escalation_engine is not None
+        assert ctx.consent_graph is not None
+        assert ctx.marketplace is not None
         assert ctx.policy_engine._event_bus is bus
         assert ctx.provenance_ledger._event_bus is bus
         assert ctx.behavioral_analyzer._event_bus is bus

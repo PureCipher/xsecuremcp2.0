@@ -13,7 +13,7 @@ from collections.abc import Awaitable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, cast, runtime_checkable
 
 logger = logging.getLogger(__name__)
 
@@ -203,9 +203,10 @@ class InvariantRegistry:
         """
         results: list[InvariantVerificationResult] = []
         for invariant in self._invariants.values():
-            result = self._verifier.verify(invariant, context)
-            if inspect.isawaitable(result):
-                result = await result
+            raw_result = self._verifier.verify(invariant, context)
+            if inspect.isawaitable(raw_result):
+                raw_result = await raw_result
+            result = cast(InvariantVerificationResult, raw_result)
             results.append(result)
             self._results.append(result)
 
@@ -223,9 +224,10 @@ class InvariantRegistry:
         if invariant is None:
             raise KeyError(f"Invariant not found: {invariant_id}")
 
-        result = self._verifier.verify(invariant, context)
-        if inspect.isawaitable(result):
-            result = await result
+        raw_result = self._verifier.verify(invariant, context)
+        if inspect.isawaitable(raw_result):
+            raw_result = await raw_result
+        result = cast(InvariantVerificationResult, raw_result)
         self._results.append(result)
         return result
 

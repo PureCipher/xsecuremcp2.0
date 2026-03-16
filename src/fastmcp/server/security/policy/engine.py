@@ -11,7 +11,7 @@ import inspect
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from fastmcp.server.security.policy.provider import (
     AllowAllPolicy,
@@ -108,6 +108,7 @@ class PolicyEngine:
         self._validator: PolicyValidator | None = None
         self._swap_lock = asyncio.Lock()
         self._swap_history: list[PolicySwapRecord] = []
+        self._invariant_tasks: set[asyncio.Task[Any]] = set()
         self._evaluation_count: int = 0
         self._deny_count: int = 0
 
@@ -175,9 +176,10 @@ class PolicyEngine:
         results: list[PolicyResult] = []
         for provider in self._providers:
             try:
-                result = provider.evaluate(context)
-                if inspect.isawaitable(result):
-                    result = await result
+                raw_result = provider.evaluate(context)
+                if inspect.isawaitable(raw_result):
+                    raw_result = await raw_result
+                result = cast(PolicyResult, raw_result)
                 results.append(result)
 
                 if result.decision == PolicyDecision.DENY:
@@ -417,9 +419,11 @@ class PolicyEngine:
                     # Fire-and-forget: don't block swap on invariant check
                     import asyncio
 
-                    asyncio.ensure_future(
+                    invariant_task = asyncio.create_task(
                         self._invariant_registry.verify_all(invariant_context)
                     )
+                    self._invariant_tasks.add(invariant_task)
+                    invariant_task.add_done_callback(self._invariant_tasks.discard)
                 except Exception:
                     logger.debug(
                         "Failed to run invariant verification after hot-swap",

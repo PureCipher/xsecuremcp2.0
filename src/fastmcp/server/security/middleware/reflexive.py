@@ -76,15 +76,11 @@ class ReflexiveMiddleware(Middleware):
         return _current_transport.get() == "stdio"
 
     def _get_actor_id(self, context: MiddlewareContext) -> str:
-        fastmcp_ctx = context.fastmcp_context
-        if fastmcp_ctx is None:
-            return "unknown"
-        try:
-            token = fastmcp_ctx.access_token
-            if token is not None:
-                return token.token[:8] + "..."
-        except Exception:
-            pass
+        from fastmcp.server.dependencies import get_access_token
+
+        token = get_access_token()
+        if token is not None:
+            return token.token[:8] + "..."
         return "anonymous"
 
     def _check_suspended(self, actor_id: str) -> None:
@@ -145,7 +141,7 @@ class ReflexiveMiddleware(Middleware):
         self._check_suspended(actor_id)
 
         # Track tool scope
-        tool_name = context.params.name if context.params else "unknown"
+        tool_name = context.message.name
         is_new_tool = self.profile_manager.record_tool_access(actor_id, tool_name)
 
         # Record call and compute rate
@@ -210,7 +206,7 @@ class ReflexiveMiddleware(Middleware):
         self._check_suspended(actor_id)
 
         # Track resource scope
-        resource_uri = str(context.params.uri) if context.params else "unknown"
+        resource_uri = str(context.message.uri)
         is_new_resource = self.profile_manager.record_resource_access(
             actor_id, resource_uri
         )
@@ -270,7 +266,7 @@ class ReflexiveMiddleware(Middleware):
         self._check_suspended(actor_id)
 
         # Track prompt scope
-        prompt_name = context.params.name if context.params else "unknown"
+        prompt_name = context.message.name
         self.profile_manager.record_prompt_access(actor_id, prompt_name)
 
         return await call_next(context)

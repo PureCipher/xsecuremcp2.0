@@ -23,7 +23,7 @@ from __future__ import annotations
 import logging
 from collections import deque
 from collections.abc import Callable
-from typing import Any
+from typing import Any, ClassVar
 
 from fastmcp.server.security.alerts.models import AlertSeverity, SecurityEvent
 
@@ -42,7 +42,7 @@ class LoggingHandler:
         logger_name: Name for the logger instance.
     """
 
-    _severity_map = {
+    _severity_map: ClassVar[dict[AlertSeverity, int]] = {
         AlertSeverity.INFO: logging.INFO,
         AlertSeverity.WARNING: logging.WARNING,
         AlertSeverity.CRITICAL: logging.CRITICAL,

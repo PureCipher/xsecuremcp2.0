@@ -748,7 +748,7 @@ class SecureMCPCLI:
                     classification=DataClassification(
                         df.get("classification", "internal")
                     ),
-                    transforms=tuple(df.get("transforms", [])),
+                    transforms=list(df.get("transforms", [])),
                     retention=df.get("retention"),
                 )
             )

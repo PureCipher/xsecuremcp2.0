@@ -6,6 +6,8 @@ trust queries, tool profiles, compliance integration, decorators, and history.
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 from fastmcp.server.security.alerts.bus import SecurityEventBus
 from fastmcp.server.security.alerts.handlers import BufferedHandler
 from fastmcp.server.security.certification.manifest import (
@@ -36,14 +38,14 @@ from fastmcp.server.security.sdk.decorators import (
 # ── Helpers ─────────────────────────────────────────────────────
 
 
-def _make_manifest(tool_name: str = "test-tool", **kwargs) -> SecurityManifest:
-    defaults = {
+def _make_manifest(tool_name: str = "test-tool", **kwargs: Any) -> SecurityManifest:
+    defaults: dict[str, Any] = {
         "tool_name": tool_name,
         "version": "1.0.0",
         "author": "acme",
     }
     defaults.update(kwargs)
-    return SecurityManifest(**defaults)
+    return SecurityManifest(**cast(Any, defaults))
 
 
 def _make_client(**kwargs) -> SecureMCPClient:

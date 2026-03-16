@@ -60,6 +60,7 @@ class TestContextBrokerBasics:
         response = await broker.negotiate(request)
 
         assert response.status == NegotiationStatus.ACCEPTED
+        assert response.contract is not None
         assert len(response.contract.terms) == 2  # default + agent
 
     @pytest.mark.anyio
@@ -110,6 +111,7 @@ class TestContextBrokerBasics:
         )
         response = await broker.negotiate(request)
         contract = response.contract
+        assert contract is not None
         assert contract.expires_at is not None
 
 
@@ -174,7 +176,7 @@ class TestContextBrokerSessions:
             agent_id="agt",
             proposed_terms=[ContractTerm()],
         )
-        resp2 = await broker.negotiate(req2)
+        await broker.negotiate(req2)
 
         # Round 3 — should be rejected
         req3 = ContractNegotiationRequest(
@@ -205,6 +207,7 @@ class TestContextBrokerCrypto:
         response = await broker.negotiate(request)
 
         contract = response.contract
+        assert contract is not None
         assert contract.is_signed_by("srv")
 
     @pytest.mark.anyio
@@ -234,6 +237,7 @@ class TestContextBrokerContractManagement:
         )
         response = await broker.negotiate(request)
 
+        assert response.contract is not None
         contract = broker.get_contract(response.contract.contract_id)
         assert contract is not None
         assert contract.contract_id == response.contract.contract_id
@@ -262,12 +266,14 @@ class TestContextBrokerContractManagement:
         )
         response = await broker.negotiate(request)
 
+        assert response.contract is not None
         result = await broker.revoke_contract(
             response.contract.contract_id, reason="Testing"
         )
         assert result is True
 
         contract = broker.get_contract(response.contract.contract_id)
+        assert contract is not None
         assert contract.status == ContractStatus.REVOKED
 
     @pytest.mark.anyio

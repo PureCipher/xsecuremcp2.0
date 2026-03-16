@@ -43,7 +43,11 @@ class TestSecureMCPFacade:
 
         assert server.security_api is not None
 
-        paths = {route.path for route in server._additional_http_routes}
+        paths = {
+            path
+            for route in server._additional_http_routes
+            if (path := getattr(route, "path", None)) is not None
+        }
         assert "/security/dashboard" in paths
         assert "/security/health" in paths
 

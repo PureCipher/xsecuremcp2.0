@@ -144,7 +144,7 @@ class MarketplaceDataBridge:
     def build_featured(self, limit: int = 6) -> list[dict[str, Any]]:
         """Build featured tools list."""
         featured = self.marketplace.get_featured(limit=limit)
-        return [self._listing_to_card(l) for l in featured]
+        return [self._listing_to_card(listing) for listing in featured]
 
     # ── All listings (paginated) ──────────────────────────
 
@@ -164,7 +164,7 @@ class MarketplaceDataBridge:
             status=status,
             limit=limit,
         )
-        return [self._listing_to_card(l) for l in results]
+        return [self._listing_to_card(listing) for listing in results]
 
     # ── Category breakdown ────────────────────────────────
 
@@ -245,7 +245,7 @@ class MarketplaceDataBridge:
     def build_moderation_queue(self) -> list[dict[str, Any]]:
         """Build the moderation queue for moderator UI."""
         pending = self.marketplace.get_pending_review()
-        return [self._listing_to_card(l) for l in pending]
+        return [self._listing_to_card(listing) for listing in pending]
 
     def build_moderation_log(self, listing_id: str) -> list[dict[str, Any]]:
         """Build moderation history for a listing."""

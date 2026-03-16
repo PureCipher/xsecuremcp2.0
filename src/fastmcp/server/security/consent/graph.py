@@ -667,7 +667,7 @@ class ConsentGraph:
                 if not edge.check_conditions(context):
                     continue
 
-                new_path = path + [edge]
+                new_path = [*path, edge]
                 if edge.target_id == target_id:
                     return new_path
                 if edge.target_id not in visited and edge.delegatable:

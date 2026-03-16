@@ -67,9 +67,9 @@ class TrustScore:
 
     Attributes:
         overall: Composite score from 0.0 (untrusted) to 1.0 (fully trusted).
-        certification_component: Score from certification level (0.0–1.0).
-        reputation_component: Score from behavioral history (0.0–1.0).
-        age_component: Score from registry tenure (0.0–1.0).
+        certification_component: Score from certification level (0.0-1.0).
+        reputation_component: Score from behavioral history (0.0-1.0).
+        age_component: Score from registry tenure (0.0-1.0).
         computed_at: When this score was last computed.
     """
 

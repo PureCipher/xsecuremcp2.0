@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, cast
 from unittest.mock import MagicMock
 
 from fastmcp.server.security.certification.attestation import (
@@ -29,14 +29,14 @@ from fastmcp.server.security.gateway.tool_marketplace import (
 
 def _make_manifest(**overrides: Any) -> SecurityManifest:
     """Create a test manifest."""
-    defaults = {
+    defaults: dict[str, Any] = {
         "manifest_id": "test-manifest",
         "tool_name": "test-tool",
         "version": "1.0.0",
         "author": "tester",
     }
     defaults.update(overrides)
-    return SecurityManifest(**defaults)
+    return SecurityManifest(**cast(Any, defaults))
 
 
 def _make_attestation(

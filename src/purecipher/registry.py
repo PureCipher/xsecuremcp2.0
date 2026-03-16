@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Generic
+from typing import Any, Generic, TypedDict
 from urllib.parse import urlencode
 
 from mcp.server.lowlevel.server import LifespanResultT
@@ -122,6 +122,19 @@ class RegistryPreflightResult:
             "report": self.report.to_dict(),
             "attestation": self.attestation.to_dict(),
         }
+
+
+class PublishFormState(TypedDict):
+    manifest_text: str
+    runtime_metadata_text: str
+    display_name: str
+    categories: str
+    tags: str
+    requested_level: str
+    source_url: str
+    homepage_url: str
+    tool_license: str
+    submission_action: str
 
 
 def _parse_manifest(data: dict[str, Any]) -> SecurityManifest:
@@ -391,6 +404,20 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             raise RuntimeError("Tool marketplace is not attached to this registry.")
         return ctx.tool_marketplace
 
+    def _trust_registry(self) -> TrustRegistry:
+        ctx = self._required_context()
+        if ctx.registry is None:
+            raise RuntimeError("Trust registry is not attached to this registry.")
+        return ctx.registry
+
+    def _certification_pipeline(self) -> CertificationPipeline:
+        ctx = self._required_context()
+        if ctx.certification_pipeline is None:
+            raise RuntimeError(
+                "Certification pipeline is not attached to this registry."
+            )
+        return ctx.certification_pipeline
+
     def _trust_overall(self, listing: ToolListing) -> float | None:
         ctx = self._required_context()
         score = (
@@ -543,13 +570,14 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
     def get_registry_health(self) -> dict[str, Any]:
         """Return PureCipher registry health and counts."""
 
-        ctx = self._required_context()
-        published = ctx.tool_marketplace.search(
+        trust_registry = self._trust_registry()
+        marketplace = self._marketplace()
+        published = marketplace.search(
             certified_only=True,
             min_certification=self.minimum_certification,
             limit=10_000,
         )
-        pending = ctx.tool_marketplace.search(
+        pending = marketplace.search(
             status=PublishStatus.PENDING_REVIEW,
             limit=10_000,
         )
@@ -561,7 +589,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             "minimum_certification": self.minimum_certification.value,
             "require_moderation": self._require_moderation,
             "auth_enabled": self.auth_enabled,
-            "registered_tools": ctx.registry.record_count,
+            "registered_tools": trust_registry.record_count,
             "verified_tools": len(published),
             "pending_review": len(pending),
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -579,9 +607,8 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
     ) -> dict[str, Any]:
         """Search the published verified catalog."""
 
-        ctx = self._required_context()
         level = min_certification or self.minimum_certification
-        listings = ctx.tool_marketplace.search(
+        listings = self._marketplace().search(
             query=query,
             author=author,
             tags=tags,
@@ -752,8 +779,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 manifest_digest=preflight.manifest_digest,
             )
 
-        ctx = self._required_context()
-        listing = ctx.tool_marketplace.publish(
+        listing = self._marketplace().publish(
             manifest.tool_name,
             display_name=display_name or manifest.tool_name,
             description=description or manifest.description,
@@ -794,8 +820,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
     ) -> RegistryPreflightResult:
         """Validate a submission without publishing it."""
 
-        ctx = self._required_context()
-        result = ctx.certification_pipeline.certify(
+        result = self._certification_pipeline().certify(
             manifest,
             requested_level=requested_level,
         )
@@ -876,14 +901,15 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
     ) -> dict[str, Any]:
         """Verify a registered tool's attestation."""
 
-        ctx = self._required_context()
-        listing = ctx.tool_marketplace.get_by_name(tool_name)
+        marketplace = self._marketplace()
+        certification_pipeline = self._certification_pipeline()
+        listing = marketplace.get_by_name(tool_name)
         if listing is None:
             return {"error": f"Tool '{tool_name}' not found", "status": 404}
         if listing.attestation is None:
             return {"error": f"Tool '{tool_name}' has no attestation", "status": 400}
 
-        verification = ctx.certification_pipeline.verify_attestation(
+        verification = certification_pipeline.verify_attestation(
             listing.attestation,
             manifest or listing.manifest,
         )
@@ -999,9 +1025,44 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             page_notice_is_error=page_notice_is_error,
         )
 
+    def _render_publish_ui_from_state(
+        self,
+        *,
+        prefix: str,
+        state: PublishFormState,
+        session: RegistrySession | None = None,
+        preflight: dict[str, Any] | None = None,
+        submission_title: str | None = None,
+        submission_body: str | None = None,
+        submission_is_error: bool = False,
+        page_notice_title: str | None = None,
+        page_notice_body: str | None = None,
+        page_notice_is_error: bool = False,
+    ) -> str:
+        return self._render_publish_ui(
+            prefix=prefix,
+            session=session,
+            manifest_text=state["manifest_text"],
+            runtime_metadata_text=state["runtime_metadata_text"],
+            display_name=state["display_name"],
+            categories=state["categories"],
+            tags=state["tags"],
+            requested_level=state["requested_level"],
+            source_url=state["source_url"],
+            homepage_url=state["homepage_url"],
+            tool_license=state["tool_license"],
+            preflight=preflight,
+            submission_title=submission_title,
+            submission_body=submission_body,
+            submission_is_error=submission_is_error,
+            page_notice_title=page_notice_title,
+            page_notice_body=page_notice_body,
+            page_notice_is_error=page_notice_is_error,
+        )
+
     @staticmethod
-    def _publish_form_state(form: Any) -> dict[str, str]:
-        return {
+    def _publish_form_state(form: Any) -> PublishFormState:
+        state: PublishFormState = {
             "manifest_text": str(form.get("manifest", SAMPLE_MANIFEST_JSON)),
             "runtime_metadata_text": str(form.get("runtime_metadata", "")),
             "display_name": str(form.get("display_name", "")),
@@ -1013,6 +1074,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             "tool_license": str(form.get("tool_license", "")),
             "submission_action": str(form.get("submission_action", "publish")),
         }
+        return state
 
     def _parse_publish_inputs(
         self,
@@ -1079,9 +1141,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             session = self._session_from_request(request)
             form = await request.form()
             state = self._publish_form_state(form)
-            submission_action = (
-                state.pop("submission_action", "publish").strip().lower() or "publish"
-            )
+            submission_action = state["submission_action"].strip().lower() or "publish"
 
             try:
                 manifest, categories, tags, requested_level, metadata = (
@@ -1095,13 +1155,13 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 )
             except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
                 return create_secure_html_response(
-                    self._render_publish_ui(
+                    self._render_publish_ui_from_state(
                         prefix=prefix,
+                        state=state,
                         session=session,
                         submission_title="Publish form is invalid",
                         submission_body=str(exc),
                         submission_is_error=True,
-                        **state,
                     ),
                     status_code=400,
                 )
@@ -1116,14 +1176,14 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
             if submission_action == "preview":
                 return create_secure_html_response(
-                    self._render_publish_ui(
+                    self._render_publish_ui_from_state(
                         prefix=prefix,
+                        state=state,
                         session=session,
                         preflight=preflight.to_dict(),
                         submission_title="Preflight complete",
                         submission_body=preflight.summary,
                         submission_is_error=not preflight.ready_for_publish,
-                        **state,
                     )
                 )
 
@@ -1141,14 +1201,14 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     "before publishing listings."
                 )
                 return create_secure_html_response(
-                    self._render_publish_ui(
+                    self._render_publish_ui_from_state(
                         prefix=prefix,
+                        state=state,
                         session=session,
                         preflight=preflight.to_dict(),
                         page_notice_title="Publishing blocked",
                         page_notice_body=message,
                         page_notice_is_error=True,
-                        **state,
                     ),
                     status_code=status_code,
                 )
@@ -1173,14 +1233,14 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 else result.reason
             )
             return create_secure_html_response(
-                self._render_publish_ui(
+                self._render_publish_ui_from_state(
                     prefix=prefix,
+                    state=state,
                     session=session,
                     preflight=preflight.to_dict(),
                     submission_title=result.reason,
                     submission_body=submission_body,
                     submission_is_error=not result.accepted,
-                    **state,
                 ),
                 status_code=status_code,
             )
@@ -1587,7 +1647,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             metadata: dict[str, Any] | None = None
             raw_metadata = raw_payload.get("metadata")
             if isinstance(raw_metadata, dict):
-                metadata = dict(raw_metadata)
+                metadata = {str(key): value for key, value in raw_metadata.items()}
             elif isinstance(raw_metadata, str) and raw_metadata.strip():
                 try:
                     parsed = json.loads(raw_metadata)

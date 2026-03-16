@@ -68,6 +68,7 @@ class TestProvenanceLedgerBasics:
         r2 = ledger.record(
             action=ProvenanceAction.RESOURCE_READ, actor_id="a1", resource_id="r1"
         )
+        assert ledger.latest_record is not None
         assert ledger.latest_record.record_id == r2.record_id
 
 
@@ -123,10 +124,10 @@ class TestProvenanceLedgerQueries:
 
     def test_query_returns_most_recent_first(self):
         ledger = ProvenanceLedger()
-        r1 = ledger.record(
+        ledger.record(
             action=ProvenanceAction.TOOL_CALLED, actor_id="a1", resource_id="first"
         )
-        r2 = ledger.record(
+        ledger.record(
             action=ProvenanceAction.TOOL_CALLED, actor_id="a1", resource_id="second"
         )
 

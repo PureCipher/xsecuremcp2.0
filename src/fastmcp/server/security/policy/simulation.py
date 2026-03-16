@@ -29,7 +29,7 @@ import inspect
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 
 from fastmcp.server.security.policy.provider import (
     PolicyDecision,
@@ -192,15 +192,17 @@ async def _evaluate_provider(
     result = provider.evaluate(context)
     if inspect.isawaitable(result):
         result = await result
+    resolved_result = cast(PolicyResult, result)
 
     pid = provider.get_policy_id()
     if inspect.isawaitable(pid):
         pid = await pid
+    policy_id = cast(str, pid)
 
     return ProviderResult(
-        policy_id=pid,
-        decision=result.decision,
-        reason=result.reason,
+        policy_id=policy_id,
+        decision=resolved_result.decision,
+        reason=resolved_result.reason,
     )
 
 
@@ -241,10 +243,10 @@ async def simulate(
     if isinstance(target, PolicyEngine):
         providers = target.providers  # Gets a copy
     elif isinstance(target, list):
-        providers = list(target)
+        providers = cast(list[PolicyProvider], list(target))
     else:
         # Single provider
-        providers = [target]
+        providers = [cast(PolicyProvider, target)]
 
     report = SimulationReport(total=len(scenarios))
 

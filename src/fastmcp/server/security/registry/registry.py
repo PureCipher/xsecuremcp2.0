@@ -303,12 +303,12 @@ class TrustRegistry:
         )
 
     def _certification_score(self, record: TrustRecord) -> float:
-        """Score from certification level (0.0–1.0)."""
+        """Score from certification level (0.0-1.0)."""
         level = record.certification_level
         return CERTIFICATION_BASE_SCORES.get(level, 0.0)
 
     def _reputation_score(self, record: TrustRecord) -> float:
-        """Score from behavioral reputation (0.0–1.0).
+        """Score from behavioral reputation (0.0-1.0).
 
         Starts at 0.5 (neutral). Each event shifts the score based
         on its impact. Bounded to [0.0, 1.0].
@@ -323,7 +323,7 @@ class TrustRegistry:
         return max(0.0, min(1.0, raw))
 
     def _age_score(self, record: TrustRecord) -> float:
-        """Score from registry tenure (0.0–1.0).
+        """Score from registry tenure (0.0-1.0).
 
         Uses a saturation curve: score = 1 - e^(-t/τ)
         where τ is the half-saturation time.

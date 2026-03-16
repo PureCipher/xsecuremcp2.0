@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any, cast
 
 from starlette.testclient import TestClient
 
@@ -15,8 +16,8 @@ from fastmcp.server.security.certification.manifest import (
 from purecipher import PureCipherRegistry, ToolCategory
 
 
-def _manifest(**overrides) -> SecurityManifest:
-    defaults = dict(
+def _manifest(**overrides: Any) -> SecurityManifest:
+    defaults: dict[str, Any] = dict(
         tool_name="weather-lookup",
         version="1.0.0",
         author="acme",
@@ -41,7 +42,7 @@ def _manifest(**overrides) -> SecurityManifest:
         tags={"weather", "api"},
     )
     defaults.update(overrides)
-    return SecurityManifest(**defaults)
+    return SecurityManifest(**cast(Any, defaults))
 
 
 def _runtime_metadata() -> dict[str, object]:
@@ -61,7 +62,11 @@ class TestPureCipherRegistry:
             signing_secret="test-secret",
         )
 
-        paths = {route.path for route in registry._additional_http_routes}
+        paths = {
+            path
+            for route in registry._additional_http_routes
+            if (path := getattr(route, "path", None)) is not None
+        }
         assert "/registry" in paths
         assert "/registry/health" in paths
         assert "/registry/session" in paths

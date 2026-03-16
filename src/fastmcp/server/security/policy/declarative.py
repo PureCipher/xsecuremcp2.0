@@ -346,11 +346,11 @@ def load_policy(source: str | Path | dict[str, Any]) -> PolicyProvider:
     if path.suffix in (".yaml", ".yml"):
         try:
             import yaml
-        except ImportError:
+        except ImportError as err:
             raise ImportError(
                 "PyYAML is required for loading YAML policy files. "
                 "Install it with: pip install pyyaml"
-            )
+            ) from err
         config = yaml.safe_load(text)
     elif path.suffix == ".json":
         config = json.loads(text)

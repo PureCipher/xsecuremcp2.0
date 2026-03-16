@@ -171,7 +171,4 @@ class EscalationRule:
         ):
             return False
 
-        if self.drift_types and event.drift_type not in self.drift_types:
-            return False
-
-        return True
+        return not self.drift_types or event.drift_type in self.drift_types

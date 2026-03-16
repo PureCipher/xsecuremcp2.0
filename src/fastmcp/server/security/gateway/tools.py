@@ -7,6 +7,7 @@ to connected agents.
 
 from __future__ import annotations
 
+from contextlib import suppress
 from typing import Any
 
 from fastmcp.server.security.gateway.audit import AuditAPI
@@ -155,17 +156,13 @@ def create_marketplace_tools(marketplace: Marketplace) -> dict[str, Any]:
         if capabilities:
             caps = set()
             for c in capabilities:
-                try:
+                with suppress(ValueError):
                     caps.add(ServerCapability(c))
-                except ValueError:
-                    pass
 
         trust = None
         if min_trust_level:
-            try:
+            with suppress(ValueError):
                 trust = TrustLevel(min_trust_level)
-            except ValueError:
-                pass
 
         results = marketplace.search(
             capabilities=caps,

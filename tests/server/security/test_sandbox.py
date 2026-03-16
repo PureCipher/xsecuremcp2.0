@@ -8,6 +8,7 @@ and the SandboxedRunner lifecycle.
 from __future__ import annotations
 
 import time
+from typing import Any, cast
 
 from fastmcp.server.security.alerts.bus import SecurityEventBus
 from fastmcp.server.security.alerts.handlers import BufferedHandler
@@ -35,14 +36,14 @@ from fastmcp.server.security.sandbox.policies import (
 # ── Helpers ─────────────────────────────────────────────────────────
 
 
-def _make_manifest(**kwargs) -> SecurityManifest:
-    defaults = {
+def _make_manifest(**kwargs: Any) -> SecurityManifest:
+    defaults: dict[str, Any] = {
         "tool_name": "test-tool",
         "version": "1.0.0",
         "author": "acme",
     }
     defaults.update(kwargs)
-    return SecurityManifest(**defaults)
+    return SecurityManifest(**cast(Any, defaults))
 
 
 # ── Resource Policy tests ───────────────────────────────────────────

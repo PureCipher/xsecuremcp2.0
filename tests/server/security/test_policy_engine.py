@@ -248,6 +248,7 @@ class TestHotSwap:
         assert len(engine.providers) == 2
 
         removed = await engine.remove_provider(1)
+        assert isinstance(removed, DenyAllPolicy)
         assert len(engine.providers) == 1
 
         result = await engine.evaluate(_make_context())

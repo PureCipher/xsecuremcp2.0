@@ -1451,7 +1451,9 @@ class ToolMarketplace:
     def published_count(self) -> int:
         """Number of published listings."""
         return sum(
-            1 for l in self._listings.values() if l.status == PublishStatus.PUBLISHED
+            1
+            for listing in self._listings.values()
+            if listing.status == PublishStatus.PUBLISHED
         )
 
     def get_all_listings(self) -> list[ToolListing]:
@@ -1462,16 +1464,22 @@ class ToolMarketplace:
         """Get marketplace statistics."""
         total = len(self._listings)
         published = sum(
-            1 for l in self._listings.values() if l.status == PublishStatus.PUBLISHED
+            1
+            for listing in self._listings.values()
+            if listing.status == PublishStatus.PUBLISHED
         )
-        certified = sum(1 for l in self._listings.values() if l.is_certified)
+        certified = sum(
+            1 for listing in self._listings.values() if listing.is_certified
+        )
         pending = sum(
             1
-            for l in self._listings.values()
-            if l.status == PublishStatus.PENDING_REVIEW
+            for listing in self._listings.values()
+            if listing.status == PublishStatus.PENDING_REVIEW
         )
-        total_installs = sum(l.install_count for l in self._listings.values())
-        total_reviews = sum(l.review_count for l in self._listings.values())
+        total_installs = sum(
+            listing.install_count for listing in self._listings.values()
+        )
+        total_reviews = sum(listing.review_count for listing in self._listings.values())
 
         # Category distribution
         category_counts: dict[str, int] = {}
@@ -1498,25 +1506,41 @@ class ToolMarketplace:
         if sort_by == SortBy.TRUST_SCORE:
             return sorted(
                 results,
-                key=lambda l: self._get_trust_score(l.tool_name),
+                key=lambda listing: self._get_trust_score(listing.tool_name),
                 reverse=True,
             )
         elif sort_by == SortBy.RATING:
-            return sorted(results, key=lambda l: l.average_rating, reverse=True)
+            return sorted(
+                results,
+                key=lambda listing: listing.average_rating,
+                reverse=True,
+            )
         elif sort_by == SortBy.INSTALLS:
-            return sorted(results, key=lambda l: l.install_count, reverse=True)
+            return sorted(
+                results,
+                key=lambda listing: listing.install_count,
+                reverse=True,
+            )
         elif sort_by == SortBy.NEWEST:
-            return sorted(results, key=lambda l: l.created_at, reverse=True)
+            return sorted(
+                results,
+                key=lambda listing: listing.created_at,
+                reverse=True,
+            )
         elif sort_by == SortBy.RECENTLY_UPDATED:
-            return sorted(results, key=lambda l: l.updated_at, reverse=True)
+            return sorted(
+                results,
+                key=lambda listing: listing.updated_at,
+                reverse=True,
+            )
         else:
             # RELEVANCE: composite of trust + rating + installs
             return sorted(
                 results,
-                key=lambda l: (
-                    self._get_trust_score(l.tool_name) * 0.4
-                    + (l.average_rating / 5.0) * 0.3
-                    + min(l.install_count / 1000.0, 1.0) * 0.3
+                key=lambda listing: (
+                    self._get_trust_score(listing.tool_name) * 0.4
+                    + (listing.average_rating / 5.0) * 0.3
+                    + min(listing.install_count / 1000.0, 1.0) * 0.3
                 ),
                 reverse=True,
             )

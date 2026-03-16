@@ -2,18 +2,24 @@
 
 from __future__ import annotations
 
+import inspect
 import json
+from collections.abc import Awaitable
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
 from fastmcp.server.security.policy.declarative import (
     dump_policy_schema,
-    load_policy,
+)
+from fastmcp.server.security.policy.declarative import (
+    load_policy as _load_policy,
 )
 from fastmcp.server.security.policy.provider import (
     PolicyDecision,
     PolicyEvaluationContext,
+    PolicyResult,
 )
 
 
@@ -33,6 +39,40 @@ def _ctx(
     )
 
 
+async def _evaluate(policy: Any, context: PolicyEvaluationContext) -> PolicyResult:
+    result = policy.evaluate(context)
+    if inspect.isawaitable(result):
+        return await cast(Awaitable[PolicyResult], result)
+    return cast(PolicyResult, result)
+
+
+async def _resolve_str(result: str | Awaitable[str]) -> str:
+    if inspect.isawaitable(result):
+        return await cast(Awaitable[str], result)
+    return result
+
+
+class _AsyncPolicy:
+    def __init__(self, policy: Any) -> None:
+        self._policy = policy
+
+    async def evaluate(self, context: PolicyEvaluationContext) -> PolicyResult:
+        return await _evaluate(self._policy, context)
+
+    async def get_policy_id(self) -> str:
+        return await _resolve_str(self._policy.get_policy_id())
+
+    async def get_policy_version(self) -> str:
+        return await _resolve_str(self._policy.get_policy_version())
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._policy, name)
+
+
+def load_policy(config: Any) -> _AsyncPolicy:
+    return _AsyncPolicy(_load_policy(config))
+
+
 # ── Loading from dict ──────────────────────────────────────────────
 
 
@@ -40,19 +80,19 @@ class TestLoadFromDict:
     @pytest.mark.anyio
     async def test_simple_allowlist(self):
         policy = load_policy({"type": "allowlist", "allowed": ["tool-a", "tool-b"]})
-        result = await policy.evaluate(_ctx(resource_id="tool-a"))
+        result = await _evaluate(policy, _ctx(resource_id="tool-a"))
         assert result.decision == PolicyDecision.ALLOW
 
-        result = await policy.evaluate(_ctx(resource_id="tool-c"))
+        result = await _evaluate(policy, _ctx(resource_id="tool-c"))
         assert result.decision == PolicyDecision.DENY
 
     @pytest.mark.anyio
     async def test_simple_denylist(self):
         policy = load_policy({"type": "denylist", "denied": ["bad-*"]})
-        result = await policy.evaluate(_ctx(resource_id="bad-tool"))
+        result = await _evaluate(policy, _ctx(resource_id="bad-tool"))
         assert result.decision == PolicyDecision.DENY
 
-        result = await policy.evaluate(_ctx(resource_id="good-tool"))
+        result = await _evaluate(policy, _ctx(resource_id="good-tool"))
         assert result.decision == PolicyDecision.ALLOW
 
     @pytest.mark.anyio
@@ -67,19 +107,19 @@ class TestLoadFromDict:
             }
         )
         # Admin can do anything
-        result = await policy.evaluate(
-            _ctx(action="delete_tool", metadata={"role": "admin"})
+        result = await _evaluate(
+            policy, _ctx(action="delete_tool", metadata={"role": "admin"})
         )
         assert result.decision == PolicyDecision.ALLOW
 
         # Viewer can only call_tool
-        result = await policy.evaluate(
-            _ctx(action="call_tool", metadata={"role": "viewer"})
+        result = await _evaluate(
+            policy, _ctx(action="call_tool", metadata={"role": "viewer"})
         )
         assert result.decision == PolicyDecision.ALLOW
 
-        result = await policy.evaluate(
-            _ctx(action="delete_tool", metadata={"role": "viewer"})
+        result = await _evaluate(
+            policy, _ctx(action="delete_tool", metadata={"role": "viewer"})
         )
         assert result.decision == PolicyDecision.DENY
 
@@ -93,9 +133,9 @@ class TestLoadFromDict:
             }
         )
         ctx = _ctx()
-        assert (await policy.evaluate(ctx)).decision == PolicyDecision.ALLOW
-        assert (await policy.evaluate(ctx)).decision == PolicyDecision.ALLOW
-        assert (await policy.evaluate(ctx)).decision == PolicyDecision.DENY
+        assert (await _evaluate(policy, ctx)).decision == PolicyDecision.ALLOW
+        assert (await _evaluate(policy, ctx)).decision == PolicyDecision.ALLOW
+        assert (await _evaluate(policy, ctx)).decision == PolicyDecision.DENY
 
     @pytest.mark.anyio
     async def test_time_based(self):
@@ -108,7 +148,7 @@ class TestLoadFromDict:
             }
         )
         # Just verify it builds and evaluates without error
-        result = await policy.evaluate(_ctx())
+        result = await _evaluate(policy, _ctx())
         assert result.decision in (PolicyDecision.ALLOW, PolicyDecision.DENY)
 
     @pytest.mark.anyio
@@ -119,10 +159,10 @@ class TestLoadFromDict:
                 "metadata_conditions": {"department": "engineering"},
             }
         )
-        result = await policy.evaluate(_ctx(metadata={"department": "engineering"}))
+        result = await _evaluate(policy, _ctx(metadata={"department": "engineering"}))
         assert result.decision == PolicyDecision.ALLOW
 
-        result = await policy.evaluate(_ctx(metadata={"department": "sales"}))
+        result = await _evaluate(policy, _ctx(metadata={"department": "sales"}))
         assert result.decision == PolicyDecision.DENY
 
     @pytest.mark.anyio

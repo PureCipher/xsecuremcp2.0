@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from typing import cast
 
 from fastmcp.server.security.policy.provider import (
     PolicyDecision,
@@ -59,9 +60,9 @@ class RoleBasedPolicy:
         if self.role_resolver is not None:
             result = self.role_resolver(context)
             if isinstance(result, Awaitable):
-                role = await result
+                role = cast(str | None, await result)
             else:
-                role = result
+                role = cast(str | None, result)
         else:
             role = context.metadata.get("role")
 

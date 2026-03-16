@@ -333,7 +333,9 @@ class TestConsentGraphRevocation:
         g = ConsentGraph()
         edge = g.grant("owner", "agent", {"read"})
         assert g.revoke(edge.edge_id)
-        assert g.get_edge(edge.edge_id).status == ConsentStatus.REVOKED
+        revoked_edge = g.get_edge(edge.edge_id)
+        assert revoked_edge is not None
+        assert revoked_edge.status == ConsentStatus.REVOKED
 
     def test_revoke_cascades_to_delegated(self):
         g = ConsentGraph()
@@ -347,7 +349,9 @@ class TestConsentGraphRevocation:
         assert child is not None
 
         g.revoke(parent.edge_id)
-        assert g.get_edge(child.edge_id).status == ConsentStatus.REVOKED
+        revoked_child = g.get_edge(child.edge_id)
+        assert revoked_child is not None
+        assert revoked_child.status == ConsentStatus.REVOKED
 
     def test_revoke_nonexistent(self):
         g = ConsentGraph()

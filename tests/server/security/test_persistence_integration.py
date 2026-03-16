@@ -299,7 +299,7 @@ class TestConsentGraphPersistence:
         graph1.add_node(
             ConsentNode(node_id="target-1", node_type=NodeType.RESOURCE, label="Target")
         )
-        edge = graph1.grant(
+        graph1.grant(
             source_id="source-1",
             target_id="target-1",
             scopes={"read", "execute"},
