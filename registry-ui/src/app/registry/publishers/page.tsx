@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { listPublishers } from "@/lib/registryClient";
+import { listPublishers, type PublisherSummary } from "@/lib/registryClient";
 
 export default async function PublishersPage() {
   const payload = (await listPublishers()) ?? { publishers: [], count: 0 };
-  const publishers: any[] = payload.publishers ?? [];
+  const publishers: PublisherSummary[] = payload.publishers ?? [];
 
   return (
     <main className="px-4 py-8 text-sm text-emerald-50">
@@ -62,4 +62,3 @@ export default async function PublishersPage() {
     </main>
   );
 }
-

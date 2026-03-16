@@ -4,7 +4,17 @@ import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useState } from "react";
 
-export function RegistryTopBar({ username }: { username: string }) {
+export function RegistryTopBar({
+  username,
+  canSubmit,
+  canReview,
+  canAdmin,
+}: {
+  username: string;
+  canSubmit: boolean;
+  canReview: boolean;
+  canAdmin: boolean;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const [signingOut, setSigningOut] = useState(false);
@@ -34,21 +44,32 @@ export function RegistryTopBar({ username }: { username: string }) {
           </div>
           <nav className="hidden items-center gap-2 text-[11px] text-emerald-200/90 sm:flex">
             <TopNavLink href="/registry/app" label="Tools" active={pathname.startsWith("/registry/app")} />
-            <TopNavLink
-              href="/registry/publish"
-              label="Publish"
-              active={pathname.startsWith("/registry/publish")}
-            />
+            {canSubmit ? (
+              <TopNavLink
+                href="/registry/publish"
+                label="Publish"
+                active={pathname.startsWith("/registry/publish")}
+              />
+            ) : null}
             <TopNavLink
               href="/registry/publishers"
               label="Publishers"
               active={pathname.startsWith("/registry/publishers")}
             />
-            <TopNavLink
-              href="/registry/review"
-              label="Review"
-              active={pathname.startsWith("/registry/review")}
-            />
+            {canReview ? (
+              <TopNavLink
+                href="/registry/review"
+                label="Review"
+                active={pathname.startsWith("/registry/review")}
+              />
+            ) : null}
+            {canReview ? (
+              <TopNavLink
+                href="/registry/policy"
+                label="Policy"
+                active={pathname.startsWith("/registry/policy")}
+              />
+            ) : null}
             <TopNavLink
               href="/registry/health"
               label="Health"
@@ -65,6 +86,19 @@ export function RegistryTopBar({ username }: { username: string }) {
           <span className="rounded-full bg-emerald-900/70 px-2.5 py-1 text-[10px] font-medium text-emerald-100">
             Signed in as <span className="font-semibold">{username}</span>
           </span>
+          {canAdmin ? (
+            <span className="rounded-full bg-emerald-500/20 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-100">
+              Admin
+            </span>
+          ) : canReview ? (
+            <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-100">
+              Reviewer
+            </span>
+          ) : canSubmit ? (
+            <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-100">
+              Publisher
+            </span>
+          ) : null}
           <button
             type="button"
             onClick={handleLogout}
@@ -93,5 +127,4 @@ function TopNavLink({ href, label, active }: { href: string; label: string; acti
     </Link>
   );
 }
-
 

@@ -206,8 +206,8 @@ class SlidingWindowDetector:
 
             # Check cooldown
             key = (actor_id, metric_name, idx)
-            last = self._last_fired.get(key, 0.0)
-            if (now - last) < self._cooldown_seconds:
+            last = self._last_fired.get(key)
+            if last is not None and (now - last) < self._cooldown_seconds:
                 continue
 
             self._last_fired[key] = now
@@ -391,8 +391,8 @@ class PatternDetector:
             if progress.current_step >= len(pattern.steps):
                 # Check cooldown
                 key = (actor_id, pid)
-                last = self._last_fired.get(key, 0.0)
-                if (now - last) < self._cooldown_seconds:
+                last = self._last_fired.get(key)
+                if last is not None and (now - last) < self._cooldown_seconds:
                     progress.current_step = 0
                     progress.first_step_time = 0.0
                     continue

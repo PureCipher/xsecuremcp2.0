@@ -92,13 +92,14 @@ class TestEngineVersionManagerWiring:
         new_policy = CustomPolicy(policy_id="new-policy", version="2.0.0")
         await engine.hot_swap(0, new_policy, reason="Upgrade to v2")
 
-        assert vm.version_count == 1
+        assert vm.version_count == 2
         version = vm.current_version
         assert version is not None
         assert "new-policy" in version.description
         assert version.author == "policy-engine"
-        assert version.policy_data["old_policy_id"] == "allow-all"
-        assert version.policy_data["new_policy_id"] == "new-policy"
+        assert version.policy_data["metadata"]["old_policy_id"] == "allow-all"
+        assert version.policy_data["metadata"]["new_policy_id"] == "new-policy"
+        assert version.policy_data["providers"][0]["type"] == "python_class"
 
     @pytest.mark.anyio
     async def test_hot_swap_without_version_manager_still_works(self):
@@ -121,11 +122,11 @@ class TestEngineVersionManagerWiring:
         await engine.hot_swap(0, CustomPolicy("v2", "2.0"), reason="Second")
         await engine.hot_swap(0, CustomPolicy("v3", "3.0"), reason="Third")
 
-        assert vm.version_count == 3
+        assert vm.version_count == 4
         versions = vm.list_versions()
-        assert versions[0].policy_data["new_policy_id"] == "v1"
-        assert versions[1].policy_data["new_policy_id"] == "v2"
-        assert versions[2].policy_data["new_policy_id"] == "v3"
+        assert versions[1].policy_data["metadata"]["new_policy_id"] == "v1"
+        assert versions[2].policy_data["metadata"]["new_policy_id"] == "v2"
+        assert versions[3].policy_data["metadata"]["new_policy_id"] == "v3"
 
     @pytest.mark.anyio
     async def test_hot_swap_version_includes_reason(self):
@@ -140,6 +141,42 @@ class TestEngineVersionManagerWiring:
         version = vm.current_version
         assert version is not None
         assert "Security patch" in version.description
+
+    @pytest.mark.anyio
+    async def test_add_and_remove_create_versions(self):
+        backend = InMemoryBackend()
+        vm = PolicyVersionManager(policy_set_id="test", backend=backend)
+        engine = PolicyEngine(
+            providers=[AllowAllPolicy()],
+            version_manager=vm,
+        )
+
+        await engine.add_provider(CustomPolicy("added", "1.1"), reason="Expand chain")
+        assert vm.version_count == 2
+        assert vm.current_version is not None
+        assert vm.current_version.policy_data["metadata"]["operation"] == "add"
+
+        await engine.remove_provider(1, reason="Undo expand")
+        assert vm.version_count == 3
+        assert vm.current_version is not None
+        assert vm.current_version.policy_data["metadata"]["operation"] == "remove"
+
+    @pytest.mark.anyio
+    async def test_rollback_restores_live_engine(self):
+        backend = InMemoryBackend()
+        vm = PolicyVersionManager(policy_set_id="test", backend=backend)
+        engine = PolicyEngine(
+            providers=[AllowAllPolicy()],
+            version_manager=vm,
+        )
+
+        await engine.hot_swap(0, DenyAllPolicy(), reason="Lock down")
+        first_version = vm.list_versions()[0]
+
+        await engine.restore_version(first_version.policy_data, reason="Rollback")
+
+        restored = engine.providers[0]
+        assert isinstance(restored, AllowAllPolicy)
 
     @pytest.mark.anyio
     async def test_hot_swap_version_manager_error_does_not_block_swap(self):
@@ -275,7 +312,7 @@ class TestOrchestratorVersioning:
         assert ctx.policy_version_manager is not None
 
         await ctx.policy_engine.hot_swap(0, CustomPolicy(), reason="Orchestrator test")
-        assert ctx.policy_version_manager.version_count == 1
+        assert ctx.policy_version_manager.version_count == 2
 
 
 # ── SecurityAPI ──────────────────────────────────────────────────
@@ -307,12 +344,12 @@ class TestSecurityAPIVersioning:
         api = SecurityAPI.from_context(ctx)
         assert api.policy_version_manager is not None
 
-    def test_get_versions_empty(self):
+    def test_get_versions_initial_snapshot(self):
         api = self._make_api_with_versioning()
         result = api.get_policy_versions()
-        assert result["version_count"] == 0
-        assert result["versions"] == []
-        assert result["current_version"] is None
+        assert result["version_count"] == 1
+        assert len(result["versions"]) == 1
+        assert result["current_version"] == 1
 
     def test_get_versions_after_create(self):
         api = self._make_api_with_versioning()
@@ -323,26 +360,24 @@ class TestSecurityAPIVersioning:
             description="Initial version",
         )
         result = api.get_policy_versions()
-        assert result["version_count"] == 1
-        assert result["current_version"] == 1
-        assert len(result["versions"]) == 1
+        assert result["version_count"] == 2
+        assert result["current_version"] == 2
+        assert len(result["versions"]) == 2
 
-    def test_rollback_success(self):
+    @pytest.mark.anyio
+    async def test_rollback_success(self):
         api = self._make_api_with_versioning()
-        assert api.policy_version_manager is not None
-        api.policy_version_manager.create_version(
-            policy_data={"v": 1}, author="test", description="V1"
-        )
-        api.policy_version_manager.create_version(
-            policy_data={"v": 2}, author="test", description="V2"
-        )
-        result = api.rollback_policy_version(1, reason="Revert")
+        assert api.policy_engine is not None
+        await api.policy_engine.hot_swap(0, DenyAllPolicy(), reason="V2")
+        result = await api.rollback_policy_version(1, reason="Revert")
         assert result["status"] == "rolled_back"
         assert result["version"]["version_number"] == 1
+        assert isinstance(api.policy_engine.providers[0], AllowAllPolicy)
 
-    def test_rollback_invalid_version(self):
+    @pytest.mark.anyio
+    async def test_rollback_invalid_version(self):
         api = self._make_api_with_versioning()
-        result = api.rollback_policy_version(99)
+        result = await api.rollback_policy_version(99)
         assert "error" in result
 
     def test_diff_versions(self):
@@ -354,9 +389,9 @@ class TestSecurityAPIVersioning:
         api.policy_version_manager.create_version(
             policy_data={"a": 1, "c": 3}, author="test", description="V2"
         )
-        result = api.diff_policy_versions(1, 2)
-        assert result["v1"] == 1
-        assert result["v2"] == 2
+        result = api.diff_policy_versions(2, 3)
+        assert result["v1"] == 2
+        assert result["v2"] == 3
         diff = result["diff"]
         assert "b" in diff["removed"]
         assert "c" in diff["added"]
@@ -366,15 +401,41 @@ class TestSecurityAPIVersioning:
         result = api.diff_policy_versions(1, 2)
         assert "error" in result
 
-    def test_not_configured_returns_503(self):
+    @pytest.mark.anyio
+    async def test_add_update_delete_provider_through_api(self):
+        api = self._make_api_with_versioning()
+
+        created = await api.add_policy_provider(
+            {"type": "denylist", "denied": ["admin-*"]},
+            reason="Add denylist",
+            author="reviewer",
+        )
+        assert created["status"] == "created"
+        assert created["policy"]["provider_count"] == 2
+
+        updated = await api.update_policy_provider(
+            1,
+            {"type": "allowlist", "allowed": ["tool:*"]},
+            reason="Swap denylist",
+            author="reviewer",
+        )
+        assert updated["status"] == "updated"
+        assert updated["policy"]["providers"][1]["config"]["type"] == "allowlist"
+
+        deleted = await api.delete_policy_provider(
+            1,
+            reason="Remove extra rule",
+            author="reviewer",
+        )
+        assert deleted["status"] == "deleted"
+        assert deleted["policy"]["provider_count"] == 1
+
+    @pytest.mark.anyio
+    async def test_not_configured_returns_503(self):
         api = SecurityAPI()
-        for method in [
-            lambda: api.get_policy_versions(),
-            lambda: api.rollback_policy_version(1),
-            lambda: api.diff_policy_versions(1, 2),
-        ]:
-            result = method()
-            assert result.get("status") == 503
+        assert api.get_policy_versions().get("status") == 503
+        assert (await api.rollback_policy_version(1)).get("status") == 503
+        assert api.diff_policy_versions(1, 2).get("status") == 503
 
     def test_health_includes_versioning(self):
         api = self._make_api_with_versioning()
@@ -409,7 +470,7 @@ class TestEndToEndVersioning:
 
         # Initially empty
         versions = api.get_policy_versions()
-        assert versions["version_count"] == 0
+        assert versions["version_count"] == 1
 
         # Do a hot swap
         await ctx.policy_engine.hot_swap(
@@ -418,13 +479,13 @@ class TestEndToEndVersioning:
 
         # Version was created
         versions = api.get_policy_versions()
-        assert versions["version_count"] == 1
-        assert versions["current_version"] == 1
+        assert versions["version_count"] == 2
+        assert versions["current_version"] == 2
 
         # The version data captures the swap
-        v = versions["versions"][0]
-        assert v["policy_data"]["old_policy_id"] == "allow-all"
-        assert v["policy_data"]["new_policy_id"] == "upgraded"
+        v = versions["versions"][1]
+        assert v["policy_data"]["metadata"]["old_policy_id"] == "allow-all"
+        assert v["policy_data"]["metadata"]["new_policy_id"] == "upgraded"
 
         # Do another swap
         await ctx.policy_engine.hot_swap(
@@ -432,18 +493,20 @@ class TestEndToEndVersioning:
         )
 
         # Diff the two versions
-        diff_result = api.diff_policy_versions(1, 2)
+        diff_result = api.diff_policy_versions(2, 3)
         assert "diff" in diff_result
-        assert diff_result["diff"]["changed"]["new_policy_id"]["from"] == "upgraded"
-        assert diff_result["diff"]["changed"]["new_policy_id"]["to"] == "final"
+        changed = diff_result["diff"]["changed"]["metadata"]
+        assert changed["from"]["new_policy_id"] == "upgraded"
+        assert changed["to"]["new_policy_id"] == "final"
 
         # Rollback to version 1
-        rollback = api.rollback_policy_version(1, reason="Reverting")
+        rollback = await api.rollback_policy_version(1, reason="Reverting")
         assert rollback["status"] == "rolled_back"
 
         # Current version is now 1
         versions = api.get_policy_versions()
         assert versions["current_version"] == 1
+        assert isinstance(ctx.policy_engine.providers[0], AllowAllPolicy)
 
     @pytest.mark.anyio
     async def test_versioning_persists_to_backend(self):
@@ -460,5 +523,5 @@ class TestEndToEndVersioning:
         # Check that data was saved to backend
         data = backend.load_policy_versions("persist-test")
         assert data is not None
-        assert len(data["versions"]) == 1
-        assert data["current_version_index"] == 0
+        assert len(data["versions"]) == 2
+        assert data["current_version_index"] == 1

@@ -157,12 +157,14 @@ def _build_abac(config: dict[str, Any]) -> AttributeBasedPolicy:
 
         rules[f"check_{key}"] = _make_check(key, expected)
 
-    return AttributeBasedPolicy(
+    policy = AttributeBasedPolicy(
         rules=rules,
         require_all=config.get("require_all", True),
         policy_id=config.get("policy_id", "abac-policy"),
         version=config.get("version", "1.0.0"),
     )
+    object.__setattr__(policy, "_metadata_conditions", dict(conditions))
+    return policy
 
 
 def _build_resource_scoped(config: dict[str, Any]) -> ResourceScopedPolicy:

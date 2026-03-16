@@ -103,6 +103,14 @@ The MVP exposes a narrow HTTP surface:
 | `GET /registry/review` | Browser moderation queue for pending and managed listings |
 | `GET /registry/review/submissions` | JSON moderation queue payload |
 | `POST /registry/review/{listing_id}/{action_name}` | Apply moderation actions such as `approve`, `reject`, `suspend`, or `unsuspend` |
+| `GET /registry/policy` | Live policy chain, versioning state, schema, and governance summary for the policy console |
+| `GET /registry/policy/schema` | Declarative policy schema for policy editor helpers |
+| `GET /registry/policy/versions` | Saved policy version history |
+| `GET /registry/policy/versions/diff?v1=1&v2=2` | Diff two saved policy versions before rollback |
+| `POST /registry/policy/providers` | Add a live policy provider |
+| `PUT /registry/policy/providers/{index}` | Replace a live policy provider at a given position |
+| `DELETE /registry/policy/providers/{index}` | Remove a live policy provider |
+| `POST /registry/policy/versions/rollback` | Roll the live policy chain back to a saved version |
 | `GET /registry/tools` | Search the published verified catalog |
 | `GET /registry/tools/{tool_name}` | Full verified listing detail |
 | `POST /registry/preflight` | Validate a draft manifest and runtime metadata without publishing |
@@ -110,6 +118,8 @@ The MVP exposes a narrow HTTP surface:
 | `POST /registry/verify` | Verify a listing's attestation against its manifest |
 
 `GET /registry/app` serves the catalog, discovery homepage, and launchpad entry point after you sign in. The homepage is designed to help end users find a good fit, understand who published a tool, and jump into setup-ready listings without leading with protocol details. The dedicated publisher workflow lives at `GET /registry/publish`, where publishers can load presets, add runtime metadata, run preflight validation, and then publish. Each listing opens as its own browser page under `/registry/listings/{tool_name}` with a guided "start here" setup section, install recipes, and the deeper manifest and attestation detail further down the page. Publisher pages, the publisher directory, the login page, and the moderation queue are also server-rendered so the whole product layer can run without a frontend build step.
+
+`GET /registry/policy` is the live policy-management surface for the registry. Reviewers and admins can inspect the active provider chain, edit or remove providers, add new providers from declarative templates, compare saved versions, and roll the live engine back to a known-good version. The registry delegates those mutations into SecureMCP's policy engine and version manager, so policy changes update the same runtime controls that protect tool calls.
 
 ## CLI Launch
 
@@ -180,6 +190,7 @@ PureCipher auth is product-layer auth owned by `src/purecipher`, not FastMCP cor
 - public: catalog, listing pages, publisher pages, install recipes, attestation verification
 - publisher or higher: manifest submission
 - reviewer or admin: moderation queue access and approve/reject/request-changes actions
+- reviewer or admin: policy management, provider edits, version diff, and rollback
 - admin only: suspend and unsuspend actions
 
 Set `PURECIPHER_ENABLE_AUTH=true` and provide a signing key with `PURECIPHER_JWT_SECRET`. You can also configure static users through `PURECIPHER_USERS_JSON`.

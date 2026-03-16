@@ -93,6 +93,13 @@ class TestPureCipherRegistry:
         assert "/registry/review" in paths
         assert "/registry/review/submissions" in paths
         assert "/registry/review/{listing_id}/{action_name}" in paths
+        assert "/registry/policy" in paths
+        assert "/registry/policy/schema" in paths
+        assert "/registry/policy/versions" in paths
+        assert "/registry/policy/versions/diff" in paths
+        assert "/registry/policy/versions/rollback" in paths
+        assert "/registry/policy/providers" in paths
+        assert "/registry/policy/providers/{index}" in paths
         assert "/registry/tools" in paths
         assert "/registry/submit" in paths
         assert "/registry/preflight" in paths
@@ -530,7 +537,7 @@ class TestPureCipherRegistry:
             response = client.get("/registry", follow_redirects=True)
 
             assert response.status_code == 200
-            assert "Sign in to the registry" in response.text
+            assert "PureCipher Secured MCP Registry" in response.text
             assert "Pending Tool" not in response.text
             assert 'href="/registry/review"' not in response.text
 
