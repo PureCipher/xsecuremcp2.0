@@ -587,6 +587,72 @@ button:hover {
   margin-top: 18px;
 }
 
+/* Login-specific tweaks */
+.shell.is-login {
+  max-width: 1000px;
+}
+
+.shell.is-login .hero {
+  margin-bottom: 16px;
+}
+
+.shell.is-login .panel {
+  padding: 26px 24px 28px;
+}
+
+.login-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 28px;
+  align-items: center;
+}
+
+.login-copy h2 {
+  margin: 0;
+  font-family: "Iowan Old Style", Georgia, serif;
+  font-size: 1.4rem;
+}
+
+.login-copy p {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.login-points {
+  margin: 16px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.login-form-wrapper {
+  display: flex;
+  justify-content: center;
+}
+
+.login-form-wrapper .auth-panel {
+  width: 100%;
+  max-width: 360px;
+}
+
+@media (max-width: 768px) {
+  .shell.is-login {
+    max-width: 100%;
+    padding-inline: 16px;
+  }
+
+  .login-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+  }
+
+  .login-form-wrapper {
+    justify-content: stretch;
+  }
+}
+
 .panel-head {
   display: flex;
   align-items: baseline;
@@ -777,6 +843,22 @@ button {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.pathway-grid,
+.status-grid,
+.help-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.pathway-grid,
+.status-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.help-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .issue-list,
 .bullet-list {
   margin: 10px 0 0 18px;
@@ -818,9 +900,131 @@ button {
   background: rgba(255, 255, 255, 0.72);
 }
 
+.section-card.is-accent {
+  background:
+    linear-gradient(180deg, rgba(237, 245, 243, 0.92), rgba(255, 255, 255, 0.92));
+  border-color: rgba(22, 95, 85, 0.18);
+}
+
 .section-card p,
 .detail-note {
   line-height: 1.6;
+}
+
+.field-hint {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.checklist {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.checklist li {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.section-kicker {
+  margin-bottom: 8px;
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.stacked-panels {
+  display: grid;
+  gap: 14px;
+}
+
+.hero-side-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.quick-link-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.decision-grid,
+.story-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.decision-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.story-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.decision-card,
+.story-card {
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 10px 24px rgba(23, 33, 43, 0.05);
+}
+
+.decision-card.is-primary {
+  background:
+    linear-gradient(180deg, rgba(237, 245, 243, 0.94), rgba(255, 255, 255, 0.94));
+  border-color: rgba(22, 95, 85, 0.2);
+}
+
+.decision-card p,
+.story-card p {
+  margin: 10px 0 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.story-card strong,
+.decision-card strong {
+  display: inline-block;
+  font-size: 1rem;
+}
+
+.simple-list {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0 0;
+}
+
+.simple-item {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.76);
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.inline-code {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 0.84rem;
 }
 
 .definition-grid {
@@ -1029,6 +1233,8 @@ button {
   .hero-cluster,
   .layout,
   .section-grid,
+  .story-grid,
+  .help-grid,
   .manifest-columns,
   form.search-form,
   .submit-grid,
@@ -1271,6 +1477,14 @@ def _logout_href(*, registry_prefix: str, next_path: str = "") -> str:
     return f"{registry_prefix}/logout?{urlencode({'next': next_path})}"
 
 
+def _can_review_registry(
+    *,
+    auth_enabled: bool,
+    session: dict[str, Any] | None,
+) -> bool:
+    return not auth_enabled or bool(session and session.get("can_review"))
+
+
 def _pretty_json(value: Any) -> str:
     return json.dumps(value, indent=2, sort_keys=True)
 
@@ -1283,48 +1497,55 @@ def _render_topbar(
     current_page: str,
     current_path: str,
 ) -> str:
-    nav_items = [
-        ("catalog", "Browse", registry_prefix),
-        ("publish", "Share", _publish_href(registry_prefix=registry_prefix)),
-        (
-            "publishers",
-            "Publishers",
-            _publisher_index_href(registry_prefix=registry_prefix),
-        ),
-        ("review", "Approvals", f"{registry_prefix}/review"),
-    ]
-    nav_html = "".join(
-        f'<a class="nav-link{" is-current" if page == current_page else ""}" href="{_escape(href)}">{_escape(label)}</a>'
-        for page, label, href in nav_items
-    )
-
-    if not auth_enabled:
-        session_html = (
-            '<div class="session-strip">'
-            '<span class="role-pill">Open access</span>'
-            '<div class="session-meta"><strong>Open access</strong>'
-            '<span class="brand-note">Anyone can browse and preview tools.</span></div>'
-            "</div>"
-        )
-    elif session is None:
-        session_html = (
-            '<div class="session-strip">'
-            '<span class="role-pill">Sign-in available</span>'
-            '<a class="action-link" href="'
-            f'{_escape(_login_href(registry_prefix=registry_prefix, next_path=current_path))}">Sign in</a>'
-            "</div>"
-        )
+    if current_page == "login":
+        nav_html = ""
     else:
-        session_html = (
-            '<div class="session-strip">'
-            f'<span class="role-pill">{_escape(session.get("role", "viewer"))}</span>'
-            '<div class="session-meta">'
-            f"<strong>{_escape(session.get('display_name') or session.get('username') or 'Authenticated user')}</strong>"
-            f'<span class="brand-note">{_escape(session.get("username") or "")}</span>'
-            "</div>"
-            f'<a class="action-link" href="{_escape(_logout_href(registry_prefix=registry_prefix, next_path=current_path))}">Sign out</a>'
-            "</div>"
+        nav_items = [
+            ("catalog", "Browse", registry_prefix),
+            ("publish", "Share", _publish_href(registry_prefix=registry_prefix)),
+            (
+                "publishers",
+                "Publishers",
+                _publisher_index_href(registry_prefix=registry_prefix),
+            ),
+        ]
+        if _can_review_registry(auth_enabled=auth_enabled, session=session):
+            nav_items.append(("review", "Approvals", f"{registry_prefix}/review"))
+        nav_html = "".join(
+            f'<a class="nav-link{" is-current" if page == current_page else ""}" href="{_escape(href)}">{_escape(label)}</a>'
+            for page, label, href in nav_items
         )
+
+    if current_page == "login":
+        session_html = ""
+    else:
+        if not auth_enabled:
+            session_html = (
+                '<div class="session-strip">'
+                '<span class="role-pill">Open access</span>'
+                '<div class="session-meta"><strong>Open access</strong>'
+                '<span class="brand-note">Anyone can browse and preview tools.</span></div>'
+                "</div>"
+            )
+        elif session is None:
+            session_html = (
+                '<div class="session-strip">'
+                '<span class="role-pill">Sign-in available</span>'
+                '<a class="action-link" href="'
+                f'{_escape(_login_href(registry_prefix=registry_prefix, next_path=current_path))}">Sign in</a>'
+                "</div>"
+            )
+        else:
+            session_html = (
+                '<div class="session-strip">'
+                f'<span class="role-pill">{_escape(session.get("role", "viewer"))}</span>'
+                '<div class="session-meta">'
+                f"<strong>{_escape(session.get('display_name') or session.get('username') or 'Authenticated user')}</strong>"
+                f'<span class="brand-note">{_escape(session.get("username") or "")}</span>'
+                "</div>"
+                f'<a class="action-link" href="{_escape(_logout_href(registry_prefix=registry_prefix, next_path=current_path))}">Sign out</a>'
+                "</div>"
+            )
 
     return f"""
     <header class="topbar">
@@ -1548,6 +1769,7 @@ def _render_dashboard_snapshot(
     detail: dict[str, Any] | None,
     query: str,
     min_certification: str,
+    can_review: bool,
 ) -> str:
     counts = queue.get("counts") or {}
     pending_items = list((queue.get("sections") or {}).get("pending_review") or [])[:3]
@@ -1574,6 +1796,32 @@ def _render_dashboard_snapshot(
             """
             for item in items
         )
+
+    moderation_snapshot = (
+        f"""
+        <div class="detail-note" style="margin-top: 12px;">Waiting for approval</div>
+        <div class="compact-list">
+          {_render_compact_items(pending_items, "No pending submissions right now.")}
+        </div>
+        <div class="detail-note" style="margin-top: 14px;">Paused</div>
+        <div class="compact-list">
+          {_render_compact_items(suspended_items, "No paused tools right now.")}
+        </div>
+        <div class="action-row" style="margin-top: 12px;">
+          <a class="action-link" href="{_escape(f"{registry_prefix}/review")}">Open approvals</a>
+          <a class="action-link" href="{_escape(f"{registry_prefix}/review/submissions")}">Queue data</a>
+        </div>
+        """
+        if can_review
+        else f"""
+        <div class="detail-note" style="margin-top: 12px;">
+          There are {_escape(counts.get("pending_review", health.get("pending_review", 0)))} tools waiting for approval and {_escape(counts.get("suspended", 0))} paused tools right now.
+        </div>
+        <div class="detail-note" style="margin-top: 10px;">
+          Approval details are visible to reviewers and admins.
+        </div>
+        """
+    )
 
     return f"""
     <div class="dashboard-stack">
@@ -1604,22 +1852,7 @@ def _render_dashboard_snapshot(
       <div class="section-card">
         <h3>What Is Happening Now</h3>
         <div class="detail-note">A quick look at what is live, waiting for approval, or temporarily paused.</div>
-        <div class="detail-note" style="margin-top: 12px;">Waiting for approval</div>
-        <div class="compact-list">
-          {_render_compact_items(pending_items, "No pending submissions right now.")}
-        </div>
-        <div class="detail-note" style="margin-top: 14px;">Paused</div>
-        <div class="compact-list">
-          {_render_compact_items(suspended_items, "No paused tools right now.")}
-        </div>
-        <div class="action-row" style="margin-top: 12px;">
-          <a class="action-link" href="{
-        _escape(f"{registry_prefix}/review")
-    }">Open approvals</a>
-          <a class="action-link" href="{
-        _escape(f"{registry_prefix}/review/submissions")
-    }">Queue data</a>
-        </div>
+        {moderation_snapshot}
       </div>
       <div class="section-card">
         <h3>Focused Tool</h3>
@@ -1637,34 +1870,452 @@ def _render_dashboard_snapshot(
     """
 
 
+def _render_api_endpoint_details(*, registry_prefix: str) -> str:
+    return f"""
+    <div class="detail-stack" style="margin-top: 12px;">
+      <div class="detail-box">
+        <div class="label">Share from scripts</div>
+        <div class="value"><code>POST {_escape(f"{registry_prefix}/submit")}</code></div>
+      </div>
+      <div class="detail-box">
+        <div class="label">Check from scripts</div>
+        <div class="value"><code>POST {_escape(f"{registry_prefix}/preflight")}</code></div>
+      </div>
+    </div>
+    """
+
+
+def _render_registry_primary_paths(
+    *,
+    registry_prefix: str,
+    auth_enabled: bool,
+    session: dict[str, Any] | None,
+) -> str:
+    if not auth_enabled:
+        role_title = "Share a tool whenever you are ready"
+        role_body = "This registry is open to explore. When you want to publish, the share flow is already available."
+        role_actions = (
+            f'<a class="action-link" href="{_escape(_publish_href(registry_prefix=registry_prefix))}">Open share flow</a>'
+            f'<a class="action-link" href="{_escape(_publisher_index_href(registry_prefix=registry_prefix))}">See publishers</a>'
+        )
+    elif session is None:
+        role_title = "Browse first, sign in later"
+        role_body = "You do not need an account to learn from tool pages. Sign in only if you want to share or review."
+        role_actions = (
+            f'<a class="action-link" href="{_escape(_login_href(registry_prefix=registry_prefix, next_path=registry_prefix))}">Sign in</a>'
+            f'<a class="action-link" href="{_escape(_publish_href(registry_prefix=registry_prefix))}">Preview sharing</a>'
+        )
+    elif session.get("can_review"):
+        role_title = "Review and share from the same place"
+        role_body = (
+            "This account can help approve submissions and publish tools of its own."
+        )
+        role_actions = (
+            f'<a class="action-link" href="{_escape(f"{registry_prefix}/review")}">Open approvals</a>'
+            f'<a class="action-link" href="{_escape(_publish_href(registry_prefix=registry_prefix))}">Share a tool</a>'
+        )
+    elif session.get("can_submit"):
+        role_title = "You are ready to publish"
+        role_body = "Use the share flow to turn your tool into a clear page with setup steps and trust details."
+        role_actions = (
+            f'<a class="action-link" href="{_escape(_publish_href(registry_prefix=registry_prefix))}">Share a tool</a>'
+            f'<a class="action-link" href="{_escape(_publisher_index_href(registry_prefix=registry_prefix))}">Learn from publishers</a>'
+        )
+    else:
+        role_title = "This account is best for exploring"
+        role_body = "Use it to browse tools and publisher pages. Switch accounts later if you need to publish or review."
+        role_actions = (
+            f'<a class="action-link" href="{_escape(_publisher_index_href(registry_prefix=registry_prefix))}">Browse publishers</a>'
+            f'<a class="action-link" href="{_escape(_login_href(registry_prefix=registry_prefix, next_path=_publish_href(registry_prefix=registry_prefix)))}">Switch account</a>'
+        )
+
+    return f"""
+    <section class="panel" style="margin-top: 18px;">
+      <div class="panel-head">
+        <div>
+          <h2>What would you like to do?</h2>
+          <div class="subtle">Most people start with one of these three paths.</div>
+        </div>
+      </div>
+      <div class="decision-grid">
+        <div class="decision-card is-primary">
+          <div class="section-kicker">Use a tool</div>
+          <strong>Start with the catalog</strong>
+          <p>Search, open a tool page, and copy the setup that fits the way you work.</p>
+          <div class="quick-link-grid">
+            <a class="action-link" href="#catalog">Browse tools</a>
+          </div>
+        </div>
+        <div class="decision-card">
+          <div class="section-kicker">Understand the source</div>
+          <strong>See who made it</strong>
+          <p>Publisher pages make it easy to compare teams, trust signals, and other tools they share.</p>
+          <div class="quick-link-grid">
+            <a class="action-link" href="{_escape(_publisher_index_href(registry_prefix=registry_prefix))}">Browse publishers</a>
+          </div>
+        </div>
+        <div class="decision-card">
+          <div class="section-kicker">Your path</div>
+          <strong>{_escape(role_title)}</strong>
+          <p>{_escape(role_body)}</p>
+          <div class="quick-link-grid">{role_actions}</div>
+        </div>
+      </div>
+    </section>
+    """
+
+
+def _rank_catalog_terms(
+    catalog: dict[str, Any],
+    *,
+    key: str,
+    limit: int = 4,
+) -> list[str]:
+    counts: dict[str, int] = {}
+    for tool in list(catalog.get("tools") or []):
+        for value in list(tool.get(key) or []):
+            label = str(value).strip()
+            if not label:
+                continue
+            counts[label] = counts.get(label, 0) + 1
+    ranked = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    return [term for term, _ in ranked[:limit]]
+
+
+def _render_registry_experience_cards(
+    *,
+    registry_prefix: str,
+    auth_enabled: bool,
+    session: dict[str, Any] | None,
+    catalog: dict[str, Any],
+    min_certification: str,
+) -> str:
+    topics = _rank_catalog_terms(catalog, key="categories") or _rank_catalog_terms(
+        catalog,
+        key="tags",
+    )
+    topic_links = (
+        "".join(
+            f'<a class="action-link" href="{_escape(_catalog_href(registry_prefix=registry_prefix, query=topic, min_certification=min_certification))}">{_escape(topic)}</a>'
+            for topic in topics
+        )
+        if topics
+        else '<div class="detail-note">Browse the catalog to see which topics show up most often.</div>'
+    )
+
+    featured_tools = list(catalog.get("tools") or [])[:3]
+    featured_links = (
+        "".join(
+            f'<a class="action-link" href="{_escape(_tool_href(registry_prefix=registry_prefix, tool_name=str(tool.get("tool_name", "")), query="", min_certification=min_certification))}">{_escape(tool.get("display_name") or tool.get("tool_name") or "Open tool")}</a>'
+            for tool in featured_tools
+        )
+        if featured_tools
+        else '<div class="detail-note">No live tools match this view yet. Try a broader search or a lower safety filter.</div>'
+    )
+
+    if not auth_enabled:
+        next_title = "Browse openly, share when ready"
+        next_body = "Anyone can explore tool pages and open the share flow here, so you can learn first and publish later."
+        next_actions = (
+            f'<a class="action-link" href="{_escape(_publish_href(registry_prefix=registry_prefix))}">Open share flow</a>'
+            f'<a class="action-link" href="{_escape(_publisher_index_href(registry_prefix=registry_prefix))}">Meet publishers</a>'
+        )
+    elif session is None:
+        next_title = "You can learn before you sign in"
+        next_body = "Browsing stays open. Sign in only when you want to share a tool or help review submissions."
+        next_actions = (
+            f'<a class="action-link" href="{_escape(_login_href(registry_prefix=registry_prefix, next_path=registry_prefix))}">Sign in</a>'
+            f'<a class="action-link" href="{_escape(_publish_href(registry_prefix=registry_prefix))}">Preview sharing flow</a>'
+        )
+    elif session.get("can_review"):
+        next_title = "This account can review and share"
+        next_body = "Use the approvals queue to manage submissions, or jump into the share flow when you want to publish one of your own tools."
+        next_actions = (
+            f'<a class="action-link" href="{_escape(f"{registry_prefix}/review")}">Open approvals</a>'
+            f'<a class="action-link" href="{_escape(_publish_href(registry_prefix=registry_prefix))}">Share a tool</a>'
+        )
+    elif session.get("can_submit"):
+        next_title = "This account is ready to share"
+        next_body = "You can keep browsing, but you also have everything you need to draft, preview, and publish a tool page from here."
+        next_actions = (
+            f'<a class="action-link" href="{_escape(_publish_href(registry_prefix=registry_prefix))}">Share a tool</a>'
+            f'<a class="action-link" href="{_escape(_publisher_index_href(registry_prefix=registry_prefix))}">Learn from other publishers</a>'
+        )
+    else:
+        next_title = "Use this account to browse confidently"
+        next_body = "This account is best for exploring tools and publisher pages. Switch accounts later if you need to share or review."
+        next_actions = (
+            f'<a class="action-link" href="{_escape(_publisher_index_href(registry_prefix=registry_prefix))}">Browse publishers</a>'
+            f'<a class="action-link" href="{_escape(_login_href(registry_prefix=registry_prefix, next_path=_publish_href(registry_prefix=registry_prefix)))}">Sign in with another role</a>'
+        )
+
+    return f"""
+    <section class="panel" style="margin-top: 18px;">
+      <div class="panel-head">
+        <div>
+          <h2>Choose your next step</h2>
+          <div class="subtle">Start from the kind of help you want: discover, compare, or publish.</div>
+        </div>
+      </div>
+      <div class="pathway-grid">
+        <div class="section-card is-accent">
+          <div class="section-kicker">Browse faster</div>
+          <h3>Popular topics</h3>
+          <div class="detail-note" style="margin-top: 10px;">
+            Jump straight into common use cases instead of starting with a blank search.
+          </div>
+          <div class="quick-link-grid">{topic_links}</div>
+        </div>
+        <div class="section-card">
+          <div class="section-kicker">Good starting points</div>
+          <h3>Open a live tool page</h3>
+          <div class="detail-note" style="margin-top: 10px;">
+            These live tool pages are the fastest way to see what a polished listing looks like.
+          </div>
+          <div class="quick-link-grid">{featured_links}</div>
+        </div>
+        <div class="section-card">
+          <div class="section-kicker">Best next move</div>
+          <h3>{_escape(next_title)}</h3>
+          <div class="detail-note" style="margin-top: 10px;">{_escape(next_body)}</div>
+          <div class="quick-link-grid">{next_actions}</div>
+        </div>
+      </div>
+    </section>
+    """
+
+
+def _render_publish_experience_cards(
+    *,
+    registry_prefix: str,
+    auth_enabled: bool,
+    session: dict[str, Any] | None,
+    preflight: dict[str, Any] | None,
+) -> str:
+    if not auth_enabled:
+        status_title = "Sharing is open"
+        status_body = (
+            "You can draft, preview, and share from this page without signing in."
+        )
+        status_actions = (
+            '<a class="action-link" href="#publish-form">Open the share form</a>'
+            '<a class="action-link" href="#preflight">See what gets checked</a>'
+        )
+    elif session is None:
+        status_title = "Preview first, sign in when ready"
+        status_body = "You can fill in the page and run checks now. Sign in only when it is time to actually share."
+        status_actions = (
+            f'<a class="action-link" href="{_escape(_login_href(registry_prefix=registry_prefix, next_path=_publish_href(registry_prefix=registry_prefix)))}">Sign in</a>'
+            f'<a class="action-link" href="#publish-form">Start with the form</a>'
+        )
+    elif session.get("can_submit"):
+        status_title = "This account can share"
+        status_body = "Run a preview, fix anything confusing, then publish from the same page when it feels ready."
+        status_actions = (
+            '<a class="action-link" href="#preflight">Run checks</a>'
+            '<a class="action-link" href="#publish-form">Finish the draft</a>'
+        )
+    else:
+        status_title = "This account can preview but not share"
+        status_body = "You can still learn the workflow here, but you will need a publisher, reviewer, or admin account to send a tool live."
+        status_actions = (
+            f'<a class="action-link" href="{_escape(_login_href(registry_prefix=registry_prefix, next_path=_publish_href(registry_prefix=registry_prefix)))}">Switch account</a>'
+            f'<a class="action-link" href="#preflight">See the checks</a>'
+        )
+
+    if preflight is None:
+        readiness_title = "What a strong listing includes"
+        readiness_body = "A plain-language summary, one real setup path, and an honest record of what the tool can access."
+    elif preflight.get("ready_for_publish"):
+        readiness_title = "This draft is close"
+        readiness_body = "The current draft is ready to share. You can still tighten the wording if you want the public page to read better."
+    else:
+        readiness_title = "Preview before you publish"
+        readiness_body = "The current draft still needs attention. Use the check results below to fix the missing pieces before sharing."
+
+    return f"""
+    <section class="panel" style="margin-top: 18px;">
+      <div class="panel-head">
+        <div>
+          <h2>Sharing should feel straightforward</h2>
+          <div class="subtle">A strong page does three simple things well: it explains the tool, shows how to start, and stays honest about access.</div>
+        </div>
+      </div>
+      <div class="pathway-grid">
+        <div class="section-card is-accent">
+          <div class="section-kicker">Account status</div>
+          <h3>{_escape(status_title)}</h3>
+          <div class="detail-note" style="margin-top: 10px;">{_escape(status_body)}</div>
+          <div class="quick-link-grid">{status_actions}</div>
+        </div>
+        <div class="section-card">
+          <div class="section-kicker">What people care about</div>
+          <h3>Make the page useful</h3>
+          <ul class="checklist">
+            <li>Tell people what the tool helps with in one clean sentence.</li>
+            <li>Include at least one real setup path so the page does not feel theoretical.</li>
+            <li>Be honest about permissions, data sharing, and connected sources.</li>
+          </ul>
+        </div>
+        <div class="section-card">
+          <div class="section-kicker">Before you share</div>
+          <h3>{_escape(readiness_title)}</h3>
+          <div class="detail-note" style="margin-top: 10px;">{_escape(readiness_body)}</div>
+          <div class="quick-link-grid">
+            <a class="action-link" href="#preflight">Open check results</a>
+            <a class="action-link" href="#publish-form">Finish the draft</a>
+          </div>
+        </div>
+      </div>
+    </section>
+    """
+
+
+def _render_listing_experience_cards(
+    *,
+    registry_prefix: str,
+    detail: dict[str, Any],
+    install_recipes: list[dict[str, Any]],
+    publisher_href: str,
+) -> str:
+    primary_recipe = install_recipes[0] if install_recipes else None
+    manifest = detail.get("manifest") or {}
+    categories = sorted(detail.get("categories") or [])
+    permission_count = len(list(manifest.get("permissions") or []))
+    resource_count = len(list(manifest.get("resource_access") or []))
+    data_flow_count = len(list(manifest.get("data_flows") or []))
+    tool_name = str(detail.get("tool_name") or "")
+
+    if primary_recipe is None:
+        start_title = "Setup details are still on the way"
+        start_body = "The page is live, but the publisher has not added a ready-to-copy setup path yet."
+        start_actions = f'<a class="action-link" href="{_escape(f"{registry_prefix}/install/{_slug(tool_name)}")}">Open setup data</a>'
+    else:
+        recipe_id = _slug(str(primary_recipe.get("recipe_id") or "primary"))
+        start_title = str(primary_recipe.get("title") or "Quickest setup path")
+        start_body = str(
+            primary_recipe.get("description")
+            or "Most people start here when they want to use this tool quickly."
+        )
+        start_actions = (
+            f'<a class="action-link" href="#recipe-{_escape(recipe_id)}">Open this setup</a>'
+            f'<a class="action-link" href="{_escape(f"{registry_prefix}/install/{_slug(tool_name)}")}">Open setup data</a>'
+        )
+
+    trust = detail.get("trust_score") or {}
+    confidence = _percent(trust.get("overall"))
+
+    return f"""
+    <section class="panel" style="margin-top: 18px;">
+      <div class="panel-head">
+        <div>
+          <h2>Get oriented quickly</h2>
+          <div class="subtle">The shortest path to deciding whether this tool is right for you.</div>
+        </div>
+      </div>
+      <div class="pathway-grid">
+        <div class="section-card is-accent">
+          <div class="section-kicker">Fastest start</div>
+          <h3>{_escape(start_title)}</h3>
+          <div class="detail-note" style="margin-top: 10px;">{_escape(start_body)}</div>
+          <div class="quick-link-grid">{start_actions}</div>
+        </div>
+        <div class="section-card">
+          <div class="section-kicker">What this tool touches</div>
+          <h3>Access and setup snapshot</h3>
+          <ul class="checklist">
+            <li>{permission_count} declared permission{"s" if permission_count != 1 else ""}</li>
+            <li>{resource_count} connected source{"s" if resource_count != 1 else ""}</li>
+            <li>{data_flow_count} data flow{"s" if data_flow_count != 1 else ""}</li>
+          </ul>
+        </div>
+        <div class="section-card">
+          <div class="section-kicker">Who shared it</div>
+          <h3>Publisher and fit</h3>
+          <div class="detail-note" style="margin-top: 10px;">
+            Shared by <a href="{_escape(publisher_href)}">{_escape(detail.get("author") or "unknown publisher")}</a> with confidence {confidence}.
+          </div>
+          <div class="chip-row" style="margin-top: 12px;">{_render_chip_row(categories)}</div>
+        </div>
+      </div>
+    </section>
+    """
+
+
+def _render_publisher_experience_cards(
+    *,
+    registry_prefix: str,
+    summary: dict[str, Any],
+    listings: list[dict[str, Any]],
+) -> str:
+    top_links = (
+        "".join(
+            f'<a class="action-link" href="{_escape(_tool_href(registry_prefix=registry_prefix, tool_name=str(listing.get("tool_name", "")), query="", min_certification=""))}">{_escape(listing.get("display_name") or listing.get("tool_name") or "Open tool")}</a>'
+            for listing in listings[:3]
+        )
+        if listings
+        else '<div class="detail-note">No live tools are available to open yet.</div>'
+    )
+
+    return f"""
+    <section class="panel" style="margin-top: 18px;">
+      <div class="panel-head">
+        <div>
+          <h2>Start with this publisher</h2>
+          <div class="subtle">A quicker way to understand what this publisher is known for and where to begin.</div>
+        </div>
+      </div>
+      <div class="pathway-grid">
+        <div class="section-card is-accent">
+          <div class="section-kicker">Best first click</div>
+          <h3>Open one of their live tools</h3>
+          <div class="detail-note" style="margin-top: 10px;">
+            If you want the fastest sense of this publisher, start with one of the live tool pages below.
+          </div>
+          <div class="quick-link-grid">{top_links}</div>
+        </div>
+        <div class="section-card">
+          <div class="section-kicker">What they focus on</div>
+          <h3>Topics and strengths</h3>
+          <div class="chip-row" style="margin-top: 12px;">{_render_chip_row(list(summary.get("categories") or []))}</div>
+          <div class="field-hint">Keywords: {_escape(", ".join(summary.get("tags") or []) or "none yet")}</div>
+        </div>
+        <div class="section-card">
+          <div class="section-kicker">Trust snapshot</div>
+          <h3>How active they are here</h3>
+          <ul class="checklist">
+            <li>{_escape(summary.get("listing_count", 0))} live tool{"s" if summary.get("listing_count", 0) != 1 else ""}</li>
+            <li>Average confidence {_percent(summary.get("average_trust"))}</li>
+            <li>Latest update {_escape(summary.get("latest_activity") or "n/a")}</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+    """
+
+
 def _render_get_started_overview(*, registry_prefix: str) -> str:
     return f"""
-    <div class="launchpad-grid">
-      <div class="section-card">
-        <h3>1. Find a good fit</h3>
-        <div class="detail-note" style="margin-top: 10px;">
-          Start with the problem you want to solve. Open any tool card to see what it helps with and who made it.
-        </div>
-        <div class="action-row" style="margin-top: 12px;">
+    <div class="story-grid">
+      <div class="story-card">
+        <div class="section-kicker">Step 1</div>
+        <strong>Pick a tool that sounds useful</strong>
+        <p>Start with the problem you want to solve, not the protocol details. Tool cards are written to be scannable.</p>
+        <div class="quick-link-grid">
           <a class="action-link" href="#catalog">Browse tools</a>
         </div>
       </div>
-      <div class="section-card">
-        <h3>2. Check who is behind it</h3>
-        <div class="detail-note" style="margin-top: 10px;">
-          Every tool links back to a publisher page so you can quickly see the team, trust signals, and other tools they have shared.
-        </div>
-        <div class="action-row" style="margin-top: 12px;">
-          <a class="action-link" href="{_escape(_publisher_index_href(registry_prefix=registry_prefix))}">Browse publishers</a>
-        </div>
+      <div class="story-card">
+        <div class="section-kicker">Step 2</div>
+        <strong>Open the full tool page</strong>
+        <p>The tool page tells you what it helps with, who shared it, and the fastest way to get started.</p>
       </div>
-      <div class="section-card">
-        <h3>3. Start using it</h3>
-        <div class="detail-note" style="margin-top: 10px;">
-          Tool pages highlight the easiest setup path first, whether that is Docker, a local command, or connecting from another app.
-        </div>
-        <div class="action-row" style="margin-top: 12px;">
-          <a class="action-link" href="{_escape(registry_prefix)}#catalog">See setup-ready tools</a>
+      <div class="story-card">
+        <div class="section-kicker">Step 3</div>
+        <strong>Copy the setup that fits</strong>
+        <p>Every good listing leads with the easiest setup path first, then keeps the deeper details lower on the page.</p>
+        <div class="quick-link-grid">
+          <a class="action-link" href="{_escape(registry_prefix)}#catalog">Find setup-ready tools</a>
         </div>
       </div>
     </div>
@@ -1746,6 +2397,83 @@ def _render_featured_publishers(
         """
         for item in items
     )
+
+
+def _render_publish_primary_paths(
+    *,
+    registry_prefix: str,
+    auth_enabled: bool,
+    session: dict[str, Any] | None,
+) -> str:
+    if not auth_enabled:
+        publish_title = "You can publish from this page"
+        publish_body = (
+            "Open the form, run the checks, and share when the draft feels clear."
+        )
+        publish_actions = (
+            '<a class="action-link" href="#publish-form">Open the form</a>'
+            '<a class="action-link" href="#preflight">See the checks</a>'
+        )
+    elif session is None:
+        publish_title = "You can prepare everything before signing in"
+        publish_body = "Fill in the page and run the checks now. Sign in only when you are ready to publish."
+        publish_actions = (
+            f'<a class="action-link" href="{_escape(_login_href(registry_prefix=registry_prefix, next_path=_publish_href(registry_prefix=registry_prefix)))}">Sign in</a>'
+            '<a class="action-link" href="#publish-form">Start with the form</a>'
+        )
+    elif session.get("can_submit"):
+        publish_title = "This account can publish"
+        publish_body = (
+            "You can move from draft to live page here without leaving the launchpad."
+        )
+        publish_actions = (
+            '<a class="action-link" href="#publish-form">Finish the draft</a>'
+            '<a class="action-link" href="#preflight">Open check results</a>'
+        )
+    else:
+        publish_title = "This account can preview, but not publish"
+        publish_body = "Use the page to learn the workflow, then switch to a publisher, reviewer, or admin account when it is time to share."
+        publish_actions = (
+            f'<a class="action-link" href="{_escape(_login_href(registry_prefix=registry_prefix, next_path=_publish_href(registry_prefix=registry_prefix)))}">Switch account</a>'
+            '<a class="action-link" href="#preflight">See the checks</a>'
+        )
+
+    return f"""
+    <section class="panel" style="margin-top: 18px;">
+      <div class="panel-head">
+        <div>
+          <h2>What happens on this page?</h2>
+          <div class="subtle">A simple view of the whole publisher workflow before you touch the form.</div>
+        </div>
+      </div>
+      <div class="decision-grid">
+        <div class="decision-card is-primary">
+          <div class="section-kicker">Start</div>
+          <strong>Pick a ready-made example</strong>
+          <p>Most people start from a preset, then adjust the wording and setup details to match their own tool.</p>
+          <div class="quick-link-grid">
+            <a class="action-link" href="#publish-form">Choose a starting point</a>
+          </div>
+        </div>
+        <div class="decision-card">
+          <div class="section-kicker">Middle</div>
+          <strong>Fill in what people need</strong>
+          <p>You only need three kinds of information: the page basics, one real setup path, and the detailed record behind the page.</p>
+          <div class="simple-list">
+            <div class="simple-item">Page basics: name, topics, links, license</div>
+            <div class="simple-item">Setup: endpoint, command, or Docker image</div>
+            <div class="simple-item">Detailed record: permissions, data sharing, and connected sources</div>
+          </div>
+        </div>
+        <div class="decision-card">
+          <div class="section-kicker">Finish</div>
+          <strong>{_escape(publish_title)}</strong>
+          <p>{_escape(publish_body)}</p>
+          <div class="quick-link-grid">{publish_actions}</div>
+        </div>
+      </div>
+    </section>
+    """
 
 
 def _render_publish_preset_cards() -> str:
@@ -1902,55 +2630,107 @@ def _render_publish_form(
 
     return f"""
     <form method="post" action="{_escape(_publish_href(registry_prefix=registry_prefix))}" style="margin-top: 14px;">
-      <div class="preset-grid">
-        {_render_publish_preset_cards()}
+      <div class="stacked-panels">
+        <section class="section-card is-accent">
+          <div class="section-kicker">Step 1</div>
+          <h3>Choose a starting point</h3>
+          <div class="detail-note" style="margin-top: 10px;">
+            Start with a ready-made draft so you can shape a good page instead of staring at a blank form.
+          </div>
+          <div class="preset-grid" style="margin-top: 16px;">
+            {_render_publish_preset_cards()}
+          </div>
+        </section>
+
+        <section class="section-card">
+          <div class="section-kicker">Step 2</div>
+          <h3>Add the page basics</h3>
+          <div class="detail-note" style="margin-top: 10px;">
+            These details appear first on the public page, so keep them plain, specific, and easy to scan.
+          </div>
+          <div class="publish-grid" style="margin-top: 16px;">
+            <label class="field-stack">
+              <span class="field-label">Public Name</span>
+              <input id="publish-display-name" name="display_name" value="{_escape(display_name)}" placeholder="Weather Lookup" />
+            </label>
+            <label class="field-stack">
+              <span class="field-label">Topics People Browse</span>
+              <input id="publish-categories" name="categories" value="{_escape(categories)}" placeholder="network,utility" />
+            </label>
+            <label class="field-stack">
+              <span class="field-label">Search Words</span>
+              <input id="publish-tags" name="tags" value="{_escape(tags)}" placeholder="weather,api" />
+            </label>
+            <label class="field-stack">
+              <span class="field-label">Requested Review Level</span>
+              <select id="publish-requested-level" name="requested_level">{requested_level_options}</select>
+            </label>
+            <label class="field-stack">
+              <span class="field-label">Source Code</span>
+              <input id="publish-source-url" name="source_url" value="{_escape(source_url)}" placeholder="https://github.com/acme/weather-lookup" />
+            </label>
+            <label class="field-stack">
+              <span class="field-label">Docs Or Homepage</span>
+              <input id="publish-homepage-url" name="homepage_url" value="{_escape(homepage_url)}" placeholder="https://acme.example/weather" />
+            </label>
+            <label class="field-stack">
+              <span class="field-label">License</span>
+              <input id="publish-license" name="tool_license" value="{_escape(tool_license)}" placeholder="MIT" />
+            </label>
+          </div>
+          <div class="field-hint">
+            Keep these details plain and specific. A good page should make sense to someone in under 30 seconds.
+          </div>
+        </section>
+
+        <section class="section-card">
+          <div class="section-kicker">Step 3</div>
+          <h3>Show how people get started</h3>
+          <div class="detail-note" style="margin-top: 10px;">
+            Add one real setup path here. This is what becomes the ready-to-copy setup block on the public page.
+          </div>
+          <label class="field-stack" style="margin-top: 14px;">
+            <span class="field-label">Setup Details (JSON)</span>
+            <textarea id="publish-runtime-metadata" name="runtime_metadata">{_escape(runtime_metadata_text)}</textarea>
+          </label>
+          <div class="field-hint">
+            Include at least one real endpoint, local command, or Docker image so the page shows people how to get started.
+          </div>
+        </section>
+
+        <section class="section-card">
+          <div class="section-kicker">Step 4</div>
+          <h3>Add the detailed record</h3>
+          <div class="detail-note" style="margin-top: 10px;">
+            This fuller record powers review, trust signals, and the deeper details behind the public page.
+          </div>
+          <label class="field-stack" style="margin-top: 14px;">
+            <span class="field-label">Detailed Record (JSON)</span>
+            <textarea id="publish-manifest" name="manifest">{_escape(manifest_text)}</textarea>
+          </label>
+          <div class="field-hint">
+            Be accurate about permissions, data sharing, and connected sources. This is where trust gets earned or lost.
+          </div>
+        </section>
+
+        <section class="section-card">
+          <div class="section-kicker">Final step</div>
+          <h3>Check, then share</h3>
+          <div class="detail-note" style="margin-top: 10px;">
+            Run the checks, fix anything unclear, then share when the page feels useful to someone seeing it for the first time.
+          </div>
+          <ul class="checklist">
+            <li>Your summary should be readable without opening the raw JSON.</li>
+            <li>You should have at least one genuine setup path in the connection details.</li>
+            <li>The detailed record should match what the tool actually does.</li>
+          </ul>
+          <div class="action-row" style="margin-top: 14px;">
+            <button class="button-secondary" type="submit" name="submission_action" value="preview">Preview Checks</button>
+            {publish_button}
+          </div>
+          {auth_note}
+        </section>
       </div>
-      <div class="publish-grid" style="margin-top: 16px;">
-        <label class="field-stack">
-          <span class="field-label">Name</span>
-          <input id="publish-display-name" name="display_name" value="{_escape(display_name)}" placeholder="Weather Lookup" />
-        </label>
-        <label class="field-stack">
-          <span class="field-label">Topics</span>
-          <input id="publish-categories" name="categories" value="{_escape(categories)}" placeholder="network,utility" />
-        </label>
-        <label class="field-stack">
-          <span class="field-label">Keywords</span>
-          <input id="publish-tags" name="tags" value="{_escape(tags)}" placeholder="weather,api" />
-        </label>
-        <label class="field-stack">
-          <span class="field-label">Safety Level</span>
-          <select id="publish-requested-level" name="requested_level">{requested_level_options}</select>
-        </label>
-        <label class="field-stack">
-          <span class="field-label">Source Link</span>
-          <input id="publish-source-url" name="source_url" value="{_escape(source_url)}" placeholder="https://github.com/acme/weather-lookup" />
-        </label>
-        <label class="field-stack">
-          <span class="field-label">Website</span>
-          <input id="publish-homepage-url" name="homepage_url" value="{_escape(homepage_url)}" placeholder="https://acme.example/weather" />
-        </label>
-        <label class="field-stack">
-          <span class="field-label">License</span>
-          <input id="publish-license" name="tool_license" value="{_escape(tool_license)}" placeholder="MIT" />
-        </label>
-      </div>
-      <div class="micro-note" style="margin-top: 14px;">
-        Add the details people need in order to use this tool after it is shared.
-      </div>
-      <label class="field-stack" style="margin-top: 12px;">
-        <span class="field-label">Connection Details (JSON)</span>
-        <textarea id="publish-runtime-metadata" name="runtime_metadata">{_escape(runtime_metadata_text)}</textarea>
-      </label>
-      <label class="field-stack" style="margin-top: 12px;">
-        <span class="field-label">Tool Record (JSON)</span>
-        <textarea id="publish-manifest" name="manifest">{_escape(manifest_text)}</textarea>
-      </label>
-      <div class="action-row" style="margin-top: 14px;">
-        <button class="button-secondary" type="submit" name="submission_action" value="preview">Preview Checks</button>
-        {publish_button}
-      </div>
-      {auth_note}
     </form>
     """
 
@@ -1982,6 +2762,7 @@ def create_registry_ui_html(
     """Render the registry catalog and submission UI."""
 
     page_title = "PureCipher Secured MCP Registry"
+    can_review = _can_review_registry(auth_enabled=auth_enabled, session=session)
     min_level_options = "".join(
         f'<option value="{value}"{" selected" if value == min_certification else ""}>{label}</option>'
         for value, label in (
@@ -2002,27 +2783,25 @@ def create_registry_ui_html(
     if min_certification:
         result_summary_bits.append(f"min {_escape(min_certification)}")
     result_summary = " · ".join(result_summary_bits)
+    publisher_count = int(publishers.get("count", 0) or 0)
     if not auth_enabled:
         submission_panel = f"""
         <div class="section-grid" style="margin-top: 14px;">
           <div class="section-card">
-            <h3>Share A Tool</h3>
+            <h3>Want to share something?</h3>
             <div class="detail-note" style="margin-top: 10px;">
-              Open the guided share flow to fill in your tool details and show people how to use it.
+              Open the guided share flow to turn your tool into a clear page with setup steps and trust details.
             </div>
             <div class="action-row" style="margin-top: 12px;">
               <a class="action-link" href="{_escape(_publish_href(registry_prefix=registry_prefix))}">Open share flow</a>
             </div>
           </div>
           <div class="section-card">
-            <h3>For Automation</h3>
+            <h3>Publishing from scripts?</h3>
             <div class="detail-note" style="margin-top: 10px;">
-              If you publish from scripts or CI, the developer endpoints are here too.
+              The same registry also exposes API endpoints for CI and scripted publishing.
             </div>
-            <div class="action-row" style="margin-top: 12px;">
-              <a class="action-link" href="{_escape(f"{registry_prefix}/submit")}">Share endpoint</a>
-              <a class="action-link" href="{_escape(f"{registry_prefix}/preflight")}">Check endpoint</a>
-            </div>
+            {_render_api_endpoint_details(registry_prefix=registry_prefix)}
           </div>
         </div>
         """
@@ -2030,7 +2809,7 @@ def create_registry_ui_html(
         submission_panel = f"""
         <div class="section-grid" style="margin-top: 14px;">
           <div class="section-card">
-            <h3>Share A Tool</h3>
+            <h3>Want to share something?</h3>
             <div class="detail-note" style="margin-top: 10px;">
               You can preview the form now. Sign in when you're ready to share.
             </div>
@@ -2040,7 +2819,7 @@ def create_registry_ui_html(
             </div>
           </div>
           <div class="section-card">
-            <h3>What To Bring</h3>
+            <h3>What you will need</h3>
             <div class="detail-note" style="margin-top: 10px;">
               Bring your tool details, setup details, source link, and license so people can understand and use your tool right away.
             </div>
@@ -2051,7 +2830,7 @@ def create_registry_ui_html(
         submission_panel = f"""
         <div class="section-grid" style="margin-top: 14px;">
           <div class="section-card">
-            <h3>Share A Tool</h3>
+            <h3>Want to share something?</h3>
             <div class="detail-note" style="margin-top: 10px;">
               Signed in as {_escape(session.get("role") or "viewer")}. Use the guided flow to check your draft and share a clear, useful tool page.
             </div>
@@ -2060,14 +2839,11 @@ def create_registry_ui_html(
             </div>
           </div>
           <div class="section-card">
-            <h3>For Automation</h3>
+            <h3>Publishing from scripts?</h3>
             <div class="detail-note" style="margin-top: 10px;">
-              If you publish from scripts or CI, the developer endpoints are still here.
+              If you publish from scripts or CI, the same API endpoints are available here too.
             </div>
-            <div class="action-row" style="margin-top: 12px;">
-              <a class="action-link" href="{_escape(f"{registry_prefix}/submit")}">Share endpoint</a>
-              <a class="action-link" href="{_escape(f"{registry_prefix}/preflight")}">Check endpoint</a>
-            </div>
+            {_render_api_endpoint_details(registry_prefix=registry_prefix)}
           </div>
         </div>
         """
@@ -2081,7 +2857,7 @@ def create_registry_ui_html(
     <style>{BASE_STYLES}</style>
   </head>
   <body>
-    <main class="shell">
+    <main class="shell is-login">
       {
         _render_topbar(
             registry_prefix=registry_prefix,
@@ -2095,16 +2871,16 @@ def create_registry_ui_html(
         <div class="eyebrow">Trusted Tool Directory</div>
         <div class="hero-cluster">
           <div>
-            <h1>Find trusted tools</h1>
+            <h1>Find a tool you can trust</h1>
             <p class="subtle" style="margin-top: 8px;">Server: {
         _escape(server_name)
     }</p>
             <p class="hero-copy">
-              Browse trusted tools, open a full page for each one, and quickly see what it does, who made it, and how to use it.
+              Open any tool page to understand what it does, who shared it, what it can access, and the easiest way to start using it.
             </p>
             <div class="jump-links">
-              <a class="action-link jump-link" href="#catalog">Browse tools</a>
-              <a class="action-link jump-link" href="#publishers">Browse publishers</a>
+              <a class="action-link jump-link" href="#catalog">Find a tool</a>
+              <a class="action-link jump-link" href="#publishers">Meet the publishers</a>
               <a class="action-link jump-link" href="{
         _escape(_publish_href(registry_prefix=registry_prefix))
     }">Share a tool</a>
@@ -2112,15 +2888,15 @@ def create_registry_ui_html(
           </div>
           <div class="metrics">
             <div class="metric">
-              <div class="label">Status</div>
-              <div class="value">{_escape(health.get("status", "unknown"))}</div>
-            </div>
-            <div class="metric">
-              <div class="label">Live Tools</div>
+              <div class="label">Tools live</div>
               <div class="value">{_escape(health.get("verified_tools", 0))}</div>
             </div>
             <div class="metric">
-              <div class="label">Safety Level</div>
+              <div class="label">Publishers</div>
+              <div class="value">{_escape(publisher_count)}</div>
+            </div>
+            <div class="metric">
+              <div class="label">Review minimum</div>
               <div class="value">{
         _escape(health.get("minimum_certification", "n/a"))
     }</div>
@@ -2131,29 +2907,51 @@ def create_registry_ui_html(
             </div>
           </div>
         </div>
-        <div class="footer-links">
-          <a href="{_escape(registry_prefix)}">Browse home</a>
-          <a href="{
+	        <div class="footer-links">
+	          <a href="{_escape(registry_prefix)}">Browse home</a>
+	          <a href="{
         _escape(_publisher_index_href(registry_prefix=registry_prefix))
     }">All publishers</a>
-          <a href="{_escape(f"{registry_prefix}/review")}">Approvals</a>
-          <a href="{_escape(f"{registry_prefix}/session")}">Account data</a>
-          <a href="{_escape(f"{registry_prefix}/tools")}">Tool data</a>
-          <a href="/security/health">Service status</a>
-        </div>
+	          <a href="{
+        _escape(_publish_href(registry_prefix=registry_prefix))
+    }">Share a tool</a>
+              {
+        f'<a href="{_escape(f"{registry_prefix}/review")}">Approvals</a>'
+        if can_review
+        else ""
+    }
+	        </div>
       </section>
 
       {page_notice_html}
+
+      {
+        _render_registry_primary_paths(
+            registry_prefix=registry_prefix,
+            auth_enabled=auth_enabled,
+            session=session,
+        )
+    }
 
       <section class="panel" style="margin-top: 18px;">
         <div class="panel-head">
           <div>
             <h2>Start Here</h2>
-            <div class="subtle">A simple path for people who want to discover, trust, and start using a tool without reading technical details first.</div>
+            <div class="subtle">If you are new here, this is the fastest way to go from “that looks useful” to “I know how to start.”</div>
           </div>
         </div>
         {_render_get_started_overview(registry_prefix=registry_prefix)}
       </section>
+
+      {
+        _render_registry_experience_cards(
+            registry_prefix=registry_prefix,
+            auth_enabled=auth_enabled,
+            session=session,
+            catalog=catalog,
+            min_certification=min_certification,
+        )
+    }
 
       <section class="layout">
         <section class="panel" id="catalog">
@@ -2205,6 +3003,7 @@ def create_registry_ui_html(
             detail=detail,
             query=query,
             min_certification=min_certification,
+            can_review=can_review,
         )
     }
         </section>
@@ -2234,7 +3033,7 @@ def create_registry_ui_html(
         <div class="panel-head">
           <div>
             <h2>Share A Tool</h2>
-            <div class="subtle">Use the guided share flow to fill in your details and check everything before it goes live.</div>
+            <div class="subtle">The share flow walks you through the public details, the setup path, and the checks before anything goes live.</div>
           </div>
           <a class="action-link" href="{
         _escape(_publish_href(registry_prefix=registry_prefix))
@@ -2280,6 +3079,7 @@ def create_publish_html(
     """Render the guided publisher launchpad."""
 
     page_title = "Share A Tool · PureCipher Secured MCP Registry"
+    can_review = _can_review_registry(auth_enabled=auth_enabled, session=session)
     page_notice_html = _render_optional_notice(
         notice_title=page_notice_title,
         notice_body=page_notice_body,
@@ -2299,6 +3099,15 @@ def create_publish_html(
             else "Preview now, sign in to share"
         )
     )
+    guidance_summary = (
+        "Open share flow"
+        if not auth_enabled
+        else (
+            "Ready to publish"
+            if session is not None and session.get("can_submit")
+            else "Preview before publish"
+        )
+    )
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -2309,7 +3118,7 @@ def create_publish_html(
     <style>{BASE_STYLES}</style>
   </head>
   <body>
-    <main class="shell">
+    <main class="shell is-login">
       {
         _render_topbar(
             registry_prefix=registry_prefix,
@@ -2323,55 +3132,69 @@ def create_publish_html(
         <div class="eyebrow">Share A Tool</div>
         <div class="hero-cluster">
           <div>
-            <h1>Share your tool</h1>
+            <h1>Share your tool without guessing</h1>
             <p class="subtle" style="margin-top: 8px;">Server: {
         _escape(server_name)
     }</p>
             <p class="hero-copy">
-              Start with a ready-made example, check for problems, add setup details, and publish a page that tells people how to use your tool.
+              This page is built to help you create a tool page people can understand quickly: what it does, how to start, and what it can access.
             </p>
             <div class="jump-links">
-              <a class="action-link jump-link" href="#launchpad">Start here</a>
-              <a class="action-link jump-link" href="#publish-form">Fill in details</a>
+              <a class="action-link jump-link" href="#launchpad">See the flow</a>
+              <a class="action-link jump-link" href="#publish-form">Open the form</a>
               <a class="action-link jump-link" href="#preflight">Review checks</a>
             </div>
           </div>
           <div class="metrics">
             <div class="metric">
-              <div class="label">Sign-In</div>
+              <div class="label">Access</div>
               <div class="value">{_escape(auth_summary)}</div>
             </div>
             <div class="metric">
-              <div class="label">Quick Check</div>
-              <div class="value">Check endpoint</div>
+              <div class="label">What you do here</div>
+              <div class="value">{_escape(guidance_summary)}</div>
             </div>
             <div class="metric">
-              <div class="label">Share From Scripts</div>
-              <div class="value">Share endpoint</div>
+              <div class="label">Checks</div>
+              <div class="value">Built in</div>
             </div>
             <div class="metric">
               <div class="label">Starter Example</div>
-              <div class="value">Remote web tool</div>
+              <div class="value">Remote HTTP</div>
             </div>
           </div>
         </div>
-        <div class="footer-links">
-          <a href="{_escape(registry_prefix)}">Browse home</a>
-          <a href="{
+	        <div class="footer-links">
+	          <a href="{_escape(registry_prefix)}">Browse home</a>
+	          <a href="{
         _escape(_publish_href(registry_prefix=registry_prefix))
     }">Share form</a>
-          <a href="{_escape(f"{registry_prefix}/preflight")}">Check endpoint</a>
-          <a href="{_escape(f"{registry_prefix}/submit")}">Share endpoint</a>
-        </div>
+              {
+        f'<a href="{_escape(f"{registry_prefix}/review")}">Approvals</a>'
+        if can_review
+        else ""
+    }
+	          <a href="{
+        _escape(_publisher_index_href(registry_prefix=registry_prefix))
+    }">Browse publishers</a>
+	        </div>
       </section>
 
       {page_notice_html}
 
+      {
+        _render_publish_primary_paths(
+            registry_prefix=registry_prefix,
+            auth_enabled=auth_enabled,
+            session=session,
+        )
+    }
+
       <section class="panel" id="launchpad" style="margin-top: 18px;">
         <div class="panel-head">
           <div>
-            <h2>Simple Path</h2>
-            <div class="subtle">A straightforward way to go from draft to live tool page.</div>
+            <h2>Start Here</h2>
+            <div class="subtle">If you are new to publishing, this is the simplest way to think about the workflow.</div>
           </div>
         </div>
         <div class="launchpad-grid">
@@ -2395,6 +3218,15 @@ def create_publish_html(
           </div>
         </div>
       </section>
+
+      {
+        _render_publish_experience_cards(
+            registry_prefix=registry_prefix,
+            auth_enabled=auth_enabled,
+            session=session,
+            preflight=preflight,
+        )
+    }
 
       <section class="layout">
         <section class="panel" id="publish-form">
@@ -2432,6 +3264,16 @@ def create_publish_html(
           </div>
           {_render_preflight_panel(preflight)}
         </section>
+      </section>
+
+      <section class="panel" style="margin-top: 18px;">
+        <div class="panel-head">
+          <div>
+            <h2>For scripts and CI</h2>
+            <div class="subtle">The browser flow and the API use the same registry logic, so automation is available when you need it.</div>
+          </div>
+        </div>
+        {_render_api_endpoint_details(registry_prefix=registry_prefix)}
       </section>
       {LISTING_INTERACTIONS_SCRIPT}
     </main>
@@ -2593,6 +3435,15 @@ def create_listing_detail_html(
           </div>
         </div>
       </section>
+
+      {
+        _render_listing_experience_cards(
+            registry_prefix=registry_prefix,
+            detail=detail,
+            install_recipes=install_recipes,
+            publisher_href=publisher_href,
+        )
+    }
 
       <section class="page-stack">
         <section class="panel">
@@ -3062,6 +3913,14 @@ def create_publisher_profile_html(
         </div>
       </section>
 
+      {
+        _render_publisher_experience_cards(
+            registry_prefix=registry_prefix,
+            summary=summary,
+            listings=listings,
+        )
+    }
+
       <section class="page-stack">
         <section class="panel">
           <div class="panel-head">
@@ -3259,33 +4118,21 @@ def create_login_html(
             ),
         )
     }
-      <section class="hero">
-        <div class="eyebrow">Sign In</div>
-        <h1>Sign in to the registry</h1>
-        <p class="subtle" style="margin-top: 8px;">Server: {
-        _escape(server_name)
-    } · Next: {_escape(next_path)}</p>
-        <p class="hero-copy">
-          Sign in to share tools, review submissions, or manage tools, depending on your account.
-        </p>
-        <div class="jump-links">
-          <span class="listing-chip">Browser sign-in</span>
-          <span class="listing-chip">role-based access</span>
-          <span class="listing-chip">share · review · manage</span>
-        </div>
-      </section>
-
       <section class="page-stack">
         {notice_html}
         <section class="panel">
-          <div class="panel-head">
-            <div>
-              <h2>Account Access</h2>
-              <div class="subtle">Different accounts can browse, share, review, or manage tools.</div>
+          <div class="login-layout">
+            <div class="login-copy">
+              <h2>PureCipher Secured MCP Registry</h2>
+              <p>Browse trusted tools, see what they can access, and share your own with clear security context.</p>
+              <ul class="login-points">
+                <li>Verified manifests and attested listings.</li>
+                <li>Role-based access for publishers and reviewers.</li>
+                <li>Copy‑ready setup for clients, Docker, and CI.</li>
+              </ul>
             </div>
-          </div>
-          <div class="auth-grid">
-            <form class="auth-panel" method="post" action="{
+            <div class="login-form-wrapper">
+              <form class="auth-panel" method="post" action="{
         _escape(f"{registry_prefix}/login")
     }">
               <input type="hidden" name="next" value="{_escape(next_path)}" />
@@ -3294,35 +4141,7 @@ def create_login_html(
               <label class="detail-note" for="password" style="margin-top: 12px; display: block;">Password</label>
               <input id="password" type="password" name="password" placeholder="••••••••" style="margin-top: 8px;" />
               <button type="submit" style="margin-top: 14px;">Sign In</button>
-            </form>
-            <div class="auth-panel">
-              <h3>What Each Account Can Do</h3>
-              <div class="role-grid" style="margin-top: 12px;">
-                <div class="mini-card">
-                  <div class="label">Viewer</div>
-                  <div class="detail-note" style="margin-top: 8px;">Browse the directory and tool pages.</div>
-                </div>
-                <div class="mini-card">
-                  <div class="label">Publisher</div>
-                  <div class="detail-note" style="margin-top: 8px;">Share new tools in the directory.</div>
-                </div>
-                <div class="mini-card">
-                  <div class="label">Reviewer</div>
-                  <div class="detail-note" style="margin-top: 8px;">Review new submissions before they go live.</div>
-                </div>
-                <div class="mini-card">
-                  <div class="label">Admin</div>
-                  <div class="detail-note" style="margin-top: 8px;">Full moderation, including suspension and restoration.</div>
-                </div>
-              </div>
-              <div class="action-row" style="margin-top: 14px;">
-                <a class="action-link" href="{
-        _escape(registry_prefix)
-    }">Back to browse</a>
-                <a class="action-link" href="{
-        _escape(f"{registry_prefix}/session")
-    }">Account data</a>
-              </div>
+              </form>
             </div>
           </div>
         </section>

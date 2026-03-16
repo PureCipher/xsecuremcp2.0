@@ -9,7 +9,7 @@ PureCipher Secured MCP Registry is an opinionated product layer on top of Secure
 - certify those tools with the SecureMCP certification pipeline
 - reject tools below a minimum certification level
 - publish accepted tools into a verified catalog
-- launch a browser UI at `GET /registry`
+- launch a browser UI at `GET /registry` (login) and `GET /registry/app` (post-login)
 - support JWT-backed login with role-based submission and moderation
 - expose registry-specific HTTP routes under `/registry/*`
 
@@ -109,7 +109,7 @@ The MVP exposes a narrow HTTP surface:
 | `POST /registry/submit` | Certify and publish a manifest into the registry |
 | `POST /registry/verify` | Verify a listing's attestation against its manifest |
 
-`GET /registry` serves the catalog, discovery homepage, and launchpad entry point. The homepage is designed to help end users find a good fit, understand who published a tool, and jump into setup-ready listings without leading with protocol details. The dedicated publisher workflow lives at `GET /registry/publish`, where publishers can load presets, add runtime metadata, run preflight validation, and then publish. Each listing opens as its own browser page under `/registry/listings/{tool_name}` with a guided "start here" setup section, install recipes, and the deeper manifest and attestation detail further down the page. Publisher pages, the publisher directory, the login page, and the moderation queue are also server-rendered so the whole product layer can run without a frontend build step.
+`GET /registry/app` serves the catalog, discovery homepage, and launchpad entry point after you sign in. The homepage is designed to help end users find a good fit, understand who published a tool, and jump into setup-ready listings without leading with protocol details. The dedicated publisher workflow lives at `GET /registry/publish`, where publishers can load presets, add runtime metadata, run preflight validation, and then publish. Each listing opens as its own browser page under `/registry/listings/{tool_name}` with a guided "start here" setup section, install recipes, and the deeper manifest and attestation detail further down the page. Publisher pages, the publisher directory, the login page, and the moderation queue are also server-rendered so the whole product layer can run without a frontend build step.
 
 ## CLI Launch
 
@@ -144,17 +144,23 @@ The repo now includes a dedicated registry image and compose file:
 docker compose -f docker-compose.purecipher-registry.yml up --build
 ```
 
-To run the Dockerized registry in moderation mode:
+The compose setup now defaults to the local secure mode:
+
+- moderation enabled
+- JWT auth enabled
+- persistent SQLite storage mounted at `./.data/purecipher-registry`
+- development users available unless `PURECIPHER_USERS_JSON` is set
+
+If you want to override the defaults cleanly, copy the example env file and pass it to Compose:
 
 ```bash
-PURECIPHER_REQUIRE_MODERATION=true docker compose -f docker-compose.purecipher-registry.yml up --build
+cp .env.purecipher-registry.example .env.purecipher-registry
+docker compose --env-file .env.purecipher-registry -f docker-compose.purecipher-registry.yml up --build
 ```
 
-To run Docker with auth enabled:
+You can still override individual settings inline:
 
 ```bash
-PURECIPHER_REQUIRE_MODERATION=true \
-PURECIPHER_ENABLE_AUTH=true \
 PURECIPHER_JWT_SECRET=this-is-a-long-registry-jwt-secret \
 docker compose -f docker-compose.purecipher-registry.yml up --build
 ```

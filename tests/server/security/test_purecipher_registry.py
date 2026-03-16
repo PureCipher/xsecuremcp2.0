@@ -14,6 +14,10 @@ from fastmcp.server.security.certification.manifest import (
     SecurityManifest,
 )
 from purecipher import PureCipherRegistry, ToolCategory
+from purecipher.auth import RegistryAuthSettings
+
+TEST_SIGNING_SECRET = "purecipher-registry-signing-secret-for-tests"
+TEST_JWT_SECRET = "purecipher-registry-jwt-secret-for-tests"
 
 
 def _manifest(**overrides: Any) -> SecurityManifest:
@@ -56,10 +60,18 @@ def _runtime_metadata() -> dict[str, object]:
     }
 
 
+def _auth_settings() -> RegistryAuthSettings:
+    return RegistryAuthSettings.from_values(
+        enabled=True,
+        issuer="purecipher-registry",
+        jwt_secret=TEST_JWT_SECRET,
+    )
+
+
 class TestPureCipherRegistry:
     def test_constructor_mounts_registry_routes(self):
         registry = PureCipherRegistry(
-            signing_secret="test-secret",
+            signing_secret=TEST_SIGNING_SECRET,
         )
 
         paths = {
@@ -68,6 +80,7 @@ class TestPureCipherRegistry:
             if (path := getattr(route, "path", None)) is not None
         }
         assert "/registry" in paths
+        assert "/registry/app" in paths
         assert "/registry/health" in paths
         assert "/registry/session" in paths
         assert "/registry/login" in paths
@@ -85,7 +98,7 @@ class TestPureCipherRegistry:
         assert "/registry/preflight" in paths
 
     def test_submit_tool_accepts_certified_manifest(self):
-        registry = PureCipherRegistry(signing_secret="test-secret")
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
 
         result = registry.submit_tool(
             _manifest(),
@@ -104,7 +117,7 @@ class TestPureCipherRegistry:
         assert detail["verification"]["valid"] is True
 
     def test_submit_tool_rejects_below_minimum_level(self):
-        registry = PureCipherRegistry(signing_secret="test-secret")
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
 
         result = registry.submit_tool(
             _manifest(),
@@ -115,7 +128,7 @@ class TestPureCipherRegistry:
         assert "minimum certification level" in result.reason
 
     def test_list_verified_tools_returns_catalog(self):
-        registry = PureCipherRegistry(signing_secret="test-secret")
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
         registry.submit_tool(
             _manifest(),
             display_name="Weather Lookup",
@@ -132,7 +145,7 @@ class TestPureCipherRegistry:
         db_path = tmp_path / "purecipher-registry.db"
 
         registry1 = PureCipherRegistry(
-            signing_secret="test-secret",
+            signing_secret=TEST_SIGNING_SECRET,
             persistence_path=str(db_path),
         )
         result = registry1.submit_tool(
@@ -144,7 +157,7 @@ class TestPureCipherRegistry:
         assert result.accepted is True
 
         registry2 = PureCipherRegistry(
-            signing_secret="test-secret",
+            signing_secret=TEST_SIGNING_SECRET,
             persistence_path=str(db_path),
         )
         catalog = registry2.list_verified_tools(query="weather")
@@ -157,7 +170,7 @@ class TestPureCipherRegistry:
         assert detail["verification"]["valid"] is True
 
     def test_http_registry_submit_and_verify(self):
-        registry = PureCipherRegistry(signing_secret="test-secret")
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
         app = registry.http_app()
 
         with TestClient(app) as client:
@@ -187,7 +200,7 @@ class TestPureCipherRegistry:
             assert verify.json()["verification"]["valid"] is True
 
     def test_http_registry_install_recipes(self):
-        registry = PureCipherRegistry(signing_secret="test-secret")
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
         registry.submit_tool(
             _manifest(),
             display_name="Weather Lookup",
@@ -218,7 +231,7 @@ class TestPureCipherRegistry:
             )
 
     def test_http_registry_listing_detail_page(self):
-        registry = PureCipherRegistry(signing_secret="test-secret")
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
         registry.submit_tool(
             _manifest(),
             display_name="Weather Lookup",
@@ -236,6 +249,9 @@ class TestPureCipherRegistry:
 
             assert response.status_code == 200
             assert "text/html" in response.headers["content-type"]
+            assert "Get oriented quickly" in response.text
+            assert "Fastest start" in response.text
+            assert "Access and setup snapshot" in response.text
             assert "Ways To Use This Tool" in response.text
             assert "Why People Choose It" in response.text
             assert "Start Here" in response.text
@@ -247,7 +263,7 @@ class TestPureCipherRegistry:
             assert ">Publisher<" in response.text
 
     def test_http_registry_publisher_page(self):
-        registry = PureCipherRegistry(signing_secret="test-secret")
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
         registry.submit_tool(
             _manifest(),
             display_name="Weather Lookup",
@@ -293,6 +309,9 @@ class TestPureCipherRegistry:
 
             assert response.status_code == 200
             assert "Publisher Profile" in response.text
+            assert "Start with this publisher" in response.text
+            assert "Best first click" in response.text
+            assert "Trust snapshot" in response.text
             assert "Weather Lookup" in response.text
             assert "Forecast Archive" in response.text
             assert "Live Tools" in response.text
@@ -304,7 +323,7 @@ class TestPureCipherRegistry:
 
     def test_http_registry_review_queue_and_actions(self):
         registry = PureCipherRegistry(
-            signing_secret="test-secret",
+            signing_secret=TEST_SIGNING_SECRET,
             require_moderation=True,
         )
         result = registry.submit_tool(
@@ -377,7 +396,7 @@ class TestPureCipherRegistry:
 
     def test_http_registry_public_routes_only_expose_published_listings(self):
         registry = PureCipherRegistry(
-            signing_secret="test-secret",
+            signing_secret=TEST_SIGNING_SECRET,
             require_moderation=True,
         )
         result = registry.submit_tool(
@@ -430,7 +449,7 @@ class TestPureCipherRegistry:
 
     def test_submit_tool_requeues_existing_listing_when_moderation_is_enabled(self):
         registry = PureCipherRegistry(
-            signing_secret="test-secret",
+            signing_secret=TEST_SIGNING_SECRET,
             require_moderation=True,
         )
         first = registry.submit_tool(
@@ -469,24 +488,97 @@ class TestPureCipherRegistry:
         assert detail["status"] == 404
 
     def test_http_registry_ui_route(self):
-        registry = PureCipherRegistry(signing_secret="test-secret")
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
         app = registry.http_app()
 
         with TestClient(app) as client:
-            response = client.get("/registry")
+            # Auth is disabled by default, so /registry should redirect to the app UI.
+            landing = client.get("/registry", follow_redirects=False)
+            assert landing.status_code == 303
+            assert landing.headers["location"] == "/registry/app"
+
+            response = client.get("/registry/app")
 
             assert response.status_code == 200
             assert "text/html" in response.headers["content-type"]
             assert "PureCipher Secured MCP Registry" in response.text
-            assert "/registry/tools" in response.text
             assert "Browse Tools" in response.text
+            assert "What would you like to do?" in response.text
+            assert "Find a tool you can trust" in response.text
             assert "Start Here" in response.text
+            assert "Choose your next step" in response.text
+            assert "Popular topics" in response.text
             assert "Overview" in response.text
             assert "Featured Publishers" in response.text
             assert "Share A Tool" in response.text
 
+    def test_http_registry_ui_hides_review_details_from_public_users(self):
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            auth_settings=_auth_settings(),
+            require_moderation=True,
+        )
+        registry.submit_tool(
+            _manifest(tool_name="pending-tool", version="1.0.0"),
+            display_name="Pending Tool",
+            categories={ToolCategory.NETWORK},
+            requested_level=CertificationLevel.BASIC,
+        )
+        app = registry.http_app()
+
+        with TestClient(app) as client:
+            response = client.get("/registry", follow_redirects=True)
+
+            assert response.status_code == 200
+            assert "Sign in to the registry" in response.text
+            assert "Pending Tool" not in response.text
+            assert 'href="/registry/review"' not in response.text
+
+    def test_http_registry_ui_shows_review_details_to_reviewers(self):
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            auth_settings=_auth_settings(),
+            require_moderation=True,
+        )
+        registry.submit_tool(
+            _manifest(tool_name="pending-tool", version="1.0.0"),
+            display_name="Pending Tool",
+            categories={ToolCategory.NETWORK},
+            requested_level=CertificationLevel.BASIC,
+        )
+        app = registry.http_app()
+
+        with TestClient(app) as client:
+            login = client.post(
+                "/registry/login",
+                json={"username": "reviewer", "password": "reviewer123"},
+            )
+            assert login.status_code == 200
+
+            response = client.get("/registry/app")
+
+            assert response.status_code == 200
+            assert "Pending Tool" in response.text
+            assert 'href="/registry/review"' in response.text
+            assert "Open approvals" in response.text
+
+    def test_registry_pages_do_not_link_to_post_only_api_routes(self):
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
+        app = registry.http_app()
+
+        with TestClient(app) as client:
+            catalog = client.get("/registry")
+            publish = client.get("/registry/publish")
+
+            assert 'href="/registry/submit"' not in catalog.text
+            assert 'href="/registry/preflight"' not in catalog.text
+            assert 'href="/registry/submit"' not in publish.text
+            assert 'href="/registry/preflight"' not in publish.text
+            assert "POST /registry/submit" in catalog.text
+            assert "POST /registry/preflight" in publish.text
+
     def test_http_registry_ui_form_submission(self):
-        registry = PureCipherRegistry(signing_secret="test-secret")
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
         app = registry.http_app()
 
         with TestClient(app) as client:
@@ -512,7 +604,7 @@ class TestPureCipherRegistry:
             assert "Ready To Share" in response.text
 
     def test_http_registry_publish_page_and_preflight(self):
-        registry = PureCipherRegistry(signing_secret="test-secret")
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
         app = registry.http_app()
 
         with TestClient(app) as client:
@@ -520,8 +612,12 @@ class TestPureCipherRegistry:
 
             assert page.status_code == 200
             assert "Share your tool" in page.text
+            assert "Share your tool without guessing" in page.text
+            assert "What happens on this page?" in page.text
+            assert "Sharing should feel straightforward" in page.text
             assert "Share Form" in page.text
             assert "Check Results" in page.text
+            assert "Choose a starting point" in page.text
             assert "Use this starting point" in page.text
 
             preview = client.post(
@@ -545,7 +641,7 @@ class TestPureCipherRegistry:
             assert "Things To Fix" in preview.text
 
     def test_http_registry_preflight_api(self):
-        registry = PureCipherRegistry(signing_secret="test-secret")
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
         app = registry.http_app()
 
         with TestClient(app) as client:
@@ -569,7 +665,7 @@ class TestPureCipherRegistry:
             assert "docker_compose" in recipe_ids
 
     def test_http_registry_tools_search(self):
-        registry = PureCipherRegistry(signing_secret="test-secret")
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
         registry.submit_tool(
             _manifest(),
             display_name="Weather Lookup",

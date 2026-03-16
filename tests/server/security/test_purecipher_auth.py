@@ -14,6 +14,9 @@ from fastmcp.server.security.certification.manifest import (
 )
 from purecipher import PureCipherRegistry, RegistryAuthSettings, ToolCategory
 
+TEST_SIGNING_SECRET = "purecipher-registry-signing-secret-for-tests"
+TEST_JWT_SECRET = "purecipher-registry-jwt-secret-for-tests"
+
 
 def _manifest(**overrides: Any) -> SecurityManifest:
     defaults: dict[str, Any] = dict(
@@ -48,7 +51,7 @@ def _auth_settings() -> RegistryAuthSettings:
     return RegistryAuthSettings.from_values(
         enabled=True,
         issuer="purecipher-registry",
-        jwt_secret="purecipher-registry-jwt-secret-for-tests",
+        jwt_secret=TEST_JWT_SECRET,
         users_json="",
     )
 
@@ -56,7 +59,7 @@ def _auth_settings() -> RegistryAuthSettings:
 class TestPureCipherRegistryAuth:
     def test_login_session_and_logout_round_trip(self):
         registry = PureCipherRegistry(
-            signing_secret="test-secret",
+            signing_secret=TEST_SIGNING_SECRET,
             auth_settings=_auth_settings(),
         )
         app = registry.http_app()
@@ -97,7 +100,7 @@ class TestPureCipherRegistryAuth:
 
     def test_review_routes_require_auth_when_enabled(self):
         registry = PureCipherRegistry(
-            signing_secret="test-secret",
+            signing_secret=TEST_SIGNING_SECRET,
             auth_settings=_auth_settings(),
             require_moderation=True,
         )
@@ -129,17 +132,13 @@ class TestPureCipherRegistryAuth:
             )
             assert submit.status_code == 401
 
-            catalog = client.get("/registry")
+            catalog = client.get("/registry", follow_redirects=False)
             assert catalog.status_code == 200
-            assert "Share A Tool" in catalog.text
-            assert (
-                "You can preview the form now. Sign in when you're ready to share."
-                in catalog.text
-            )
+            assert "Sign in to the registry" in catalog.text
 
-            publish_page = client.get("/registry/publish")
-            assert publish_page.status_code == 200
-            assert "Check Results" in publish_page.text
+            publish_page = client.get("/registry/publish", follow_redirects=False)
+            assert publish_page.status_code == 303
+            assert publish_page.headers["location"].startswith("/registry/login?next=")
 
             preflight = client.post(
                 "/registry/preflight",
@@ -155,7 +154,7 @@ class TestPureCipherRegistryAuth:
 
     def test_publisher_can_submit_but_cannot_access_review_queue(self):
         registry = PureCipherRegistry(
-            signing_secret="test-secret",
+            signing_secret=TEST_SIGNING_SECRET,
             auth_settings=_auth_settings(),
         )
         app = registry.http_app()
@@ -184,9 +183,13 @@ class TestPureCipherRegistryAuth:
             assert queue.status_code == 403
             assert queue.json()["error"] == "Reviewer or admin role required."
 
+            publish_page = client.get("/registry/publish")
+            assert publish_page.status_code == 200
+            assert 'href="/registry/review"' not in publish_page.text
+
     def test_viewer_cannot_submit(self):
         registry = PureCipherRegistry(
-            signing_secret="test-secret",
+            signing_secret=TEST_SIGNING_SECRET,
             auth_settings=_auth_settings(),
         )
         app = registry.http_app()
@@ -215,7 +218,7 @@ class TestPureCipherRegistryAuth:
 
     def test_reviewer_can_approve_but_admin_is_required_to_suspend(self):
         registry = PureCipherRegistry(
-            signing_secret="test-secret",
+            signing_secret=TEST_SIGNING_SECRET,
             auth_settings=_auth_settings(),
             require_moderation=True,
         )
@@ -271,7 +274,7 @@ class TestPureCipherRegistryAuth:
 
     def test_login_api_rejects_invalid_credentials(self):
         registry = PureCipherRegistry(
-            signing_secret="test-secret",
+            signing_secret=TEST_SIGNING_SECRET,
             auth_settings=_auth_settings(),
         )
         app = registry.http_app()

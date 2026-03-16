@@ -1412,9 +1412,11 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             self._clear_auth_cookie(response)
             return response
 
-        @self.custom_route(prefix, methods=["GET"])
-        async def registry_ui(request: Request):
+        @self.custom_route(f"{prefix}/app", methods=["GET"])
+        async def registry_app(request: Request):
             session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return self._login_redirect(request, prefix=prefix)
             return create_secure_html_response(
                 self._render_registry_ui(
                     prefix=prefix,
@@ -1431,9 +1433,25 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 )
             )
 
+        @self.custom_route(prefix, methods=["GET"])
+        async def registry_ui(request: Request):
+            session = self._session_from_request(request)
+            app_path = f"{prefix}/app"
+            if not self.auth_enabled:
+                return RedirectResponse(url=app_path, status_code=303)
+            return create_secure_html_response(
+                self._render_login_ui(
+                    prefix=prefix,
+                    next_path=app_path,
+                    session=session,
+                )
+            )
+
         @self.custom_route(f"{prefix}/publish", methods=["GET"])
         async def registry_publish_page(request: Request):
             session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return self._login_redirect(request, prefix=prefix)
             return create_secure_html_response(
                 self._render_publish_ui(
                     prefix=prefix,
@@ -1448,6 +1466,8 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         async def registry_listing_ui(request: Request):
             tool_name = request.path_params.get("tool_name", "")
             session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return self._login_redirect(request, prefix=prefix)
             detail = self.get_verified_tool(tool_name)
             if "error" in detail:
                 return create_secure_html_response(
@@ -1491,15 +1511,16 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             limit = int(request.query_params.get("limit", "200"))
             payload = self.list_publishers(limit=limit)
             if request.query_params.get("view") == "html":
+                session = self._session_from_request(request)
+                if self.auth_enabled and session is None:
+                    return self._login_redirect(request, prefix=prefix)
                 return create_secure_html_response(
                     create_publisher_index_html(
                         server_name=self.name,
                         registry_prefix=prefix,
                         publishers=payload,
                         auth_enabled=self.auth_enabled,
-                        session=self._session_payload(
-                            self._session_from_request(request)
-                        ),
+                        session=self._session_payload(session),
                     )
                 )
             return JSONResponse(payload)
@@ -1508,6 +1529,8 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         async def registry_publisher_profile(request: Request):
             publisher_id = request.path_params.get("publisher_id", "")
             session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return self._login_redirect(request, prefix=prefix)
             payload = self.get_publisher_profile(publisher_id)
             if "error" in payload:
                 return create_secure_html_response(

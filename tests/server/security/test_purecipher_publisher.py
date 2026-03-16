@@ -18,6 +18,9 @@ from purecipher.publisher import (
 )
 from purecipher.publisher.cli import build_parser, init_project, main
 
+TEST_SIGNING_SECRET = "purecipher-registry-signing-secret-for-tests"
+TEST_JWT_SECRET = "purecipher-registry-jwt-secret-for-tests"
+
 
 class TestPureCipherPublisherCLI:
     @staticmethod
@@ -37,7 +40,7 @@ class TestPureCipherPublisherCLI:
         return RegistryAuthSettings.from_values(
             enabled=True,
             issuer="purecipher-registry",
-            jwt_secret="purecipher-registry-jwt-secret-for-tests",
+            jwt_secret=TEST_JWT_SECRET,
             users_json="",
         )
 
@@ -182,7 +185,7 @@ class TestPureCipherPublisherCLI:
 
     def test_login_to_registry_stores_token(self, tmp_path):
         registry = PureCipherRegistry(
-            signing_secret="test-secret",
+            signing_secret=TEST_SIGNING_SECRET,
             auth_settings=self._auth_settings(),
         )
         app = registry.http_app()
@@ -203,7 +206,7 @@ class TestPureCipherPublisherCLI:
 
     def test_login_to_registry_recovers_from_corrupt_auth_file(self, tmp_path):
         registry = PureCipherRegistry(
-            signing_secret="test-secret",
+            signing_secret=TEST_SIGNING_SECRET,
             auth_settings=self._auth_settings(),
         )
         app = registry.http_app()
@@ -268,7 +271,7 @@ class TestPureCipherPublisherCLI:
         self._make_ready_project(project_root)
 
         registry = PureCipherRegistry(
-            signing_secret="test-secret",
+            signing_secret=TEST_SIGNING_SECRET,
             auth_settings=self._auth_settings(),
         )
         app = registry.http_app()
@@ -312,7 +315,7 @@ class TestPureCipherPublisherCLI:
         self._make_ready_project(project_root)
 
         registry = PureCipherRegistry(
-            signing_secret="test-secret",
+            signing_secret=TEST_SIGNING_SECRET,
             auth_settings=self._auth_settings(),
         )
         app = registry.http_app()
@@ -352,7 +355,7 @@ class TestPureCipherPublisherCLI:
         self._make_ready_project(project_root)
 
         registry = PureCipherRegistry(
-            signing_secret="test-secret",
+            signing_secret=TEST_SIGNING_SECRET,
             auth_settings=self._auth_settings(),
         )
         app = registry.http_app()
@@ -390,7 +393,7 @@ class TestPureCipherPublisherCLI:
         self._make_ready_project(project_root)
 
         registry = PureCipherRegistry(
-            signing_secret="test-secret",
+            signing_secret=TEST_SIGNING_SECRET,
             require_moderation=True,
             auth_settings=self._auth_settings(),
         )
@@ -444,7 +447,7 @@ class TestPureCipherPublisherCLI:
         config = self._make_ready_project(project_root)
 
         registry = PureCipherRegistry(
-            signing_secret="test-secret",
+            signing_secret=TEST_SIGNING_SECRET,
             require_moderation=True,
             auth_settings=self._auth_settings(),
         )
