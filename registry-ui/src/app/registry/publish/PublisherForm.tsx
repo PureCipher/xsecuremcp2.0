@@ -2,25 +2,59 @@
 
 import { useState } from "react";
 
+type PublishManifest = Record<string, unknown>;
+type PublishMetadata = Record<string, unknown>;
+
+type PublishRequestBody = {
+  display_name: string;
+  categories: string[];
+  manifest: PublishManifest;
+  metadata: PublishMetadata;
+};
+
+type PreflightFinding = {
+  severity?: string;
+  message?: string;
+  summary?: string;
+};
+
+type PublisherPreflightResponse = {
+  error?: string;
+  ready_for_publish?: boolean;
+  summary?: string;
+  effective_certification_level?: string;
+  minimum_required_level?: string;
+  report?: {
+    findings?: PreflightFinding[];
+  };
+};
+
 export function PublisherForm() {
   const [displayName, setDisplayName] = useState("");
   const [categories, setCategories] = useState("network,utility");
   const [manifestText, setManifestText] = useState("{\n  \"tool_name\": \"\",\n  \"version\": \"1.0.0\",\n  \"author\": \"\",\n  \"description\": \"\",\n  \"permissions\": [],\n  \"data_flows\": [],\n  \"resource_access\": [],\n  \"tags\": []\n}");
   const [runtimeText, setRuntimeText] = useState("{}");
-  const [preflight, setPreflight] = useState<any | null>(null);
+  const [preflight, setPreflight] = useState<PublisherPreflightResponse | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  function parseCommonBody() {
-    const body: any = {};
+  function parseCommonBody(): PublishRequestBody {
+    const body: PublishRequestBody = {
+      display_name: "",
+      categories: [],
+      manifest: {},
+      metadata: {},
+    };
     body.display_name = displayName.trim();
     body.categories = categories
       .split(",")
-      .map((c) => c.trim())
+      .map((category) => category.trim())
       .filter(Boolean);
-    body.manifest = JSON.parse(manifestText);
-    body.metadata = runtimeText.trim() ? JSON.parse(runtimeText) : {};
+    body.manifest = JSON.parse(manifestText) as PublishManifest;
+    body.metadata = runtimeText.trim()
+      ? (JSON.parse(runtimeText) as PublishMetadata)
+      : {};
     return body;
   }
 
@@ -35,7 +69,7 @@ export function PublisherForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      const payload = await response.json();
+      const payload = (await response.json()) as PublisherPreflightResponse;
       if (!response.ok || payload.error) {
         setError(payload.error ?? "Preflight failed.");
       } else {
@@ -142,10 +176,10 @@ export function PublisherForm() {
               </div>
             </div>
             {Array.isArray(preflight.report?.findings) && preflight.report.findings.length > 0 ? (
-              <div className="mt-2 space-y-1">
+                  <div className="mt-2 space-y-1">
                 <p className="font-semibold text-emerald-50">Guardrail findings</p>
                 <ul className="space-y-1 text-emerald-200/90">
-                  {preflight.report.findings.slice(0, 4).map((finding: any, index: number) => (
+                  {preflight.report.findings.slice(0, 4).map((finding, index) => (
                     <li key={index} className="text-[10px] leading-snug">
                       <span className="font-semibold">
                         {finding.severity?.toUpperCase?.() ?? "INFO"}:
@@ -191,4 +225,3 @@ export function PublisherForm() {
     </section>
   );
 }
-

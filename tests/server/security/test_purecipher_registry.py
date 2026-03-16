@@ -95,8 +95,13 @@ class TestPureCipherRegistry:
         assert "/registry/review/{listing_id}/{action_name}" in paths
         assert "/registry/policy" in paths
         assert "/registry/policy/schema" in paths
+        assert "/registry/policy/bundles" in paths
+        assert "/registry/policy/bundles/{bundle_id}/stage" in paths
+        assert "/registry/policy/environments" in paths
+        assert "/registry/policy/analytics" in paths
         assert "/registry/policy/export" in paths
         assert "/registry/policy/import" in paths
+        assert "/registry/policy/migrations/preview" in paths
         assert "/registry/policy/versions" in paths
         assert "/registry/policy/versions/diff" in paths
         assert "/registry/policy/versions/rollback" in paths

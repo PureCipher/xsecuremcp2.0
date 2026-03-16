@@ -848,6 +848,47 @@ class TestSecurityAPIGovernance:
             version_export["snapshot"]["providers"] == exported["snapshot"]["providers"]
         )
 
+    def test_get_policy_bundles(self) -> None:
+        api = self._make_api()
+
+        bundles = api.get_policy_bundles()
+
+        assert bundles["count"] >= 1
+        assert bundles["bundles"][0]["provider_count"] >= 1
+
+    def test_get_policy_environment_profiles(self) -> None:
+        api = self._make_api()
+
+        environments = api.get_policy_environment_profiles()
+
+        assert environments["count"] >= 1
+        assert {item["environment_id"] for item in environments["environments"]} >= {
+            "development",
+            "staging",
+            "production",
+        }
+
+    def test_get_policy_analytics(self) -> None:
+        api = self._make_api()
+
+        analytics = api.get_policy_analytics()
+
+        assert analytics["overview"]["provider_count"] == 1
+        assert "blocked" in analytics
+        assert "risks" in analytics
+
+    def test_preview_policy_migration(self) -> None:
+        api = self._make_api()
+
+        preview = api.preview_policy_migration(
+            source_version_number=1,
+            target_environment="production",
+        )
+
+        assert preview["environment"]["environment_id"] == "production"
+        assert preview["source"]["version_number"] == 1
+        assert preview["summary"]["source_provider_count"] == 1
+
     def test_validate_policy_success(self) -> None:
         api = self._make_api()
         result = api.validate_policy({"type": "allow_all"})
@@ -1068,6 +1109,20 @@ class TestSecurityAPIGovernance:
         assert imported["summary"]["created"] == 1
         assert imported["summary"]["changed"] == 1
         assert imported["summary"]["added"] == 1
+
+    @pytest.mark.anyio
+    async def test_stage_policy_bundle_creates_replace_chain_proposal(self) -> None:
+        api = self._make_api()
+
+        staged = await api.stage_policy_bundle(
+            "registry-balanced",
+            author="reviewer",
+            description="Stage a recommended baseline bundle",
+        )
+
+        assert staged["status"] == "imported"
+        assert staged["bundle"]["bundle_id"] == "registry-balanced"
+        assert staged["proposal"]["action"] == "replace_chain"
 
     @pytest.mark.anyio
     async def test_reject_governance_proposal(self) -> None:

@@ -231,6 +231,18 @@ class TestPureCipherRegistryAuth:
             unauthenticated_export = client.get("/registry/policy/export")
             assert unauthenticated_export.status_code == 401
 
+            unauthenticated_bundles = client.get("/registry/policy/bundles")
+            assert unauthenticated_bundles.status_code == 401
+
+            unauthenticated_analytics = client.get("/registry/policy/analytics")
+            assert unauthenticated_analytics.status_code == 401
+
+            unauthenticated_migration = client.post(
+                "/registry/policy/migrations/preview",
+                json={"target_environment": "staging"},
+            )
+            assert unauthenticated_migration.status_code == 401
+
             unauthenticated_import = client.post(
                 "/registry/policy/import",
                 json={"snapshot": {"providers": []}},
@@ -248,6 +260,18 @@ class TestPureCipherRegistryAuth:
 
             forbidden_export = client.get("/registry/policy/export")
             assert forbidden_export.status_code == 403
+
+            forbidden_bundles = client.get("/registry/policy/bundles")
+            assert forbidden_bundles.status_code == 403
+
+            forbidden_analytics = client.get("/registry/policy/analytics")
+            assert forbidden_analytics.status_code == 403
+
+            forbidden_migration = client.post(
+                "/registry/policy/migrations/preview",
+                json={"target_environment": "staging"},
+            )
+            assert forbidden_migration.status_code == 403
 
             forbidden_import = client.post(
                 "/registry/policy/import",
@@ -274,6 +298,39 @@ class TestPureCipherRegistryAuth:
             payload = status.json()
             assert payload["policy"]["provider_count"] == 1
             assert payload["versions"]["version_count"] == 1
+            assert payload["bundles"]["count"] >= 1
+            assert payload["analytics"]["overview"]["provider_count"] == 1
+            assert payload["environments"]["count"] >= 1
+
+            bundles = client.get("/registry/policy/bundles")
+            assert bundles.status_code == 200
+            bundle = bundles.json()["bundles"][0]
+
+            stage_bundle = client.post(
+                f"/registry/policy/bundles/{bundle['bundle_id']}/stage",
+                json={"description": "Stage bundle for review."},
+            )
+            assert stage_bundle.status_code == 200
+            assert stage_bundle.json()["bundle"]["bundle_id"] == bundle["bundle_id"]
+            assert stage_bundle.json()["proposal"]["action"] == "replace_chain"
+
+            analytics = client.get("/registry/policy/analytics")
+            assert analytics.status_code == 200
+            assert "overview" in analytics.json()
+
+            migration_preview = client.post(
+                "/registry/policy/migrations/preview",
+                json={
+                    "source_version_number": 1,
+                    "target_environment": "production",
+                },
+            )
+            assert migration_preview.status_code == 200
+            assert (
+                migration_preview.json()["environment"]["environment_id"]
+                == "production"
+            )
+            assert "summary" in migration_preview.json()
 
             add_response = client.post(
                 "/registry/policy/proposals",
@@ -289,7 +346,13 @@ class TestPureCipherRegistryAuth:
 
             proposal_queue = client.get("/registry/policy/proposals")
             assert proposal_queue.status_code == 200
-            assert proposal_queue.json()["pending_count"] == 1
+            queue_payload = proposal_queue.json()
+            assert queue_payload["pending_count"] == 2
+            proposal_ids = {
+                proposal["proposal_id"] for proposal in queue_payload["proposals"]
+            }
+            assert proposal_id in proposal_ids
+            assert stage_bundle.json()["proposal"]["proposal_id"] in proposal_ids
 
             assign_response = client.post(
                 f"/registry/policy/proposals/{proposal_id}/assign",
