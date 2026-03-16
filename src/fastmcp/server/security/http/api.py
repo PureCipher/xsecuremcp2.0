@@ -38,12 +38,22 @@ from typing import TYPE_CHECKING, Any
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+from fastmcp.server.security.http.policy_routes import mount_policy_routes
 from fastmcp.server.security.integration import get_security_context
 from fastmcp.server.security.policy.serialization import (
     describe_policy_provider,
     policy_provider_from_config,
     policy_snapshot,
     providers_from_snapshot,
+)
+from fastmcp.server.security.policy.workbench import (
+    build_environment_recommendations,
+    build_policy_risks,
+    get_policy_bundle,
+    get_policy_environment,
+    list_policy_bundles,
+    list_policy_environments,
+    summarize_policy_chain_delta,
 )
 
 if TYPE_CHECKING:
@@ -523,6 +533,26 @@ class SecurityAPI:
 
         return dump_policy_schema()
 
+    def get_policy_bundles(self) -> dict[str, Any]:
+        """Return reusable policy bundle metadata for the workbench UI."""
+
+        bundles = list_policy_bundles()
+        return {
+            "count": len(bundles),
+            "bundles": bundles,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    def get_policy_environment_profiles(self) -> dict[str, Any]:
+        """Return named environment profiles for migration guidance."""
+
+        environments = list_policy_environments()
+        return {
+            "count": len(environments),
+            "environments": environments,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
     def export_policy_snapshot(
         self,
         *,
@@ -584,6 +614,33 @@ class SecurityAPI:
             ),
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
+
+    async def stage_policy_bundle(
+        self,
+        bundle_id: str,
+        *,
+        author: str = "api",
+        description: str = "",
+    ) -> dict[str, Any]:
+        """Create a governance proposal from a reusable bundle."""
+
+        bundle = get_policy_bundle(bundle_id)
+        if bundle is None:
+            return {"error": f"Policy bundle not found: {bundle_id}", "status": 404}
+
+        snapshot = {
+            "format": "securemcp-policy-set/v1",
+            "providers": bundle["providers"],
+            "metadata": {"source": "policy_bundle", "bundle_id": bundle_id},
+        }
+        payload = await self.import_policy_snapshot(
+            snapshot,
+            author=author,
+            description_prefix=description or f"Apply bundle: {bundle['title']}",
+        )
+        if payload.get("status") in {"imported", "no_changes"}:
+            payload["bundle"] = bundle
+        return payload
 
     # ── Policy Versioning ────────────────────────────────────
 
@@ -781,6 +838,7 @@ class SecurityAPI:
             "v1": v1,
             "v2": v2,
             "diff": diff,
+            "summary": self._summarize_version_delta(v1, v2),
         }
 
     async def import_policy_snapshot(
@@ -883,6 +941,212 @@ class SecurityAPI:
             "governance": self.get_governance_proposals(),
         }
 
+    def get_policy_analytics(self) -> dict[str, Any]:
+        """Return blocked/changed/risk summaries for the policy workbench."""
+
+        policy = self.get_policy_status()
+        governance = self.get_governance_proposals()
+        audit_stats = (
+            self.get_policy_audit_statistics()
+            if self.policy_audit_log is not None
+            else {"status": 503}
+        )
+        recent_denials = (
+            self.get_policy_audit(decision="deny", limit=5)
+            if self.policy_audit_log is not None
+            else {"entries": []}
+        )
+        monitor_metrics = (
+            self.get_policy_metrics()
+            if self.policy_monitor is not None
+            else {"status": 503}
+        )
+        alerts = (
+            self.get_policy_alerts(limit=5)
+            if self.policy_monitor is not None
+            else {"alerts": []}
+        )
+
+        current_version = (
+            self.policy_version_manager.current_version
+            if self.policy_version_manager is not None
+            else None
+        )
+        previous_version_number = None
+        latest_change_summary: dict[str, Any] | None = None
+        if (
+            self.policy_version_manager is not None
+            and current_version is not None
+            and current_version.version_number > 1
+        ):
+            previous_version_number = current_version.version_number - 1
+            latest_change_summary = self._summarize_version_delta(
+                previous_version_number,
+                current_version.version_number,
+            )
+
+        providers = policy.get("providers", [])
+        provider_configs = [
+            provider["config"]
+            for provider in providers
+            if isinstance(provider, dict) and isinstance(provider.get("config"), dict)
+        ]
+        deny_rate = 0.0
+        if isinstance(audit_stats, dict):
+            deny_rate = float(audit_stats.get("deny_rate", 0.0) or 0.0)
+        recent_alerts = alerts.get("alerts", []) if isinstance(alerts, dict) else []
+        risk_items = build_policy_risks(
+            provider_configs=provider_configs,
+            pending_count=int(governance.get("pending_count", 0) or 0),
+            stale_count=int(governance.get("stale_count", 0) or 0),
+            deny_rate=deny_rate,
+            recent_alert_count=len(recent_alerts),
+            changed_count=(
+                int(latest_change_summary.get("changed_count", 0))
+                if latest_change_summary is not None
+                else 0
+            ),
+        )
+
+        return {
+            "overview": {
+                "provider_count": policy.get("provider_count"),
+                "evaluation_count": policy.get("evaluation_count"),
+                "deny_count": policy.get("deny_count"),
+                "current_version": (
+                    current_version.version_number
+                    if current_version is not None
+                    else None
+                ),
+                "pending_proposals": governance.get("pending_count"),
+                "stale_proposals": governance.get("stale_count"),
+            },
+            "blocked": {
+                "audit": audit_stats,
+                "recent_denials": recent_denials.get("entries", [])
+                if isinstance(recent_denials, dict)
+                else [],
+                "monitor": monitor_metrics,
+                "alerts": recent_alerts,
+            },
+            "changes": {
+                "latest_version_from": previous_version_number,
+                "latest_version_to": (
+                    current_version.version_number
+                    if current_version is not None
+                    else None
+                ),
+                "latest_version_summary": latest_change_summary,
+                "recent_deployments": [
+                    proposal
+                    for proposal in governance.get("proposals", [])
+                    if proposal.get("status") == "deployed"
+                ][:5],
+            },
+            "risks": risk_items,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    def preview_policy_migration(
+        self,
+        *,
+        source_snapshot: dict[str, Any] | None = None,
+        source_version_number: int | None = None,
+        target_version_number: int | None = None,
+        target_environment: str = "staging",
+    ) -> dict[str, Any]:
+        """Preview promotion between live/versioned chains and named environments."""
+
+        environment = get_policy_environment(target_environment)
+        if environment is None:
+            return {
+                "error": f"Unknown policy environment: {target_environment}",
+                "status": 400,
+            }
+
+        source = self._resolve_policy_snapshot(
+            snapshot=source_snapshot,
+            version_number=source_version_number,
+            label_prefix="source",
+        )
+        if "error" in source:
+            source["status"] = source.get("status", 400)
+            return source
+
+        target = self._resolve_policy_snapshot(
+            version_number=target_version_number,
+            label_prefix="target",
+        )
+        if "error" in target:
+            target["status"] = target.get("status", 400)
+            return target
+
+        source_snapshot_data = source["snapshot"]
+        target_snapshot_data = target["snapshot"]
+        source_providers = source_snapshot_data.get("providers", [])
+        target_providers = target_snapshot_data.get("providers", [])
+        if not isinstance(source_providers, list) or not isinstance(
+            target_providers, list
+        ):
+            return {
+                "error": "Policy migration preview requires provider lists on both sides.",
+                "status": 400,
+            }
+
+        source_configs = [item for item in source_providers if isinstance(item, dict)]
+        target_configs = [item for item in target_providers if isinstance(item, dict)]
+        summary = summarize_policy_chain_delta(source_configs, target_configs)
+        risks = build_policy_risks(
+            provider_configs=source_configs,
+            changed_count=int(summary.get("changed_count", 0)),
+        )
+        risks.extend(
+            [
+                {
+                    "level": "medium",
+                    "title": "Target environment requires stronger controls",
+                    "detail": recommendation,
+                }
+                for recommendation in build_environment_recommendations(
+                    environment_id=target_environment,
+                    provider_configs=source_configs,
+                )
+                if recommendation
+                != "This chain already lines up well with the selected environment profile."
+            ]
+        )
+
+        return {
+            "source": {
+                "label": source["label"],
+                "version_number": source.get("version_number"),
+                "provider_count": len(source_configs),
+            },
+            "target": {
+                "label": target["label"],
+                "version_number": target.get("version_number"),
+                "provider_count": len(target_configs),
+            },
+            "environment": environment,
+            "summary": summary,
+            "recommendations": build_environment_recommendations(
+                environment_id=target_environment,
+                provider_configs=source_configs,
+            ),
+            "risks": risks,
+            "suggested_snapshot": {
+                "format": source_snapshot_data.get("format", "securemcp-policy-set/v1"),
+                "providers": source_configs,
+                "metadata": {
+                    **dict(source_snapshot_data.get("metadata", {})),
+                    "target_environment": target_environment,
+                    "migration_source": source["label"],
+                    "migration_target": target["label"],
+                },
+            },
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
     # ── Validation ─────────────────────────────────────────────
 
     def validate_policy(self, config: dict) -> dict[str, Any]:
@@ -899,6 +1163,66 @@ class SecurityAPI:
 
         result = self.policy_validator.validate_declarative(config)
         return result.to_dict()
+
+    def _resolve_policy_snapshot(
+        self,
+        *,
+        snapshot: dict[str, Any] | None = None,
+        version_number: int | None = None,
+        label_prefix: str,
+    ) -> dict[str, Any]:
+        if snapshot is not None:
+            normalized = self._normalize_import_snapshot(snapshot)
+            if normalized.get("status") == 400:
+                return normalized
+            return {
+                "label": f"{label_prefix}: imported snapshot",
+                "version_number": None,
+                "snapshot": normalized,
+            }
+
+        exported = self.export_policy_snapshot(version_number=version_number)
+        if exported.get("error"):
+            return exported
+        return {
+            "label": (
+                f"{label_prefix}: live policy"
+                if version_number is None
+                else f"{label_prefix}: version {version_number}"
+            ),
+            "version_number": exported.get("version_number"),
+            "snapshot": exported.get("snapshot", {}),
+        }
+
+    def _summarize_version_delta(self, v1: int, v2: int) -> dict[str, Any] | None:
+        if self.policy_version_manager is None:
+            return None
+
+        versions = {
+            version.version_number: version
+            for version in self.policy_version_manager.list_versions()
+        }
+        source_version = versions.get(v1)
+        target_version = versions.get(v2)
+        if source_version is None or target_version is None:
+            return None
+
+        source_snapshot = source_version.policy_data
+        target_snapshot = target_version.policy_data
+        source_providers = source_snapshot.get("providers", [])
+        target_providers = target_snapshot.get("providers", [])
+        if not isinstance(source_providers, list) or not isinstance(
+            target_providers, list
+        ):
+            return None
+
+        summary = summarize_policy_chain_delta(
+            [item for item in source_providers if isinstance(item, dict)],
+            [item for item in target_providers if isinstance(item, dict)],
+        )
+        summary["from_version"] = v1
+        summary["to_version"] = v2
+        return summary
 
     def _normalize_import_snapshot(
         self,
@@ -1621,268 +1945,7 @@ def mount_security_routes(
             api.get_provenance(resource_id=resource, actor_id=actor, limit=limit)
         )
 
-    # Policy
-    @server.custom_route(f"{prefix}/policy", methods=["GET"])
-    async def policy_status_endpoint(request: Request) -> JSONResponse:
-        return JSONResponse(api.get_policy_status())
-
-    @server.custom_route(f"{prefix}/policy/audit", methods=["GET"])
-    async def policy_audit_endpoint(request: Request) -> JSONResponse:
-        actor = request.query_params.get("actor")
-        resource = request.query_params.get("resource")
-        decision = request.query_params.get("decision")
-        limit = int(request.query_params.get("limit", "50"))
-        return JSONResponse(
-            api.get_policy_audit(
-                actor_id=actor,
-                resource_id=resource,
-                decision=decision,
-                limit=limit,
-            )
-        )
-
-    @server.custom_route(f"{prefix}/policy/audit/stats", methods=["GET"])
-    async def policy_audit_stats_endpoint(request: Request) -> JSONResponse:
-        return JSONResponse(api.get_policy_audit_statistics())
-
-    @server.custom_route(f"{prefix}/policy/simulate", methods=["POST"])
-    async def policy_simulate_endpoint(request: Request) -> JSONResponse:
-        body = await request.json()
-        scenarios = body.get("scenarios", [])
-        result = await api.simulate_policy(scenarios)
-        return JSONResponse(result)
-
-    @server.custom_route(f"{prefix}/policy/schema", methods=["GET"])
-    async def policy_schema_endpoint(request: Request) -> JSONResponse:
-        return JSONResponse(api.get_policy_schema())
-
-    @server.custom_route(f"{prefix}/policy/export", methods=["GET"])
-    async def policy_export_endpoint(request: Request) -> JSONResponse:
-        raw_version = request.query_params.get("version")
-        try:
-            version_number = int(raw_version) if raw_version is not None else None
-        except ValueError:
-            return JSONResponse(
-                {"error": "Invalid `version` query parameter.", "status": 400},
-                status_code=400,
-            )
-        payload = api.export_policy_snapshot(version_number=version_number)
-        status_code = (
-            payload["status"] if isinstance(payload.get("status"), int) else 200
-        )
-        return JSONResponse(payload, status_code=status_code)
-
-    @server.custom_route(f"{prefix}/policy/import", methods=["POST"])
-    async def policy_import_endpoint(request: Request) -> JSONResponse:
-        try:
-            body = await request.json()
-        except Exception:
-            body = {}
-        snapshot = body.get("snapshot", body) if isinstance(body, dict) else body
-        author = str(body.get("author", "api")) if isinstance(body, dict) else "api"
-        description_prefix = (
-            str(body.get("description_prefix", "Imported policy snapshot"))
-            if isinstance(body, dict)
-            else "Imported policy snapshot"
-        )
-        payload = await api.import_policy_snapshot(
-            snapshot,
-            author=author,
-            description_prefix=description_prefix,
-        )
-        status_code = (
-            payload["status"] if isinstance(payload.get("status"), int) else 200
-        )
-        return JSONResponse(payload, status_code=status_code)
-
-    # Policy Versioning
-    @server.custom_route(f"{prefix}/policy/versions", methods=["GET"])
-    async def policy_versions_endpoint(request: Request) -> JSONResponse:
-        return JSONResponse(api.get_policy_versions())
-
-    @server.custom_route(f"{prefix}/policy/versions/rollback", methods=["POST"])
-    async def policy_rollback_endpoint(request: Request) -> JSONResponse:
-        body = await request.json()
-        version_number = body.get("version_number", 0)
-        reason = body.get("reason", "")
-        return JSONResponse(await api.rollback_policy_version(version_number, reason))
-
-    @server.custom_route(f"{prefix}/policy/versions/diff", methods=["GET"])
-    async def policy_diff_endpoint(request: Request) -> JSONResponse:
-        v1 = int(request.query_params.get("v1", "0"))
-        v2 = int(request.query_params.get("v2", "0"))
-        return JSONResponse(api.diff_policy_versions(v1, v2))
-
-    # Validation
-    @server.custom_route(f"{prefix}/policy/validate", methods=["POST"])
-    async def policy_validate_endpoint(request: Request) -> JSONResponse:
-        body = await request.json()
-        config = body.get("config", {})
-        return JSONResponse(api.validate_policy(config))
-
-    @server.custom_route(f"{prefix}/policy/validate/providers", methods=["GET"])
-    async def policy_validate_providers_endpoint(request: Request) -> JSONResponse:
-        return JSONResponse(api.validate_providers())
-
-    # Monitoring
-    @server.custom_route(f"{prefix}/policy/metrics", methods=["GET"])
-    async def policy_metrics_endpoint(request: Request) -> JSONResponse:
-        return JSONResponse(api.get_policy_metrics())
-
-    @server.custom_route(f"{prefix}/policy/alerts", methods=["GET"])
-    async def policy_alerts_endpoint(request: Request) -> JSONResponse:
-        limit = int(request.query_params.get("limit", "50"))
-        return JSONResponse(api.get_policy_alerts(limit=limit))
-
-    # Governance
-    @server.custom_route(f"{prefix}/policy/governance", methods=["GET"])
-    async def policy_governance_endpoint(request: Request) -> JSONResponse:
-        return JSONResponse(api.get_governance_proposals())
-
-    @server.custom_route(f"{prefix}/policy/governance/{{proposal_id}}", methods=["GET"])
-    async def policy_governance_detail_endpoint(request: Request) -> JSONResponse:
-        pid = request.path_params.get("proposal_id", "")
-        return JSONResponse(api.get_governance_proposal(pid))
-
-    @server.custom_route(f"{prefix}/policy/governance/proposals", methods=["POST"])
-    async def policy_governance_create_endpoint(request: Request) -> JSONResponse:
-        body = await request.json()
-        payload = await api.create_governance_proposal(
-            action=str(body.get("action", "")),
-            config=body.get("config") if isinstance(body.get("config"), dict) else None,
-            target_index=(
-                int(body["target_index"])
-                if body.get("target_index") is not None
-                else None
-            ),
-            description=str(body.get("description", "")),
-            author=str(body.get("author", "api")),
-        )
-        status_code = (
-            payload["status"] if isinstance(payload.get("status"), int) else 200
-        )
-        return JSONResponse(payload, status_code=status_code)
-
-    @server.custom_route(
-        f"{prefix}/policy/governance/{{proposal_id}}/approve",
-        methods=["POST"],
-    )
-    async def policy_governance_approve_endpoint(request: Request) -> JSONResponse:
-        pid = request.path_params.get("proposal_id", "")
-        try:
-            body = await request.json()
-        except Exception:
-            body = {}
-        payload = api.approve_governance_proposal(
-            pid,
-            approver=str(body.get("approver", "api")),
-            note=str(body.get("note", body.get("reason", ""))),
-        )
-        status_code = (
-            payload["status"] if isinstance(payload.get("status"), int) else 200
-        )
-        return JSONResponse(payload, status_code=status_code)
-
-    @server.custom_route(
-        f"{prefix}/policy/governance/{{proposal_id}}/assign",
-        methods=["POST"],
-    )
-    async def policy_governance_assign_endpoint(request: Request) -> JSONResponse:
-        pid = request.path_params.get("proposal_id", "")
-        try:
-            body = await request.json()
-        except Exception:
-            body = {}
-        payload = api.assign_governance_proposal(
-            pid,
-            reviewer=str(body.get("reviewer", "")),
-            actor=str(body.get("actor", "api")),
-            note=str(body.get("note", "")),
-        )
-        status_code = (
-            payload["status"] if isinstance(payload.get("status"), int) else 200
-        )
-        return JSONResponse(payload, status_code=status_code)
-
-    @server.custom_route(
-        f"{prefix}/policy/governance/{{proposal_id}}/simulate",
-        methods=["POST"],
-    )
-    async def policy_governance_simulate_endpoint(request: Request) -> JSONResponse:
-        pid = request.path_params.get("proposal_id", "")
-        try:
-            body = await request.json()
-        except Exception:
-            body = {}
-        scenarios = body.get("scenarios")
-        payload = await api.simulate_governance_proposal(
-            pid,
-            scenarios_data=scenarios if isinstance(scenarios, list) else [],
-        )
-        status_code = (
-            payload["status"] if isinstance(payload.get("status"), int) else 200
-        )
-        return JSONResponse(payload, status_code=status_code)
-
-    @server.custom_route(
-        f"{prefix}/policy/governance/{{proposal_id}}/deploy",
-        methods=["POST"],
-    )
-    async def policy_governance_deploy_endpoint(request: Request) -> JSONResponse:
-        pid = request.path_params.get("proposal_id", "")
-        try:
-            body = await request.json()
-        except Exception:
-            body = {}
-        payload = await api.deploy_governance_proposal(
-            pid,
-            actor=str(body.get("actor", "api")),
-            note=str(body.get("note", body.get("reason", ""))),
-        )
-        status_code = (
-            payload["status"] if isinstance(payload.get("status"), int) else 200
-        )
-        return JSONResponse(payload, status_code=status_code)
-
-    @server.custom_route(
-        f"{prefix}/policy/governance/{{proposal_id}}/reject",
-        methods=["POST"],
-    )
-    async def policy_governance_reject_endpoint(request: Request) -> JSONResponse:
-        pid = request.path_params.get("proposal_id", "")
-        try:
-            body = await request.json()
-        except Exception:
-            body = {}
-        payload = api.reject_governance_proposal(
-            pid,
-            reason=str(body.get("reason", "")),
-            actor=str(body.get("actor", "api")),
-        )
-        status_code = (
-            payload["status"] if isinstance(payload.get("status"), int) else 200
-        )
-        return JSONResponse(payload, status_code=status_code)
-
-    @server.custom_route(
-        f"{prefix}/policy/governance/{{proposal_id}}/withdraw",
-        methods=["POST"],
-    )
-    async def policy_governance_withdraw_endpoint(request: Request) -> JSONResponse:
-        pid = request.path_params.get("proposal_id", "")
-        try:
-            body = await request.json()
-        except Exception:
-            body = {}
-        payload = api.withdraw_governance_proposal(
-            pid,
-            actor=str(body.get("actor", "api")),
-            note=str(body.get("note", body.get("reason", ""))),
-        )
-        status_code = (
-            payload["status"] if isinstance(payload.get("status"), int) else 200
-        )
-        return JSONResponse(payload, status_code=status_code)
+    mount_policy_routes(server, api, prefix)
 
     # Health
     @server.custom_route(f"{prefix}/health", methods=["GET"])

@@ -629,6 +629,7 @@ class TestSchema:
         assert "policy_types" in schema
         assert "compositions" in schema
         assert "common_fields" in schema
+        assert "common_field_specs" in schema
 
     def test_schema_includes_all_types(self):
         schema = dump_policy_schema()
@@ -656,6 +657,20 @@ class TestSchema:
         # Should not raise
         serialized = json.dumps(schema)
         assert len(serialized) > 0
+
+    def test_schema_includes_guided_field_specs(self):
+        schema = dump_policy_schema()
+        allowlist = schema["policy_types"]["allowlist"]
+        not_composition = schema["compositions"]["not"]
+
+        assert allowlist["field_specs"]["allowed"]["type"] == "string_list"
+        assert allowlist["starter_config"]["type"] == "allowlist"
+        assert schema["common_field_specs"]["policy_id"]["required"] is False
+        assert schema["common_field_specs"]["version"]["default"] == "1.0.0"
+        assert not_composition["starter_config"]["composition"] == "not"
+        assert (
+            not_composition["field_specs"]["policies"]["type"] == "policy_config_list"
+        )
 
 
 # ── Edge cases ─────────────────────────────────────────────────────

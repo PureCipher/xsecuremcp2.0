@@ -197,11 +197,26 @@ export type PolicyVersionDiffResponse = RegistryErrorResponse & {
 
 export type PolicySchemaFieldMap = Record<string, string>;
 
+export type PolicySchemaFieldSpec = {
+  label?: string;
+  type?: string;
+  description?: string;
+  required?: boolean;
+  default?: unknown;
+  placeholder?: string;
+  example?: unknown;
+  enum?: string[];
+  minimum?: number;
+  maximum?: number;
+};
+
 export type PolicySchemaType = {
   description?: string;
   aliases?: string[];
   fields?: PolicySchemaFieldMap;
   extra_fields?: PolicySchemaFieldMap;
+  field_specs?: Record<string, PolicySchemaFieldSpec>;
+  starter_config?: PolicyConfig;
 };
 
 export type PolicySchemaResponse = RegistryErrorResponse & {
@@ -209,6 +224,7 @@ export type PolicySchemaResponse = RegistryErrorResponse & {
   policy_types?: Record<string, PolicySchemaType>;
   compositions?: Record<string, PolicySchemaType>;
   common_fields?: PolicySchemaFieldMap;
+  common_field_specs?: Record<string, PolicySchemaFieldSpec>;
 };
 
 export type PolicyValidationFinding = {
@@ -303,6 +319,9 @@ export type PolicyManagementResponse = RegistryErrorResponse & {
   versions?: PolicyVersionsResponse;
   schema?: PolicySchemaResponse;
   governance?: PolicyGovernanceResponse;
+  bundles?: PolicyBundlesResponse;
+  analytics?: PolicyAnalyticsResponse;
+  environments?: PolicyEnvironmentResponse;
   simulation_defaults?: PolicySimulationScenario[];
   generated_at?: string;
 };
@@ -335,6 +354,90 @@ export type PolicyImportResponse = RegistryErrorResponse & {
   proposal?: PolicyProposalItem;
   governance?: PolicyGovernanceResponse;
   validation?: PolicyValidationSummary;
+};
+
+export type PolicyBundleItem = {
+  bundle_id: string;
+  title?: string;
+  summary?: string;
+  description?: string;
+  risk_posture?: string;
+  recommended_environments?: string[];
+  tags?: string[];
+  provider_count?: number;
+  provider_summaries?: string[];
+  providers?: PolicyConfig[];
+};
+
+export type PolicyBundlesResponse = RegistryErrorResponse & {
+  count?: number;
+  bundles?: PolicyBundleItem[];
+  generated_at?: string;
+};
+
+export type PolicyEnvironmentProfile = {
+  environment_id: string;
+  title?: string;
+  description?: string;
+  goals?: string[];
+  required_controls?: string[];
+  warnings?: string[];
+};
+
+export type PolicyEnvironmentResponse = RegistryErrorResponse & {
+  count?: number;
+  environments?: PolicyEnvironmentProfile[];
+  generated_at?: string;
+};
+
+export type PolicyRiskItem = {
+  level?: string;
+  title?: string;
+  detail?: string;
+};
+
+export type PolicyAnalyticsResponse = RegistryErrorResponse & {
+  overview?: {
+    provider_count?: number;
+    evaluation_count?: number;
+    deny_count?: number;
+    current_version?: number | null;
+    pending_proposals?: number;
+    stale_proposals?: number;
+  };
+  blocked?: {
+    audit?: RegistryPayload;
+    recent_denials?: RegistryPayload[];
+    monitor?: RegistryPayload;
+    alerts?: RegistryPayload[];
+  };
+  changes?: {
+    latest_version_from?: number | null;
+    latest_version_to?: number | null;
+    latest_version_summary?: RegistryPayload | null;
+    recent_deployments?: PolicyProposalItem[];
+  };
+  risks?: PolicyRiskItem[];
+  generated_at?: string;
+};
+
+export type PolicyMigrationPreviewResponse = RegistryErrorResponse & {
+  source?: {
+    label?: string;
+    version_number?: number | null;
+    provider_count?: number;
+  };
+  target?: {
+    label?: string;
+    version_number?: number | null;
+    provider_count?: number;
+  };
+  environment?: PolicyEnvironmentProfile;
+  summary?: RegistryPayload;
+  recommendations?: string[];
+  risks?: PolicyRiskItem[];
+  suggested_snapshot?: PolicySnapshot;
+  generated_at?: string;
 };
 
 function backendBase() {

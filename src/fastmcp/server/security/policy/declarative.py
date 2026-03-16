@@ -376,17 +376,64 @@ def dump_policy_schema() -> dict[str, Any]:
     """
     return {
         "description": "Declarative policy definition schema for SecureMCP",
+        "common_field_specs": {
+            "policy_id": {
+                "label": "Policy ID",
+                "type": "string",
+                "description": "Stable identifier for audit trails and version history.",
+                "required": False,
+                "placeholder": "my-policy",
+            },
+            "version": {
+                "label": "Version",
+                "type": "string",
+                "description": "Provider-level version string captured in snapshots.",
+                "required": False,
+                "default": "1.0.0",
+                "placeholder": "1.0.0",
+            },
+        },
         "policy_types": {
             "allowlist": {
                 "description": "Allow only listed resources (glob patterns supported)",
                 "fields": {
                     "allowed": "list[str] — resource IDs or glob patterns",
                 },
+                "field_specs": {
+                    "allowed": {
+                        "label": "Allowed resources",
+                        "type": "string_list",
+                        "description": "Resource IDs or glob patterns that should remain callable.",
+                        "required": True,
+                        "example": ["tool:*", "registry:submit"],
+                    },
+                },
+                "starter_config": {
+                    "type": "allowlist",
+                    "policy_id": "allowlist-policy",
+                    "version": "1.0.0",
+                    "allowed": ["tool:*"],
+                },
             },
             "denylist": {
                 "description": "Block listed resources (glob patterns supported)",
                 "fields": {
                     "denied": "list[str] — resource IDs or glob patterns",
+                },
+                "field_specs": {
+                    "denied": {
+                        "label": "Blocked resources",
+                        "type": "string_list",
+                        "description": "Resource IDs or glob patterns that should always be denied.",
+                        "required": True,
+                        "example": ["admin-panel", "tool:dangerous-*"],
+                    },
+                },
+                "starter_config": {
+                    "type": "denylist",
+                    "policy_id": "denylist-policy",
+                    "version": "1.0.0",
+                    "denied": ["admin-panel"],
                 },
             },
             "rbac": {
@@ -396,12 +443,68 @@ def dump_policy_schema() -> dict[str, Any]:
                     "role_mappings": "dict[str, list[str]] — role → allowed actions",
                     "default_decision": "str — 'allow' | 'deny' | 'defer' (default: deny)",
                 },
+                "field_specs": {
+                    "role_mappings": {
+                        "label": "Role mappings",
+                        "type": "string_map_string_list",
+                        "description": "Map a role to the actions it may perform.",
+                        "required": True,
+                        "example": {
+                            "reviewer": ["review_listing", "manage_policy"],
+                            "admin": ["*"],
+                        },
+                    },
+                    "default_decision": {
+                        "label": "Default decision",
+                        "type": "enum",
+                        "description": "What to do when no role mapping matches.",
+                        "required": False,
+                        "default": "deny",
+                        "enum": ["allow", "deny", "defer"],
+                    },
+                },
+                "starter_config": {
+                    "type": "rbac",
+                    "policy_id": "rbac-policy",
+                    "version": "1.0.0",
+                    "role_mappings": {
+                        "publisher": ["submit_listing"],
+                        "reviewer": ["review_listing", "manage_policy"],
+                        "admin": ["*"],
+                    },
+                    "default_decision": "deny",
+                },
             },
             "rate_limit": {
                 "description": "Sliding-window rate limiting per actor",
                 "fields": {
                     "max_requests": "int — max requests per window (default: 100)",
                     "window_seconds": "int — window duration in seconds (default: 3600)",
+                },
+                "field_specs": {
+                    "max_requests": {
+                        "label": "Max requests",
+                        "type": "int",
+                        "description": "Maximum requests allowed per actor in each window.",
+                        "required": False,
+                        "default": 100,
+                        "minimum": 1,
+                    },
+                    "window_seconds": {
+                        "label": "Window (seconds)",
+                        "type": "int",
+                        "description": "Length of the rate-limit window in seconds.",
+                        "required": False,
+                        "default": 3600,
+                        "minimum": 1,
+                    },
+                },
+                "starter_config": {
+                    "type": "rate_limit",
+                    "policy_id": "rate-limit-policy",
+                    "version": "1.0.0",
+                    "max_requests": 200,
+                    "window_seconds": 3600,
                 },
             },
             "time_based": {
@@ -413,6 +516,51 @@ def dump_policy_schema() -> dict[str, Any]:
                     "end_hour": "int — 0-23 (default: 23)",
                     "utc_offset_hours": "int (default: 0)",
                 },
+                "field_specs": {
+                    "allowed_days": {
+                        "label": "Allowed days",
+                        "type": "int_list",
+                        "description": "Days of the week where the policy can allow access. Use 0=Mon .. 6=Sun.",
+                        "required": False,
+                        "default": [0, 1, 2, 3, 4],
+                    },
+                    "start_hour": {
+                        "label": "Start hour",
+                        "type": "int",
+                        "description": "Hour of day when access opens.",
+                        "required": False,
+                        "default": 9,
+                        "minimum": 0,
+                        "maximum": 23,
+                    },
+                    "end_hour": {
+                        "label": "End hour",
+                        "type": "int",
+                        "description": "Hour of day when access closes.",
+                        "required": False,
+                        "default": 17,
+                        "minimum": 0,
+                        "maximum": 23,
+                    },
+                    "utc_offset_hours": {
+                        "label": "UTC offset",
+                        "type": "int",
+                        "description": "Hour offset from UTC for interpreting the time window.",
+                        "required": False,
+                        "default": 0,
+                        "minimum": -12,
+                        "maximum": 14,
+                    },
+                },
+                "starter_config": {
+                    "type": "time_based",
+                    "policy_id": "business-hours-policy",
+                    "version": "1.0.0",
+                    "allowed_days": [0, 1, 2, 3, 4],
+                    "start_hour": 9,
+                    "end_hour": 17,
+                    "utc_offset_hours": 0,
+                },
             },
             "abac": {
                 "description": "Attribute-based policy using metadata checks",
@@ -420,6 +568,29 @@ def dump_policy_schema() -> dict[str, Any]:
                 "fields": {
                     "metadata_conditions": "dict[str, Any] — key/value checks against context.metadata",
                     "require_all": "bool — True=AND, False=OR (default: True)",
+                },
+                "field_specs": {
+                    "metadata_conditions": {
+                        "label": "Metadata conditions",
+                        "type": "json_map",
+                        "description": "Exact key/value checks applied to context.metadata.",
+                        "required": True,
+                        "example": {"tenant": "acme", "clearance": "reviewer"},
+                    },
+                    "require_all": {
+                        "label": "Require all conditions",
+                        "type": "bool",
+                        "description": "When enabled, every metadata condition must match.",
+                        "required": False,
+                        "default": True,
+                    },
+                },
+                "starter_config": {
+                    "type": "abac",
+                    "policy_id": "abac-policy",
+                    "version": "1.0.0",
+                    "metadata_conditions": {"tenant": "acme"},
+                    "require_all": True,
                 },
             },
             "resource_scoped": {
@@ -429,28 +600,152 @@ def dump_policy_schema() -> dict[str, Any]:
                     "default": "policy_config — fallback policy",
                     "prefix_match": "bool (default: False)",
                 },
+                "field_specs": {
+                    "resource_rules": {
+                        "label": "Resource rules",
+                        "type": "policy_config_map",
+                        "description": "Map a resource to a nested policy config. Use the JSON preview for nested rules.",
+                        "required": True,
+                    },
+                    "default": {
+                        "label": "Default policy",
+                        "type": "policy_config",
+                        "description": "Fallback nested policy when a resource has no direct match.",
+                        "required": False,
+                    },
+                    "prefix_match": {
+                        "label": "Prefix match resources",
+                        "type": "bool",
+                        "description": "Match resource IDs by prefix instead of exact equality.",
+                        "required": False,
+                        "default": False,
+                    },
+                },
+                "starter_config": {
+                    "type": "resource_scoped",
+                    "policy_id": "resource-scoped-policy",
+                    "version": "1.0.0",
+                    "resource_rules": {
+                        "registry:policy": {"type": "deny_all"},
+                    },
+                    "default": {"type": "allow_all"},
+                    "prefix_match": False,
+                },
             },
-            "allow_all": {"description": "Always allow", "fields": {}},
-            "deny_all": {"description": "Always deny", "fields": {}},
+            "allow_all": {
+                "description": "Always allow",
+                "fields": {},
+                "field_specs": {},
+                "starter_config": {"type": "allow_all"},
+            },
+            "deny_all": {
+                "description": "Always deny",
+                "fields": {},
+                "field_specs": {},
+                "starter_config": {"type": "deny_all"},
+            },
         },
         "compositions": {
             "all_of": {
                 "description": "All child policies must ALLOW",
                 "aliases": ["allof", "all"],
+                "field_specs": {
+                    "policies": {
+                        "label": "Child policies",
+                        "type": "policy_config_list",
+                        "description": "Ordered child policy configs. Use the JSON preview to edit nested children.",
+                        "required": True,
+                    }
+                },
+                "starter_config": {
+                    "composition": "all_of",
+                    "policy_id": "all-of-policy",
+                    "version": "1.0.0",
+                    "policies": [
+                        {"type": "allow_all"},
+                        {"type": "denylist", "denied": ["admin-panel"]},
+                    ],
+                },
             },
             "any_of": {
                 "description": "At least N child policies must ALLOW",
                 "aliases": ["anyof", "any"],
                 "extra_fields": {"require_minimum": "int (default: 1)"},
+                "field_specs": {
+                    "policies": {
+                        "label": "Child policies",
+                        "type": "policy_config_list",
+                        "description": "Ordered child policy configs. Use the JSON preview to edit nested children.",
+                        "required": True,
+                    },
+                    "require_minimum": {
+                        "label": "Minimum allows",
+                        "type": "int",
+                        "description": "Minimum child policies that must allow.",
+                        "required": False,
+                        "default": 1,
+                        "minimum": 1,
+                    },
+                },
+                "starter_config": {
+                    "composition": "any_of",
+                    "policy_id": "any-of-policy",
+                    "version": "1.0.0",
+                    "require_minimum": 1,
+                    "policies": [
+                        {"type": "allow_all"},
+                        {"type": "denylist", "denied": ["admin-panel"]},
+                    ],
+                },
             },
             "first_match": {
                 "description": "First non-DEFER result wins",
                 "aliases": ["firstmatch"],
                 "extra_fields": {"default_decision": "str (default: 'deny')"},
+                "field_specs": {
+                    "policies": {
+                        "label": "Child policies",
+                        "type": "policy_config_list",
+                        "description": "Ordered child policy configs. Use the JSON preview to edit nested children.",
+                        "required": True,
+                    },
+                    "default_decision": {
+                        "label": "Default decision",
+                        "type": "enum",
+                        "description": "Fallback decision if all children defer.",
+                        "required": False,
+                        "default": "deny",
+                        "enum": ["allow", "deny", "defer"],
+                    },
+                },
+                "starter_config": {
+                    "composition": "first_match",
+                    "policy_id": "first-match-policy",
+                    "version": "1.0.0",
+                    "default_decision": "deny",
+                    "policies": [
+                        {"type": "denylist", "denied": ["admin-panel"]},
+                        {"type": "allow_all"},
+                    ],
+                },
             },
             "not": {
                 "description": "Invert child decision (exactly 1 child)",
                 "aliases": [],
+                "field_specs": {
+                    "policies": {
+                        "label": "Child policy",
+                        "type": "policy_config_list",
+                        "description": "Exactly one child policy. Use the JSON preview to edit nested children.",
+                        "required": True,
+                    }
+                },
+                "starter_config": {
+                    "composition": "not",
+                    "policy_id": "not-policy",
+                    "version": "1.0.0",
+                    "policies": [{"type": "deny_all"}],
+                },
             },
         },
         "common_fields": {

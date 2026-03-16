@@ -2,13 +2,17 @@
 
 import { useMemo, useState, type ChangeEvent } from "react";
 import type {
+  PolicyAnalyticsResponse,
+  PolicyBundleItem,
   PolicyConfig,
+  PolicyMigrationPreviewResponse,
   PolicyExportResponse,
   PolicyGovernanceResponse,
   PolicyImportResponse,
   PolicyManagementResponse,
   PolicyProposalEvent,
   PolicyProposalItem,
+  RegistryPayload,
   PolicySchemaResponse,
   PolicySimulationScenario,
   PolicyVersionDiffResponse,
@@ -16,10 +20,17 @@ import type {
 import {
   downloadJsonFile,
   parseImportedPolicyJson,
+  parseFieldInput,
+  schemaCommonFieldSpecs,
   schemaCommonFields,
   schemaCompositionEntries,
   schemaTypeEntries,
+  starterPolicyConfig,
 } from "./policyTransfer";
+import {
+  PolicyAnalyticsBundlesSection,
+  PolicyWorkbenchSidebar,
+} from "./PolicyWorkbenchPanels";
 
 type PolicyTemplateName =
   | "allowlist"
@@ -33,7 +44,14 @@ type PolicyVersionsState = NonNullable<PolicyManagementResponse["versions"]>;
 type PolicySchemaState = NonNullable<PolicyManagementResponse["schema"]>;
 type PolicyManagerData = Pick<
   PolicyManagementResponse,
-  "policy" | "versions" | "governance" | "schema" | "simulation_defaults"
+  | "policy"
+  | "versions"
+  | "governance"
+  | "schema"
+  | "bundles"
+  | "analytics"
+  | "environments"
+  | "simulation_defaults"
 >;
 
 const POLICY_TEMPLATES: Record<PolicyTemplateName, PolicyConfig> = {
@@ -168,6 +186,14 @@ function trailEventLabel(event: string | undefined): string {
     .join(" ");
 }
 
+type ProposalFilterKey =
+  | "all"
+  | "assigned"
+  | "unassigned"
+  | "stale"
+  | "ready"
+  | "needs_simulation";
+
 export function PolicyManager({
   initialData,
   currentUsername,
@@ -179,6 +205,9 @@ export function PolicyManager({
   const versionsState: PolicyVersionsState = initialData?.versions ?? {};
   const schema: PolicySchemaState = initialData?.schema ?? {};
   const governance: PolicyGovernanceResponse = initialData?.governance ?? {};
+  const bundleState = initialData?.bundles ?? {};
+  const analytics: PolicyAnalyticsResponse = initialData?.analytics ?? {};
+  const environmentState = initialData?.environments ?? {};
   const simulationDefaults: PolicySimulationScenario[] =
     initialData?.simulation_defaults ?? [];
   const versions = versionsState.versions ?? [];
@@ -204,11 +233,14 @@ export function PolicyManager({
   const versionNumbers = sortedVersions.map((version) => version.version_number);
   const requireApproval = governance.require_approval !== false;
   const requireSimulation = governance.require_simulation === true;
+  const bundles = bundleState.bundles ?? [];
+  const environments = environmentState.environments ?? [];
   const policyTypeEntries = schemaTypeEntries(schema as PolicySchemaResponse);
   const compositionEntries = schemaCompositionEntries(
     schema as PolicySchemaResponse,
   );
   const commonFieldEntries = schemaCommonFields(schema as PolicySchemaResponse);
+  const commonFieldSpecs = schemaCommonFieldSpecs(schema as PolicySchemaResponse);
 
   const [banner, setBanner] = useState<{ tone: "success" | "error"; message: string } | null>(
     null,
@@ -238,6 +270,24 @@ export function PolicyManager({
   const [importDescriptionPrefix, setImportDescriptionPrefix] = useState(
     "Imported policy snapshot",
   );
+  const [guidedKind, setGuidedKind] = useState<"policy" | "composition">("policy");
+  const [guidedSelection, setGuidedSelection] = useState<string>(
+    policyTypeEntries[0]?.[0] ?? "allowlist",
+  );
+  const [guidedDraft, setGuidedDraft] = useState<PolicyConfig>(
+    starterPolicyConfig(schema as PolicySchemaResponse, policyTypeEntries[0]?.[0] ?? "allowlist", "policy"),
+  );
+  const [proposalFilter, setProposalFilter] = useState<ProposalFilterKey>("all");
+  const [proposalSearch, setProposalSearch] = useState("");
+  const [migrationSource, setMigrationSource] = useState<string>("live");
+  const [migrationTarget, setMigrationTarget] = useState<string>(
+    currentVersion ? `version:${currentVersion}` : "live",
+  );
+  const [migrationEnvironment, setMigrationEnvironment] = useState<string>(
+    environments[1]?.environment_id ?? environments[0]?.environment_id ?? "staging",
+  );
+  const [migrationPreview, setMigrationPreview] =
+    useState<PolicyMigrationPreviewResponse | null>(null);
 
   const importPreview = useMemo(() => {
     try {
@@ -246,6 +296,95 @@ export function PolicyManager({
       return error instanceof Error ? error : new Error("Invalid JSON");
     }
   }, [importText]);
+
+  const guidedDefinition =
+    guidedKind === "policy"
+      ? (schema as PolicySchemaResponse)?.policy_types?.[guidedSelection]
+      : (schema as PolicySchemaResponse)?.compositions?.[guidedSelection];
+  const guidedFieldSpecs = Object.entries(guidedDefinition?.field_specs ?? {});
+  const proposalFilterCounts = useMemo(
+    () => ({
+      all: activeProposals.length,
+      assigned: activeProposals.filter(
+        (proposal) => proposal.assigned_reviewer === currentUsername,
+      ).length,
+      unassigned: activeProposals.filter((proposal) => !proposal.assigned_reviewer)
+        .length,
+      stale: activeProposals.filter((proposal) => proposal.is_stale).length,
+      ready: activeProposals.filter(
+        (proposal) =>
+          proposal.status === "simulated" ||
+          (!requireSimulation && proposal.status === "validated"),
+      ).length,
+      needs_simulation: activeProposals.filter(
+        (proposal) =>
+          requireSimulation &&
+          proposal.validation?.valid !== false &&
+          proposal.status === "validated",
+      ).length,
+    }),
+    [activeProposals, currentUsername, requireSimulation],
+  );
+  const filteredActiveProposals = useMemo(() => {
+    const query = proposalSearch.trim().toLowerCase();
+    return activeProposals.filter((proposal) => {
+      const filterMatch =
+        proposalFilter === "all"
+          ? true
+          : proposalFilter === "assigned"
+            ? proposal.assigned_reviewer === currentUsername
+            : proposalFilter === "unassigned"
+              ? !proposal.assigned_reviewer
+              : proposalFilter === "stale"
+                ? proposal.is_stale === true
+                : proposalFilter === "ready"
+                  ? proposal.status === "simulated" ||
+                    (!requireSimulation && proposal.status === "validated")
+                  : requireSimulation &&
+                    proposal.validation?.valid !== false &&
+                    proposal.status === "validated";
+
+      if (!filterMatch) {
+        return false;
+      }
+
+      if (!query) {
+        return true;
+      }
+
+      return [
+        proposal.description,
+        proposal.author,
+        proposal.action,
+        proposal.assigned_reviewer,
+        proposal.proposal_id,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query));
+    });
+  }, [
+    activeProposals,
+    currentUsername,
+    proposalFilter,
+    proposalSearch,
+    requireSimulation,
+  ]);
+  const topDeniedResources = useMemo(() => {
+    const auditResources = analytics.blocked?.audit?.top_denied_resources;
+    if (Array.isArray(auditResources)) {
+      return auditResources as RegistryPayload[];
+    }
+
+    const monitorWindow = analytics.blocked?.monitor?.window as
+      | RegistryPayload
+      | undefined;
+    const monitorResources = monitorWindow?.top_denied_resources;
+    if (Array.isArray(monitorResources)) {
+      return monitorResources as RegistryPayload[];
+    }
+
+    return [] as RegistryPayload[];
+  }, [analytics.blocked?.audit?.top_denied_resources, analytics.blocked?.monitor]);
 
   const stats = useMemo(
     () => [
@@ -280,10 +419,71 @@ export function PolicyManager({
       versions.length,
     ],
   );
+  const templateChoices = useMemo(
+    () =>
+      (Object.keys(POLICY_TEMPLATES) as PolicyTemplateName[]).map((templateName) => ({
+        key: templateName,
+        title: templateName.replaceAll("_", " "),
+        summary:
+          templateName === "allowlist"
+            ? "Allow only named tools"
+            : templateName === "denylist"
+              ? "Block named tools"
+              : templateName === "rbac"
+                ? "Map roles to actions"
+                : templateName === "rate_limit"
+                  ? "Control request volume"
+                  : "Restrict by time window",
+      })),
+    [],
+  );
 
   function chooseTemplate(name: PolicyTemplateName) {
     setCreateTemplate(name);
     setCreateConfigText(prettyJson(POLICY_TEMPLATES[name]));
+  }
+
+  function chooseGuidedTemplate(nextKind: "policy" | "composition", key: string) {
+    setGuidedKind(nextKind);
+    setGuidedSelection(key);
+    setGuidedDraft(starterPolicyConfig(schema as PolicySchemaResponse, key, nextKind));
+  }
+
+  function updateGuidedField(fieldName: string, rawValue: string) {
+    const spec = guidedDefinition?.field_specs?.[fieldName];
+    try {
+      const parsed = parseFieldInput(spec, rawValue);
+      setGuidedDraft((current) => ({
+        ...current,
+        [fieldName]: parsed,
+      }));
+      setBanner(null);
+    } catch (error) {
+      setBanner({
+        tone: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : `Unable to update ${fieldName}.`,
+      });
+    }
+  }
+
+  function updateGuidedCommonField(fieldName: string, rawValue: string) {
+    const spec = (schema as PolicySchemaResponse)?.common_field_specs?.[fieldName];
+    const parsed = parseFieldInput(spec, rawValue);
+    setGuidedDraft((current) => ({
+      ...current,
+      [fieldName]: parsed,
+    }));
+  }
+
+  function loadGuidedDraftIntoEditor() {
+    setCreateConfigText(prettyJson(guidedDraft));
+    setBanner({
+      tone: "success",
+      message: "Loaded the guided draft into the proposal editor.",
+    });
   }
 
   async function createProposal(payload: {
@@ -833,6 +1033,75 @@ export function PolicyManager({
     }
   }
 
+  async function handleStageBundle(bundle: PolicyBundleItem) {
+    setBanner(null);
+    setBusyKey(`bundle-${bundle.bundle_id}`);
+    try {
+      const response = await fetch(`/api/policy/bundles/${bundle.bundle_id}/stage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          description: `Apply bundle: ${bundle.title ?? bundle.bundle_id}`,
+        }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as PolicyImportResponse;
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Unable to stage policy bundle.");
+      }
+      setBanner({
+        tone: "success",
+        message:
+          payload.status === "no_changes"
+            ? "That bundle already matches the live chain."
+            : `${bundle.title ?? bundle.bundle_id} is now staged as a proposal.`,
+      });
+      window.location.reload();
+    } catch (error) {
+      setBanner({
+        tone: "error",
+        message:
+          error instanceof Error ? error.message : "Unable to stage policy bundle.",
+      });
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function handlePreviewMigration() {
+    setBanner(null);
+    setBusyKey("migration-preview");
+    try {
+      const response = await fetch("/api/policy/migrations/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source_version_number:
+            migrationSource === "live" ? null : Number(migrationSource.replace("version:", "")),
+          target_version_number:
+            migrationTarget === "live" ? null : Number(migrationTarget.replace("version:", "")),
+          target_environment: migrationEnvironment,
+        }),
+      });
+      const payload =
+        (await response.json().catch(() => ({}))) as PolicyMigrationPreviewResponse;
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Unable to preview policy migration.");
+      }
+      setMigrationPreview(payload);
+    } catch (error) {
+      setMigrationPreview(null);
+      setBanner({
+        tone: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Unable to preview policy migration.",
+      });
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6">
       {banner ? (
@@ -860,6 +1129,14 @@ export function PolicyManager({
           </div>
         ))}
       </section>
+
+      <PolicyAnalyticsBundlesSection
+        analytics={analytics}
+        topDeniedResources={topDeniedResources}
+        bundles={bundles}
+        busyKey={busyKey}
+        onStageBundle={handleStageBundle}
+      />
 
       <section className="grid gap-6 xl:grid-cols-[1.2fr,0.8fr]">
         <div className="flex flex-col gap-4">
@@ -1035,16 +1312,53 @@ export function PolicyManager({
               </div>
             ) : null}
 
+            <div className="mt-4 rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/70">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap gap-2">
+                  {(
+                    [
+                      ["all", "All"],
+                      ["assigned", "Assigned to me"],
+                      ["unassigned", "Unassigned"],
+                      ["ready", "Ready to approve"],
+                      ["needs_simulation", "Needs simulation"],
+                      ["stale", "Stale"],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setProposalFilter(key)}
+                      className={`rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] transition ${
+                        proposalFilter === key
+                          ? "bg-emerald-500 text-emerald-950"
+                          : "border border-emerald-700/70 text-emerald-100 hover:bg-emerald-700/20"
+                      }`}
+                    >
+                      {label} · {proposalFilterCounts[key]}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  value={proposalSearch}
+                  onChange={(event) => setProposalSearch(event.target.value)}
+                  placeholder="Search proposals, owners, or actions"
+                  className="w-full max-w-xs rounded-full border border-emerald-700/70 bg-emerald-950 px-4 py-2 text-[11px] text-emerald-50 outline-none focus:border-emerald-400"
+                />
+              </div>
+            </div>
+
             <div className="mt-4 flex flex-col gap-3">
-              {activeProposals.length === 0 ? (
+              {filteredActiveProposals.length === 0 ? (
                 <div className="rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/70">
                   <p className="text-[12px] text-emerald-100/90">
-                    No policy changes are waiting right now. Draft a change from the live
-                    chain or starter panel.
+                    {activeProposals.length === 0
+                      ? "No policy changes are waiting right now. Draft a change from the live chain or starter panel."
+                      : "No proposals match the current reviewer filter."}
                   </p>
                 </div>
               ) : (
-                activeProposals.map((proposal) => {
+                filteredActiveProposals.map((proposal) => {
                   const proposalId = proposal.proposal_id ?? "";
                   const validationFindings = proposal.validation?.findings ?? [];
                   const simulationResults = proposal.simulation?.results ?? [];
@@ -1646,252 +1960,217 @@ export function PolicyManager({
               </>
             )}
           </div>
-        </div>
 
-        <aside className="flex flex-col gap-4">
           <div className="rounded-3xl bg-emerald-900/40 p-5 ring-1 ring-emerald-700/60">
             <div className="space-y-1">
               <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-300">
-                Schema guide
+                Migration preview
               </p>
               <h2 className="text-xl font-semibold text-emerald-50">
-                See the supported JSON shape
+                Plan promotion between versions and environments
               </h2>
-              <p className="text-[11px] text-emerald-100/80">
-                Use this guide when you hand-edit JSON, prepare imports, or want a quick
-                reminder of the fields each policy type supports.
+              <p className="max-w-2xl text-[11px] text-emerald-100/80">
+                Compare a live chain or saved version against the current target and see
+                what will change, what is risky, and what the chosen environment expects.
               </p>
             </div>
 
-            <div className="mt-4 rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/70">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
-                Common fields
-              </p>
-              <ul className="mt-2 space-y-1 text-[11px] text-emerald-100/90">
-                {commonFieldEntries.map(([fieldName, description]) => (
-                  <li key={fieldName}>
-                    <span className="font-semibold text-emerald-50">{fieldName}</span>:{" "}
-                    {description}
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="mt-4 grid gap-3">
-              {policyTypeEntries.map(([typeName, definition]) => (
-                <div
-                  key={typeName}
-                  className="rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/70"
+            <div className="mt-4 grid gap-3 lg:grid-cols-[1fr,1fr,1fr,auto]">
+              <label className="flex flex-col gap-1 text-[11px] text-emerald-100/90">
+                Source
+                <select
+                  value={migrationSource}
+                  onChange={(event) => setMigrationSource(event.target.value)}
+                  className="rounded-2xl border border-emerald-700/70 bg-emerald-950 px-4 py-2 text-[11px] text-emerald-50 outline-none focus:border-emerald-400"
                 >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-[11px] font-semibold capitalize text-emerald-50">
-                      {typeName.replaceAll("_", " ")}
-                    </p>
-                    {definition.aliases?.length ? (
-                      <span className="text-[10px] text-emerald-300/90">
-                        Aliases: {definition.aliases.join(", ")}
-                      </span>
-                    ) : null}
-                  </div>
-                  <p className="mt-2 text-[11px] text-emerald-100/90">
-                    {definition.description}
-                  </p>
-                  <ul className="mt-2 space-y-1 text-[10px] text-emerald-200/90">
-                    {Object.entries(definition.fields ?? {}).map(([fieldName, description]) => (
-                      <li key={`${typeName}-${fieldName}`}>
-                        <span className="font-semibold text-emerald-100">{fieldName}</span>:{" "}
-                        {description}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
+                  <option value="live">Live policy</option>
+                  {versionNumbers.map((versionNumber) => (
+                    <option key={`migration-source-${versionNumber}`} value={`version:${versionNumber}`}>
+                      Version {versionNumber}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-            <div className="mt-4 rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/70">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
-                Composition helpers
-              </p>
-              <ul className="mt-2 space-y-2 text-[11px] text-emerald-100/90">
-                {compositionEntries.map(([name, definition]) => (
-                  <li key={name}>
-                    <span className="font-semibold text-emerald-50">
-                      {name.replaceAll("_", " ")}
-                    </span>
-                    : {definition.description}
-                    {definition.extra_fields
-                      ? ` Extra fields: ${Object.entries(definition.extra_fields)
-                          .map(([fieldName, description]) => `${fieldName} (${description})`)
-                          .join(", ")}`
-                      : ""}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-
-          <div className="rounded-3xl bg-emerald-900/40 p-5 ring-1 ring-emerald-700/60">
-            <div className="space-y-1">
-              <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-300">
-                New proposal
-              </p>
-              <h2 className="text-xl font-semibold text-emerald-50">
-                Start from a policy template
-              </h2>
-              <p className="text-[11px] text-emerald-100/80">
-                Pick a starter, adjust the JSON, and create a proposal that reviewers can
-                approve before it goes live.
-              </p>
-            </div>
-
-            <div className="mt-4 grid gap-2 sm:grid-cols-2">
-              {(Object.keys(POLICY_TEMPLATES) as PolicyTemplateName[]).map((templateName) => (
-                <button
-                  key={templateName}
-                  type="button"
-                  onClick={() => chooseTemplate(templateName)}
-                  className={`rounded-2xl px-3 py-3 text-left text-[11px] ring-1 transition ${
-                    createTemplate === templateName
-                      ? "bg-emerald-500/15 text-emerald-50 ring-emerald-400/70"
-                      : "bg-emerald-950/70 text-emerald-100 ring-emerald-700/70 hover:bg-emerald-900/60"
-                  }`}
+              <label className="flex flex-col gap-1 text-[11px] text-emerald-100/90">
+                Compare against
+                <select
+                  value={migrationTarget}
+                  onChange={(event) => setMigrationTarget(event.target.value)}
+                  className="rounded-2xl border border-emerald-700/70 bg-emerald-950 px-4 py-2 text-[11px] text-emerald-50 outline-none focus:border-emerald-400"
                 >
-                  <span className="block font-semibold capitalize">
-                    {templateName.replaceAll("_", " ")}
-                  </span>
-                  <span className="mt-1 block text-[10px] text-emerald-200/80">
-                    {templateName === "allowlist"
-                      ? "Allow only named tools"
-                      : templateName === "denylist"
-                        ? "Block named tools"
-                        : templateName === "rbac"
-                          ? "Map roles to actions"
-                          : templateName === "rate_limit"
-                            ? "Control request volume"
-                            : "Restrict by time window"}
-                  </span>
-                </button>
-              ))}
-            </div>
+                  <option value="live">Current live chain</option>
+                  {versionNumbers.map((versionNumber) => (
+                    <option key={`migration-target-${versionNumber}`} value={`version:${versionNumber}`}>
+                      Version {versionNumber}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-            <textarea
-              value={createConfigText}
-              onChange={(event) => setCreateConfigText(event.target.value)}
-              className="mt-4 min-h-[280px] w-full rounded-2xl border border-emerald-700/70 bg-emerald-950 px-4 py-3 font-mono text-[11px] leading-6 text-emerald-50 outline-none focus:border-emerald-400"
-            />
+              <label className="flex flex-col gap-1 text-[11px] text-emerald-100/90">
+                Target environment
+                <select
+                  value={migrationEnvironment}
+                  onChange={(event) => setMigrationEnvironment(event.target.value)}
+                  className="rounded-2xl border border-emerald-700/70 bg-emerald-950 px-4 py-2 text-[11px] text-emerald-50 outline-none focus:border-emerald-400"
+                >
+                  {environments.map((environment) => (
+                    <option
+                      key={environment.environment_id}
+                      value={environment.environment_id}
+                    >
+                      {environment.title ?? environment.environment_id}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-            <input
-              value={createDescription}
-              onChange={(event) => setCreateDescription(event.target.value)}
-              placeholder="What change should this proposal make?"
-              className="mt-3 w-full rounded-full border border-emerald-700/70 bg-emerald-950 px-4 py-2 text-[11px] text-emerald-50 outline-none focus:border-emerald-400"
-            />
-
-            <button
-              type="button"
-              onClick={() => void handleCreateProposal()}
-              disabled={creating}
-              className="mt-4 rounded-full bg-emerald-500 px-4 py-2 text-[11px] font-semibold text-emerald-950 transition hover:bg-emerald-400 disabled:opacity-60"
-            >
-              {creating ? "Creating proposal…" : "Create proposal"}
-            </button>
-          </div>
-
-          <div className="rounded-3xl bg-emerald-900/40 p-5 ring-1 ring-emerald-700/60">
-            <div className="space-y-1">
-              <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-300">
-                Import and export
-              </p>
-              <h2 className="text-xl font-semibold text-emerald-50">
-                Move policy JSON in and out safely
-              </h2>
-              <p className="text-[11px] text-emerald-100/80">
-                Export the live chain or a saved version, then import a snapshot, provider
-                list, or single rule. Imports become batch proposals that still go through
-                validation, simulation, approval, and deploy.
-              </p>
-            </div>
-
-            <div className="mt-4 flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={() => void handleExportPolicy()}
-                disabled={busyKey === "export-live"}
-                className="rounded-full border border-emerald-600/80 px-3 py-1 text-[10px] font-semibold text-emerald-100 transition hover:bg-emerald-700/30 disabled:opacity-60"
+                onClick={() => void handlePreviewMigration()}
+                disabled={busyKey === "migration-preview"}
+                className="self-end rounded-full bg-emerald-500 px-4 py-2 text-[11px] font-semibold text-emerald-950 transition hover:bg-emerald-400 disabled:opacity-60"
               >
-                {busyKey === "export-live" ? "Downloading…" : "Export live JSON"}
+                {busyKey === "migration-preview" ? "Previewing…" : "Preview migration"}
               </button>
-              <label className="rounded-full border border-emerald-600/80 px-3 py-1 text-[10px] font-semibold text-emerald-100 transition hover:bg-emerald-700/30 cursor-pointer">
-                Load JSON file
-                <input
-                  type="file"
-                  accept="application/json,.json"
-                  onChange={(event) => void handleImportFile(event)}
-                  className="sr-only"
-                />
-              </label>
             </div>
 
-            <textarea
-              value={importText}
-              onChange={(event) => setImportText(event.target.value)}
-              placeholder="Paste a policy snapshot, provider list, or single policy rule JSON."
-              className="mt-4 min-h-[220px] w-full rounded-2xl border border-emerald-700/70 bg-emerald-950 px-4 py-3 font-mono text-[11px] leading-6 text-emerald-50 outline-none focus:border-emerald-400"
-            />
+            <div className="mt-4 rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/70">
+              {migrationPreview?.summary ? (
+                <div className="grid gap-4 lg:grid-cols-[0.9fr,1.1fr]">
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+                        Migration summary
+                      </p>
+                      <p className="mt-2 text-[11px] text-emerald-100/90">
+                        {migrationPreview.source?.label} → {migrationPreview.target?.label}
+                      </p>
+                      <p className="mt-1 text-[10px] text-emerald-300/90">
+                        {String(
+                          (migrationPreview.summary.changed_count as number | undefined) ?? 0,
+                        )}{" "}
+                        changed ·{" "}
+                        {String(
+                          (migrationPreview.summary.added_count as number | undefined) ?? 0,
+                        )}{" "}
+                        added ·{" "}
+                        {String(
+                          (migrationPreview.summary.removed_count as number | undefined) ?? 0,
+                        )}{" "}
+                        removed
+                      </p>
+                    </div>
 
-            <input
-              value={importDescriptionPrefix}
-              onChange={(event) => setImportDescriptionPrefix(event.target.value)}
-              placeholder="Imported policy snapshot"
-              className="mt-3 w-full rounded-full border border-emerald-700/70 bg-emerald-950 px-4 py-2 text-[11px] text-emerald-50 outline-none focus:border-emerald-400"
-            />
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+                        Environment fit
+                      </p>
+                      <p className="mt-2 text-[11px] text-emerald-100/90">
+                        {migrationPreview.environment?.description}
+                      </p>
+                      <ul className="mt-2 space-y-1 text-[10px] text-emerald-200/90">
+                        {(migrationPreview.environment?.required_controls ?? []).map((item) => (
+                          <li key={`required-control-${item}`}>• {item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
 
-            <div className="mt-3 rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/70">
-              {importPreview instanceof Error ? (
-                <p className="text-[11px] text-rose-100">{importPreview.message}</p>
-              ) : importPreview ? (
-                <div className="space-y-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
-                    Import preview
-                  </p>
-                  <p className="text-[11px] text-emerald-100/90">
-                    {importPreview.label} · {importPreview.providerCount}{" "}
-                    {importPreview.providerCount === 1 ? "provider" : "providers"}
-                  </p>
-                  <p className="text-[10px] text-emerald-300/90">
-                    The import will stage a batch proposal against the current live chain
-                    instead of changing it directly.
-                  </p>
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+                        Recommendations
+                      </p>
+                      <ul className="mt-2 space-y-1 text-[11px] text-emerald-100/90">
+                        {(migrationPreview.recommendations ?? []).map((item) => (
+                          <li key={`migration-recommendation-${item}`}>• {item}</li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    {(migrationPreview.risks ?? []).length > 0 ? (
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+                          Risks
+                        </p>
+                        <ul className="mt-2 space-y-2 text-[11px] text-emerald-100/90">
+                          {(migrationPreview.risks ?? []).slice(0, 4).map((risk, index) => (
+                            <li
+                              key={`migration-risk-${index}`}
+                              className="rounded-2xl bg-emerald-900/20 px-3 py-2 ring-1 ring-emerald-700/30"
+                            >
+                              <span className="font-semibold text-emerald-50">
+                                {risk.title}
+                              </span>{" "}
+                              <span className="text-[10px] uppercase tracking-[0.14em] text-emerald-300">
+                                {risk.level}
+                              </span>
+                              <p className="mt-1 text-[11px] text-emerald-100/90">
+                                {risk.detail}
+                              </p>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               ) : (
-                <p className="text-[11px] text-emerald-100/90">
-                  Paste JSON to see what kind of policy import it is before staging it.
+                <p className="text-[12px] text-emerald-100/90">
+                  Choose a source, comparison target, and environment profile to preview
+                  promotion risk.
                 </p>
               )}
             </div>
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => void handleImportPolicy()}
-                disabled={busyKey === "import-policy"}
-                className="rounded-full bg-emerald-500 px-4 py-2 text-[11px] font-semibold text-emerald-950 transition hover:bg-emerald-400 disabled:opacity-60"
-              >
-                {busyKey === "import-policy" ? "Importing…" : "Stage import as proposals"}
-              </button>
-              {importPreview && !(importPreview instanceof Error) ? (
-                <button
-                  type="button"
-                  onClick={() => handleLoadIntoDraft()}
-                  disabled={importPreview.kind !== "single_provider"}
-                  className="rounded-full border border-emerald-600/80 px-4 py-2 text-[11px] font-semibold text-emerald-100 transition hover:bg-emerald-700/30 disabled:opacity-60"
-                >
-                  Load single rule into draft
-                </button>
-              ) : null}
-            </div>
           </div>
-        </aside>
+        </div>
+
+        <PolicyWorkbenchSidebar
+          commonFieldEntries={commonFieldEntries}
+          policyTypeEntries={policyTypeEntries}
+          compositionEntries={compositionEntries}
+          commonFieldSpecs={commonFieldSpecs}
+          guidedKind={guidedKind}
+          guidedSelection={guidedSelection}
+          onGuidedKindChange={(nextKind) =>
+            chooseGuidedTemplate(
+              nextKind,
+              nextKind === "policy"
+                ? (policyTypeEntries[0]?.[0] ?? "allowlist")
+                : (compositionEntries[0]?.[0] ?? "all_of"),
+            )
+          }
+          onGuidedSelectionChange={(selection) =>
+            chooseGuidedTemplate(guidedKind, selection)
+          }
+          guidedDraft={guidedDraft}
+          guidedFieldSpecs={guidedFieldSpecs}
+          onGuidedCommonFieldChange={updateGuidedCommonField}
+          onGuidedFieldChange={updateGuidedField}
+          onLoadGuidedDraft={loadGuidedDraftIntoEditor}
+          templateChoices={templateChoices}
+          selectedTemplate={createTemplate}
+          onChooseTemplate={(templateName) =>
+            chooseTemplate(templateName as PolicyTemplateName)
+          }
+          createConfigText={createConfigText}
+          onCreateConfigTextChange={setCreateConfigText}
+          createDescription={createDescription}
+          onCreateDescriptionChange={setCreateDescription}
+          creating={creating}
+          onCreateProposal={handleCreateProposal}
+          importText={importText}
+          onImportTextChange={setImportText}
+          importDescriptionPrefix={importDescriptionPrefix}
+          onImportDescriptionPrefixChange={setImportDescriptionPrefix}
+          importPreview={importPreview}
+          onImportFile={handleImportFile}
+          onImportPolicy={handleImportPolicy}
+          onLoadIntoDraft={handleLoadIntoDraft}
+          busyKey={busyKey}
+        />
       </section>
     </div>
   );
