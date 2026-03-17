@@ -42,6 +42,8 @@ class MemoryBackend:
         self._marketplace: dict[str, dict[str, Any]] = {}
         # Tool marketplace: {mp_id: {listings, installs, reviews}}
         self._tool_marketplace: dict[str, dict[str, Any]] = {}
+        # Policy workbench: {policy_set_id: data}
+        self._policy_workbench: dict[str, dict[str, Any]] = {}
 
     # ── Provenance ────────────────────────────────────────────────
 
@@ -257,3 +259,16 @@ class MemoryBackend:
         if not hasattr(self, "_policy_versions"):
             self._policy_versions: dict[str, dict[str, Any]] = {}
         return self._policy_versions.get(policy_set_id)
+
+    def save_policy_workbench_state(
+        self,
+        policy_set_id: str,
+        data: dict[str, Any],
+    ) -> None:
+        self._policy_workbench[policy_set_id] = data
+
+    def load_policy_workbench_state(
+        self,
+        policy_set_id: str,
+    ) -> dict[str, Any] | None:
+        return self._policy_workbench.get(policy_set_id)

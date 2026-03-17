@@ -234,6 +234,12 @@ class TestPureCipherRegistryAuth:
             unauthenticated_bundles = client.get("/registry/policy/bundles")
             assert unauthenticated_bundles.status_code == 401
 
+            unauthenticated_packs = client.get("/registry/policy/packs")
+            assert unauthenticated_packs.status_code == 401
+
+            unauthenticated_promotions = client.get("/registry/policy/promotions")
+            assert unauthenticated_promotions.status_code == 401
+
             unauthenticated_analytics = client.get("/registry/policy/analytics")
             assert unauthenticated_analytics.status_code == 401
 
@@ -248,6 +254,12 @@ class TestPureCipherRegistryAuth:
                 json={"snapshot": {"providers": []}},
             )
             assert unauthenticated_import.status_code == 401
+
+            unauthenticated_capture = client.post(
+                "/registry/policy/environments/staging/capture",
+                json={"source_version_number": 1},
+            )
+            assert unauthenticated_capture.status_code == 401
 
             viewer_login = client.post(
                 "/registry/login",
@@ -264,6 +276,12 @@ class TestPureCipherRegistryAuth:
             forbidden_bundles = client.get("/registry/policy/bundles")
             assert forbidden_bundles.status_code == 403
 
+            forbidden_packs = client.get("/registry/policy/packs")
+            assert forbidden_packs.status_code == 403
+
+            forbidden_promotions = client.get("/registry/policy/promotions")
+            assert forbidden_promotions.status_code == 403
+
             forbidden_analytics = client.get("/registry/policy/analytics")
             assert forbidden_analytics.status_code == 403
 
@@ -278,6 +296,12 @@ class TestPureCipherRegistryAuth:
                 json={"snapshot": {"providers": []}},
             )
             assert forbidden_import.status_code == 403
+
+            forbidden_capture = client.post(
+                "/registry/policy/environments/staging/capture",
+                json={"source_version_number": 1},
+            )
+            assert forbidden_capture.status_code == 403
 
     def test_reviewer_can_manage_policy_chain(self):
         registry = PureCipherRegistry(
@@ -299,8 +323,10 @@ class TestPureCipherRegistryAuth:
             assert payload["policy"]["provider_count"] == 1
             assert payload["versions"]["version_count"] == 1
             assert payload["bundles"]["count"] >= 1
+            assert "packs" in payload
             assert payload["analytics"]["overview"]["provider_count"] == 1
             assert payload["environments"]["count"] >= 1
+            assert "promotions" in payload
 
             bundles = client.get("/registry/policy/bundles")
             assert bundles.status_code == 200
@@ -317,6 +343,21 @@ class TestPureCipherRegistryAuth:
             analytics = client.get("/registry/policy/analytics")
             assert analytics.status_code == 200
             assert "overview" in analytics.json()
+            assert "history" in analytics.json()
+
+            save_pack = client.post(
+                "/registry/policy/packs",
+                json={
+                    "title": "Reviewer pack",
+                    "source_version_number": 1,
+                    "recommended_environments": ["development"],
+                },
+            )
+            assert save_pack.status_code == 200
+            pack_id = save_pack.json()["pack"]["pack_id"]
+
+            stage_pack = client.post(f"/registry/policy/packs/{pack_id}/stage")
+            assert stage_pack.status_code == 200
 
             migration_preview = client.post(
                 "/registry/policy/migrations/preview",
@@ -331,6 +372,16 @@ class TestPureCipherRegistryAuth:
                 == "production"
             )
             assert "summary" in migration_preview.json()
+
+            capture_environment = client.post(
+                "/registry/policy/environments/development/capture",
+                json={"source_version_number": 1},
+            )
+            assert capture_environment.status_code == 200
+
+            promotions = client.get("/registry/policy/promotions")
+            assert promotions.status_code == 200
+            assert "promotions" in promotions.json()
 
             add_response = client.post(
                 "/registry/policy/proposals",

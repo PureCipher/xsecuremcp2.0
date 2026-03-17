@@ -118,6 +118,11 @@ class PolicyVersionManager:
         """Get the currently active version."""
         return self._history.current_version
 
+    @property
+    def backend(self) -> StorageBackend:
+        """The persistence backend used for version history."""
+        return self._backend
+
     def rollback_to(self, version_number: int, reason: str = "") -> PolicyVersion:
         """Switch to a previous version.
 

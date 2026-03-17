@@ -191,6 +191,21 @@ class StorageBackend(Protocol):
         """Load version history for a policy set. Returns None if not found."""
         ...
 
+    def save_policy_workbench_state(
+        self,
+        policy_set_id: str,
+        data: dict[str, Any],
+    ) -> None:
+        """Persist policy workbench state for a policy set."""
+        ...
+
+    def load_policy_workbench_state(
+        self,
+        policy_set_id: str,
+    ) -> dict[str, Any] | None:
+        """Load policy workbench state for a policy set, if any."""
+        ...
+
     # ── Tool Marketplace ──────────────────────────────────────────
 
     def save_tool_listing(

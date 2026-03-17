@@ -171,6 +171,136 @@ export function PolicyAnalyticsBundlesSection({
             ))}
           </div>
         </div>
+
+        <div className="mt-4 rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/60">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+                Trend history
+              </p>
+              <p className="mt-1 text-[11px] text-emerald-100/90">
+                Recent analytics snapshots keep rollouts grounded in how the
+                policy set has actually behaved over time.
+              </p>
+            </div>
+            <span className="rounded-full bg-emerald-900/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-200">
+              {String(analytics.history?.sample_count ?? 0)} samples
+            </span>
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-4">
+            <div className="rounded-2xl bg-emerald-900/20 p-3 ring-1 ring-emerald-700/30">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-300">
+                Eval trend
+              </p>
+              <p className="mt-2 text-lg font-semibold text-emerald-50">
+                {String(
+                  (analytics.history?.deltas?.evaluation_count as number | undefined) ??
+                    0,
+                )}
+              </p>
+            </div>
+            <div className="rounded-2xl bg-emerald-900/20 p-3 ring-1 ring-emerald-700/30">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-300">
+                Deny trend
+              </p>
+              <p className="mt-2 text-lg font-semibold text-emerald-50">
+                {String(
+                  (analytics.history?.deltas?.deny_count as number | undefined) ?? 0,
+                )}
+              </p>
+            </div>
+            <div className="rounded-2xl bg-emerald-900/20 p-3 ring-1 ring-emerald-700/30">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-300">
+                Queue trend
+              </p>
+              <p className="mt-2 text-lg font-semibold text-emerald-50">
+                {String(
+                  (analytics.history?.deltas?.pending_proposals as
+                    | number
+                    | undefined) ?? 0,
+                )}
+              </p>
+            </div>
+            <div className="rounded-2xl bg-emerald-900/20 p-3 ring-1 ring-emerald-700/30">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-300">
+                Risk trend
+              </p>
+              <p className="mt-2 text-lg font-semibold text-emerald-50">
+                {String(
+                  (analytics.history?.deltas?.risk_count as number | undefined) ?? 0,
+                )}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-[1.2fr,0.8fr]">
+            <div className="rounded-2xl bg-emerald-900/20 p-3 ring-1 ring-emerald-700/30">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-300">
+                Recent snapshots
+              </p>
+              <div className="mt-3 space-y-2">
+                {((analytics.history?.snapshots as RegistryPayload[] | undefined) ?? [])
+                  .slice(-6)
+                  .map((snapshot, index) => (
+                    <div
+                      key={`analytics-snapshot-${index}`}
+                      className="rounded-2xl bg-emerald-950/80 px-3 py-2 ring-1 ring-emerald-700/30"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-emerald-300">
+                        <span>{String(snapshot.captured_at ?? "Unknown time")}</span>
+                        <span>v{String(snapshot.current_version ?? "live")}</span>
+                      </div>
+                      <p className="mt-2 text-[11px] text-emerald-100/90">
+                        {String(snapshot.deny_count ?? 0)} denials ·{" "}
+                        {String(snapshot.pending_proposals ?? 0)} open proposals ·{" "}
+                        {String(snapshot.risk_count ?? 0)} active risks
+                      </p>
+                    </div>
+                  ))}
+                {(((analytics.history?.snapshots as RegistryPayload[] | undefined) ?? [])
+                  .length === 0) ? (
+                  <p className="text-[11px] text-emerald-200/90">
+                    Trend history will start filling in as this workbench is
+                    used and policy changes are reviewed.
+                  </p>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-emerald-900/20 p-3 ring-1 ring-emerald-700/30">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-300">
+                Recent promotions
+              </p>
+              <div className="mt-3 space-y-2">
+                {(analytics.history?.recent_promotions ?? []).slice(0, 4).map((promotion, index) => (
+                  <div
+                    key={`analytics-promotion-${promotion.promotion_id ?? index}`}
+                    className="rounded-2xl bg-emerald-950/80 px-3 py-2 ring-1 ring-emerald-700/30"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-[11px] font-semibold text-emerald-50">
+                        {promotion.source_environment ?? "source"} →{" "}
+                        {promotion.target_environment ?? "target"}
+                      </p>
+                      <span className="rounded-full bg-emerald-900/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-200">
+                        {promotion.status ?? "staged"}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-[11px] text-emerald-100/90">
+                      {promotion.note || "Promotion tracked through the policy workflow."}
+                    </p>
+                  </div>
+                ))}
+                {((analytics.history?.recent_promotions ?? []).length === 0) ? (
+                  <p className="text-[11px] text-emerald-200/90">
+                    No environment promotions have been staged yet.
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="rounded-3xl bg-emerald-900/40 p-5 ring-1 ring-emerald-700/60">

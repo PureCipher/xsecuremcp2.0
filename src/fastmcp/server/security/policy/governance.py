@@ -123,6 +123,7 @@ class PolicyProposal:
     author: str
     description: str
     base_version_number: int | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
     assigned_reviewer: str | None = None
     status: ProposalStatus = ProposalStatus.DRAFT
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
@@ -143,6 +144,7 @@ class PolicyProposal:
             "author": self.author,
             "description": self.description,
             "base_version_number": self.base_version_number,
+            "metadata": dict(self.metadata),
             "assigned_reviewer": self.assigned_reviewer,
             "status": self.status.value,
             "created_at": self.created_at.isoformat(),
@@ -220,6 +222,7 @@ class PolicyGovernor:
         *,
         author: str = "unknown",
         description: str = "",
+        metadata: dict[str, Any] | None = None,
     ) -> PolicyProposal:
         """Propose adding a new provider to the engine.
 
@@ -240,6 +243,7 @@ class PolicyGovernor:
             author=author,
             description=description,
             base_version_number=self._current_version_number(),
+            metadata=dict(metadata or {}),
         )
         proposal.decision_trail.append(
             PolicyProposalEvent(
@@ -263,6 +267,7 @@ class PolicyGovernor:
         *,
         author: str = "unknown",
         description: str = "",
+        metadata: dict[str, Any] | None = None,
     ) -> PolicyProposal:
         """Propose swapping a provider at a specific index.
 
@@ -290,6 +295,7 @@ class PolicyGovernor:
             author=author,
             description=description,
             base_version_number=self._current_version_number(),
+            metadata=dict(metadata or {}),
         )
         proposal.decision_trail.append(
             PolicyProposalEvent(
@@ -313,6 +319,7 @@ class PolicyGovernor:
         *,
         author: str = "unknown",
         description: str = "",
+        metadata: dict[str, Any] | None = None,
     ) -> PolicyProposal:
         """Propose removing a provider at a specific index.
 
@@ -339,6 +346,7 @@ class PolicyGovernor:
             author=author,
             description=description,
             base_version_number=self._current_version_number(),
+            metadata=dict(metadata or {}),
         )
         proposal.decision_trail.append(
             PolicyProposalEvent(
@@ -362,6 +370,7 @@ class PolicyGovernor:
         *,
         author: str = "unknown",
         description: str = "",
+        metadata: dict[str, Any] | None = None,
     ) -> PolicyProposal:
         """Propose replacing the full provider chain atomically."""
         proposal = PolicyProposal(
@@ -373,6 +382,7 @@ class PolicyGovernor:
             author=author,
             description=description,
             base_version_number=self._current_version_number(),
+            metadata=dict(metadata or {}),
         )
         proposal.decision_trail.append(
             PolicyProposalEvent(

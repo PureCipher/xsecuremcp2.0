@@ -97,7 +97,12 @@ class TestPureCipherRegistry:
         assert "/registry/policy/schema" in paths
         assert "/registry/policy/bundles" in paths
         assert "/registry/policy/bundles/{bundle_id}/stage" in paths
+        assert "/registry/policy/packs" in paths
+        assert "/registry/policy/packs/{pack_id}" in paths
+        assert "/registry/policy/packs/{pack_id}/stage" in paths
         assert "/registry/policy/environments" in paths
+        assert "/registry/policy/environments/{environment_id}/capture" in paths
+        assert "/registry/policy/promotions" in paths
         assert "/registry/policy/analytics" in paths
         assert "/registry/policy/export" in paths
         assert "/registry/policy/import" in paths
@@ -657,6 +662,118 @@ class TestPureCipherRegistry:
             )
             assert stale_simulate.status_code == 400
             assert "Create a fresh proposal" in stale_simulate.json()["error"]
+
+    def test_http_registry_policy_packs_and_promotions(self):
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
+        app = registry.http_app()
+
+        with TestClient(app) as client:
+            saved_pack = client.post(
+                "/registry/policy/packs",
+                json={
+                    "title": "Team baseline",
+                    "summary": "Reusable private pack",
+                    "description": "A private reviewer baseline.",
+                    "source_version_number": 1,
+                    "recommended_environments": ["development", "staging"],
+                    "tags": ["private", "baseline"],
+                },
+            )
+            assert saved_pack.status_code == 200
+            saved_pack_payload = saved_pack.json()
+            pack_id = saved_pack_payload["pack"]["pack_id"]
+            assert saved_pack_payload["pack"]["visibility"] == "private"
+
+            list_packs = client.get("/registry/policy/packs")
+            assert list_packs.status_code == 200
+            assert list_packs.json()["count"] == 1
+
+            capture_staging = client.post(
+                "/registry/policy/environments/staging/capture",
+                json={"source_version_number": 1},
+            )
+            assert capture_staging.status_code == 200
+            assert capture_staging.json()["environment"]["current_version_number"] == 1
+
+            created = client.post(
+                "/registry/policy/proposals",
+                json={
+                    "action": "add",
+                    "config": {
+                        "type": "denylist",
+                        "policy_id": "admin-guard",
+                        "version": "1.0.0",
+                        "denied": ["admin-*"],
+                    },
+                    "description": "Protect admin tools.",
+                },
+            )
+            assert created.status_code == 200
+            created_id = created.json()["proposal"]["proposal_id"]
+            simulated_created = client.post(
+                f"/registry/policy/proposals/{created_id}/simulate"
+            )
+            assert simulated_created.status_code == 200
+            approved = client.post(f"/registry/policy/proposals/{created_id}/approve")
+            assert approved.status_code == 200
+            deployed = client.post(f"/registry/policy/proposals/{created_id}/deploy")
+            assert deployed.status_code == 200
+            assert deployed.json()["versions"]["current_version"] == 2
+
+            capture_dev = client.post(
+                "/registry/policy/environments/development/capture",
+                json={"source_version_number": 2},
+            )
+            assert capture_dev.status_code == 200
+            assert capture_dev.json()["environment"]["current_version_number"] == 2
+
+            stage_pack = client.post(f"/registry/policy/packs/{pack_id}/stage")
+            assert stage_pack.status_code == 200
+            assert stage_pack.json()["pack"]["pack_id"] == pack_id
+
+            stage_promotion = client.post(
+                "/registry/policy/promotions",
+                json={
+                    "source_environment": "development",
+                    "target_environment": "staging",
+                    "description": "Promote development into staging",
+                },
+            )
+            assert stage_promotion.status_code == 200
+            promotion_payload = stage_promotion.json()
+            assert promotion_payload["promotions"]["count"] == 1
+            promotion_id = promotion_payload["proposal"]["proposal_id"]
+            assert (
+                promotion_payload["proposal"]["metadata"]["workbench_kind"]
+                == "promotion"
+            )
+
+            simulated_promotion = client.post(
+                f"/registry/policy/proposals/{promotion_id}/simulate"
+            )
+            assert simulated_promotion.status_code == 200
+            approved_promotion = client.post(
+                f"/registry/policy/proposals/{promotion_id}/approve"
+            )
+            assert approved_promotion.status_code == 200
+            deployed_promotion = client.post(
+                f"/registry/policy/proposals/{promotion_id}/deploy"
+            )
+            assert deployed_promotion.status_code == 200
+            assert deployed_promotion.json()["versions"]["current_version"] == 3
+
+            promotions = client.get("/registry/policy/promotions")
+            assert promotions.status_code == 200
+            assert promotions.json()["promotions"][0]["status"] == "deployed"
+
+            environments = client.get("/registry/policy/environments")
+            assert environments.status_code == 200
+            staging = next(
+                item
+                for item in environments.json()["environments"]
+                if item["environment_id"] == "staging"
+            )
+            assert staging["current_version_number"] == 3
 
     def test_http_registry_ui_hides_review_details_from_public_users(self):
         registry = PureCipherRegistry(

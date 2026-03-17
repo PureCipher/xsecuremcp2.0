@@ -856,6 +856,42 @@ class TestSecurityAPIGovernance:
         assert bundles["count"] >= 1
         assert bundles["bundles"][0]["provider_count"] >= 1
 
+    @pytest.mark.anyio
+    async def test_save_stage_and_delete_private_policy_pack(self) -> None:
+        api = self._make_api()
+
+        saved = await api.save_policy_pack(
+            title="Team baseline",
+            summary="Reusable private pack",
+            description="Keep a private baseline for reviewers.",
+            source_version_number=1,
+            author="reviewer",
+            recommended_environments=["development", "staging"],
+            tags=["private", "baseline"],
+        )
+
+        assert saved["status"] == "saved"
+        pack = saved["pack"]
+        pack_id = pack["pack_id"]
+        assert pack["visibility"] == "private"
+        assert pack["revision_count"] == 1
+
+        packs = api.get_policy_packs()
+        assert packs["count"] == 1
+        assert packs["packs"][0]["pack_id"] == pack_id
+
+        staged = await api.stage_policy_pack(
+            pack_id,
+            author="reviewer",
+            description="Roll out the saved private pack",
+        )
+        assert staged["status"] == "no_changes"
+        assert staged["pack"]["pack_id"] == pack_id
+
+        deleted = api.delete_policy_pack(pack_id)
+        assert deleted["status"] == "deleted"
+        assert api.get_policy_packs()["count"] == 0
+
     def test_get_policy_environment_profiles(self) -> None:
         api = self._make_api()
 
@@ -876,6 +912,27 @@ class TestSecurityAPIGovernance:
         assert analytics["overview"]["provider_count"] == 1
         assert "blocked" in analytics
         assert "risks" in analytics
+        assert analytics["history"]["sample_count"] >= 1
+
+    @pytest.mark.anyio
+    async def test_policy_analytics_history_tracks_state_changes(self) -> None:
+        api = self._make_api()
+
+        first = api.get_policy_analytics()
+        assert first["history"]["sample_count"] >= 1
+
+        created = await api.create_governance_proposal(
+            action="add",
+            config={"type": "denylist", "denied": ["admin-*"]},
+            target_index=None,
+            description="Track pending proposal history",
+            author="reviewer",
+        )
+        assert created["status"] == "created"
+
+        second = api.get_policy_analytics()
+        assert second["history"]["sample_count"] >= 2
+        assert second["history"]["deltas"]["pending_proposals"] >= 1
 
     def test_preview_policy_migration(self) -> None:
         api = self._make_api()
@@ -888,6 +945,80 @@ class TestSecurityAPIGovernance:
         assert preview["environment"]["environment_id"] == "production"
         assert preview["source"]["version_number"] == 1
         assert preview["summary"]["source_provider_count"] == 1
+
+    @pytest.mark.anyio
+    async def test_stage_and_deploy_environment_promotion(self) -> None:
+        api = self._make_api()
+
+        captured_staging = api.capture_policy_environment(
+            "staging",
+            actor="reviewer",
+            source_version_number=1,
+            note="Seed staging from the current baseline.",
+        )
+        assert captured_staging["status"] == "captured"
+        assert captured_staging["environment"]["current_version_number"] == 1
+
+        created = await api.create_governance_proposal(
+            action="add",
+            config={"type": "denylist", "denied": ["admin-*"]},
+            target_index=None,
+            description="Harden the policy chain in development",
+            author="reviewer",
+        )
+        proposal_id = created["proposal"]["proposal_id"]
+        api.approve_governance_proposal(proposal_id, approver="admin")
+        deployed = await api.deploy_governance_proposal(proposal_id, actor="admin")
+        assert deployed["versions"]["current_version"] == 2
+
+        captured_development = api.capture_policy_environment(
+            "development",
+            actor="reviewer",
+            source_version_number=2,
+            note="Development is ready for promotion.",
+        )
+        assert captured_development["status"] == "captured"
+        assert captured_development["environment"]["current_version_number"] == 2
+
+        staged = await api.stage_policy_promotion(
+            source_environment="development",
+            target_environment="staging",
+            author="reviewer",
+            description="Promote development into staging",
+        )
+        assert staged["status"] == "imported"
+        promotion_proposal_id = staged["proposal"]["proposal_id"]
+        assert staged["proposal"]["metadata"]["workbench_kind"] == "promotion"
+        assert staged["promotions"]["count"] == 1
+
+        approved = api.approve_governance_proposal(
+            promotion_proposal_id,
+            approver="admin",
+            note="Promotion approved.",
+        )
+        assert approved["status"] == "approved"
+
+        deployed_promotion = await api.deploy_governance_proposal(
+            promotion_proposal_id,
+            actor="admin",
+            note="Promoting development to staging.",
+        )
+        assert deployed_promotion["status"] == "deployed"
+        assert deployed_promotion["versions"]["current_version"] == 3
+
+        environments = api.get_policy_environment_profiles()
+        staging = next(
+            item
+            for item in environments["environments"]
+            if item["environment_id"] == "staging"
+        )
+        assert staging["current_version_number"] == 3
+        assert staging["current_source_label"] == "promotion from development"
+
+        promotions = api.get_policy_promotions()
+        assert promotions["count"] == 1
+        assert promotions["promotions"][0]["status"] == "deployed"
+        assert promotions["promotions"][0]["deployed_version_number"] == 3
 
     def test_validate_policy_success(self) -> None:
         api = self._make_api()

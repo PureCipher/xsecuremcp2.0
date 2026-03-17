@@ -31,7 +31,7 @@ Standalone usage::
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
@@ -55,6 +55,7 @@ from fastmcp.server.security.policy.workbench import (
     list_policy_environments,
     summarize_policy_chain_delta,
 )
+from fastmcp.server.security.policy.workbench_store import PolicyWorkbenchStore
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -108,6 +109,11 @@ class SecurityAPI:
     policy_validator: PolicyValidator | None = None
     policy_monitor: PolicyMonitor | None = None
     policy_governor: PolicyGovernor | None = None
+    _policy_workbench_store: PolicyWorkbenchStore | None = field(
+        default=None,
+        init=False,
+        repr=False,
+    )
 
     @classmethod
     def from_context(cls, ctx: Any) -> SecurityAPI:
@@ -533,6 +539,66 @@ class SecurityAPI:
 
         return dump_policy_schema()
 
+    def _policy_workbench(self) -> PolicyWorkbenchStore:
+        """Return the persistent workbench store for the active policy set."""
+
+        if self._policy_workbench_store is None:
+            policy_set_id = (
+                self.policy_version_manager.policy_set_id
+                if self.policy_version_manager is not None
+                else "securemcp-policy"
+            )
+            backend = (
+                self.policy_version_manager.backend
+                if self.policy_version_manager is not None
+                else None
+            )
+            self._policy_workbench_store = PolicyWorkbenchStore(
+                policy_set_id,
+                backend=backend,
+            )
+        return self._policy_workbench_store
+
+    def _merge_environment_profiles(self) -> list[dict[str, Any]]:
+        """Combine static environment profiles with captured live state."""
+
+        captured = {
+            str(item.get("environment_id")): item
+            for item in self._policy_workbench().list_environment_states()
+        }
+        promotions = self._policy_workbench().list_promotions(limit=100)
+        merged: list[dict[str, Any]] = []
+        for environment in list_policy_environments():
+            env_id = str(environment.get("environment_id", ""))
+            state = captured.get(env_id, {})
+            current = (
+                state.get("current", {})
+                if isinstance(state.get("current"), dict)
+                else {}
+            )
+            last_promotion = next(
+                (
+                    promotion
+                    for promotion in promotions
+                    if promotion.get("target_environment") == env_id
+                ),
+                None,
+            )
+            merged.append(
+                {
+                    **environment,
+                    "capture_count": int(state.get("capture_count", 0) or 0),
+                    "current_version_number": current.get("version_number"),
+                    "current_provider_count": current.get("provider_count"),
+                    "current_source_label": current.get("source_label"),
+                    "captured_at": current.get("captured_at"),
+                    "captured_by": current.get("captured_by"),
+                    "last_capture_note": current.get("note"),
+                    "last_promotion": last_promotion,
+                }
+            )
+        return merged
+
     def get_policy_bundles(self) -> dict[str, Any]:
         """Return reusable policy bundle metadata for the workbench UI."""
 
@@ -543,13 +609,33 @@ class SecurityAPI:
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
+    def get_policy_packs(self) -> dict[str, Any]:
+        """Return private reusable packs saved by the policy team."""
+
+        packs = self._policy_workbench().list_saved_packs()
+        return {
+            "count": len(packs),
+            "packs": packs,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
     def get_policy_environment_profiles(self) -> dict[str, Any]:
         """Return named environment profiles for migration guidance."""
 
-        environments = list_policy_environments()
+        environments = self._merge_environment_profiles()
         return {
             "count": len(environments),
             "environments": environments,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    def get_policy_promotions(self) -> dict[str, Any]:
+        """Return recent promotion records across environments."""
+
+        promotions = self._policy_workbench().list_promotions(limit=30)
+        return {
+            "count": len(promotions),
+            "promotions": promotions,
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -637,9 +723,246 @@ class SecurityAPI:
             snapshot,
             author=author,
             description_prefix=description or f"Apply bundle: {bundle['title']}",
+            metadata={
+                "workbench_kind": "starter_bundle",
+                "bundle_id": bundle_id,
+                "bundle_title": bundle.get("title"),
+            },
         )
         if payload.get("status") in {"imported", "no_changes"}:
             payload["bundle"] = bundle
+        return payload
+
+    async def save_policy_pack(
+        self,
+        *,
+        title: str,
+        summary: str = "",
+        description: str = "",
+        snapshot: dict[str, Any] | list[Any] | None = None,
+        source_version_number: int | None = None,
+        author: str = "api",
+        pack_id: str | None = None,
+        tags: list[str] | None = None,
+        recommended_environments: list[str] | None = None,
+        note: str = "",
+    ) -> dict[str, Any]:
+        """Save a private reusable pack from live policy JSON or one version."""
+        resolved_label = "pack: live policy"
+        if snapshot is not None:
+            normalized = self._normalize_import_snapshot(snapshot)
+        else:
+            resolved = self._resolve_policy_snapshot(
+                snapshot=None,
+                version_number=source_version_number,
+                label_prefix="pack",
+            )
+            if "error" in resolved:
+                resolved["status"] = resolved.get("status", 400)
+                return resolved
+            resolved_label = str(resolved.get("label", resolved_label))
+            snapshot_data = resolved.get("snapshot", {})
+            if not isinstance(snapshot_data, dict):
+                return {
+                    "error": "Unable to resolve a valid policy snapshot.",
+                    "status": 400,
+                }
+            normalized = self._normalize_import_snapshot(snapshot_data)
+        if normalized.get("status") == 400:
+            return normalized
+
+        raw_providers = normalized.get("providers", [])
+        if not isinstance(raw_providers, list) or not raw_providers:
+            return {
+                "error": "Saved packs require at least one provider.",
+                "status": 400,
+            }
+        for raw_provider in raw_providers:
+            if not isinstance(raw_provider, dict):
+                return {
+                    "error": "Each saved pack provider must be a JSON object.",
+                    "status": 400,
+                }
+            if (
+                self.policy_validator is not None
+                and raw_provider.get("type") != "python_class"
+            ):
+                result = self.policy_validator.validate_declarative(raw_provider)
+                if not result.valid:
+                    return {
+                        "error": "Saved pack failed validation.",
+                        "status": 400,
+                        "validation": result.to_dict(),
+                    }
+
+        pack = self._policy_workbench().save_pack(
+            title=title,
+            summary=summary,
+            description=description,
+            snapshot=normalized,
+            author=author,
+            tags=tags,
+            recommended_environments=recommended_environments,
+            pack_id=pack_id,
+            note=note or resolved_label,
+        )
+        return {
+            "status": "saved",
+            "pack": pack,
+            "packs": self.get_policy_packs(),
+        }
+
+    def delete_policy_pack(self, pack_id: str) -> dict[str, Any]:
+        """Delete one private saved pack."""
+
+        deleted = self._policy_workbench().delete_pack(pack_id)
+        if not deleted:
+            return {"error": f"Policy pack not found: {pack_id}", "status": 404}
+        return {
+            "status": "deleted",
+            "pack_id": pack_id,
+            "packs": self.get_policy_packs(),
+        }
+
+    async def stage_policy_pack(
+        self,
+        pack_id: str,
+        *,
+        author: str = "api",
+        description: str = "",
+    ) -> dict[str, Any]:
+        """Stage a saved private pack as a governance proposal."""
+
+        pack = self._policy_workbench().get_saved_pack(pack_id)
+        if pack is None:
+            return {"error": f"Policy pack not found: {pack_id}", "status": 404}
+        payload = await self.import_policy_snapshot(
+            pack.get("snapshot", {}),
+            author=author,
+            description_prefix=description or f"Apply pack: {pack.get('title', pack_id)}",
+            metadata={
+                "workbench_kind": "saved_pack",
+                "pack_id": pack_id,
+                "pack_title": pack.get("title"),
+            },
+        )
+        if payload.get("status") in {"imported", "no_changes"}:
+            payload["pack"] = pack
+        return payload
+    
+    def capture_policy_environment(
+        self,
+        environment_id: str,
+        *,
+        actor: str = "api",
+        note: str = "",
+        source_snapshot: dict[str, Any] | None = None,
+        source_version_number: int | None = None,
+    ) -> dict[str, Any]:
+        """Capture the current live chain or one version into an environment."""
+
+        environment = get_policy_environment(environment_id)
+        if environment is None:
+            return {
+                "error": f"Unknown policy environment: {environment_id}",
+                "status": 400,
+            }
+        source = self._resolve_policy_snapshot(
+            snapshot=source_snapshot,
+            version_number=source_version_number,
+            label_prefix=f"environment {environment_id}",
+        )
+        if "error" in source:
+            source["status"] = source.get("status", 400)
+            return source
+
+        snapshot_data = source.get("snapshot", {})
+        if not isinstance(snapshot_data, dict):
+            return {"error": "Unable to resolve environment snapshot.", "status": 400}
+
+        state = self._policy_workbench().capture_environment(
+            environment_id=environment_id,
+            snapshot=snapshot_data,
+            actor=actor,
+            source_label=str(source.get("label", environment_id)),
+            version_number=source.get("version_number"),
+            note=note,
+        )
+        return {
+            "status": "captured",
+            "environment": {
+                **environment,
+                **{
+                    "capture_count": state.get("capture_count", 0),
+                    "current_version_number": state.get("current", {}).get("version_number"),
+                    "current_provider_count": state.get("current", {}).get("provider_count"),
+                    "current_source_label": state.get("current", {}).get("source_label"),
+                    "captured_at": state.get("current", {}).get("captured_at"),
+                    "captured_by": state.get("current", {}).get("captured_by"),
+                    "last_capture_note": state.get("current", {}).get("note"),
+                },
+            },
+            "environments": self.get_policy_environment_profiles(),
+        }
+
+    async def stage_policy_promotion(
+        self,
+        *,
+        source_environment: str,
+        target_environment: str,
+        author: str = "api",
+        description: str = "",
+    ) -> dict[str, Any]:
+        """Create a promotion proposal from one environment into another."""
+
+        source_state = self._policy_workbench().get_environment_state(source_environment)
+        if source_state is None:
+            return {
+                "error": f"No captured policy baseline found for {source_environment}.",
+                "status": 400,
+            }
+        target_profile = get_policy_environment(target_environment)
+        if target_profile is None:
+            return {
+                "error": f"Unknown policy environment: {target_environment}",
+                "status": 400,
+            }
+
+        current = source_state.get("current", {})
+        snapshot = current.get("snapshot")
+        if not isinstance(snapshot, dict):
+            return {
+                "error": f"{source_environment} does not have a captured snapshot to promote.",
+                "status": 400,
+            }
+
+        payload = await self.import_policy_snapshot(
+            snapshot,
+            author=author,
+            description_prefix=(
+                description
+                or f"Promote policy from {source_environment} to {target_environment}"
+            ),
+            metadata={
+                "workbench_kind": "promotion",
+                "source_environment": source_environment,
+                "target_environment": target_environment,
+                "source_version_number": current.get("version_number"),
+            },
+        )
+        proposal = payload.get("proposal", {})
+        proposal_id = proposal.get("proposal_id")
+        if payload.get("status") == "imported" and isinstance(proposal_id, str):
+            self._policy_workbench().record_promotion(
+                source_environment=source_environment,
+                target_environment=target_environment,
+                actor=author,
+                note=description,
+                proposal_id=proposal_id,
+                source_version_number=current.get("version_number"),
+                target_version_number=None,
+            )
+            payload["promotions"] = self.get_policy_promotions()
         return payload
 
     # ── Policy Versioning ────────────────────────────────────
@@ -847,6 +1170,7 @@ class SecurityAPI:
         *,
         author: str = "api",
         description_prefix: str = "Imported policy snapshot",
+        metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Import policy JSON by creating one batch governance proposal."""
         if self.policy_engine is None:
@@ -913,6 +1237,7 @@ class SecurityAPI:
                 imported_providers,
                 author=author,
                 description=description_prefix,
+                metadata=metadata,
             )
             validation = self.policy_governor.validate_proposal(proposal.proposal_id)
         except (IndexError, KeyError, ValueError) as exc:
@@ -1007,6 +1332,23 @@ class SecurityAPI:
                 else 0
             ),
         )
+        history = self._policy_workbench().record_analytics_snapshot(
+            {
+                "current_version": (
+                    current_version.version_number if current_version is not None else None
+                ),
+                "provider_count": policy.get("provider_count"),
+                "evaluation_count": policy.get("evaluation_count"),
+                "deny_count": policy.get("deny_count"),
+                "deny_rate": deny_rate,
+                "pending_proposals": governance.get("pending_count"),
+                "stale_proposals": governance.get("stale_count"),
+                "risk_count": len(risk_items),
+                "alert_count": len(recent_alerts),
+            }
+        )
+        history_start = history[0] if history else {}
+        history_end = history[-1] if history else {}
 
         return {
             "overview": {
@@ -1042,6 +1384,23 @@ class SecurityAPI:
                     for proposal in governance.get("proposals", [])
                     if proposal.get("status") == "deployed"
                 ][:5],
+            },
+            "history": {
+                "snapshots": history,
+                "sample_count": len(history),
+                "deltas": {
+                    "evaluation_count": int(history_end.get("evaluation_count", 0) or 0)
+                    - int(history_start.get("evaluation_count", 0) or 0),
+                    "deny_count": int(history_end.get("deny_count", 0) or 0)
+                    - int(history_start.get("deny_count", 0) or 0),
+                    "pending_proposals": int(
+                        history_end.get("pending_proposals", 0) or 0
+                    )
+                    - int(history_start.get("pending_proposals", 0) or 0),
+                    "risk_count": int(history_end.get("risk_count", 0) or 0)
+                    - int(history_start.get("risk_count", 0) or 0),
+                },
+                "recent_promotions": self._policy_workbench().list_promotions(limit=6),
             },
             "risks": risk_items,
             "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -1424,6 +1783,7 @@ class SecurityAPI:
         target_index: int | None,
         description: str = "",
         author: str = "api",
+        metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Create and validate a governance proposal."""
         if self.policy_governor is None:
@@ -1462,6 +1822,7 @@ class SecurityAPI:
                     provider,
                     author=author,
                     description=description,
+                    metadata=metadata,
                 )
             elif action_name == "swap":
                 if target_index is None:
@@ -1472,6 +1833,7 @@ class SecurityAPI:
                     provider,
                     author=author,
                     description=description,
+                    metadata=metadata,
                 )
             elif action_name == "remove":
                 if target_index is None:
@@ -1480,6 +1842,7 @@ class SecurityAPI:
                     target_index,
                     author=author,
                     description=description,
+                    metadata=metadata,
                 )
             elif action_name == "replace_chain":
                 if config is None:
@@ -1494,6 +1857,7 @@ class SecurityAPI:
                     providers,
                     author=author,
                     description=description,
+                    metadata=metadata,
                 )
             else:
                 raise ValueError(f"Unsupported proposal action: {action}")
@@ -1507,6 +1871,67 @@ class SecurityAPI:
             "validation": validation.to_dict(),
             "governance": self.get_governance_proposals(),
         }
+
+    def _sync_workbench_proposal_state(
+        self,
+        proposal: Any,
+        *,
+        status: str,
+        actor: str,
+        note: str = "",
+    ) -> None:
+        """Reflect proposal lifecycle changes into the workbench store."""
+
+        metadata = (
+            proposal.metadata
+            if isinstance(getattr(proposal, "metadata", None), dict)
+            else {}
+        )
+        if metadata.get("workbench_kind") != "promotion":
+            return
+
+        deployed_version_number = None
+        if status == "deployed":
+            current_version = (
+                self.policy_version_manager.current_version
+                if self.policy_version_manager is not None
+                else None
+            )
+            deployed_version_number = (
+                current_version.version_number if current_version is not None else None
+            )
+            target_environment = str(metadata.get("target_environment", "")).strip()
+            source_environment = str(metadata.get("source_environment", "")).strip()
+            if target_environment and self.policy_engine is not None:
+                snapshot = policy_snapshot(
+                    list(self.policy_engine.providers),
+                    metadata={
+                        "source": "promotion",
+                        "source_environment": source_environment,
+                        "target_environment": target_environment,
+                        "proposal_id": proposal.proposal_id,
+                    },
+                )
+                self._policy_workbench().capture_environment(
+                    environment_id=target_environment,
+                    snapshot=snapshot,
+                    actor=actor,
+                    source_label=(
+                        f"promotion from {source_environment}"
+                        if source_environment
+                        else "promotion"
+                    ),
+                    version_number=deployed_version_number,
+                    note=note or proposal.description,
+                )
+
+        self._policy_workbench().update_promotion_from_proposal(
+            proposal_id=proposal.proposal_id,
+            status=status,
+            actor=actor,
+            note=note,
+            deployed_version_number=deployed_version_number,
+        )
 
     def approve_governance_proposal(
         self,
@@ -1530,6 +1955,12 @@ class SecurityAPI:
         except ValueError as exc:
             return {"error": str(exc), "status": 400}
 
+        self._sync_workbench_proposal_state(
+            proposal,
+            status="approved",
+            actor=approver,
+            note=note,
+        )
         return {
             "status": "approved",
             "proposal": self._serialize_governance_proposal(proposal),
@@ -1558,6 +1989,12 @@ class SecurityAPI:
         except ValueError as exc:
             return {"error": str(exc), "status": 400}
 
+        self._sync_workbench_proposal_state(
+            proposal,
+            status="deployed",
+            actor=actor,
+            note=note,
+        )
         return {
             "status": "deployed",
             "proposal": self._serialize_governance_proposal(proposal),
@@ -1593,6 +2030,12 @@ class SecurityAPI:
             "governance": self.get_governance_proposals(),
         }
         if proposal is not None:
+            self._sync_workbench_proposal_state(
+                proposal,
+                status="simulated",
+                actor="policy-simulator",
+                note=f"Ran {report.total} scenarios.",
+            )
             payload["proposal"] = self._serialize_governance_proposal(proposal)
         return payload
 
@@ -1618,6 +2061,12 @@ class SecurityAPI:
         except ValueError as exc:
             return {"error": str(exc), "status": 400}
 
+        self._sync_workbench_proposal_state(
+            proposal,
+            status="rejected",
+            actor=actor,
+            note=reason,
+        )
         return {
             "status": "rejected",
             "proposal": self._serialize_governance_proposal(proposal),
@@ -1646,6 +2095,12 @@ class SecurityAPI:
         except ValueError as exc:
             return {"error": str(exc), "status": 400}
 
+        self._sync_workbench_proposal_state(
+            proposal,
+            status="withdrawn",
+            actor=actor,
+            note=note,
+        )
         return {
             "status": "withdrawn",
             "proposal": self._serialize_governance_proposal(proposal),

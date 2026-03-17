@@ -127,4 +127,3 @@ function TopNavLink({ href, label, active }: { href: string; label: string; acti
     </Link>
   );
 }
-

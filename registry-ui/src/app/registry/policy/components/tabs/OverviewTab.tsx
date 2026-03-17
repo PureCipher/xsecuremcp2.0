@@ -1,0 +1,328 @@
+"use client";
+
+import { useMemo } from "react";
+import type {
+  PolicyAnalyticsResponse,
+  PolicyBundleItem,
+  RegistryPayload,
+} from "@/lib/registryClient";
+import { usePolicyContext } from "../../contexts/PolicyContext";
+
+type OverviewTabProps = {
+  analytics: PolicyAnalyticsResponse;
+  bundles: PolicyBundleItem[];
+  onStageBundle: (bundleId: string, title: string) => Promise<void>;
+};
+
+export function OverviewTab({
+  analytics,
+  bundles,
+  onStageBundle,
+}: OverviewTabProps) {
+  const { busyKey } = usePolicyContext();
+
+  const topDeniedResources = useMemo(() => {
+    const auditResources = analytics.blocked?.audit?.top_denied_resources;
+    if (Array.isArray(auditResources)) return auditResources as RegistryPayload[];
+    const monitorWindow = analytics.blocked?.monitor?.window as RegistryPayload | undefined;
+    const monitorResources = monitorWindow?.top_denied_resources;
+    if (Array.isArray(monitorResources)) return monitorResources as RegistryPayload[];
+    return [] as RegistryPayload[];
+  }, [analytics.blocked?.audit?.top_denied_resources, analytics.blocked?.monitor]);
+
+  return (
+    <div className="flex flex-col gap-6">
+      {/* ── Analytics ─────────────────────────────────────────────── */}
+      <section className="grid gap-4 xl:grid-cols-[1.1fr,0.9fr]">
+        <div className="rounded-3xl bg-emerald-900/40 p-5 ring-1 ring-emerald-700/60">
+          <div className="space-y-1">
+            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-300">
+              Policy analytics
+            </p>
+            <h2 className="text-xl font-semibold text-emerald-50">
+              See what is blocked, changed, and risky
+            </h2>
+            <p className="text-xs text-emerald-100/80">
+              Live deny patterns, recent changes, and rollout risk at a glance.
+            </p>
+          </div>
+
+          {/* Key metrics */}
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <MetricCard
+              label="Blocked now"
+              value={String(
+                (analytics.blocked?.audit?.current_deny as number | undefined) ??
+                  analytics.overview?.deny_count ?? 0,
+              )}
+              subtitle="Denials in the current window"
+            />
+            <MetricCard
+              label="Deny rate"
+              value={`${Math.round(
+                Number(
+                  (analytics.blocked?.audit?.deny_rate as number | undefined) ??
+                    (analytics.blocked?.monitor?.window as RegistryPayload | undefined)
+                      ?.deny_rate ?? 0,
+                ) * 100,
+              )}%`}
+              subtitle="Recent blocked traffic share"
+            />
+            <MetricCard
+              label="Active risks"
+              value={String(analytics.risks?.length ?? 0)}
+              subtitle="Review items worth attention"
+            />
+          </div>
+
+          {/* Most blocked + version changes */}
+          <div className="mt-4 grid gap-4 lg:grid-cols-[1fr,1fr]">
+            <div className="rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/60">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+                Most blocked resources
+              </p>
+              <ul className="mt-3 space-y-2 text-xs text-emerald-100/90">
+                {topDeniedResources.slice(0, 4).map((item, index) => (
+                  <li
+                    key={`top-denied-${index}`}
+                    className="rounded-2xl bg-emerald-900/20 px-3 py-2 ring-1 ring-emerald-700/30"
+                  >
+                    {String(item.resource_id ?? "unknown")} ·{" "}
+                    {String(item.count ?? 0)} denials
+                  </li>
+                ))}
+                {topDeniedResources.length === 0 ? (
+                  <li className="text-xs text-emerald-200/90">
+                    No deny hot spots have been recorded yet.
+                  </li>
+                ) : null}
+              </ul>
+            </div>
+
+            <div className="rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/60">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+                Recent version change
+              </p>
+              {analytics.changes?.latest_version_summary ? (
+                <div className="mt-3 space-y-2 text-xs text-emerald-100/90">
+                  <p>
+                    Compared v{analytics.changes.latest_version_from ?? "?"} to v
+                    {analytics.changes.latest_version_to ?? "?"}.
+                  </p>
+                  <p>
+                    {String((analytics.changes.latest_version_summary?.changed_count as number | undefined) ?? 0)} changed ·{" "}
+                    {String((analytics.changes.latest_version_summary?.added_count as number | undefined) ?? 0)} added ·{" "}
+                    {String((analytics.changes.latest_version_summary?.removed_count as number | undefined) ?? 0)} removed
+                  </p>
+                </div>
+              ) : (
+                <p className="mt-3 text-xs text-emerald-200/90">
+                  No prior version delta is available yet.
+                </p>
+              )}
+              {(analytics.risks ?? []).slice(0, 3).map((risk, index) => (
+                <div
+                  key={`risk-${index}`}
+                  className="mt-3 rounded-2xl bg-emerald-900/20 p-3 ring-1 ring-emerald-700/30"
+                >
+                  <p className="text-xs font-semibold text-emerald-50">{risk.title}</p>
+                  <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-emerald-300">
+                    {risk.level}
+                  </p>
+                  <p className="mt-2 text-xs text-emerald-100/90">{risk.detail}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Trend history */}
+          <div className="mt-4 rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/60">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+                  Trend history
+                </p>
+                <p className="mt-1 text-xs text-emerald-100/90">
+                  Recent analytics snapshots show how the policy set has behaved over time.
+                </p>
+              </div>
+              <span className="rounded-full bg-emerald-900/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-200">
+                {String(analytics.history?.sample_count ?? 0)} samples
+              </span>
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-4">
+              {[
+                { label: "Eval trend", value: analytics.history?.deltas?.evaluation_count },
+                { label: "Deny trend", value: analytics.history?.deltas?.deny_count },
+                { label: "Queue trend", value: analytics.history?.deltas?.pending_proposals },
+                { label: "Risk trend", value: analytics.history?.deltas?.risk_count },
+              ].map((item) => (
+                <div key={item.label} className="rounded-2xl bg-emerald-900/20 p-3 ring-1 ring-emerald-700/30">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-300">
+                    {item.label}
+                  </p>
+                  <p className="mt-2 text-lg font-semibold text-emerald-50">
+                    {String((item.value as number | undefined) ?? 0)}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4 grid gap-3 lg:grid-cols-[1.2fr,0.8fr]">
+              <div className="rounded-2xl bg-emerald-900/20 p-3 ring-1 ring-emerald-700/30">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-300">
+                  Recent snapshots
+                </p>
+                <div className="mt-3 space-y-2">
+                  {((analytics.history?.snapshots as RegistryPayload[] | undefined) ?? [])
+                    .slice(-6)
+                    .map((snapshot, index) => (
+                      <div
+                        key={`analytics-snapshot-${index}`}
+                        className="rounded-2xl bg-emerald-950/80 px-3 py-2 ring-1 ring-emerald-700/30"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-emerald-300">
+                          <span>{String(snapshot.captured_at ?? "Unknown time")}</span>
+                          <span>v{String(snapshot.current_version ?? "live")}</span>
+                        </div>
+                        <p className="mt-2 text-xs text-emerald-100/90">
+                          {String(snapshot.deny_count ?? 0)} denials ·{" "}
+                          {String(snapshot.pending_proposals ?? 0)} open proposals ·{" "}
+                          {String(snapshot.risk_count ?? 0)} active risks
+                        </p>
+                      </div>
+                    ))}
+                  {(((analytics.history?.snapshots as RegistryPayload[] | undefined) ?? []).length === 0) ? (
+                    <p className="text-xs text-emerald-200/90">
+                      Trend history will start filling in as policy changes are reviewed.
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="rounded-2xl bg-emerald-900/20 p-3 ring-1 ring-emerald-700/30">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-300">
+                  Recent promotions
+                </p>
+                <div className="mt-3 space-y-2">
+                  {(analytics.history?.recent_promotions ?? []).slice(0, 4).map((promotion, index) => (
+                    <div
+                      key={`analytics-promotion-${promotion.promotion_id ?? index}`}
+                      className="rounded-2xl bg-emerald-950/80 px-3 py-2 ring-1 ring-emerald-700/30"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs font-semibold text-emerald-50">
+                          {promotion.source_environment ?? "source"} →{" "}
+                          {promotion.target_environment ?? "target"}
+                        </p>
+                        <span className="rounded-full bg-emerald-900/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-200">
+                          {promotion.status ?? "staged"}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-xs text-emerald-100/90">
+                        {promotion.note || "Promotion tracked through the policy workflow."}
+                      </p>
+                    </div>
+                  ))}
+                  {((analytics.history?.recent_promotions ?? []).length === 0) ? (
+                    <p className="text-xs text-emerald-200/90">
+                      No environment promotions have been staged yet.
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Bundles ──────────────────────────────────────────────── */}
+        <div className="rounded-3xl bg-emerald-900/40 p-5 ring-1 ring-emerald-700/60">
+          <div className="space-y-1">
+            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-300">
+              Reusable bundles
+            </p>
+            <h2 className="text-xl font-semibold text-emerald-50">
+              Start from proven policy packs
+            </h2>
+            <p className="text-xs text-emerald-100/80">
+              Bundles stage full-chain proposals for common registry operating modes.
+            </p>
+          </div>
+
+          <div className="mt-4 flex flex-col gap-3">
+            {bundles.length === 0 ? (
+              <div className="rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/60">
+                <p className="text-xs text-emerald-100/90">
+                  No reusable bundles are available yet.
+                </p>
+              </div>
+            ) : (
+              bundles.map((bundle) => (
+                <article
+                  key={bundle.bundle_id}
+                  className="rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/60"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-xs font-semibold text-emerald-50">
+                          {bundle.title ?? bundle.bundle_id}
+                        </p>
+                        <span className="rounded-full bg-emerald-900/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-200">
+                          {bundle.risk_posture ?? "bundle"}
+                        </span>
+                      </div>
+                      <p className="text-xs text-emerald-100/90">
+                        {bundle.summary ?? bundle.description}
+                      </p>
+                      <p className="text-[11px] text-emerald-300/90">
+                        {bundle.provider_count ?? 0} steps · Best for{" "}
+                        {(bundle.recommended_environments ?? []).join(", ") || "any environment"}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void onStageBundle(bundle.bundle_id, bundle.title ?? bundle.bundle_id)}
+                      disabled={busyKey === `bundle-${bundle.bundle_id}`}
+                      className="rounded-full bg-emerald-500 px-4 py-2 text-[11px] font-semibold text-emerald-950 transition hover:bg-emerald-400 disabled:opacity-60"
+                    >
+                      {busyKey === `bundle-${bundle.bundle_id}` ? "Staging\u2026" : "Stage bundle"}
+                    </button>
+                  </div>
+                  <ul className="mt-3 space-y-1 text-[10px] text-emerald-200/90">
+                    {(bundle.provider_summaries ?? []).slice(0, 3).map((summary, index) => (
+                      <li key={`${bundle.bundle_id}-summary-${index}`}>
+                        \u2022 {summary}
+                      </li>
+                    ))}
+                  </ul>
+                </article>
+              ))
+            )}
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+  subtitle,
+}: {
+  label: string;
+  value: string;
+  subtitle: string;
+}) {
+  return (
+    <div className="rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/60">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+        {label}
+      </p>
+      <p className="mt-2 text-2xl font-semibold text-emerald-50">{value}</p>
+      <p className="mt-1 text-[11px] text-emerald-200/90">{subtitle}</p>
+    </div>
+  );
+}

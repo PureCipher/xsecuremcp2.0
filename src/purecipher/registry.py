@@ -636,16 +636,20 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         schema = api.get_policy_schema()
         proposals = api.get_governance_proposals()
         bundles = api.get_policy_bundles()
+        packs = api.get_policy_packs()
         analytics = api.get_policy_analytics()
         environments = api.get_policy_environment_profiles()
+        promotions = api.get_policy_promotions()
         return {
             "policy": status,
             "versions": versions,
             "schema": schema,
             "governance": proposals,
             "bundles": bundles,
+            "packs": packs,
             "analytics": analytics,
             "environments": environments,
+            "promotions": promotions,
             "simulation_defaults": self.get_default_policy_simulation_scenarios(),
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
@@ -729,6 +733,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         target_index: int | None,
         description: str = "",
         author: str = "registry-admin",
+        metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Create a policy governance proposal."""
 
@@ -738,6 +743,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             target_index=target_index,
             description=description,
             author=author,
+            metadata=metadata,
         )
 
     def get_policy_proposal(self, proposal_id: str) -> dict[str, Any]:
@@ -919,6 +925,11 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
         return self._policy_api().get_policy_bundles()
 
+    def get_policy_packs(self) -> dict[str, Any]:
+        """Return saved private policy packs."""
+
+        return self._policy_api().get_policy_packs()
+
     def get_policy_environments(self) -> dict[str, Any]:
         """Return named policy environments."""
 
@@ -928,6 +939,11 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         """Return analytics for blocked, changed, and risky policy behavior."""
 
         return self._policy_api().get_policy_analytics()
+
+    def get_policy_promotions(self) -> dict[str, Any]:
+        """Return recent policy promotion records."""
+
+        return self._policy_api().get_policy_promotions()
 
     async def stage_policy_bundle(
         self,
@@ -940,6 +956,91 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
         return await self._policy_api().stage_policy_bundle(
             bundle_id,
+            author=author,
+            description=description,
+        )
+
+    async def save_policy_pack(
+        self,
+        *,
+        title: str,
+        summary: str = "",
+        description: str = "",
+        snapshot: dict[str, Any] | list[Any] | None = None,
+        source_version_number: int | None = None,
+        author: str = "registry-admin",
+        pack_id: str | None = None,
+        tags: list[str] | None = None,
+        recommended_environments: list[str] | None = None,
+        note: str = "",
+    ) -> dict[str, Any]:
+        """Save a private reusable policy pack."""
+
+        return await self._policy_api().save_policy_pack(
+            title=title,
+            summary=summary,
+            description=description,
+            snapshot=snapshot,
+            source_version_number=source_version_number,
+            author=author,
+            pack_id=pack_id,
+            tags=tags,
+            recommended_environments=recommended_environments,
+            note=note,
+        )
+
+    def delete_policy_pack(self, pack_id: str) -> dict[str, Any]:
+        """Delete a saved private policy pack."""
+
+        return self._policy_api().delete_policy_pack(pack_id)
+
+    async def stage_policy_pack(
+        self,
+        pack_id: str,
+        *,
+        author: str = "registry-admin",
+        description: str = "",
+    ) -> dict[str, Any]:
+        """Stage a saved private pack as a governance proposal."""
+
+        return await self._policy_api().stage_policy_pack(
+            pack_id,
+            author=author,
+            description=description,
+        )
+
+    def capture_policy_environment(
+        self,
+        environment_id: str,
+        *,
+        actor: str = "registry-admin",
+        note: str = "",
+        source_snapshot: dict[str, Any] | None = None,
+        source_version_number: int | None = None,
+    ) -> dict[str, Any]:
+        """Capture the current live chain or one version into an environment."""
+
+        return self._policy_api().capture_policy_environment(
+            environment_id,
+            actor=actor,
+            note=note,
+            source_snapshot=source_snapshot,
+            source_version_number=source_version_number,
+        )
+
+    async def stage_policy_promotion(
+        self,
+        *,
+        source_environment: str,
+        target_environment: str,
+        author: str = "registry-admin",
+        description: str = "",
+    ) -> dict[str, Any]:
+        """Stage an environment promotion as a governance proposal."""
+
+        return await self._policy_api().stage_policy_promotion(
+            source_environment=source_environment,
+            target_environment=target_environment,
             author=author,
             description=description,
         )
@@ -967,6 +1068,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         *,
         description_prefix: str = "Imported policy snapshot",
         author: str = "registry-admin",
+        metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Import policy JSON by creating governance proposals."""
 
@@ -974,6 +1076,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             snapshot,
             description_prefix=description_prefix,
             author=author,
+            metadata=metadata,
         )
 
     def list_verified_tools(

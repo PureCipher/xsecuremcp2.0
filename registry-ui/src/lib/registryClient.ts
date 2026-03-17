@@ -253,6 +253,7 @@ export type PolicyProposalItem = {
   action?: string;
   author?: string;
   description?: string;
+  metadata?: RegistryPayload;
   base_version_number?: number | null;
   live_version_number?: number | null;
   is_stale?: boolean;
@@ -320,8 +321,10 @@ export type PolicyManagementResponse = RegistryErrorResponse & {
   schema?: PolicySchemaResponse;
   governance?: PolicyGovernanceResponse;
   bundles?: PolicyBundlesResponse;
+  packs?: PolicyPacksResponse;
   analytics?: PolicyAnalyticsResponse;
   environments?: PolicyEnvironmentResponse;
+  promotions?: PolicyPromotionsResponse;
   simulation_defaults?: PolicySimulationScenario[];
   generated_at?: string;
 };
@@ -375,6 +378,39 @@ export type PolicyBundlesResponse = RegistryErrorResponse & {
   generated_at?: string;
 };
 
+export type PolicyPackRevision = {
+  revision_id?: string;
+  revision_number?: number;
+  created_at?: string;
+  author?: string;
+  note?: string;
+};
+
+export type PolicyPackItem = {
+  pack_id: string;
+  title?: string;
+  summary?: string;
+  description?: string;
+  owner?: string;
+  visibility?: string;
+  tags?: string[];
+  recommended_environments?: string[];
+  provider_count?: number;
+  provider_summaries?: string[];
+  snapshot?: PolicySnapshot;
+  created_at?: string;
+  updated_at?: string;
+  revision_count?: number;
+  current_revision_number?: number;
+  revisions?: PolicyPackRevision[];
+};
+
+export type PolicyPacksResponse = RegistryErrorResponse & {
+  count?: number;
+  packs?: PolicyPackItem[];
+  generated_at?: string;
+};
+
 export type PolicyEnvironmentProfile = {
   environment_id: string;
   title?: string;
@@ -382,11 +418,48 @@ export type PolicyEnvironmentProfile = {
   goals?: string[];
   required_controls?: string[];
   warnings?: string[];
+  capture_count?: number;
+  current_version_number?: number | null;
+  current_provider_count?: number | null;
+  current_source_label?: string;
+  captured_at?: string;
+  captured_by?: string;
+  last_capture_note?: string;
+  last_promotion?: PolicyPromotionItem | null;
 };
 
 export type PolicyEnvironmentResponse = RegistryErrorResponse & {
   count?: number;
   environments?: PolicyEnvironmentProfile[];
+  generated_at?: string;
+};
+
+export type PolicyPromotionEvent = {
+  event?: string;
+  actor?: string;
+  note?: string;
+  created_at?: string;
+};
+
+export type PolicyPromotionItem = {
+  promotion_id?: string;
+  proposal_id?: string;
+  source_environment?: string;
+  target_environment?: string;
+  source_version_number?: number | null;
+  target_version_number?: number | null;
+  deployed_version_number?: number | null;
+  status?: string;
+  created_at?: string;
+  created_by?: string;
+  note?: string;
+  completed_at?: string;
+  decision_trail?: PolicyPromotionEvent[];
+};
+
+export type PolicyPromotionsResponse = RegistryErrorResponse & {
+  count?: number;
+  promotions?: PolicyPromotionItem[];
   generated_at?: string;
 };
 
@@ -416,6 +489,12 @@ export type PolicyAnalyticsResponse = RegistryErrorResponse & {
     latest_version_to?: number | null;
     latest_version_summary?: RegistryPayload | null;
     recent_deployments?: PolicyProposalItem[];
+  };
+  history?: {
+    snapshots?: RegistryPayload[];
+    sample_count?: number;
+    deltas?: RegistryPayload;
+    recent_promotions?: PolicyPromotionItem[];
   };
   risks?: PolicyRiskItem[];
   generated_at?: string;

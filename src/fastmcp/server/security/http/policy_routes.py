@@ -53,6 +53,41 @@ def mount_policy_routes(server: Any, api: Any, prefix: str) -> None:
     async def policy_bundles_endpoint(request: Request) -> JSONResponse:
         return JSONResponse(api.get_policy_bundles())
 
+    @server.custom_route(f"{prefix}/policy/packs", methods=["GET"])
+    async def policy_packs_endpoint(request: Request) -> JSONResponse:
+        return JSONResponse(api.get_policy_packs())
+
+    @server.custom_route(f"{prefix}/policy/packs", methods=["POST"])
+    async def policy_packs_save_endpoint(request: Request) -> JSONResponse:
+        body = await request.json()
+        payload = await api.save_policy_pack(
+            title=str(body.get("title", "")),
+            summary=str(body.get("summary", "")),
+            description=str(body.get("description", "")),
+            snapshot=body.get("snapshot") if body.get("snapshot") is not None else None,
+            source_version_number=(
+                int(body["source_version_number"])
+                if body.get("source_version_number") is not None
+                else None
+            ),
+            author=str(body.get("author", "api")),
+            pack_id=str(body.get("pack_id")) if body.get("pack_id") else None,
+            tags=list(body.get("tags", [])) if isinstance(body.get("tags"), list) else None,
+            recommended_environments=(
+                list(body.get("recommended_environments", []))
+                if isinstance(body.get("recommended_environments"), list)
+                else None
+            ),
+            note=str(body.get("note", "")),
+        )
+        return JSONResponse(payload, status_code=_status_code_from_payload(payload))
+
+    @server.custom_route(f"{prefix}/policy/packs/{{pack_id}}", methods=["DELETE"])
+    async def policy_packs_delete_endpoint(request: Request) -> JSONResponse:
+        pack_id = request.path_params.get("pack_id", "")
+        payload = api.delete_policy_pack(str(pack_id))
+        return JSONResponse(payload, status_code=_status_code_from_payload(payload))
+
     @server.custom_route(
         f"{prefix}/policy/bundles/{{bundle_id}}/stage", methods=["POST"]
     )
@@ -66,9 +101,58 @@ def mount_policy_routes(server: Any, api: Any, prefix: str) -> None:
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
+    @server.custom_route(f"{prefix}/policy/packs/{{pack_id}}/stage", methods=["POST"])
+    async def policy_pack_stage_endpoint(request: Request) -> JSONResponse:
+        pack_id = request.path_params.get("pack_id", "")
+        body = await request.json()
+        payload = await api.stage_policy_pack(
+            str(pack_id),
+            author=str(body.get("author", "api")),
+            description=str(body.get("description", "")),
+        )
+        return JSONResponse(payload, status_code=_status_code_from_payload(payload))
+
     @server.custom_route(f"{prefix}/policy/environments", methods=["GET"])
     async def policy_environments_endpoint(request: Request) -> JSONResponse:
         return JSONResponse(api.get_policy_environment_profiles())
+
+    @server.custom_route(
+        f"{prefix}/policy/environments/{{environment_id}}/capture", methods=["POST"]
+    )
+    async def policy_environment_capture_endpoint(request: Request) -> JSONResponse:
+        environment_id = request.path_params.get("environment_id", "")
+        body = await request.json()
+        payload = api.capture_policy_environment(
+            str(environment_id),
+            actor=str(body.get("actor", "api")),
+            note=str(body.get("note", "")),
+            source_snapshot=(
+                body.get("source_snapshot")
+                if isinstance(body.get("source_snapshot"), dict)
+                else None
+            ),
+            source_version_number=(
+                int(body["source_version_number"])
+                if body.get("source_version_number") is not None
+                else None
+            ),
+        )
+        return JSONResponse(payload, status_code=_status_code_from_payload(payload))
+
+    @server.custom_route(f"{prefix}/policy/promotions", methods=["GET"])
+    async def policy_promotions_endpoint(request: Request) -> JSONResponse:
+        return JSONResponse(api.get_policy_promotions())
+
+    @server.custom_route(f"{prefix}/policy/promotions", methods=["POST"])
+    async def policy_promotions_stage_endpoint(request: Request) -> JSONResponse:
+        body = await request.json()
+        payload = await api.stage_policy_promotion(
+            source_environment=str(body.get("source_environment", "")),
+            target_environment=str(body.get("target_environment", "")),
+            author=str(body.get("author", "api")),
+            description=str(body.get("description", "")),
+        )
+        return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
     @server.custom_route(f"{prefix}/policy/analytics", methods=["GET"])
     async def policy_analytics_endpoint(request: Request) -> JSONResponse:
@@ -186,6 +270,7 @@ def mount_policy_routes(server: Any, api: Any, prefix: str) -> None:
             ),
             description=str(body.get("description", "")),
             author=str(body.get("author", "api")),
+            metadata=body.get("metadata") if isinstance(body.get("metadata"), dict) else None,
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 

@@ -77,6 +77,60 @@ def mount_registry_policy_routes(
             return error_response
         return JSONResponse(registry.get_policy_bundles())
 
+    @registry.custom_route(f"{prefix}/policy/packs", methods=["GET"])
+    async def registry_policy_packs(request: Request) -> JSONResponse:
+        _, error_response = _require_policy_access(registry, request, allowed_roles)
+        if error_response is not None:
+            return error_response
+        return JSONResponse(registry.get_policy_packs())
+
+    @registry.custom_route(f"{prefix}/policy/packs", methods=["POST"])
+    async def registry_policy_save_pack(request: Request) -> JSONResponse:
+        session, error_response = _require_policy_access(
+            registry, request, allowed_roles
+        )
+        if error_response is not None:
+            return error_response
+        body = await _load_json_body(request, default=None)
+        if not isinstance(body, dict):
+            return JSONResponse(
+                {"error": "Invalid JSON body", "status": 400},
+                status_code=400,
+            )
+        payload = await registry.save_policy_pack(
+            title=str(body.get("title", "")),
+            summary=str(body.get("summary", "")),
+            description=str(body.get("description", "")),
+            snapshot=body.get("snapshot") if body.get("snapshot") is not None else None,
+            source_version_number=(
+                int(body["source_version_number"])
+                if body.get("source_version_number") is not None
+                else None
+            ),
+            author=session.username if session is not None else "registry-admin",
+            pack_id=str(body.get("pack_id")) if body.get("pack_id") else None,
+            tags=list(body.get("tags", [])) if isinstance(body.get("tags"), list) else None,
+            recommended_environments=(
+                list(body.get("recommended_environments", []))
+                if isinstance(body.get("recommended_environments"), list)
+                else None
+            ),
+            note=str(body.get("note", "")),
+        )
+        return JSONResponse(payload, status_code=_status_code_from_payload(payload))
+
+    @registry.custom_route(
+        f"{prefix}/policy/packs/{{pack_id}}",
+        methods=["DELETE"],
+    )
+    async def registry_policy_delete_pack(request: Request) -> JSONResponse:
+        _, error_response = _require_policy_access(registry, request, allowed_roles)
+        if error_response is not None:
+            return error_response
+        pack_id = str(request.path_params.get("pack_id", ""))
+        payload = registry.delete_policy_pack(pack_id)
+        return JSONResponse(payload, status_code=_status_code_from_payload(payload))
+
     @registry.custom_route(
         f"{prefix}/policy/bundles/{{bundle_id}}/stage",
         methods=["POST"],
@@ -98,12 +152,90 @@ def mount_registry_policy_routes(
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
+    @registry.custom_route(
+        f"{prefix}/policy/packs/{{pack_id}}/stage",
+        methods=["POST"],
+    )
+    async def registry_policy_stage_pack(request: Request) -> JSONResponse:
+        session, error_response = _require_policy_access(
+            registry, request, allowed_roles
+        )
+        if error_response is not None:
+            return error_response
+        pack_id = request.path_params.get("pack_id", "")
+        body = await _load_json_body(request, default={})
+        payload = await registry.stage_policy_pack(
+            str(pack_id),
+            author=session.username if session is not None else "registry-admin",
+            description=str(body.get("description", ""))
+            if isinstance(body, dict)
+            else "",
+        )
+        return JSONResponse(payload, status_code=_status_code_from_payload(payload))
+
     @registry.custom_route(f"{prefix}/policy/environments", methods=["GET"])
     async def registry_policy_environments(request: Request) -> JSONResponse:
         _, error_response = _require_policy_access(registry, request, allowed_roles)
         if error_response is not None:
             return error_response
         return JSONResponse(registry.get_policy_environments())
+
+    @registry.custom_route(
+        f"{prefix}/policy/environments/{{environment_id}}/capture",
+        methods=["POST"],
+    )
+    async def registry_policy_capture_environment(request: Request) -> JSONResponse:
+        session, error_response = _require_policy_access(
+            registry, request, allowed_roles
+        )
+        if error_response is not None:
+            return error_response
+        environment_id = str(request.path_params.get("environment_id", ""))
+        body = await _load_json_body(request, default={})
+        payload = registry.capture_policy_environment(
+            environment_id,
+            actor=session.username if session is not None else "registry-admin",
+            note=str(body.get("note", "")) if isinstance(body, dict) else "",
+            source_snapshot=(
+                body.get("source_snapshot")
+                if isinstance(body, dict) and isinstance(body.get("source_snapshot"), dict)
+                else None
+            ),
+            source_version_number=(
+                int(body["source_version_number"])
+                if isinstance(body, dict) and body.get("source_version_number") is not None
+                else None
+            ),
+        )
+        return JSONResponse(payload, status_code=_status_code_from_payload(payload))
+
+    @registry.custom_route(f"{prefix}/policy/promotions", methods=["GET"])
+    async def registry_policy_promotions(request: Request) -> JSONResponse:
+        _, error_response = _require_policy_access(registry, request, allowed_roles)
+        if error_response is not None:
+            return error_response
+        return JSONResponse(registry.get_policy_promotions())
+
+    @registry.custom_route(f"{prefix}/policy/promotions", methods=["POST"])
+    async def registry_policy_stage_promotion(request: Request) -> JSONResponse:
+        session, error_response = _require_policy_access(
+            registry, request, allowed_roles
+        )
+        if error_response is not None:
+            return error_response
+        body = await _load_json_body(request, default=None)
+        if not isinstance(body, dict):
+            return JSONResponse(
+                {"error": "Invalid JSON body", "status": 400},
+                status_code=400,
+            )
+        payload = await registry.stage_policy_promotion(
+            source_environment=str(body.get("source_environment", "")),
+            target_environment=str(body.get("target_environment", "")),
+            author=session.username if session is not None else "registry-admin",
+            description=str(body.get("description", "")),
+        )
+        return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
     @registry.custom_route(f"{prefix}/policy/analytics", methods=["GET"])
     async def registry_policy_analytics(request: Request) -> JSONResponse:
@@ -232,6 +364,7 @@ def mount_registry_policy_routes(
             ),
             description=str(body.get("description", "")),
             author=session.username if session is not None else "registry-admin",
+            metadata=body.get("metadata") if isinstance(body.get("metadata"), dict) else None,
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
