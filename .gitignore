@@ -66,6 +66,7 @@ dmypy.json
 
 # Claude worktree management
 .claude-wt/worktrees
+.claude/worktrees/
 
 # Agents and local AI/editor config (do not commit)
 /PLAN.md
