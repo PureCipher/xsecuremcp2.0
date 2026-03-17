@@ -56,6 +56,13 @@ from pathlib import Path
 from typing import Any
 
 from fastmcp.server.security.policy.composition import AllOf, AnyOf, FirstMatch, Not
+from fastmcp.server.security.policy.plugin_registry import (
+    PolicyTypeDescriptor,
+    get_registry,
+)
+
+# Import built_in to trigger registration of compliance types (gdpr, hipaa, etc.)
+import fastmcp.server.security.policy.built_in as _built_in  # noqa: F401
 from fastmcp.server.security.policy.policies.abac import AttributeBasedPolicy
 from fastmcp.server.security.policy.policies.allowlist import (
     AllowlistPolicy,
@@ -76,8 +83,10 @@ from fastmcp.server.security.policy.provider import (
 
 logger = logging.getLogger(__name__)
 
+_registry = get_registry()
 
-# ── Policy type registry ───────────────────────────────────────────
+
+# ── Factory functions ─────────────────────────────────────────────
 
 
 def _build_allowlist(config: dict[str, Any]) -> AllowlistPolicy:
@@ -208,20 +217,283 @@ def _build_deny_all(config: dict[str, Any]) -> DenyAllPolicy:
     return DenyAllPolicy()
 
 
-# Map of type names → factory functions.
+# ── Register built-in types in the plugin registry ────────────────
+
+
+def _register_builtins() -> None:
+    """Register all built-in policy types with the global registry."""
+    builtins = [
+        PolicyTypeDescriptor(
+            type_key="allowlist",
+            factory=_build_allowlist,
+            display_name="Allowlist",
+            description="Allow only listed resources (glob patterns supported)",
+            category="access_control",
+            field_specs={
+                "allowed": {
+                    "label": "Allowed resources",
+                    "type": "string_list",
+                    "description": "Resource IDs or glob patterns that should remain callable.",
+                    "required": True,
+                    "example": ["tool:*", "registry:submit"],
+                },
+            },
+            starter_config={
+                "type": "allowlist",
+                "policy_id": "allowlist-policy",
+                "version": "1.0.0",
+                "allowed": ["tool:*"],
+            },
+        ),
+        PolicyTypeDescriptor(
+            type_key="denylist",
+            factory=_build_denylist,
+            display_name="Denylist",
+            description="Block listed resources (glob patterns supported)",
+            category="access_control",
+            field_specs={
+                "denied": {
+                    "label": "Blocked resources",
+                    "type": "string_list",
+                    "description": "Resource IDs or glob patterns that should always be denied.",
+                    "required": True,
+                    "example": ["admin-panel", "tool:dangerous-*"],
+                },
+            },
+            starter_config={
+                "type": "denylist",
+                "policy_id": "denylist-policy",
+                "version": "1.0.0",
+                "denied": ["admin-panel"],
+            },
+        ),
+        PolicyTypeDescriptor(
+            type_key="rbac",
+            factory=_build_rbac,
+            display_name="Role-Based Access Control",
+            description="Role-based access control",
+            category="access_control",
+            aliases=("role_based",),
+            field_specs={
+                "role_mappings": {
+                    "label": "Role mappings",
+                    "type": "string_map_string_list",
+                    "description": "Map a role to the actions it may perform.",
+                    "required": True,
+                    "example": {
+                        "reviewer": ["review_listing", "manage_policy"],
+                        "admin": ["*"],
+                    },
+                },
+                "default_decision": {
+                    "label": "Default decision",
+                    "type": "enum",
+                    "description": "What to do when no role mapping matches.",
+                    "required": False,
+                    "default": "deny",
+                    "enum": ["allow", "deny", "defer"],
+                },
+            },
+            starter_config={
+                "type": "rbac",
+                "policy_id": "rbac-policy",
+                "version": "1.0.0",
+                "role_mappings": {
+                    "publisher": ["submit_listing"],
+                    "reviewer": ["review_listing", "manage_policy"],
+                    "admin": ["*"],
+                },
+                "default_decision": "deny",
+            },
+        ),
+        PolicyTypeDescriptor(
+            type_key="rate_limit",
+            factory=_build_rate_limit,
+            display_name="Rate Limit",
+            description="Sliding-window rate limiting per actor",
+            category="rate_limiting",
+            field_specs={
+                "max_requests": {
+                    "label": "Max requests",
+                    "type": "int",
+                    "description": "Maximum requests allowed per actor in each window.",
+                    "required": False,
+                    "default": 100,
+                    "minimum": 1,
+                },
+                "window_seconds": {
+                    "label": "Window (seconds)",
+                    "type": "int",
+                    "description": "Length of the rate-limit window in seconds.",
+                    "required": False,
+                    "default": 3600,
+                    "minimum": 1,
+                },
+            },
+            starter_config={
+                "type": "rate_limit",
+                "policy_id": "rate-limit-policy",
+                "version": "1.0.0",
+                "max_requests": 200,
+                "window_seconds": 3600,
+            },
+        ),
+        PolicyTypeDescriptor(
+            type_key="time_based",
+            factory=_build_time_based,
+            display_name="Time-Based Access",
+            description="Time-of-day and day-of-week restrictions",
+            category="access_control",
+            aliases=("temporal",),
+            field_specs={
+                "allowed_days": {
+                    "label": "Allowed days",
+                    "type": "int_list",
+                    "description": "Days of the week where the policy can allow access. Use 0=Mon .. 6=Sun.",
+                    "required": False,
+                    "default": [0, 1, 2, 3, 4],
+                },
+                "start_hour": {
+                    "label": "Start hour",
+                    "type": "int",
+                    "description": "Hour of day when access opens.",
+                    "required": False,
+                    "default": 9,
+                    "minimum": 0,
+                    "maximum": 23,
+                },
+                "end_hour": {
+                    "label": "End hour",
+                    "type": "int",
+                    "description": "Hour of day when access closes.",
+                    "required": False,
+                    "default": 17,
+                    "minimum": 0,
+                    "maximum": 23,
+                },
+                "utc_offset_hours": {
+                    "label": "UTC offset",
+                    "type": "int",
+                    "description": "Hour offset from UTC for interpreting the time window.",
+                    "required": False,
+                    "default": 0,
+                    "minimum": -12,
+                    "maximum": 14,
+                },
+            },
+            starter_config={
+                "type": "time_based",
+                "policy_id": "business-hours-policy",
+                "version": "1.0.0",
+                "allowed_days": [0, 1, 2, 3, 4],
+                "start_hour": 9,
+                "end_hour": 17,
+                "utc_offset_hours": 0,
+            },
+        ),
+        PolicyTypeDescriptor(
+            type_key="abac",
+            factory=_build_abac,
+            display_name="Attribute-Based Access Control",
+            description="Attribute-based policy using metadata checks",
+            category="access_control",
+            aliases=("attribute_based",),
+            field_specs={
+                "metadata_conditions": {
+                    "label": "Metadata conditions",
+                    "type": "json_map",
+                    "description": "Exact key/value checks applied to context.metadata.",
+                    "required": True,
+                    "example": {"tenant": "acme", "clearance": "reviewer"},
+                },
+                "require_all": {
+                    "label": "Require all conditions",
+                    "type": "bool",
+                    "description": "When enabled, every metadata condition must match.",
+                    "required": False,
+                    "default": True,
+                },
+            },
+            starter_config={
+                "type": "abac",
+                "policy_id": "abac-policy",
+                "version": "1.0.0",
+                "metadata_conditions": {"tenant": "acme"},
+                "require_all": True,
+            },
+        ),
+        PolicyTypeDescriptor(
+            type_key="resource_scoped",
+            factory=_build_resource_scoped,
+            display_name="Resource-Scoped",
+            description="Delegate to sub-policies per resource ID",
+            category="access_control",
+            field_specs={
+                "resource_rules": {
+                    "label": "Resource rules",
+                    "type": "policy_config_map",
+                    "description": "Map a resource to a nested policy config. Use the JSON preview for nested rules.",
+                    "required": True,
+                },
+                "default": {
+                    "label": "Default policy",
+                    "type": "policy_config",
+                    "description": "Fallback nested policy when a resource has no direct match.",
+                    "required": False,
+                },
+                "prefix_match": {
+                    "label": "Prefix match resources",
+                    "type": "bool",
+                    "description": "Match resource IDs by prefix instead of exact equality.",
+                    "required": False,
+                    "default": False,
+                },
+            },
+            starter_config={
+                "type": "resource_scoped",
+                "policy_id": "resource-scoped-policy",
+                "version": "1.0.0",
+                "resource_rules": {
+                    "registry:policy": {"type": "deny_all"},
+                },
+                "default": {"type": "allow_all"},
+                "prefix_match": False,
+            },
+        ),
+        PolicyTypeDescriptor(
+            type_key="allow_all",
+            factory=_build_allow_all,
+            display_name="Allow All",
+            description="Always allow",
+            category="access_control",
+            field_specs={},
+            starter_config={"type": "allow_all"},
+        ),
+        PolicyTypeDescriptor(
+            type_key="deny_all",
+            factory=_build_deny_all,
+            display_name="Deny All",
+            description="Always deny",
+            category="access_control",
+            field_specs={},
+            starter_config={"type": "deny_all"},
+        ),
+    ]
+    for desc in builtins:
+        if _registry.get(desc.type_key) is None:
+            _registry.register(desc)
+
+
+# Run registration at module import time.
+_register_builtins()
+
+
+# ── Backward-compatible lookup ────────────────────────────────────
+# Kept for any code that references _POLICY_FACTORIES directly.
 _POLICY_FACTORIES: dict[str, Any] = {
-    "allowlist": _build_allowlist,
-    "denylist": _build_denylist,
-    "rbac": _build_rbac,
-    "role_based": _build_rbac,
-    "rate_limit": _build_rate_limit,
-    "time_based": _build_time_based,
-    "temporal": _build_time_based,
-    "abac": _build_abac,
-    "attribute_based": _build_abac,
-    "resource_scoped": _build_resource_scoped,
-    "allow_all": _build_allow_all,
-    "deny_all": _build_deny_all,
+    key: (_registry.get(key).factory if _registry.get(key) else None)
+    for key in _registry.type_keys
+    if _registry.get(key) is not None
 }
 
 
@@ -253,20 +525,14 @@ def _build_single_policy(config: dict[str, Any]) -> PolicyProvider:
     """Build a single PolicyProvider from a config dict.
 
     Handles both simple policies and nested compositions via
-    ``composition`` key.
+    ``composition`` key. Delegates to the plugin registry for
+    type lookup.
     """
     # If it has a "composition" or "policies" key, it's a composite
     if "composition" in config or "policies" in config:
         return _build_composite(config)
 
-    policy_type = config.get("type", "")
-    factory = _POLICY_FACTORIES.get(policy_type)
-    if factory is None:
-        raise ValueError(
-            f"Unknown policy type: {policy_type!r}. "
-            f"Available types: {sorted(_POLICY_FACTORIES.keys())}"
-        )
-    return factory(config)
+    return _registry.build(config)
 
 
 def _build_composite(config: dict[str, Any]) -> PolicyProvider:
@@ -369,11 +635,26 @@ def load_policy(source: str | Path | dict[str, Any]) -> PolicyProvider:
     return _build_single_policy(config)
 
 
-def dump_policy_schema() -> dict[str, Any]:
+def dump_policy_schema(
+    *,
+    jurisdiction: str | None = None,
+    category: str | None = None,
+) -> dict[str, Any]:
     """Return a JSON-serializable schema describing the declarative format.
 
     Useful for documentation, IDE completion hints, or validation.
+    Dynamically includes all registered policy types from the plugin
+    registry.
+
+    Args:
+        jurisdiction: Optional filter to types matching this jurisdiction.
+        category: Optional filter to types in this category.
     """
+    # Get dynamically registered types from the plugin registry.
+    registry_schema = _registry.dump_schema(
+        jurisdiction=jurisdiction, category=category
+    )
+
     return {
         "description": "Declarative policy definition schema for SecureMCP",
         "common_field_specs": {
@@ -393,258 +674,7 @@ def dump_policy_schema() -> dict[str, Any]:
                 "placeholder": "1.0.0",
             },
         },
-        "policy_types": {
-            "allowlist": {
-                "description": "Allow only listed resources (glob patterns supported)",
-                "fields": {
-                    "allowed": "list[str] — resource IDs or glob patterns",
-                },
-                "field_specs": {
-                    "allowed": {
-                        "label": "Allowed resources",
-                        "type": "string_list",
-                        "description": "Resource IDs or glob patterns that should remain callable.",
-                        "required": True,
-                        "example": ["tool:*", "registry:submit"],
-                    },
-                },
-                "starter_config": {
-                    "type": "allowlist",
-                    "policy_id": "allowlist-policy",
-                    "version": "1.0.0",
-                    "allowed": ["tool:*"],
-                },
-            },
-            "denylist": {
-                "description": "Block listed resources (glob patterns supported)",
-                "fields": {
-                    "denied": "list[str] — resource IDs or glob patterns",
-                },
-                "field_specs": {
-                    "denied": {
-                        "label": "Blocked resources",
-                        "type": "string_list",
-                        "description": "Resource IDs or glob patterns that should always be denied.",
-                        "required": True,
-                        "example": ["admin-panel", "tool:dangerous-*"],
-                    },
-                },
-                "starter_config": {
-                    "type": "denylist",
-                    "policy_id": "denylist-policy",
-                    "version": "1.0.0",
-                    "denied": ["admin-panel"],
-                },
-            },
-            "rbac": {
-                "description": "Role-based access control",
-                "aliases": ["role_based"],
-                "fields": {
-                    "role_mappings": "dict[str, list[str]] — role → allowed actions",
-                    "default_decision": "str — 'allow' | 'deny' | 'defer' (default: deny)",
-                },
-                "field_specs": {
-                    "role_mappings": {
-                        "label": "Role mappings",
-                        "type": "string_map_string_list",
-                        "description": "Map a role to the actions it may perform.",
-                        "required": True,
-                        "example": {
-                            "reviewer": ["review_listing", "manage_policy"],
-                            "admin": ["*"],
-                        },
-                    },
-                    "default_decision": {
-                        "label": "Default decision",
-                        "type": "enum",
-                        "description": "What to do when no role mapping matches.",
-                        "required": False,
-                        "default": "deny",
-                        "enum": ["allow", "deny", "defer"],
-                    },
-                },
-                "starter_config": {
-                    "type": "rbac",
-                    "policy_id": "rbac-policy",
-                    "version": "1.0.0",
-                    "role_mappings": {
-                        "publisher": ["submit_listing"],
-                        "reviewer": ["review_listing", "manage_policy"],
-                        "admin": ["*"],
-                    },
-                    "default_decision": "deny",
-                },
-            },
-            "rate_limit": {
-                "description": "Sliding-window rate limiting per actor",
-                "fields": {
-                    "max_requests": "int — max requests per window (default: 100)",
-                    "window_seconds": "int — window duration in seconds (default: 3600)",
-                },
-                "field_specs": {
-                    "max_requests": {
-                        "label": "Max requests",
-                        "type": "int",
-                        "description": "Maximum requests allowed per actor in each window.",
-                        "required": False,
-                        "default": 100,
-                        "minimum": 1,
-                    },
-                    "window_seconds": {
-                        "label": "Window (seconds)",
-                        "type": "int",
-                        "description": "Length of the rate-limit window in seconds.",
-                        "required": False,
-                        "default": 3600,
-                        "minimum": 1,
-                    },
-                },
-                "starter_config": {
-                    "type": "rate_limit",
-                    "policy_id": "rate-limit-policy",
-                    "version": "1.0.0",
-                    "max_requests": 200,
-                    "window_seconds": 3600,
-                },
-            },
-            "time_based": {
-                "description": "Time-of-day and day-of-week restrictions",
-                "aliases": ["temporal"],
-                "fields": {
-                    "allowed_days": "list[int] — 0=Mon..6=Sun (default: all)",
-                    "start_hour": "int — 0-23 (default: 0)",
-                    "end_hour": "int — 0-23 (default: 23)",
-                    "utc_offset_hours": "int (default: 0)",
-                },
-                "field_specs": {
-                    "allowed_days": {
-                        "label": "Allowed days",
-                        "type": "int_list",
-                        "description": "Days of the week where the policy can allow access. Use 0=Mon .. 6=Sun.",
-                        "required": False,
-                        "default": [0, 1, 2, 3, 4],
-                    },
-                    "start_hour": {
-                        "label": "Start hour",
-                        "type": "int",
-                        "description": "Hour of day when access opens.",
-                        "required": False,
-                        "default": 9,
-                        "minimum": 0,
-                        "maximum": 23,
-                    },
-                    "end_hour": {
-                        "label": "End hour",
-                        "type": "int",
-                        "description": "Hour of day when access closes.",
-                        "required": False,
-                        "default": 17,
-                        "minimum": 0,
-                        "maximum": 23,
-                    },
-                    "utc_offset_hours": {
-                        "label": "UTC offset",
-                        "type": "int",
-                        "description": "Hour offset from UTC for interpreting the time window.",
-                        "required": False,
-                        "default": 0,
-                        "minimum": -12,
-                        "maximum": 14,
-                    },
-                },
-                "starter_config": {
-                    "type": "time_based",
-                    "policy_id": "business-hours-policy",
-                    "version": "1.0.0",
-                    "allowed_days": [0, 1, 2, 3, 4],
-                    "start_hour": 9,
-                    "end_hour": 17,
-                    "utc_offset_hours": 0,
-                },
-            },
-            "abac": {
-                "description": "Attribute-based policy using metadata checks",
-                "aliases": ["attribute_based"],
-                "fields": {
-                    "metadata_conditions": "dict[str, Any] — key/value checks against context.metadata",
-                    "require_all": "bool — True=AND, False=OR (default: True)",
-                },
-                "field_specs": {
-                    "metadata_conditions": {
-                        "label": "Metadata conditions",
-                        "type": "json_map",
-                        "description": "Exact key/value checks applied to context.metadata.",
-                        "required": True,
-                        "example": {"tenant": "acme", "clearance": "reviewer"},
-                    },
-                    "require_all": {
-                        "label": "Require all conditions",
-                        "type": "bool",
-                        "description": "When enabled, every metadata condition must match.",
-                        "required": False,
-                        "default": True,
-                    },
-                },
-                "starter_config": {
-                    "type": "abac",
-                    "policy_id": "abac-policy",
-                    "version": "1.0.0",
-                    "metadata_conditions": {"tenant": "acme"},
-                    "require_all": True,
-                },
-            },
-            "resource_scoped": {
-                "description": "Delegate to sub-policies per resource ID",
-                "fields": {
-                    "resource_rules": "dict[str, policy_config] — resource → sub-policy",
-                    "default": "policy_config — fallback policy",
-                    "prefix_match": "bool (default: False)",
-                },
-                "field_specs": {
-                    "resource_rules": {
-                        "label": "Resource rules",
-                        "type": "policy_config_map",
-                        "description": "Map a resource to a nested policy config. Use the JSON preview for nested rules.",
-                        "required": True,
-                    },
-                    "default": {
-                        "label": "Default policy",
-                        "type": "policy_config",
-                        "description": "Fallback nested policy when a resource has no direct match.",
-                        "required": False,
-                    },
-                    "prefix_match": {
-                        "label": "Prefix match resources",
-                        "type": "bool",
-                        "description": "Match resource IDs by prefix instead of exact equality.",
-                        "required": False,
-                        "default": False,
-                    },
-                },
-                "starter_config": {
-                    "type": "resource_scoped",
-                    "policy_id": "resource-scoped-policy",
-                    "version": "1.0.0",
-                    "resource_rules": {
-                        "registry:policy": {"type": "deny_all"},
-                    },
-                    "default": {"type": "allow_all"},
-                    "prefix_match": False,
-                },
-            },
-            "allow_all": {
-                "description": "Always allow",
-                "fields": {},
-                "field_specs": {},
-                "starter_config": {"type": "allow_all"},
-            },
-            "deny_all": {
-                "description": "Always deny",
-                "fields": {},
-                "field_specs": {},
-                "starter_config": {"type": "deny_all"},
-            },
-        },
+        "policy_types": registry_schema["policy_types"],
         "compositions": {
             "all_of": {
                 "description": "All child policies must ALLOW",

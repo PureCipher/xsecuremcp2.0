@@ -419,21 +419,89 @@ class SecurityAPI:
         self,
         resource_id: str | None = None,
         actor_id: str | None = None,
+        action: str | None = None,
         limit: int = 50,
     ) -> dict[str, Any]:
         """Query provenance records."""
         if self.provenance_ledger is None:
             return {"error": "Provenance ledger not configured", "status": 503}
 
+        from fastmcp.server.security.provenance.records import ProvenanceAction
+
+        action_filter = None
+        if action:
+            try:
+                action_filter = ProvenanceAction(action)
+            except ValueError:
+                pass
+
         records = self.provenance_ledger.get_records(
             resource_id=resource_id,
             actor_id=actor_id,
+            action=action_filter,
             limit=limit,
         )
         return {
-            "total_records": len(records),
+            "total_records": self.provenance_ledger.record_count,
+            "returned": len(records),
             "records": [r.to_dict() for r in records],
             "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    def get_provenance_chain_status(self) -> dict[str, Any]:
+        """Get provenance chain integrity status."""
+        if self.provenance_ledger is None:
+            return {"error": "Provenance ledger not configured", "status": 503}
+
+        ledger = self.provenance_ledger
+        return {
+            "ledger_id": ledger.ledger_id,
+            "record_count": ledger.record_count,
+            "chain_valid": ledger.verify_chain(),
+            "tree_valid": ledger.verify_tree(),
+            "root_hash": ledger.root_hash,
+            "chain_digest": ledger.get_chain_digest(),
+            "scheme": ledger.get_scheme_status(),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    def get_provenance_proof(self, record_id: str) -> dict[str, Any]:
+        """Get a verification bundle for a specific record."""
+        if self.provenance_ledger is None:
+            return {"error": "Provenance ledger not configured", "status": 503}
+
+        try:
+            bundle = self.provenance_ledger.export_verification_bundle(record_id)
+            return {"bundle": bundle, "status": "ok"}
+        except KeyError:
+            return {"error": f"Record '{record_id}' not found", "status": 404}
+
+    def get_provenance_export(self) -> dict[str, Any]:
+        """Export full chain dump for external audit."""
+        if self.provenance_ledger is None:
+            return {"error": "Provenance ledger not configured", "status": 503}
+
+        from fastmcp.server.security.provenance.export import export_chain_dump
+
+        return export_chain_dump(
+            records=self.provenance_ledger.all_records,
+            root_hash=self.provenance_ledger.root_hash,
+        )
+
+    def verify_provenance_bundle(self, bundle_data: dict[str, Any]) -> dict[str, Any]:
+        """Verify an externally-provided verification bundle."""
+        from fastmcp.server.security.provenance.export import verify_bundle
+
+        return verify_bundle(bundle_data)
+
+    def get_provenance_actions(self) -> dict[str, Any]:
+        """List all available provenance action types."""
+        from fastmcp.server.security.provenance.records import ProvenanceAction
+
+        return {
+            "actions": [
+                {"value": a.value, "name": a.name} for a in ProvenanceAction
+            ],
         }
 
     # ── Policy ────────────────────────────────────────────────
@@ -533,11 +601,19 @@ class SecurityAPI:
         report = await simulate(self.policy_engine, scenarios)
         return report.to_dict()
 
-    def get_policy_schema(self) -> dict[str, Any]:
-        """Get the declarative policy schema for the editor UI."""
+    def get_policy_schema(
+        self,
+        *,
+        jurisdiction: str | None = None,
+        category: str | None = None,
+    ) -> dict[str, Any]:
+        """Get the declarative policy schema for the editor UI.
+
+        Optionally filter by jurisdiction or category.
+        """
         from fastmcp.server.security.policy.declarative import dump_policy_schema
 
-        return dump_policy_schema()
+        return dump_policy_schema(jurisdiction=jurisdiction, category=category)
 
     def _policy_workbench(self) -> PolicyWorkbenchStore:
         """Return the persistent workbench store for the active policy set."""
@@ -2395,10 +2471,37 @@ def mount_security_routes(
     async def provenance_endpoint(request: Request) -> JSONResponse:
         resource = request.query_params.get("resource")
         actor = request.query_params.get("actor")
+        action = request.query_params.get("action")
         limit = int(request.query_params.get("limit", "50"))
         return JSONResponse(
-            api.get_provenance(resource_id=resource, actor_id=actor, limit=limit)
+            api.get_provenance(
+                resource_id=resource, actor_id=actor, action=action, limit=limit
+            )
         )
+
+    @server.custom_route(f"{prefix}/provenance/chain-status", methods=["GET"])
+    async def provenance_chain_status_endpoint(request: Request) -> JSONResponse:
+        return JSONResponse(api.get_provenance_chain_status())
+
+    @server.custom_route(f"{prefix}/provenance/actions", methods=["GET"])
+    async def provenance_actions_endpoint(request: Request) -> JSONResponse:
+        return JSONResponse(api.get_provenance_actions())
+
+    @server.custom_route(
+        f"{prefix}/provenance/proof/{{record_id}}", methods=["GET"]
+    )
+    async def provenance_proof_endpoint(request: Request) -> JSONResponse:
+        record_id = request.path_params.get("record_id", "")
+        return JSONResponse(api.get_provenance_proof(record_id))
+
+    @server.custom_route(f"{prefix}/provenance/export", methods=["GET"])
+    async def provenance_export_endpoint(request: Request) -> JSONResponse:
+        return JSONResponse(api.get_provenance_export())
+
+    @server.custom_route(f"{prefix}/provenance/verify", methods=["POST"])
+    async def provenance_verify_endpoint(request: Request) -> JSONResponse:
+        body = await request.json()
+        return JSONResponse(api.verify_provenance_bundle(body))
 
     mount_policy_routes(server, api, prefix)
 

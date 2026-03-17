@@ -1,64 +1,25 @@
 "use client";
 
-import { useState, useMemo, type ChangeEvent } from "react";
+import { useState, useMemo, useEffect, type ChangeEvent } from "react";
 import type {
   PolicyConfig,
+  PolicyPlugin,
   PolicySchemaResponse,
 } from "@/lib/registryClient";
-import {
-  parseImportedPolicyJson,
-  type ImportedPolicyPreview,
-} from "../../policyTransfer";
+import { parseImportedPolicyJson } from "../../policyTransfer";
 import { usePolicyContext } from "../../contexts/PolicyContext";
 import { GuidedPolicyBuilder } from "../GuidedPolicyBuilder";
+import { JsonEditor } from "../JsonEditor";
 import { ConfirmModal } from "../ConfirmModal";
 
-type PolicyTemplateName =
-  | "allowlist"
-  | "denylist"
-  | "rbac"
-  | "rate_limit"
-  | "time_based";
-
-const POLICY_TEMPLATES: Record<PolicyTemplateName, PolicyConfig> = {
-  allowlist: {
-    type: "allowlist",
-    policy_id: "allowlist-policy",
-    version: "1.0.0",
-    allowed: ["tool:*"],
-  },
-  denylist: {
-    type: "denylist",
-    policy_id: "denylist-policy",
-    version: "1.0.0",
-    denied: ["tool:admin-*"],
-  },
-  rbac: {
-    type: "rbac",
-    policy_id: "rbac-policy",
-    version: "1.0.0",
-    role_mappings: {
-      admin: ["*"],
-      reviewer: ["call_tool", "read_resource"],
-    },
-    default_decision: "deny",
-  },
-  rate_limit: {
-    type: "rate_limit",
-    policy_id: "rate-limit-policy",
-    version: "1.0.0",
-    max_requests: 200,
-    window_seconds: 3600,
-  },
-  time_based: {
-    type: "time_based",
-    policy_id: "business-hours-policy",
-    version: "1.0.0",
-    allowed_days: [0, 1, 2, 3, 4],
-    start_hour: 9,
-    end_hour: 17,
-    utc_offset_hours: 0,
-  },
+type TemplateChoice = {
+  key: string;
+  title: string;
+  summary: string;
+  config: PolicyConfig;
+  jurisdiction: string | null;
+  category: string;
+  version: string | null;
 };
 
 type PackItem = {
@@ -113,11 +74,31 @@ export function ToolsTab({
 }: ToolsTabProps) {
   const { busyKey, setBanner } = usePolicyContext();
 
+  // Plugin-driven templates
+  const [plugins, setPlugins] = useState<PolicyPlugin[]>([]);
+  const [pluginFilter, setPluginFilter] = useState<string>("all");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch("/api/policy/plugins");
+        if (response.ok) {
+          const data = await response.json();
+          if (!cancelled && Array.isArray(data?.plugins)) {
+            setPlugins(data.plugins as PolicyPlugin[]);
+          }
+        }
+      } catch {
+        // Fall back to schema-derived templates
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   // Proposal editor state
-  const [createTemplate, setCreateTemplate] = useState<PolicyTemplateName>("allowlist");
-  const [createConfigText, setCreateConfigText] = useState(
-    prettyJson(POLICY_TEMPLATES.allowlist),
-  );
+  const [createTemplate, setCreateTemplate] = useState<string>("allowlist");
+  const [createConfigText, setCreateConfigText] = useState("{}");
   const [createDescription, setCreateDescription] = useState("");
   const [creating, setCreating] = useState(false);
 
@@ -138,24 +119,65 @@ export function ToolsTab({
   // Delete pack modal
   const [deletePackModal, setDeletePackModal] = useState<{ id: string; title: string } | null>(null);
 
-  const templateChoices = useMemo(
-    () =>
-      (Object.keys(POLICY_TEMPLATES) as PolicyTemplateName[]).map((templateName) => ({
-        key: templateName,
-        title: templateName.replaceAll("_", " "),
-        summary:
-          templateName === "allowlist"
-            ? "Allow only named tools"
-            : templateName === "denylist"
-              ? "Block named tools"
-              : templateName === "rbac"
-                ? "Map roles to actions"
-                : templateName === "rate_limit"
-                  ? "Control request volume"
-                  : "Restrict by time window",
-      })),
-    [],
-  );
+  // Build template choices from plugins (preferred) or schema (fallback)
+  const templateChoices = useMemo(() => {
+    const choices: TemplateChoice[] = [];
+
+    if (plugins.length > 0) {
+      for (const plugin of plugins) {
+        choices.push({
+          key: plugin.type_key,
+          title: plugin.display_name || plugin.type_key.replaceAll("_", " "),
+          summary: plugin.description || "Policy type",
+          config: plugin.starter_config,
+          jurisdiction: plugin.jurisdiction,
+          category: plugin.category,
+          version: plugin.version || null,
+        });
+      }
+    } else if (schema?.policy_types) {
+      for (const [typeKey, typeInfo] of Object.entries(schema.policy_types)) {
+        choices.push({
+          key: typeKey,
+          title: typeKey.replaceAll("_", " "),
+          summary: typeInfo.description ?? "Policy type",
+          config: typeInfo.starter_config ?? { type: typeKey },
+          jurisdiction: null,
+          category: "general",
+          version: null,
+        });
+      }
+    }
+
+    return choices;
+  }, [plugins, schema]);
+
+  // Unique jurisdictions for the filter dropdown
+  const jurisdictions = useMemo(() => {
+    const set = new Set<string>();
+    for (const choice of templateChoices) {
+      if (choice.jurisdiction) set.add(choice.jurisdiction);
+    }
+    return Array.from(set).sort();
+  }, [templateChoices]);
+
+  // Filtered template choices
+  const filteredTemplates = useMemo(() => {
+    if (pluginFilter === "all") return templateChoices;
+    if (pluginFilter === "universal") return templateChoices.filter((c) => !c.jurisdiction);
+    return templateChoices.filter((c) => c.jurisdiction === pluginFilter);
+  }, [templateChoices, pluginFilter]);
+
+  // Initialize the config text from the first template once loaded
+  useEffect(() => {
+    if (templateChoices.length > 0 && createConfigText === "{}") {
+      const first = templateChoices[0];
+      if (first) {
+        setCreateTemplate(first.key);
+        setCreateConfigText(prettyJson(first.config));
+      }
+    }
+  }, [templateChoices, createConfigText]);
 
   const importPreview = useMemo(() => {
     try {
@@ -165,9 +187,12 @@ export function ToolsTab({
     }
   }, [importText]);
 
-  function chooseTemplate(name: PolicyTemplateName) {
-    setCreateTemplate(name);
-    setCreateConfigText(prettyJson(POLICY_TEMPLATES[name]));
+  function chooseTemplate(key: string) {
+    setCreateTemplate(key);
+    const choice = templateChoices.find((c) => c.key === key);
+    if (choice) {
+      setCreateConfigText(prettyJson(choice.config));
+    }
   }
 
   async function handleCreateProposal() {
@@ -339,33 +364,91 @@ export function ToolsTab({
             </p>
           </div>
 
+          {jurisdictions.length > 0 ? (
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-medium text-emerald-200/90">Filter:</span>
+              <button
+                type="button"
+                onClick={() => setPluginFilter("all")}
+                className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
+                  pluginFilter === "all"
+                    ? "bg-emerald-500 text-emerald-950"
+                    : "border border-emerald-700/70 text-emerald-100 hover:bg-emerald-700/20"
+                }`}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                onClick={() => setPluginFilter("universal")}
+                className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
+                  pluginFilter === "universal"
+                    ? "bg-emerald-500 text-emerald-950"
+                    : "border border-emerald-700/70 text-emerald-100 hover:bg-emerald-700/20"
+                }`}
+              >
+                Universal
+              </button>
+              {jurisdictions.map((j) => (
+                <button
+                  key={j}
+                  type="button"
+                  onClick={() => setPluginFilter(j)}
+                  className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
+                    pluginFilter === j
+                      ? "bg-emerald-500 text-emerald-950"
+                      : "border border-emerald-700/70 text-emerald-100 hover:bg-emerald-700/20"
+                  }`}
+                >
+                  {j}
+                </button>
+              ))}
+            </div>
+          ) : null}
+
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
-            {templateChoices.map((template) => (
+            {filteredTemplates.map((template) => (
               <button
                 key={template.key}
                 type="button"
-                onClick={() => chooseTemplate(template.key as PolicyTemplateName)}
+                onClick={() => chooseTemplate(template.key)}
                 className={`rounded-2xl px-3 py-3 text-left text-xs ring-1 transition ${
                   createTemplate === template.key
                     ? "bg-emerald-500/15 text-emerald-50 ring-emerald-400/70"
                     : "bg-emerald-950/70 text-emerald-100 ring-emerald-700/70 hover:bg-emerald-900/60"
                 }`}
               >
-                <span className="block font-semibold capitalize">
-                  {template.title}
-                </span>
-                <span className="mt-1 block text-[11px] text-emerald-200/80">
-                  {template.summary}
+                <div className="flex items-center gap-2">
+                  <span className="block font-semibold capitalize">
+                    {template.title}
+                  </span>
+                  {template.jurisdiction ? (
+                    <span className="rounded-full bg-emerald-900/70 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-emerald-300">
+                      {template.jurisdiction}
+                    </span>
+                  ) : null}
+                  {template.version ? (
+                    <span className="rounded-full bg-emerald-800/60 px-1.5 py-0.5 text-[9px] font-medium tracking-wide text-emerald-400/90">
+                      v{template.version}
+                    </span>
+                  ) : null}
+                </div>
+                <span className="mt-1 block text-[11px] leading-snug text-emerald-200/80">
+                  {template.summary.length > 80
+                    ? `${template.summary.slice(0, 80)}…`
+                    : template.summary}
                 </span>
               </button>
             ))}
           </div>
 
-          <textarea
-            value={createConfigText}
-            onChange={(event) => setCreateConfigText(event.target.value)}
-            className="mt-4 min-h-[280px] w-full rounded-2xl border border-emerald-700/70 bg-emerald-950 px-4 py-3 font-mono text-xs leading-6 text-emerald-50 outline-none focus:border-emerald-400"
-          />
+          <div className="mt-4">
+            <JsonEditor
+              value={createConfigText}
+              onChange={setCreateConfigText}
+              minHeight="280px"
+            />
+          </div>
 
           <input
             value={createDescription}
@@ -424,12 +507,14 @@ export function ToolsTab({
             </label>
           </div>
 
-          <textarea
-            value={importText}
-            onChange={(event) => setImportText(event.target.value)}
-            placeholder="Paste a policy snapshot, provider list, or single policy rule JSON."
-            className="mt-4 min-h-[220px] w-full rounded-2xl border border-emerald-700/70 bg-emerald-950 px-4 py-3 font-mono text-xs leading-6 text-emerald-50 outline-none focus:border-emerald-400"
-          />
+          <div className="mt-4">
+            <JsonEditor
+              value={importText}
+              onChange={setImportText}
+              minHeight="220px"
+              placeholder="Paste a policy snapshot, provider list, or single policy rule JSON."
+            />
+          </div>
 
           <input
             value={importDescriptionPrefix}

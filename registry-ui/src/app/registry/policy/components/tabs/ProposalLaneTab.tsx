@@ -7,10 +7,8 @@ import type {
   PolicySimulationScenario,
 } from "@/lib/registryClient";
 import { usePolicyContext } from "../../contexts/PolicyContext";
-import {
-  useProposalFiltering,
-  type ProposalFilterKey,
-} from "../../hooks/useProposalFiltering";
+import { useProposalFiltering } from "../../hooks/useProposalFiltering";
+import { ProposalStepper } from "../ProposalStepper";
 import { ConfirmModal } from "../ConfirmModal";
 
 type ProposalLaneTabProps = {
@@ -116,6 +114,14 @@ export function ProposalLaneTab({
 
   const [proposalNotes, setProposalNotes] = useState<Record<string, string>>({});
   const [assignmentTargets, setAssignmentTargets] = useState<Record<string, string>>({});
+  const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
+
+  function toggleCard(proposalId: string) {
+    setExpandedCards((current) => ({
+      ...current,
+      [proposalId]: !current[proposalId],
+    }));
+  }
 
   // Destructive action modals
   const [deployModal, setDeployModal] = useState<PolicyProposalItem | null>(null);
@@ -225,11 +231,22 @@ export function ProposalLaneTab({
                 proposal.status !== "simulated" &&
                 proposal.status !== "approved";
 
+              const isExpanded = expandedCards[proposalId] ?? false;
+
               return (
                 <article
                   key={proposalId}
-                  className="rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/70"
+                  className="rounded-2xl bg-emerald-950/70 ring-1 ring-emerald-700/70"
                 >
+                  {/* Stepper bar */}
+                  <div className="px-4 pt-4">
+                    <ProposalStepper
+                      status={proposal.status}
+                      requireSimulation={requireSimulation}
+                    />
+                  </div>
+
+                  <div className="p-4 pt-3">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
@@ -380,7 +397,24 @@ export function ProposalLaneTab({
                     </div>
                   ) : null}
 
-                  <div className="mt-3 grid gap-3 lg:grid-cols-[0.95fr,1fr,0.9fr]">
+                  {/* Expand/collapse toggle */}
+                  <button
+                    type="button"
+                    onClick={() => toggleCard(proposalId)}
+                    className="mt-3 flex items-center gap-1.5 text-[11px] font-semibold text-emerald-300/80 transition hover:text-emerald-200"
+                  >
+                    <svg
+                      viewBox="0 0 12 12"
+                      className={`h-3 w-3 transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                      fill="currentColor"
+                    >
+                      <path d="M4 2l4 4-4 4V2z" />
+                    </svg>
+                    {isExpanded ? "Hide details" : "Show details"}
+                  </button>
+
+                  <div className={`${isExpanded ? "" : "hidden"} mt-3`}>
+                  <div className="grid gap-3 lg:grid-cols-[0.95fr,1fr,0.9fr]">
                     {/* Ownership panel */}
                     <div className="rounded-2xl bg-emerald-900/20 p-3 ring-1 ring-emerald-700/40">
                       <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
@@ -592,6 +626,8 @@ export function ProposalLaneTab({
                       ) : null}
                     </div>
                   ) : null}
+                  </div>
+                  </div>
                 </article>
               );
             })

@@ -31,6 +31,12 @@ class ProvenanceAction(Enum):
     ACCESS_DENIED = "access_denied"
     ERROR = "error"
     CUSTOM = "custom"
+    # Smart Provenance — extended action types
+    MODEL_INVOKED = "model_invoked"
+    DATASET_ACCESSED = "dataset_accessed"
+    OUTCOME_RECORDED = "outcome_recorded"
+    CHAIN_ANCHORED = "chain_anchored"
+    LEDGER_VERIFIED = "ledger_verified"
 
 
 @dataclass(frozen=True)

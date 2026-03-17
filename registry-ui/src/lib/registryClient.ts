@@ -227,6 +227,21 @@ export type PolicySchemaResponse = RegistryErrorResponse & {
   common_field_specs?: Record<string, PolicySchemaFieldSpec>;
 };
 
+export type PolicyPlugin = {
+  type_key: string;
+  display_name: string;
+  description: string;
+  jurisdiction: string | null;
+  category: string;
+  version: string;
+  starter_config: PolicyConfig;
+};
+
+export type PolicyPluginsResponse = {
+  plugins: PolicyPlugin[];
+  count: number;
+};
+
 export type PolicyValidationFinding = {
   severity?: string;
   message?: string;
@@ -622,6 +637,18 @@ export async function getPolicyVersions(): Promise<PolicyVersionsResponse | null
   return parseJson<PolicyVersionsResponse>(response);
 }
 
+export async function listPolicyPlugins(
+  jurisdiction?: string,
+): Promise<PolicyPluginsResponse | null> {
+  const params = new URLSearchParams();
+  if (jurisdiction) params.set("jurisdiction", jurisdiction);
+  const qs = params.toString();
+  const response = await backendFetch(
+    `/registry/policy/plugins${qs ? `?${qs}` : ""}`,
+  );
+  return parseJson<PolicyPluginsResponse>(response);
+}
+
 export async function verifyTool(toolName: string): Promise<ToolVerificationResponse | null> {
   const response = await backendFetch("/registry/verify", {
     method: "POST",
@@ -631,4 +658,146 @@ export async function verifyTool(toolName: string): Promise<ToolVerificationResp
     body: JSON.stringify({ tool_name: toolName }),
   });
   return parseJson<ToolVerificationResponse>(response);
+}
+
+// ── Provenance API ──────────────────────────────────────────────
+
+export type ProvenanceRecord = {
+  record_id: string;
+  action: string;
+  actor_id: string;
+  resource_id: string;
+  timestamp: string;
+  input_hash: string;
+  output_hash: string;
+  metadata: Record<string, unknown>;
+  previous_hash: string;
+  contract_id: string;
+  session_id: string;
+};
+
+export type ProvenanceQueryResponse = {
+  total_records: number;
+  returned: number;
+  records: ProvenanceRecord[];
+  generated_at: string;
+};
+
+export type ProvenanceChainStatus = {
+  ledger_id: string;
+  record_count: number;
+  chain_valid: boolean;
+  tree_valid: boolean;
+  root_hash: string;
+  chain_digest: string;
+  scheme: {
+    scheme: string;
+    leaf_count: number;
+    root_hash: string;
+    tree_valid: boolean;
+    anchor_count?: number;
+    anchors_valid?: boolean;
+    records_since_anchor?: number;
+    anchor_interval?: number;
+    latest_anchor?: Record<string, unknown> | null;
+  };
+  generated_at: string;
+};
+
+export type ProvenanceProofResponse = {
+  bundle?: {
+    record: Record<string, unknown>;
+    merkle_proof: {
+      leaf_hash: string;
+      proof_hashes: string[];
+      directions: string[];
+      root_hash: string;
+    };
+    chain_context: {
+      predecessor_hash: string;
+      successor_hash: string;
+    };
+    ledger_state: {
+      root_hash: string;
+      record_count: number;
+    };
+    exported_at: string;
+  };
+  status?: string;
+  error?: string;
+};
+
+export type ProvenanceActionType = {
+  value: string;
+  name: string;
+};
+
+export type ProvenanceActionsResponse = {
+  actions: ProvenanceActionType[];
+};
+
+export type ProvenanceVerifyResult = {
+  valid: boolean;
+  checks: Record<string, boolean>;
+  record_id: string;
+  details: string;
+};
+
+export type ProvenanceExportResponse = {
+  format: string;
+  exported_at: string;
+  record_count: number;
+  merkle_root: string;
+  chain_digest: string;
+  records: Array<Record<string, unknown>>;
+};
+
+export async function getProvenanceRecords(
+  params?: { resource?: string; actor?: string; action?: string; limit?: number },
+): Promise<ProvenanceQueryResponse | null> {
+  const qs = new URLSearchParams();
+  if (params?.resource) qs.set("resource", params.resource);
+  if (params?.actor) qs.set("actor", params.actor);
+  if (params?.action) qs.set("action", params.action);
+  if (params?.limit) qs.set("limit", String(params.limit));
+  const q = qs.toString();
+  const response = await backendFetch(
+    `/security/provenance${q ? `?${q}` : ""}`,
+  );
+  return parseJson<ProvenanceQueryResponse>(response);
+}
+
+export async function getProvenanceChainStatus(): Promise<ProvenanceChainStatus | null> {
+  const response = await backendFetch("/security/provenance/chain-status");
+  return parseJson<ProvenanceChainStatus>(response);
+}
+
+export async function getProvenanceActions(): Promise<ProvenanceActionsResponse | null> {
+  const response = await backendFetch("/security/provenance/actions");
+  return parseJson<ProvenanceActionsResponse>(response);
+}
+
+export async function getProvenanceProof(
+  recordId: string,
+): Promise<ProvenanceProofResponse | null> {
+  const response = await backendFetch(
+    `/security/provenance/proof/${encodeURIComponent(recordId)}`,
+  );
+  return parseJson<ProvenanceProofResponse>(response);
+}
+
+export async function getProvenanceExport(): Promise<ProvenanceExportResponse | null> {
+  const response = await backendFetch("/security/provenance/export");
+  return parseJson<ProvenanceExportResponse>(response);
+}
+
+export async function verifyProvenanceBundle(
+  bundle: Record<string, unknown>,
+): Promise<ProvenanceVerifyResult | null> {
+  const response = await backendFetch("/security/provenance/verify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(bundle),
+  });
+  return parseJson<ProvenanceVerifyResult>(response);
 }

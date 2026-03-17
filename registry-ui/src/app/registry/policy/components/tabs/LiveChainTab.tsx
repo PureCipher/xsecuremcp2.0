@@ -8,6 +8,7 @@ import type {
 } from "@/lib/registryClient";
 import { downloadJsonFile } from "../../policyTransfer";
 import { usePolicyContext } from "../../contexts/PolicyContext";
+import { JsonEditor } from "../JsonEditor";
 import { ConfirmModal } from "../ConfirmModal";
 
 type LiveChainTabProps = {
@@ -150,15 +151,15 @@ export function LiveChainTab({
 
                   {isEditing ? (
                     <div className="mt-4 flex flex-col gap-3">
-                      <textarea
+                      <JsonEditor
                         value={editableText}
-                        onChange={(event) =>
+                        onChange={(newText) =>
                           setEditTexts((current) => ({
                             ...current,
-                            [provider.index]: event.target.value,
+                            [provider.index]: newText,
                           }))
                         }
-                        className="min-h-[220px] rounded-2xl border border-emerald-700/70 bg-emerald-950 px-4 py-3 font-mono text-[11px] leading-6 text-emerald-50 outline-none focus:border-emerald-400"
+                        minHeight="220px"
                       />
                       <input
                         value={editDescriptions[provider.index] ?? ""}

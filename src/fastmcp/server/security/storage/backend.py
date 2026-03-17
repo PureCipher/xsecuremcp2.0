@@ -206,6 +206,22 @@ class StorageBackend(Protocol):
         """Load policy workbench state for a policy set, if any."""
         ...
 
+    # ── Policy Proposals ────────────────────────────────────────
+
+    def save_policy_proposal(
+        self, governor_id: str, proposal_id: str, data: dict[str, Any]
+    ) -> None:
+        """Persist or update a policy proposal."""
+        ...
+
+    def remove_policy_proposal(self, governor_id: str, proposal_id: str) -> None:
+        """Remove a policy proposal (after deployment/rejection/withdrawal)."""
+        ...
+
+    def load_policy_proposals(self, governor_id: str) -> dict[str, dict[str, Any]]:
+        """Load all proposals for a governor. Returns {proposal_id: data}."""
+        ...
+
     # ── Tool Marketplace ──────────────────────────────────────────
 
     def save_tool_listing(

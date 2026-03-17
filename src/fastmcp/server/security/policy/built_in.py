@@ -1,14 +1,20 @@
 """Built-in policy providers for common compliance frameworks.
 
 These are starter implementations that can be extended or replaced
-with organization-specific policies.
+with organization-specific policies. GDPR and HIPAA providers are
+automatically registered in the plugin registry at import time.
 """
 
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from typing import Any
 
+from fastmcp.server.security.policy.plugin_registry import (
+    PolicyTypeDescriptor,
+    get_registry,
+)
 from fastmcp.server.security.policy.provider import (
     PolicyDecision,
     PolicyEvaluationContext,
@@ -285,3 +291,276 @@ class HIPAAPolicy:
 
     async def get_policy_version(self) -> str:
         return self.version
+
+
+# ── Factory functions for plugin registry ─────────────────────────
+
+
+def _build_tag_based(config: dict[str, Any]) -> TagBasedPolicy:
+    return TagBasedPolicy(
+        policy_id=config.get("policy_id", "tag-based-policy"),
+        version=config.get("version", "1.0.0"),
+        allowed_tags=frozenset(config.get("allowed_tags", [])),
+        denied_tags=frozenset(config.get("denied_tags", [])),
+        default_decision=PolicyDecision(
+            config.get("default_decision", "allow").lower()
+        ),
+    )
+
+
+def _build_action_based(config: dict[str, Any]) -> ActionBasedPolicy:
+    return ActionBasedPolicy(
+        policy_id=config.get("policy_id", "action-based-policy"),
+        version=config.get("version", "1.0.0"),
+        allowed_actions=frozenset(config.get("allowed_actions", [])),
+        denied_actions=frozenset(config.get("denied_actions", [])),
+    )
+
+
+def _build_gdpr(config: dict[str, Any]) -> GDPRPolicy:
+    return GDPRPolicy(
+        policy_id=config.get("policy_id", "gdpr-v1"),
+        version=config.get("version", "1.0.0"),
+        personal_data_tags=frozenset(
+            config.get(
+                "personal_data_tags",
+                ["pii", "personal_data", "sensitive_data", "gdpr_regulated"],
+            )
+        ),
+        valid_legal_bases=frozenset(
+            config.get(
+                "valid_legal_bases",
+                [
+                    "consent",
+                    "contract",
+                    "legal_obligation",
+                    "vital_interests",
+                    "public_interest",
+                    "legitimate_interests",
+                ],
+            )
+        ),
+    )
+
+
+def _build_hipaa(config: dict[str, Any]) -> HIPAAPolicy:
+    return HIPAAPolicy(
+        policy_id=config.get("policy_id", "hipaa-v1"),
+        version=config.get("version", "1.0.0"),
+        phi_tags=frozenset(
+            config.get(
+                "phi_tags",
+                ["phi", "health_data", "medical_record", "hipaa_regulated"],
+            )
+        ),
+        authorized_roles=frozenset(
+            config.get(
+                "authorized_roles",
+                [
+                    "healthcare_provider",
+                    "health_plan",
+                    "healthcare_clearinghouse",
+                    "business_associate",
+                ],
+            )
+        ),
+    )
+
+
+# ── Register compliance types in the plugin registry ──────────────
+
+
+def _register_compliance_types() -> None:
+    """Register GDPR, HIPAA, tag-based, and action-based types."""
+    _registry = get_registry()
+    compliance_types = [
+        PolicyTypeDescriptor(
+            type_key="tag_based",
+            factory=_build_tag_based,
+            display_name="Tag-Based Policy",
+            description="Decisions based on component tags (allow/deny tag sets)",
+            category="access_control",
+            field_specs={
+                "allowed_tags": {
+                    "label": "Allowed tags",
+                    "type": "string_list",
+                    "description": "Tags that should be ALLOWED access.",
+                    "required": False,
+                    "example": ["public", "internal"],
+                },
+                "denied_tags": {
+                    "label": "Denied tags",
+                    "type": "string_list",
+                    "description": "Tags that should be DENIED access.",
+                    "required": False,
+                    "example": ["deprecated", "unsafe"],
+                },
+                "default_decision": {
+                    "label": "Default decision",
+                    "type": "enum",
+                    "description": "Decision for tags not matching any rule.",
+                    "required": False,
+                    "default": "allow",
+                    "enum": ["allow", "deny", "defer"],
+                },
+            },
+            starter_config={
+                "type": "tag_based",
+                "policy_id": "tag-based-policy",
+                "version": "1.0.0",
+                "allowed_tags": ["public", "internal"],
+                "denied_tags": ["deprecated", "unsafe"],
+                "default_decision": "allow",
+            },
+        ),
+        PolicyTypeDescriptor(
+            type_key="action_based",
+            factory=_build_action_based,
+            display_name="Action-Based Policy",
+            description="Controls access based on action types (allowed vs denied)",
+            category="access_control",
+            field_specs={
+                "allowed_actions": {
+                    "label": "Allowed actions",
+                    "type": "string_list",
+                    "description": "Actions that are permitted (if set, others are denied).",
+                    "required": False,
+                    "example": ["call_tool", "read_resource"],
+                },
+                "denied_actions": {
+                    "label": "Denied actions",
+                    "type": "string_list",
+                    "description": "Actions that are denied (others are allowed).",
+                    "required": False,
+                    "example": ["delete_resource", "admin_override"],
+                },
+            },
+            starter_config={
+                "type": "action_based",
+                "policy_id": "action-based-policy",
+                "version": "1.0.0",
+                "allowed_actions": ["call_tool", "read_resource"],
+            },
+        ),
+        PolicyTypeDescriptor(
+            type_key="gdpr",
+            factory=_build_gdpr,
+            display_name="GDPR Data Protection",
+            description=(
+                "Enforces GDPR principles: requires legal basis for personal "
+                "data access. Tags: pii, personal_data, sensitive_data, gdpr_regulated."
+            ),
+            jurisdiction="EU",
+            category="compliance",
+            version="1.0.0",
+            field_specs={
+                "personal_data_tags": {
+                    "label": "Personal data tags",
+                    "type": "string_list",
+                    "description": "Component tags that indicate personal data handling.",
+                    "required": False,
+                    "default": [
+                        "pii",
+                        "personal_data",
+                        "sensitive_data",
+                        "gdpr_regulated",
+                    ],
+                },
+                "valid_legal_bases": {
+                    "label": "Valid legal bases",
+                    "type": "string_list",
+                    "description": "Accepted legal bases per GDPR Art. 6.",
+                    "required": False,
+                    "default": [
+                        "consent",
+                        "contract",
+                        "legal_obligation",
+                        "vital_interests",
+                        "public_interest",
+                        "legitimate_interests",
+                    ],
+                },
+            },
+            starter_config={
+                "type": "gdpr",
+                "policy_id": "gdpr-v1",
+                "version": "1.0.0",
+                "personal_data_tags": [
+                    "pii",
+                    "personal_data",
+                    "sensitive_data",
+                    "gdpr_regulated",
+                ],
+                "valid_legal_bases": [
+                    "consent",
+                    "contract",
+                    "legal_obligation",
+                    "vital_interests",
+                    "public_interest",
+                    "legitimate_interests",
+                ],
+            },
+        ),
+        PolicyTypeDescriptor(
+            type_key="hipaa",
+            factory=_build_hipaa,
+            display_name="HIPAA PHI Protection",
+            description=(
+                "Enforces HIPAA principles: requires authorized role and stated "
+                "purpose for PHI access (minimum necessary principle)."
+            ),
+            jurisdiction="US",
+            category="compliance",
+            version="1.0.0",
+            field_specs={
+                "phi_tags": {
+                    "label": "PHI tags",
+                    "type": "string_list",
+                    "description": "Component tags that indicate protected health information.",
+                    "required": False,
+                    "default": [
+                        "phi",
+                        "health_data",
+                        "medical_record",
+                        "hipaa_regulated",
+                    ],
+                },
+                "authorized_roles": {
+                    "label": "Authorized roles",
+                    "type": "string_list",
+                    "description": "Roles permitted to access PHI.",
+                    "required": False,
+                    "default": [
+                        "healthcare_provider",
+                        "health_plan",
+                        "healthcare_clearinghouse",
+                        "business_associate",
+                    ],
+                },
+            },
+            starter_config={
+                "type": "hipaa",
+                "policy_id": "hipaa-v1",
+                "version": "1.0.0",
+                "phi_tags": [
+                    "phi",
+                    "health_data",
+                    "medical_record",
+                    "hipaa_regulated",
+                ],
+                "authorized_roles": [
+                    "healthcare_provider",
+                    "health_plan",
+                    "healthcare_clearinghouse",
+                    "business_associate",
+                ],
+            },
+        ),
+    ]
+    for desc in compliance_types:
+        if _registry.get(desc.type_key) is None:
+            _registry.register(desc)
+
+
+# Run registration at module import time.
+_register_compliance_types()

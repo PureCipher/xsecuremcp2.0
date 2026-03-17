@@ -47,7 +47,11 @@ def mount_policy_routes(server: Any, api: Any, prefix: str) -> None:
 
     @server.custom_route(f"{prefix}/policy/schema", methods=["GET"])
     async def policy_schema_endpoint(request: Request) -> JSONResponse:
-        return JSONResponse(api.get_policy_schema())
+        jurisdiction = request.query_params.get("jurisdiction")
+        category = request.query_params.get("category")
+        return JSONResponse(
+            api.get_policy_schema(jurisdiction=jurisdiction, category=category)
+        )
 
     @server.custom_route(f"{prefix}/policy/bundles", methods=["GET"])
     async def policy_bundles_endpoint(request: Request) -> JSONResponse:
@@ -358,3 +362,16 @@ def mount_policy_routes(server: Any, api: Any, prefix: str) -> None:
             note=str(body.get("note", body.get("reason", ""))),
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
+
+    @server.custom_route(f"{prefix}/policy/plugins", methods=["GET"])
+    async def policy_plugins_endpoint(request: Request) -> JSONResponse:
+        """List all registered policy type plugins."""
+        from fastmcp.server.security.policy.plugin_registry import get_registry
+
+        jurisdiction = request.query_params.get("jurisdiction")
+        category = request.query_params.get("category")
+        registry = get_registry()
+        plugins = registry.dump_plugin_list(
+            jurisdiction=jurisdiction, category=category
+        )
+        return JSONResponse({"plugins": plugins, "count": len(plugins)})

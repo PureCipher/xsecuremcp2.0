@@ -5,6 +5,7 @@ import type {
   PolicyVersionDiffResponse,
 } from "@/lib/registryClient";
 import { usePolicyContext } from "../../contexts/PolicyContext";
+import { highlightJson } from "../JsonEditor";
 import { ConfirmModal } from "../ConfirmModal";
 
 type VersionItem = {
@@ -110,7 +111,11 @@ export function VersionsTab({
                           Version {version.version_number}
                         </span>
                         {isCurrent ? (
-                          <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-100">
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-100">
+                            <span className="relative flex h-2 w-2">
+                              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                            </span>
                             Live now
                           </span>
                         ) : null}
@@ -232,9 +237,12 @@ export function VersionsTab({
 
             <div className="mt-4 rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/70">
               {versionDiff?.diff ? (
-                <pre className="max-h-[320px] overflow-auto whitespace-pre-wrap break-words text-xs leading-6 text-emerald-50">
-                  {prettyJson(versionDiff.diff)}
-                </pre>
+                <pre
+                  className="max-h-[320px] overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-6 text-emerald-50"
+                  dangerouslySetInnerHTML={{
+                    __html: highlightJson(prettyJson(versionDiff.diff)),
+                  }}
+                />
               ) : (
                 <p className="text-xs text-emerald-100/90">
                   Choose two versions to inspect the saved diff before you act on it.

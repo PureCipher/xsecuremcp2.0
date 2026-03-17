@@ -42,6 +42,8 @@ class MemoryBackend:
         self._marketplace: dict[str, dict[str, Any]] = {}
         # Tool marketplace: {mp_id: {listings, installs, reviews}}
         self._tool_marketplace: dict[str, dict[str, Any]] = {}
+        # Policy proposals: {governor_id: {proposal_id: data}}
+        self._policy_proposals: dict[str, dict[str, dict[str, Any]]] = {}
         # Policy workbench: {policy_set_id: data}
         self._policy_workbench: dict[str, dict[str, Any]] = {}
 
@@ -247,6 +249,20 @@ class MemoryBackend:
                 for listing_id, reviews in store["reviews"].items()
             },
         }
+
+    # ── Policy Proposals ────────────────────────────────────────
+
+    def save_policy_proposal(
+        self, governor_id: str, proposal_id: str, data: dict[str, Any]
+    ) -> None:
+        self._policy_proposals.setdefault(governor_id, {})[proposal_id] = data
+
+    def remove_policy_proposal(self, governor_id: str, proposal_id: str) -> None:
+        if governor_id in self._policy_proposals:
+            self._policy_proposals[governor_id].pop(proposal_id, None)
+
+    def load_policy_proposals(self, governor_id: str) -> dict[str, dict[str, Any]]:
+        return dict(self._policy_proposals.get(governor_id, {}))
 
     # ── Policy Versioning ────────────────────────────────────────
 

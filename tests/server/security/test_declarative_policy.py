@@ -644,6 +644,11 @@ class TestSchema:
             "resource_scoped",
             "allow_all",
             "deny_all",
+            # Compliance types registered by built_in.py
+            "tag_based",
+            "action_based",
+            "gdpr",
+            "hipaa",
         }
         assert set(types.keys()) == expected
 

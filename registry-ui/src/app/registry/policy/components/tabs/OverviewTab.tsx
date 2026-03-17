@@ -14,6 +14,50 @@ type OverviewTabProps = {
   onStageBundle: (bundleId: string, title: string) => Promise<void>;
 };
 
+function riskLevelClass(level: string | undefined): string {
+  switch (level?.toLowerCase()) {
+    case "critical":
+      return "bg-red-500/15 text-red-200 ring-1 ring-red-400/50";
+    case "high":
+      return "bg-rose-500/15 text-rose-200 ring-1 ring-rose-400/50";
+    case "medium":
+      return "bg-amber-500/15 text-amber-200 ring-1 ring-amber-400/50";
+    case "low":
+      return "bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-400/50";
+    default:
+      return "bg-zinc-500/15 text-zinc-200 ring-1 ring-zinc-400/40";
+  }
+}
+
+function TrendIndicator({ value, invertColor }: { value: number | undefined; invertColor?: boolean }) {
+  const num = Number(value ?? 0);
+  if (num === 0) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-300/70">
+        <span className="text-sm">&mdash;</span> no change
+      </span>
+    );
+  }
+
+  // For deny/risk counts, "up" is bad (red) and "down" is good (green)
+  // For eval counts, "up" is good — use invertColor to flip
+  const isUp = num > 0;
+  const isGood = invertColor ? isUp : !isUp;
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1 text-[11px] font-semibold ${
+        isGood ? "text-emerald-300" : "text-rose-300"
+      }`}
+    >
+      <svg viewBox="0 0 12 12" className={`h-3 w-3 ${isUp ? "" : "rotate-180"}`} fill="currentColor">
+        <path d="M6 2l4 6H2z" />
+      </svg>
+      {isUp ? "+" : ""}{num}
+    </span>
+  );
+}
+
 export function OverviewTab({
   analytics,
   bundles,
@@ -125,10 +169,14 @@ export function OverviewTab({
                   key={`risk-${index}`}
                   className="mt-3 rounded-2xl bg-emerald-900/20 p-3 ring-1 ring-emerald-700/30"
                 >
-                  <p className="text-xs font-semibold text-emerald-50">{risk.title}</p>
-                  <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-emerald-300">
-                    {risk.level}
-                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-xs font-semibold text-emerald-50">{risk.title}</p>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] ${riskLevelClass(risk.level)}`}
+                    >
+                      {risk.level}
+                    </span>
+                  </div>
                   <p className="mt-2 text-xs text-emerald-100/90">{risk.detail}</p>
                 </div>
               ))}
@@ -153,18 +201,21 @@ export function OverviewTab({
 
             <div className="mt-4 grid gap-3 sm:grid-cols-4">
               {[
-                { label: "Eval trend", value: analytics.history?.deltas?.evaluation_count },
-                { label: "Deny trend", value: analytics.history?.deltas?.deny_count },
-                { label: "Queue trend", value: analytics.history?.deltas?.pending_proposals },
-                { label: "Risk trend", value: analytics.history?.deltas?.risk_count },
+                { label: "Eval trend", value: analytics.history?.deltas?.evaluation_count, invertColor: true },
+                { label: "Deny trend", value: analytics.history?.deltas?.deny_count, invertColor: false },
+                { label: "Queue trend", value: analytics.history?.deltas?.pending_proposals, invertColor: false },
+                { label: "Risk trend", value: analytics.history?.deltas?.risk_count, invertColor: false },
               ].map((item) => (
                 <div key={item.label} className="rounded-2xl bg-emerald-900/20 p-3 ring-1 ring-emerald-700/30">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-300">
                     {item.label}
                   </p>
-                  <p className="mt-2 text-lg font-semibold text-emerald-50">
-                    {String((item.value as number | undefined) ?? 0)}
-                  </p>
+                  <div className="mt-2">
+                    <TrendIndicator
+                      value={item.value as number | undefined}
+                      invertColor={item.invertColor}
+                    />
+                  </div>
                 </div>
               ))}
             </div>

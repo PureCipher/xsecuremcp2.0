@@ -70,6 +70,13 @@ export function RegistryTopBar({
                 active={pathname.startsWith("/registry/policy")}
               />
             ) : null}
+            {canReview ? (
+              <TopNavLink
+                href="/registry/provenance"
+                label="Provenance"
+                active={pathname.startsWith("/registry/provenance")}
+              />
+            ) : null}
             <TopNavLink
               href="/registry/health"
               label="Health"

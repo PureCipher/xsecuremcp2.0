@@ -3,9 +3,7 @@
 import { useState } from "react";
 import type {
   PolicyConfig,
-  PolicySchemaFieldSpec,
   PolicySchemaResponse,
-  PolicySchemaType,
 } from "@/lib/registryClient";
 import {
   formatFieldInput,
@@ -17,6 +15,7 @@ import {
   starterPolicyConfig,
 } from "../policyTransfer";
 import { usePolicyContext } from "../contexts/PolicyContext";
+import { highlightJson, JsonEditor } from "./JsonEditor";
 
 type GuidedPolicyBuilderProps = {
   schema: PolicySchemaResponse;
@@ -310,12 +309,12 @@ export function GuidedPolicyBuilder({
                   </select>
                 ) : spec.type === "json_map" ||
                   spec.type === "string_map_string_list" ? (
-                  <textarea
+                  <JsonEditor
                     value={inputValue}
-                    onChange={(event) =>
-                      updateGuidedField(fieldName, event.target.value)
+                    onChange={(newText) =>
+                      updateGuidedField(fieldName, newText)
                     }
-                    className="min-h-[120px] rounded-2xl border border-emerald-700/70 bg-emerald-950 px-4 py-3 font-mono text-xs leading-6 text-emerald-50 outline-none focus:border-emerald-400"
+                    minHeight="120px"
                   />
                 ) : (
                   <input
@@ -355,9 +354,12 @@ export function GuidedPolicyBuilder({
               Load into proposal editor
             </button>
           </div>
-          <pre className="mt-3 max-h-[280px] overflow-auto whitespace-pre-wrap break-words text-xs leading-6 text-emerald-50">
-            {prettyJson(guidedDraft)}
-          </pre>
+          <pre
+            className="mt-3 max-h-[280px] overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-6 text-emerald-50"
+            dangerouslySetInnerHTML={{
+              __html: highlightJson(prettyJson(guidedDraft)),
+            }}
+          />
         </div>
       </div>
     </div>

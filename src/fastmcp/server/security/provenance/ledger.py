@@ -21,6 +21,7 @@ from fastmcp.server.security.storage.backend import StorageBackend
 
 if TYPE_CHECKING:
     from fastmcp.server.security.alerts.bus import SecurityEventBus
+    from fastmcp.server.security.provenance.schemes import LedgerScheme
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,12 @@ class ProvenanceLedger:
     Every operation recorded gets:
     1. A hash-chained link to the previous record (sequential integrity)
     2. A Merkle tree leaf for efficient batch verification
+
+    Supports pluggable ledger schemes via the ``scheme`` parameter:
+
+    - ``LocalMerkleLedger`` (default): Fast in-process Merkle tree.
+    - ``BlockchainAnchoredLedger``: Local Merkle + periodic external
+      chain anchoring for distributed trust.
 
     Example::
 
@@ -55,6 +62,8 @@ class ProvenanceLedger:
 
     Args:
         ledger_id: Unique identifier for this ledger instance.
+        scheme: Optional pluggable ledger scheme. If None, uses
+            an internal MerkleTree directly (equivalent to LocalMerkleLedger).
     """
 
     def __init__(
@@ -63,10 +72,12 @@ class ProvenanceLedger:
         *,
         backend: StorageBackend | None = None,
         event_bus: SecurityEventBus | None = None,
+        scheme: LedgerScheme | None = None,
     ) -> None:
         self.ledger_id = ledger_id
         self._backend = backend
         self._event_bus = event_bus
+        self._scheme = scheme
         self._records: list[ProvenanceRecord] = []
         self._record_index: dict[str, int] = {}
         self._merkle_tree = MerkleTree()
@@ -88,7 +99,10 @@ class ProvenanceLedger:
             rec = provenance_record_from_dict(data)
             self._records.append(rec)
             self._record_index[rec.record_id] = i
-            self._merkle_tree.add_leaf(rec.compute_hash())
+            record_hash = rec.compute_hash()
+            self._merkle_tree.add_leaf(record_hash)
+            if self._scheme is not None:
+                self._scheme.add_record_hash(record_hash)
 
     def record(
         self,
@@ -141,8 +155,11 @@ class ProvenanceLedger:
         self._records.append(entry)
         self._record_index[entry.record_id] = idx
 
-        # Add to Merkle tree
-        self._merkle_tree.add_leaf(entry.compute_hash())
+        # Add to Merkle tree (and scheme if configured)
+        record_hash = entry.compute_hash()
+        self._merkle_tree.add_leaf(record_hash)
+        if self._scheme is not None:
+            self._scheme.add_record_hash(record_hash)
 
         # Persist to backend
         if self._backend is not None:
@@ -303,3 +320,74 @@ class ProvenanceLedger:
         if not self._records:
             return "empty"
         return self._records[-1].compute_hash()
+
+    @property
+    def scheme(self) -> LedgerScheme | None:
+        """The pluggable ledger scheme, if configured."""
+        return self._scheme
+
+    @property
+    def all_records(self) -> list[ProvenanceRecord]:
+        """All records in insertion order (read-only copy)."""
+        return list(self._records)
+
+    def get_scheme_status(self) -> dict[str, Any]:
+        """Get the ledger scheme status.
+
+        Returns scheme-specific information (anchor status, tree stats, etc.)
+        or basic Merkle tree info if no scheme is configured.
+        """
+        if self._scheme is not None:
+            return self._scheme.get_status()
+        return {
+            "scheme": "internal_merkle",
+            "leaf_count": self._merkle_tree.leaf_count,
+            "root_hash": self.root_hash,
+            "tree_valid": self.verify_tree(),
+        }
+
+    def export_verification_bundle(self, record_id: str) -> dict[str, Any]:
+        """Export a self-contained verification bundle for a record.
+
+        The bundle contains everything needed for an external auditor
+        to independently verify the record's integrity and chain position.
+
+        Args:
+            record_id: The record to export a bundle for.
+
+        Returns:
+            A JSON-safe dict that can be verified with ``verify_bundle()``.
+
+        Raises:
+            KeyError: If the record is not found.
+        """
+        from fastmcp.server.security.provenance.export import VerificationBundle
+
+        idx = self._record_index.get(record_id)
+        if idx is None:
+            raise KeyError(f"Record '{record_id}' not found in ledger")
+
+        record = self._records[idx]
+        proof = self._merkle_tree.get_proof(idx)
+
+        # Chain context
+        predecessor_hash = "genesis" if idx == 0 else self._records[idx - 1].compute_hash()
+        successor_hash = (
+            self._records[idx + 1].compute_hash()
+            if idx + 1 < len(self._records)
+            else ""
+        )
+
+        bundle = VerificationBundle(
+            record=record.to_dict(),
+            proof_leaf_hash=proof.leaf_hash,
+            proof_hashes=proof.proof_hashes,
+            proof_directions=proof.directions,
+            proof_root_hash=proof.root_hash,
+            chain_predecessor_hash=predecessor_hash,
+            chain_successor_hash=successor_hash,
+            ledger_root_hash=self.root_hash,
+            ledger_record_count=self.record_count,
+        )
+
+        return bundle.to_dict()

@@ -183,6 +183,14 @@ class SQLiteBackend:
             CREATE INDEX IF NOT EXISTS idx_tool_reviews_ns
                 ON tool_reviews(namespace);
 
+            CREATE TABLE IF NOT EXISTS policy_proposals (
+                namespace TEXT NOT NULL,
+                item_id TEXT NOT NULL,
+                data TEXT NOT NULL,
+                updated_at REAL NOT NULL,
+                PRIMARY KEY (namespace, item_id)
+            );
+
             CREATE TABLE IF NOT EXISTS policy_versions (
                 policy_set_id TEXT NOT NULL PRIMARY KEY,
                 data TEXT NOT NULL,
@@ -609,6 +617,35 @@ class SQLiteBackend:
             "installs": installs,
             "reviews": reviews,
         }
+
+    # ── Policy Proposals ────────────────────────────────────────
+
+    def save_policy_proposal(
+        self, governor_id: str, proposal_id: str, data: dict[str, Any]
+    ) -> None:
+        conn = self._get_conn()
+        conn.execute(
+            "INSERT OR REPLACE INTO policy_proposals "
+            "(namespace, item_id, data, updated_at) VALUES (?, ?, ?, ?)",
+            (governor_id, proposal_id, json.dumps(data), time.time()),
+        )
+        conn.commit()
+
+    def remove_policy_proposal(self, governor_id: str, proposal_id: str) -> None:
+        conn = self._get_conn()
+        conn.execute(
+            "DELETE FROM policy_proposals WHERE namespace = ? AND item_id = ?",
+            (governor_id, proposal_id),
+        )
+        conn.commit()
+
+    def load_policy_proposals(self, governor_id: str) -> dict[str, dict[str, Any]]:
+        conn = self._get_conn()
+        cursor = conn.execute(
+            "SELECT item_id, data FROM policy_proposals WHERE namespace = ?",
+            (governor_id,),
+        )
+        return {row[0]: json.loads(row[1]) for row in cursor.fetchall()}
 
     # ── Policy Versioning ────────────────────────────────────────
 

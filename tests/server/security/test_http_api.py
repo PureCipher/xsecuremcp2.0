@@ -333,11 +333,11 @@ class TestProvenance:
 
     def test_provenance_no_results(self, full_api):
         result = full_api.get_provenance(resource_id="nonexistent")
-        assert result["total_records"] == 0
+        assert result["returned"] == 0
 
     def test_provenance_limit(self, full_api):
         result = full_api.get_provenance(limit=1)
-        assert result["total_records"] <= 1
+        assert result["returned"] <= 1
 
 
 # ── Health tests ──────────────────────────────────────────────

@@ -47,6 +47,7 @@ if TYPE_CHECKING:
         Scenario,
         SimulationReport,
     )
+    from fastmcp.server.security.storage.backend import StorageBackend
 
 logger = logging.getLogger(__name__)
 
@@ -188,12 +189,17 @@ class PolicyGovernor:
         validator: PolicyValidator | None = None,
         require_simulation: bool = True,
         require_approval: bool = True,
+        storage: StorageBackend | None = None,
+        governor_id: str = "default",
     ) -> None:
         self._engine = engine
         self._validator = validator or PolicyValidator()
         self.require_simulation = require_simulation
         self.require_approval = require_approval
+        self._storage = storage
+        self._governor_id = governor_id
         self._proposals: dict[str, PolicyProposal] = {}
+        self._load_persisted_proposals()
 
     @property
     def proposals(self) -> list[PolicyProposal]:
@@ -253,6 +259,7 @@ class PolicyGovernor:
             )
         )
         self._proposals[proposal.proposal_id] = proposal
+        self._persist_proposal(proposal)
         logger.info(
             "Policy proposal created: %s (ADD by %s)",
             proposal.proposal_id,
@@ -305,6 +312,7 @@ class PolicyGovernor:
             )
         )
         self._proposals[proposal.proposal_id] = proposal
+        self._persist_proposal(proposal)
         logger.info(
             "Policy proposal created: %s (SWAP index %d by %s)",
             proposal.proposal_id,
@@ -356,6 +364,7 @@ class PolicyGovernor:
             )
         )
         self._proposals[proposal.proposal_id] = proposal
+        self._persist_proposal(proposal)
         logger.info(
             "Policy proposal created: %s (REMOVE index %d by %s)",
             proposal.proposal_id,
@@ -392,6 +401,7 @@ class PolicyGovernor:
             )
         )
         self._proposals[proposal.proposal_id] = proposal
+        self._persist_proposal(proposal)
         logger.info(
             "Policy proposal created: %s (REPLACE_CHAIN with %d providers by %s)",
             proposal.proposal_id,
@@ -452,6 +462,7 @@ class PolicyGovernor:
                 )
             )
 
+        self._persist_proposal(proposal)
         return result
 
     # ── Simulate ──────────────────────────────────────────────
@@ -506,6 +517,7 @@ class PolicyGovernor:
                 note=f"Ran {report.total} scenarios.",
             )
         )
+        self._persist_proposal(proposal)
         return report
 
     # ── Approve / Reject ──────────────────────────────────────
@@ -541,6 +553,7 @@ class PolicyGovernor:
                 note=note or f"Assigned to {reviewer_name}.",
             )
         )
+        self._persist_proposal(proposal)
         return proposal
 
     def approve(
@@ -588,6 +601,7 @@ class PolicyGovernor:
                 note=note or "Approved for deployment.",
             )
         )
+        self._persist_proposal(proposal)
         logger.info("Policy proposal approved: %s by %s", proposal_id, approver)
         return proposal
 
@@ -627,6 +641,7 @@ class PolicyGovernor:
                 note=reason,
             )
         )
+        self._persist_proposal(proposal)
         logger.info("Policy proposal rejected: %s — %s", proposal_id, reason)
         return proposal
 
@@ -660,6 +675,7 @@ class PolicyGovernor:
                 note=note or "Withdrawn before deployment.",
             )
         )
+        self._persist_proposal(proposal)
         return proposal
 
     # ── Deploy ────────────────────────────────────────────────
@@ -688,6 +704,20 @@ class PolicyGovernor:
         """
         proposal = self._get_or_raise(proposal_id)
         self._raise_if_stale(proposal, action="deploy")
+
+        # Guard: reloaded proposals lose their live provider references
+        needs_provider = proposal.action in (ProposalAction.ADD, ProposalAction.SWAP)
+        needs_chain = proposal.action == ProposalAction.REPLACE_CHAIN
+        if needs_provider and proposal.new_provider is None:
+            raise ValueError(
+                "Cannot deploy a reloaded proposal — the policy provider "
+                "was not persisted. Create a fresh proposal instead."
+            )
+        if needs_chain and proposal.replacement_providers is None:
+            raise ValueError(
+                "Cannot deploy a reloaded proposal — the replacement "
+                "providers were not persisted. Create a fresh proposal instead."
+            )
 
         if self.require_approval and proposal.status != ProposalStatus.APPROVED:
             raise ValueError(
@@ -761,10 +791,75 @@ class PolicyGovernor:
                 note=note or "Applied to the live policy chain.",
             )
         )
+        self._persist_proposal(proposal)
         logger.info("Policy proposal deployed: %s", proposal_id)
         return proposal
 
     # ── Helpers ────────────────────────────────────────────────
+
+    def _persist_proposal(self, proposal: PolicyProposal) -> None:
+        """Save a proposal to persistent storage, if configured."""
+        if self._storage is not None:
+            self._storage.save_policy_proposal(
+                self._governor_id, proposal.proposal_id, proposal.to_dict()
+            )
+
+    def _load_persisted_proposals(self) -> None:
+        """Load any persisted proposals into memory on init.
+
+        Note: Only proposal *metadata* is restored (status, author, trail,
+        etc.). The ``new_provider`` and ``replacement_providers`` fields
+        require live Python objects and are set to ``None`` after reload.
+        Re-deploying a reloaded proposal is not supported — create a fresh
+        proposal from the current chain instead.
+        """
+        if self._storage is None:
+            return
+        stored = self._storage.load_policy_proposals(self._governor_id)
+        for proposal_id, data in stored.items():
+            try:
+                proposal = PolicyProposal(
+                    proposal_id=data["proposal_id"],
+                    action=ProposalAction(data["action"]),
+                    new_provider=None,
+                    replacement_providers=None,
+                    target_index=data.get("target_index"),
+                    author=data.get("author", "unknown"),
+                    description=data.get("description", ""),
+                    base_version_number=data.get("base_version_number"),
+                    metadata=data.get("metadata", {}),
+                    assigned_reviewer=data.get("assigned_reviewer"),
+                    status=ProposalStatus(data.get("status", "draft")),
+                    created_at=datetime.fromisoformat(data["created_at"]),
+                    approved_by=data.get("approved_by"),
+                    approved_at=(
+                        datetime.fromisoformat(data["approved_at"])
+                        if data.get("approved_at")
+                        else None
+                    ),
+                    deployed_at=(
+                        datetime.fromisoformat(data["deployed_at"])
+                        if data.get("deployed_at")
+                        else None
+                    ),
+                    rejection_reason=data.get("rejection_reason"),
+                    decision_trail=[
+                        PolicyProposalEvent(
+                            event=e["event"],
+                            actor=e["actor"],
+                            note=e.get("note", ""),
+                            created_at=datetime.fromisoformat(e["created_at"]),
+                        )
+                        for e in data.get("decision_trail", [])
+                    ],
+                )
+                self._proposals[proposal_id] = proposal
+            except (KeyError, ValueError) as exc:
+                logger.warning(
+                    "Skipping corrupted persisted proposal %s: %s",
+                    proposal_id,
+                    exc,
+                )
 
     def _get_or_raise(self, proposal_id: str) -> PolicyProposal:
         """Get a proposal or raise KeyError."""

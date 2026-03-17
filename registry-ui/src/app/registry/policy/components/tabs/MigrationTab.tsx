@@ -39,6 +39,21 @@ type MigrationTabProps = {
   ) => Promise<PolicyMigrationPreviewResponse | null>;
 };
 
+function migrationRiskClass(level: string | undefined): string {
+  switch (level?.toLowerCase()) {
+    case "critical":
+      return "bg-red-500/15 text-red-200 ring-1 ring-red-400/50";
+    case "high":
+      return "bg-rose-500/15 text-rose-200 ring-1 ring-rose-400/50";
+    case "medium":
+      return "bg-amber-500/15 text-amber-200 ring-1 ring-amber-400/50";
+    case "low":
+      return "bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-400/50";
+    default:
+      return "bg-zinc-500/15 text-zinc-200 ring-1 ring-zinc-400/40";
+  }
+}
+
 export function MigrationTab({
   environments,
   promotions,
@@ -434,12 +449,16 @@ export function MigrationTab({
                           key={`migration-risk-${index}`}
                           className="rounded-2xl bg-emerald-900/20 px-3 py-2 ring-1 ring-emerald-700/30"
                         >
-                          <span className="font-semibold text-emerald-50">
-                            {risk.title}
-                          </span>{" "}
-                          <span className="text-[10px] uppercase tracking-[0.14em] text-emerald-300">
-                            {risk.level}
-                          </span>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-semibold text-emerald-50">
+                              {risk.title}
+                            </span>
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] ${migrationRiskClass(risk.level)}`}
+                            >
+                              {risk.level}
+                            </span>
+                          </div>
                           <p className="mt-1 text-xs text-emerald-100/90">
                             {risk.detail}
                           </p>
