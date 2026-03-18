@@ -1,15 +1,19 @@
 """Reflexive monitoring middleware for SecureMCP.
 
 Observes MCP operation patterns, feeds them to the behavioral analyzer,
-and triggers escalation when drift is detected.
+and triggers escalation when drift is detected. When an IntrospectionEngine
+is attached, performs pre-execution gating: halting, throttling, or requiring
+confirmation before operations proceed.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from collections import defaultdict
 from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 import mcp.types as mt
 
@@ -28,9 +32,13 @@ from fastmcp.server.security.reflexive.analyzer import (
 )
 from fastmcp.server.security.reflexive.models import (
     DriftEvent,
+    ExecutionVerdict,
 )
 from fastmcp.server.security.reflexive.profiles import ActorProfileManager
 from fastmcp.tools.tool import Tool, ToolResult
+
+if TYPE_CHECKING:
+    from fastmcp.server.security.reflexive.introspection import IntrospectionEngine
 
 logger = logging.getLogger(__name__)
 
@@ -45,12 +53,21 @@ class ReflexiveMiddleware(Middleware):
     If a SUSPEND_AGENT or SHUTDOWN escalation is triggered, subsequent
     requests from that actor are blocked.
 
+    When an ``introspection_engine`` is provided, pre-execution gating
+    is performed: operations may be halted, throttled, or require
+    confirmation based on the actor's current behavioral state.
+
     Args:
         analyzer: The behavioral analyzer for drift detection.
         escalation_engine: Engine for processing drift events.
         bypass_stdio: If True (default), skip monitoring for STDIO transport.
         profile_manager: Optional ActorProfileManager for scope tracking
             and threat scoring. If None, one is created automatically.
+        introspection_engine: Optional IntrospectionEngine for pre-execution
+            gating. If None, the middleware operates in monitoring-only mode
+            (backward compatible).
+        throttle_delay_seconds: Delay in seconds when THROTTLE verdict is
+            returned. Defaults to 2.0.
     """
 
     def __init__(
@@ -60,11 +77,15 @@ class ReflexiveMiddleware(Middleware):
         *,
         bypass_stdio: bool = True,
         profile_manager: ActorProfileManager | None = None,
+        introspection_engine: IntrospectionEngine | None = None,
+        throttle_delay_seconds: float = 2.0,
     ) -> None:
         self.analyzer = analyzer
         self.escalation_engine = escalation_engine or EscalationEngine()
         self.bypass_stdio = bypass_stdio
         self.profile_manager = profile_manager or ActorProfileManager()
+        self.introspection_engine = introspection_engine
+        self.throttle_delay_seconds = throttle_delay_seconds
         self._suspended_actors: set[str] = set()
         self._call_timestamps: dict[str, list[float]] = defaultdict(list)
 
@@ -106,6 +127,66 @@ class ReflexiveMiddleware(Middleware):
         """Record a call timestamp for rate computation."""
         self._call_timestamps[actor_id].append(time.monotonic())
 
+    async def _pre_execution_gate(
+        self, actor_id: str, operation: str, resource_id: str = ""
+    ) -> None:
+        """Check the introspection engine and enforce pre-execution gating.
+
+        Does nothing if no introspection_engine is configured.
+
+        Raises:
+            PermissionError: When the verdict is HALT.
+            ConfirmationRequiredError: When the verdict is REQUIRE_CONFIRMATION.
+        """
+        if self.introspection_engine is None:
+            return
+
+        verdict = self.introspection_engine.get_execution_verdict(
+            actor_id, operation, resource_id
+        )
+
+        if verdict == ExecutionVerdict.HALT:
+            result = self.introspection_engine.introspect(actor_id)
+            raise PermissionError(
+                f"Operation '{operation}' halted for actor '{actor_id}': "
+                f"threat_level={result.threat_level.value}, "
+                f"compliance={result.compliance_status.value}"
+            )
+
+        if verdict == ExecutionVerdict.REQUIRE_CONFIRMATION:
+            from fastmcp.server.security.reflexive.introspection import (
+                ConfirmationRequiredError,
+            )
+
+            result = self.introspection_engine.introspect(actor_id)
+            raise ConfirmationRequiredError(
+                f"Operation '{operation}' requires confirmation for actor "
+                f"'{actor_id}': threat_level={result.threat_level.value}",
+                introspection=result,
+                actor_id=actor_id,
+                operation=operation,
+            )
+
+        if verdict == ExecutionVerdict.THROTTLE:
+            logger.info(
+                "Throttling actor %s for %.1fs before %s",
+                actor_id,
+                self.throttle_delay_seconds,
+                operation,
+            )
+            await asyncio.sleep(self.throttle_delay_seconds)
+
+    def _post_execution_record(
+        self, actor_id: str, operation_id: str = ""
+    ) -> None:
+        """Record introspection after execution for accountability binding."""
+        if self.introspection_engine is None:
+            return
+        result = self.introspection_engine.introspect(actor_id)
+        self.introspection_engine.bind_to_provenance(
+            actor_id, result, operation_id
+        )
+
     def _process_drift(self, events: list[DriftEvent]) -> None:
         """Process drift events through escalation engine and profile manager."""
         for event in events:
@@ -140,8 +221,11 @@ class ReflexiveMiddleware(Middleware):
         actor_id = self._get_actor_id(context)
         self._check_suspended(actor_id)
 
-        # Track tool scope
+        # Pre-execution gating
         tool_name = context.message.name
+        await self._pre_execution_gate(actor_id, "call_tool", tool_name)
+
+        # Track tool scope
         is_new_tool = self.profile_manager.record_tool_access(actor_id, tool_name)
 
         # Record call and compute rate
@@ -176,6 +260,10 @@ class ReflexiveMiddleware(Middleware):
             drift_events.extend(self.analyzer.observe(actor_id, "error_rate", 0.0))
 
             self._process_drift(drift_events)
+
+            # Post-execution accountability
+            self._post_execution_record(actor_id, f"tool:{tool_name}")
+
             return result
 
         except Exception:
@@ -205,8 +293,11 @@ class ReflexiveMiddleware(Middleware):
         actor_id = self._get_actor_id(context)
         self._check_suspended(actor_id)
 
-        # Track resource scope
+        # Pre-execution gating
         resource_uri = str(context.message.uri)
+        await self._pre_execution_gate(actor_id, "read_resource", resource_uri)
+
+        # Track resource scope
         is_new_resource = self.profile_manager.record_resource_access(
             actor_id, resource_uri
         )
@@ -230,6 +321,10 @@ class ReflexiveMiddleware(Middleware):
         try:
             result = await call_next(context)
             self._process_drift(drift_events)
+
+            # Post-execution accountability
+            self._post_execution_record(actor_id, f"resource:{resource_uri}")
+
             return result
         except Exception:
             drift_events.extend(self.analyzer.observe(actor_id, "error_rate", 1.0))
@@ -265,11 +360,19 @@ class ReflexiveMiddleware(Middleware):
         actor_id = self._get_actor_id(context)
         self._check_suspended(actor_id)
 
-        # Track prompt scope
+        # Pre-execution gating
         prompt_name = context.message.name
+        await self._pre_execution_gate(actor_id, "get_prompt", prompt_name)
+
+        # Track prompt scope
         self.profile_manager.record_prompt_access(actor_id, prompt_name)
 
-        return await call_next(context)
+        result = await call_next(context)
+
+        # Post-execution accountability
+        self._post_execution_record(actor_id, f"prompt:{prompt_name}")
+
+        return result
 
     async def on_list_prompts(
         self,

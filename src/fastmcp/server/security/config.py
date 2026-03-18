@@ -20,6 +20,7 @@ from fastmcp.server.security.compliance.reports import (
     ComplianceReporter,
 )
 from fastmcp.server.security.consent.graph import ConsentGraph
+from fastmcp.server.security.contracts.agent_registry import AgentKeyRegistry
 from fastmcp.server.security.contracts.broker import ContextBroker
 from fastmcp.server.security.contracts.crypto import ContractCryptoHandler
 from fastmcp.server.security.contracts.exchange_log import ExchangeLog
@@ -42,7 +43,11 @@ from fastmcp.server.security.reflexive.analyzer import (
     BehavioralAnalyzer,
     EscalationEngine,
 )
-from fastmcp.server.security.reflexive.models import DriftSeverity, EscalationRule
+from fastmcp.server.security.reflexive.models import (
+    DriftSeverity,
+    EscalationRule,
+    ThreatLevel,
+)
 from fastmcp.server.security.registry.registry import TrustRegistry
 from fastmcp.server.security.sandbox.enforcer import SandboxedRunner
 from fastmcp.server.security.storage.backend import StorageBackend
@@ -221,6 +226,7 @@ class ContractConfig:
     contract_duration: timedelta = field(default_factory=lambda: timedelta(hours=1))
     require_for_list: bool = False
     backend: StorageBackend | None = None
+    agent_registry: AgentKeyRegistry | None = None
 
     def get_broker(self, server_id: str = "securemcp-server") -> ContextBroker:
         """Get or create the context broker."""
@@ -236,6 +242,7 @@ class ContractConfig:
             session_timeout=self.session_timeout,
             contract_duration=self.contract_duration,
             backend=self.backend,
+            agent_registry=self.agent_registry,
         )
 
 
@@ -307,6 +314,58 @@ class ReflexiveConfig:
 
 
 @dataclass
+class IntrospectionConfig:
+    """Configuration for the Reflexive Execution Engine (introspection).
+
+    Adds self-examination and pre-execution gating capabilities to the
+    reflexive layer. When enabled, operations can be halted, throttled,
+    or require confirmation based on an actor's behavioral state.
+
+    Attributes:
+        threat_thresholds: Score boundaries for ThreatLevel classification.
+            Maps ThreatLevel to minimum score (e.g., ``{ThreatLevel.LOW: 5.0}``).
+        enable_pre_execution_gating: If True, non-PROCEED verdicts are
+            enforced. If False, always returns PROCEED (monitoring-only).
+        throttle_delay_seconds: Delay in seconds when THROTTLE verdict is
+            returned. Defaults to 2.0.
+    """
+
+    threat_thresholds: dict[ThreatLevel, float] | None = None
+    enable_pre_execution_gating: bool = False
+    throttle_delay_seconds: float = 2.0
+
+    def get_introspection_engine(
+        self,
+        analyzer: BehavioralAnalyzer,
+        escalation_engine: EscalationEngine,
+        profile_manager: Any = None,
+    ) -> Any:
+        """Create an IntrospectionEngine from this config.
+
+        Args:
+            analyzer: The BehavioralAnalyzer instance.
+            escalation_engine: The EscalationEngine instance.
+            profile_manager: The ActorProfileManager instance.
+
+        Returns:
+            An IntrospectionEngine instance.
+        """
+        from fastmcp.server.security.reflexive.introspection import (
+            IntrospectionEngine,
+        )
+        from fastmcp.server.security.reflexive.profiles import ActorProfileManager
+
+        pm = profile_manager or ActorProfileManager()
+        return IntrospectionEngine(
+            analyzer=analyzer,
+            escalation_engine=escalation_engine,
+            profile_manager=pm,
+            threat_thresholds=self.threat_thresholds,
+            enable_pre_execution_gating=self.enable_pre_execution_gating,
+        )
+
+
+@dataclass
 class ConsentConfig:
     """Configuration for the Consent Graph layer (Phase 5).
 
@@ -328,6 +387,57 @@ class ConsentConfig:
         if self.graph is not None:
             return self.graph
         return ConsentGraph(graph_id=self.graph_id, backend=self.backend)
+
+
+@dataclass
+class FederatedConsentConfig:
+    """Configuration for the Federated Consent Graph layer.
+
+    Bridges the local ConsentGraph with TrustFederation to enable
+    jurisdiction-aware, multi-institutional consent evaluation.
+
+    Attributes:
+        federated_graph: Pre-built FederatedConsentGraph. If None, one
+            is created from the other settings.
+        jurisdiction_policies: Jurisdiction policies to register on creation.
+        institution_id: This institution's identifier.
+        enable_peer_coordination: Whether to query federation peers.
+    """
+
+    federated_graph: Any = None  # FederatedConsentGraph | None
+    jurisdiction_policies: dict[str, Any] | None = None  # JurisdictionPolicy
+    institution_id: str = "default"
+    enable_peer_coordination: bool = True
+
+    def get_federated_graph(
+        self,
+        local_graph: ConsentGraph,
+        federation: Any = None,
+        event_bus: SecurityEventBus | None = None,
+    ) -> Any:
+        """Get or create the FederatedConsentGraph.
+
+        Args:
+            local_graph: The local ConsentGraph instance.
+            federation: The TrustFederation instance.
+            event_bus: Optional event bus.
+
+        Returns:
+            A FederatedConsentGraph instance.
+        """
+        if self.federated_graph is not None:
+            return self.federated_graph
+        from fastmcp.server.security.consent.federation import (
+            FederatedConsentGraph,
+        )
+
+        return FederatedConsentGraph(
+            local_graph=local_graph,
+            federation=federation,
+            jurisdiction_policies=self.jurisdiction_policies,
+            institution_id=self.institution_id,
+            event_bus=event_bus,
+        )
 
 
 @dataclass
@@ -577,7 +687,9 @@ class SecurityConfig:
     contracts: ContractConfig | None = None
     provenance: ProvenanceConfig | None = None
     reflexive: ReflexiveConfig | None = None
+    introspection: IntrospectionConfig | None = None
     consent: ConsentConfig | None = None
+    federated_consent: FederatedConsentConfig | None = None
     gateway: GatewayConfig | None = None
     alerts: AlertConfig | None = None
     certification: CertificationConfig | None = None

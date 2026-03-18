@@ -24,6 +24,9 @@ from typing import Any, cast
 from fastmcp.server.security.policy.composition import AllOf, AnyOf, FirstMatch, Not
 from fastmcp.server.security.policy.declarative import load_policy
 from fastmcp.server.security.policy.policies.abac import AttributeBasedPolicy
+from fastmcp.server.security.policy.policies.compliance_rule import (
+    ComplianceRulePolicy,
+)
 from fastmcp.server.security.policy.policies.allowlist import (
     AllowlistPolicy,
     DenylistPolicy,
@@ -259,6 +262,37 @@ def policy_provider_to_config(provider: PolicyProvider) -> dict[str, Any]:
                 else None
             ),
             "prefix_match": provider.prefix_match,
+            "policy_id": provider.policy_id,
+            "version": provider.version,
+        }
+
+    if isinstance(provider, ComplianceRulePolicy):
+        return {
+            "type": "compliance_rule",
+            "framework": provider.framework,
+            "require_all_rules": provider.require_all_rules,
+            "rules": [
+                {
+                    "name": rule.name,
+                    "description": rule.description,
+                    "tags": sorted(rule.tags),
+                    "checks": [
+                        {
+                            "metadata_key": check.metadata_key,
+                            **(
+                                {"allowed_values": sorted(check.allowed_values)}
+                                if check.allowed_values is not None
+                                else {}
+                            ),
+                            **({"required": check.required} if not check.required else {}),
+                        }
+                        for check in rule.checks
+                    ],
+                    "deny_message": rule.deny_message,
+                    "allow_message": rule.allow_message,
+                }
+                for rule in provider.rules
+            ],
             "policy_id": provider.policy_id,
             "version": provider.version,
         }

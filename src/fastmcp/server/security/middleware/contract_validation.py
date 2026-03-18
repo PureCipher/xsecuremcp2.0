@@ -21,6 +21,7 @@ from fastmcp.server.middleware.middleware import (
     MiddlewareContext,
 )
 from fastmcp.server.security.contracts.broker import ContextBroker
+from fastmcp.server.security.contracts.exchange_log import ExchangeEventType
 from fastmcp.server.security.contracts.schema import Contract
 from fastmcp.tools.tool import Tool, ToolResult
 
@@ -133,6 +134,29 @@ class ContractValidationMiddleware(Middleware):
 
         return None  # All checks passed
 
+    def _record_verification(
+        self,
+        contract: Contract,
+        passed: bool,
+        reason: str = "",
+    ) -> None:
+        """Record a VERIFICATION_PASSED or VERIFICATION_FAILED event."""
+        event_type = (
+            ExchangeEventType.VERIFICATION_PASSED
+            if passed
+            else ExchangeEventType.VERIFICATION_FAILED
+        )
+        self.broker.exchange_log.record(
+            session_id=contract.session_id,
+            event_type=event_type,
+            actor_id=self.broker.server_id,
+            data={
+                "contract_id": contract.contract_id,
+                "agent_id": contract.agent_id,
+                "reason": reason,
+            },
+        )
+
     # ── Tool operations ──────────────────────────────────────────────
 
     async def on_call_tool(
@@ -156,8 +180,10 @@ class ContractValidationMiddleware(Middleware):
         # Check term constraints
         violation = self._check_term_constraint(contract, "call_tool", tool_name)
         if violation:
+            self._record_verification(contract, passed=False, reason=violation)
             raise ContractViolationError(violation, contract_id=contract.contract_id)
 
+        self._record_verification(contract, passed=True)
         return await call_next(context)
 
     async def on_list_tools(
@@ -207,8 +233,10 @@ class ContractValidationMiddleware(Middleware):
 
         violation = self._check_term_constraint(contract, "read_resource", uri)
         if violation:
+            self._record_verification(contract, passed=False, reason=violation)
             raise ContractViolationError(violation, contract_id=contract.contract_id)
 
+        self._record_verification(contract, passed=True)
         return await call_next(context)
 
     async def on_list_resources(
@@ -270,8 +298,10 @@ class ContractValidationMiddleware(Middleware):
 
         violation = self._check_term_constraint(contract, "get_prompt", prompt_name)
         if violation:
+            self._record_verification(contract, passed=False, reason=violation)
             raise ContractViolationError(violation, contract_id=contract.contract_id)
 
+        self._record_verification(contract, passed=True)
         return await call_next(context)
 
     async def on_list_prompts(

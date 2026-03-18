@@ -37,6 +37,8 @@ export function ChainIntegrityPanel({ status }: Props) {
   const allValid = status.chain_valid && status.tree_valid;
   const scheme = status.scheme;
   const isAnchored = scheme?.scheme === "blockchain_anchored";
+  const recordCountText =
+    typeof status.record_count === "number" ? status.record_count.toLocaleString() : "—";
 
   return (
     <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-5 space-y-4">
@@ -49,7 +51,7 @@ export function ChainIntegrityPanel({ status }: Props) {
               Chain Integrity
             </h3>
             <p className="text-[11px] text-zinc-500">
-              Ledger: {status.ledger_id} · {status.record_count.toLocaleString()} records
+              Ledger: {status.ledger_id} · {recordCountText} records
             </p>
           </div>
         </div>

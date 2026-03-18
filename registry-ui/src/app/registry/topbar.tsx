@@ -77,6 +77,27 @@ export function RegistryTopBar({
                 active={pathname.startsWith("/registry/provenance")}
               />
             ) : null}
+            {canAdmin ? (
+              <TopNavLink
+                href="/registry/contracts"
+                label="Contracts"
+                active={pathname.startsWith("/registry/contracts")}
+              />
+            ) : null}
+            {canAdmin ? (
+              <TopNavLink
+                href="/registry/consent"
+                label="Consent"
+                active={pathname.startsWith("/registry/consent")}
+              />
+            ) : null}
+            {canAdmin ? (
+              <TopNavLink
+                href="/registry/reflexive"
+                label="Reflexive"
+                active={pathname.startsWith("/registry/reflexive")}
+              />
+            ) : null}
             <TopNavLink
               href="/registry/health"
               label="Health"

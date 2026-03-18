@@ -685,7 +685,7 @@ export type ProvenanceQueryResponse = {
 
 export type ProvenanceChainStatus = {
   ledger_id: string;
-  record_count: number;
+  record_count?: number;
   chain_valid: boolean;
   tree_valid: boolean;
   root_hash: string;
@@ -719,7 +719,7 @@ export type ProvenanceProofResponse = {
     };
     ledger_state: {
       root_hash: string;
-      record_count: number;
+      record_count?: number;
     };
     exported_at: string;
   };
@@ -800,4 +800,406 @@ export async function verifyProvenanceBundle(
     body: JSON.stringify(bundle),
   });
   return parseJson<ProvenanceVerifyResult>(response);
+}
+
+// ── Contracts API ────────────────────────────────────────────
+
+export type ContractTermData = {
+  term_id: string;
+  term_type: string;
+  description: string;
+  constraint: Record<string, unknown>;
+  required: boolean;
+  metadata?: Record<string, unknown>;
+};
+
+export type ContractData = {
+  contract_id: string;
+  server_id: string;
+  agent_id: string;
+  status: string;
+  terms: ContractTermData[];
+  signatures: Record<string, string>;
+  created_at: string;
+  expires_at?: string;
+  session_id?: string;
+};
+
+export type NegotiateContractResponse = {
+  request_id: string;
+  session_id: string;
+  status: string;
+  reason: string;
+  contract?: ContractData;
+  counter_terms?: ContractTermData[];
+};
+
+export type ContractDetailResponse = {
+  contract: ContractData;
+  signatures: Record<string, string>;
+  is_valid: boolean;
+  is_mutually_signed: boolean;
+  error?: string;
+};
+
+export type ContractListResponse = {
+  agent_id: string;
+  contracts: ContractData[];
+  count: number;
+};
+
+export type ExchangeLogEntry = {
+  entry_id?: string;
+  session_id: string;
+  direction: string;
+  message_type: string;
+  payload: Record<string, unknown>;
+  timestamp: string;
+  hash?: string;
+  previous_hash?: string;
+};
+
+export type ExchangeLogResponse = {
+  session_id: string | null;
+  entries: ExchangeLogEntry[];
+  count: number;
+};
+
+export type ExchangeChainVerifyResponse = {
+  session_id: string;
+  valid: boolean;
+  entry_count: number;
+  entries: ExchangeLogEntry[];
+};
+
+export async function negotiateContract(
+  body: Record<string, unknown>,
+): Promise<NegotiateContractResponse | null> {
+  const response = await backendFetch("/security/contracts/negotiate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return parseJson<NegotiateContractResponse>(response);
+}
+
+export async function getContractDetails(
+  contractId: string,
+): Promise<ContractDetailResponse | null> {
+  const response = await backendFetch(
+    `/security/contracts/${encodeURIComponent(contractId)}`,
+  );
+  return parseJson<ContractDetailResponse>(response);
+}
+
+export async function listContracts(
+  agentId?: string,
+): Promise<ContractListResponse | null> {
+  const qs = agentId ? `?agent_id=${encodeURIComponent(agentId)}` : "";
+  const response = await backendFetch(`/security/contracts${qs}`);
+  return parseJson<ContractListResponse>(response);
+}
+
+export async function signContract(
+  contractId: string,
+  signatureBody: Record<string, unknown>,
+): Promise<Record<string, unknown> | null> {
+  const response = await backendFetch(
+    `/security/contracts/${encodeURIComponent(contractId)}/sign`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(signatureBody),
+    },
+  );
+  return parseJson<Record<string, unknown>>(response);
+}
+
+export async function revokeContract(
+  contractId: string,
+  reason?: string,
+): Promise<Record<string, unknown> | null> {
+  const response = await backendFetch(
+    `/security/contracts/${encodeURIComponent(contractId)}/revoke`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason: reason || "" }),
+    },
+  );
+  return parseJson<Record<string, unknown>>(response);
+}
+
+export async function getExchangeLog(
+  sessionId?: string,
+): Promise<ExchangeLogResponse | null> {
+  const qs = sessionId
+    ? `?session_id=${encodeURIComponent(sessionId)}`
+    : "";
+  const response = await backendFetch(`/security/contracts/exchange-log${qs}`);
+  return parseJson<ExchangeLogResponse>(response);
+}
+
+export async function verifyExchangeChain(
+  sessionId: string,
+): Promise<ExchangeChainVerifyResponse | null> {
+  const response = await backendFetch(
+    `/security/contracts/exchange-log/${encodeURIComponent(sessionId)}/verify`,
+  );
+  return parseJson<ExchangeChainVerifyResponse>(response);
+}
+
+// ── Federated Consent API ────────────────────────────────────
+
+export type JurisdictionResult = {
+  jurisdiction_code: string;
+  satisfied: boolean;
+  required_scopes: string[];
+  satisfied_scopes: string[];
+  missing_scopes: string[];
+  applicable_regulations: string[];
+  reason: string;
+};
+
+export type ConsentAccessRights = {
+  agent_id: string;
+  resource_id: string;
+  allowed_scopes: string[];
+  jurisdiction_constraints: Record<string, string[]>;
+  conditions: string[];
+  grant_sources: string[];
+  expires_at?: string | null;
+};
+
+export type ConsentEvaluationResponse = {
+  granted: boolean;
+  reason: string;
+  local_decision: { granted: boolean; reason: string };
+  jurisdiction_results: Record<string, JurisdictionResult>;
+  peer_decisions: Record<string, { granted: boolean; reason: string }>;
+  access_rights: ConsentAccessRights | null;
+  evaluated_at: string;
+};
+
+export type JurisdictionPolicy = {
+  jurisdiction_id: string;
+  jurisdiction_code: string;
+  applicable_regulations: string[];
+  required_consent_scopes: string[];
+  requires_explicit_consent: boolean;
+  data_residency_required: boolean;
+};
+
+export type JurisdictionListResponse = {
+  jurisdictions: Record<string, JurisdictionPolicy>;
+  count: number;
+};
+
+export type InstitutionListResponse = {
+  institutions: Record<string, { jurisdiction_code: string }>;
+  count: number;
+};
+
+export async function evaluateFederatedConsent(
+  body: Record<string, unknown>,
+): Promise<ConsentEvaluationResponse | null> {
+  const response = await backendFetch("/security/consent/federated/evaluate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return parseJson<ConsentEvaluationResponse>(response);
+}
+
+export async function getAccessRights(
+  agentId: string,
+  resourceId: string,
+): Promise<ConsentAccessRights | null> {
+  const response = await backendFetch(
+    `/security/consent/federated/access-rights/${encodeURIComponent(agentId)}/${encodeURIComponent(resourceId)}`,
+  );
+  return parseJson<ConsentAccessRights>(response);
+}
+
+export async function listJurisdictions(): Promise<JurisdictionListResponse | null> {
+  const response = await backendFetch("/security/consent/federated/jurisdictions");
+  return parseJson<JurisdictionListResponse>(response);
+}
+
+export async function listInstitutions(): Promise<InstitutionListResponse | null> {
+  const response = await backendFetch("/security/consent/federated/institutions");
+  return parseJson<InstitutionListResponse>(response);
+}
+
+export async function propagateConsent(
+  edgeId: string,
+  targetPeers?: string[],
+): Promise<Record<string, unknown> | null> {
+  const response = await backendFetch("/security/consent/federated/propagate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ edge_id: edgeId, target_peers: targetPeers }),
+  });
+  return parseJson<Record<string, unknown>>(response);
+}
+
+// ── Reflexive Introspection API ─────────────────────────────
+
+export type IntrospectionResponse = {
+  actor_id: string;
+  threat_score: number;
+  threat_level: string;
+  drift_summary: Record<string, number>;
+  active_escalations: string[];
+  compliance_status: string;
+  verdict: string;
+  should_halt: boolean;
+  should_require_confirmation: boolean;
+  constraints: string[];
+  assessed_at: string;
+};
+
+export type VerdictResponse = {
+  actor_id: string;
+  operation: string;
+  verdict: string;
+};
+
+export type ThreatLevelResponse = {
+  actor_id: string;
+  threat_level: string;
+  threat_score: number;
+};
+
+export type ConstraintsResponse = {
+  actor_id: string;
+  constraints: string[];
+  count: number;
+};
+
+export type AccountabilityEntry = {
+  type: string;
+  actor_id: string;
+  threat_score?: number;
+  threat_level?: string;
+  compliance_status?: string;
+  verdict?: string;
+  constraints?: string[];
+  timestamp?: string;
+  binding_id?: string;
+  operation_id?: string;
+  assessed_at?: string;
+  bound_at?: string;
+};
+
+export type AccountabilityResponse = {
+  entries: AccountabilityEntry[];
+  count: number;
+};
+
+export async function getIntrospection(
+  actorId: string,
+): Promise<IntrospectionResponse | null> {
+  const response = await backendFetch(
+    `/security/reflexive/introspect/${encodeURIComponent(actorId)}`,
+  );
+  return parseJson<IntrospectionResponse>(response);
+}
+
+export async function getVerdict(
+  actorId: string,
+  operation: string,
+): Promise<VerdictResponse | null> {
+  const response = await backendFetch(
+    `/security/reflexive/verdict/${encodeURIComponent(actorId)}/${encodeURIComponent(operation)}`,
+  );
+  return parseJson<VerdictResponse>(response);
+}
+
+export async function getThreatLevel(
+  actorId: string,
+): Promise<ThreatLevelResponse | null> {
+  const response = await backendFetch(
+    `/security/reflexive/threat-level/${encodeURIComponent(actorId)}`,
+  );
+  return parseJson<ThreatLevelResponse>(response);
+}
+
+export async function getActorConstraints(
+  actorId: string,
+): Promise<ConstraintsResponse | null> {
+  const response = await backendFetch(
+    `/security/reflexive/constraints/${encodeURIComponent(actorId)}`,
+  );
+  return parseJson<ConstraintsResponse>(response);
+}
+
+export async function getAccountabilityLog(
+  actorId?: string,
+  limit?: number,
+): Promise<AccountabilityResponse | null> {
+  const qs = new URLSearchParams();
+  if (actorId) qs.set("actor_id", actorId);
+  if (limit) qs.set("limit", String(limit));
+  const q = qs.toString();
+  const response = await backendFetch(
+    `/security/reflexive/accountability${q ? `?${q}` : ""}`,
+  );
+  return parseJson<AccountabilityResponse>(response);
+}
+
+// ── Federation & CRL API ────────────────────────────────────
+
+export type FederationPeer = {
+  peer_id: string;
+  endpoint: string;
+  status: string;
+  trust_score: number;
+  last_seen: string;
+  metadata: Record<string, unknown>;
+};
+
+export type FederationStatusResponse = {
+  peers: FederationPeer[];
+  peer_count: number;
+  federation_id: string;
+  status: string;
+  error?: string;
+};
+
+export type RevocationEntry = {
+  tool_name: string;
+  reason: string;
+  revoked_at: string;
+  revoked_by: string;
+};
+
+export type RevocationsResponse = {
+  entries: RevocationEntry[];
+  count: number;
+  error?: string;
+};
+
+export async function getFederationStatus(): Promise<FederationStatusResponse | null> {
+  const response = await backendFetch("/security/federation");
+  return parseJson<FederationStatusResponse>(response);
+}
+
+export async function getRevocations(): Promise<RevocationsResponse | null> {
+  const response = await backendFetch("/security/revocations");
+  return parseJson<RevocationsResponse>(response);
+}
+
+// ── Security Health API ─────────────────────────────────────
+
+export type SecurityHealthResponse = {
+  status: string;
+  components: Record<string, string>;
+  component_count: number;
+  timestamp: string;
+};
+
+export async function getSecurityHealth(): Promise<SecurityHealthResponse | null> {
+  const response = await backendFetch("/security/health");
+  return parseJson<SecurityHealthResponse>(response);
 }

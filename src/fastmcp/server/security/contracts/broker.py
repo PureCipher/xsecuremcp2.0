@@ -13,8 +13,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from fastmcp.server.security.contracts.agent_registry import AgentKeyRegistry
 from fastmcp.server.security.contracts.crypto import (
     ContractCryptoHandler,
+    SignatureInfo,
     compute_digest,
 )
 from fastmcp.server.security.contracts.exchange_log import (
@@ -114,11 +116,13 @@ class ContextBroker:
         contract_duration: timedelta = timedelta(hours=1),
         broker_id: str = "default",
         backend: StorageBackend | None = None,
+        agent_registry: AgentKeyRegistry | None = None,
     ) -> None:
         self.server_id = server_id
         self.broker_id = broker_id
         self._backend = backend
         self.crypto_handler = crypto_handler
+        self.agent_registry = agent_registry
         self.exchange_log = exchange_log or ExchangeLog()
         self._term_evaluator = term_evaluator
         self.default_terms = default_terms or []
@@ -358,13 +362,30 @@ class ContextBroker:
         session: NegotiationSession,
         terms: list[ContractTerm],
     ) -> Contract:
-        """Create and optionally sign a contract."""
+        """Create and optionally sign a contract.
+
+        When an ``agent_registry`` is configured, the contract enters
+        ``PENDING_COUNTERSIGN`` after the server signs — the agent must
+        call :meth:`agent_sign_contract` to complete mutual authentication.
+        Without an agent registry, the contract goes straight to ``ACTIVE``
+        (backward-compatible behaviour).
+        """
+        # Determine initial status based on whether mutual signing is required
+        needs_countersign = (
+            self.crypto_handler is not None and self.agent_registry is not None
+        )
+        initial_status = (
+            ContractStatus.PENDING_COUNTERSIGN
+            if needs_countersign
+            else ContractStatus.ACTIVE
+        )
+
         contract = Contract(
             session_id=session.session_id,
             server_id=self.server_id,
             agent_id=session.agent_id,
             terms=terms,
-            status=ContractStatus.ACTIVE,
+            status=initial_status,
         )
         contract.set_default_expiry(self.contract_duration)
 
@@ -396,6 +417,91 @@ class ContextBroker:
             )
 
         return contract
+
+    async def agent_sign_contract(
+        self,
+        contract_id: str,
+        agent_signature: SignatureInfo,
+    ) -> tuple[bool, str]:
+        """Accept an agent's countersignature on a pending contract.
+
+        This completes the mutual authentication handshake.  The agent
+        signs the same contract data that the server signed, and the
+        broker verifies the signature using the agent's registered key.
+
+        Args:
+            contract_id: The contract to countersign.
+            agent_signature: The agent's ``SignatureInfo``.
+
+        Returns:
+            ``(True, "")`` on success, ``(False, reason)`` on failure.
+        """
+        contract = self._active_contracts.get(contract_id)
+        if contract is None:
+            return False, "Contract not found"
+
+        if contract.status != ContractStatus.PENDING_COUNTERSIGN:
+            return False, f"Contract is not awaiting countersignature (status={contract.status.value})"
+
+        if self.agent_registry is None:
+            return False, "Agent registry not configured"
+
+        if self.crypto_handler is None:
+            return False, "Crypto handler not configured"
+
+        agent_id = contract.agent_id
+        agent_key_entry = self.agent_registry.get_agent_key(agent_id)
+        if agent_key_entry is None:
+            return False, f"No registered key for agent {agent_id}"
+
+        key_material, _algorithm = agent_key_entry
+
+        # Verify the agent's signature against the contract data
+        contract_data = contract.to_dict()
+        valid = self.crypto_handler.verify_with_external_key(
+            contract_data, agent_signature, key_material
+        )
+        if not valid:
+            self.exchange_log.record(
+                session_id=contract.session_id,
+                event_type=ExchangeEventType.VERIFICATION_FAILED,
+                actor_id=agent_id,
+                data={
+                    "contract_id": contract_id,
+                    "reason": "Invalid agent signature",
+                },
+            )
+            return False, "Invalid agent signature"
+
+        # Store the agent's signature and activate the contract
+        contract.signatures[agent_id] = agent_signature.signature
+        contract.status = ContractStatus.ACTIVE
+
+        self.exchange_log.record(
+            session_id=contract.session_id,
+            event_type=ExchangeEventType.AGENT_SIGNED,
+            actor_id=agent_id,
+            data={
+                "contract_id": contract_id,
+                "digest": compute_digest(contract_data),
+            },
+        )
+
+        # Persist updated state
+        if self._backend is not None:
+            from fastmcp.server.security.storage.serialization import contract_to_dict
+
+            self._backend.save_contract(
+                self.broker_id, contract_id, contract_to_dict(contract)
+            )
+
+        logger.info(
+            "Contract %s mutually signed by server %s and agent %s",
+            contract_id,
+            self.server_id,
+            agent_id,
+        )
+        return True, ""
 
     def get_contract(self, contract_id: str) -> Contract | None:
         """Look up an active contract by ID."""

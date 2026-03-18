@@ -172,3 +172,95 @@ class EscalationRule:
             return False
 
         return not self.drift_types or event.drift_type in self.drift_types
+
+
+# ---------------------------------------------------------------------------
+# Reflexive Execution Engine models
+# ---------------------------------------------------------------------------
+
+
+class ComplianceStatus(Enum):
+    """Compliance status derived from introspection.
+
+    Indicates whether an actor's behavior is within acceptable
+    bounds or has deviated enough to warrant concern.
+    """
+
+    COMPLIANT = "compliant"
+    ELEVATED_RISK = "elevated_risk"
+    NON_COMPLIANT = "non_compliant"
+    UNKNOWN = "unknown"
+
+
+class ExecutionVerdict(Enum):
+    """Pre-execution verdict from the introspection engine.
+
+    Determines how an operation should proceed (or not) based
+    on the actor's current behavioral state.
+    """
+
+    PROCEED = "proceed"
+    REQUIRE_CONFIRMATION = "require_confirmation"
+    THROTTLE = "throttle"
+    HALT = "halt"
+
+
+class ThreatLevel(Enum):
+    """Discrete threat level mapped from a numeric threat score.
+
+    Provides human-readable categorization of an actor's threat
+    posture for use in policies and UI displays.
+    """
+
+    NONE = "none"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
+# Default score boundaries for threat-level classification.
+DEFAULT_THREAT_THRESHOLDS: dict[ThreatLevel, float] = {
+    ThreatLevel.LOW: 5.0,
+    ThreatLevel.MEDIUM: 15.0,
+    ThreatLevel.HIGH: 30.0,
+    ThreatLevel.CRITICAL: 50.0,
+}
+
+
+@dataclass
+class IntrospectionResult:
+    """Result of a reflexive self-examination for an actor.
+
+    Captures the actor's current threat posture, compliance status,
+    active escalations, and operational constraints so that the
+    system (or the actor itself) can make informed decisions about
+    whether to proceed with an operation.
+
+    Attributes:
+        actor_id: The agent being examined.
+        threat_score: Current time-decayed threat score.
+        threat_level: Discrete categorization of the score.
+        drift_summary: Summary of recent drift events by type.
+        active_escalations: Recent escalation actions in effect.
+        compliance_status: Overall compliance assessment.
+        verdict: Recommended execution verdict.
+        should_halt: Convenience flag: True when verdict is HALT.
+        should_require_confirmation: True when verdict is REQUIRE_CONFIRMATION.
+        constraints: Dynamic operational constraints (e.g., ``"sandbox_required"``).
+        assessed_at: When this introspection was performed.
+        metadata: Additional context.
+    """
+
+    actor_id: str = ""
+    threat_score: float = 0.0
+    threat_level: ThreatLevel = ThreatLevel.NONE
+    drift_summary: dict[str, int] = field(default_factory=dict)
+    active_escalations: list[str] = field(default_factory=list)
+    compliance_status: ComplianceStatus = ComplianceStatus.UNKNOWN
+    verdict: ExecutionVerdict = ExecutionVerdict.PROCEED
+    should_halt: bool = False
+    should_require_confirmation: bool = False
+    constraints: list[str] = field(default_factory=list)
+    assessed_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    metadata: dict[str, Any] = field(default_factory=dict)

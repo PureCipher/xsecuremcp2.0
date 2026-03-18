@@ -60,6 +60,7 @@ from fastmcp.server.security.policy.workbench_store import PolicyWorkbenchStore
 if TYPE_CHECKING:
     from fastmcp import FastMCP
     from fastmcp.server.security.alerts.bus import SecurityEventBus
+    from fastmcp.server.security.contracts.broker import ContextBroker
     from fastmcp.server.security.compliance.reports import ComplianceReporter
     from fastmcp.server.security.dashboard.snapshot import SecurityDashboard
     from fastmcp.server.security.federation.crl import CertificateRevocationList
@@ -71,7 +72,9 @@ if TYPE_CHECKING:
     from fastmcp.server.security.policy.monitoring import PolicyMonitor
     from fastmcp.server.security.policy.validator import PolicyValidator
     from fastmcp.server.security.policy.versioning.manager import PolicyVersionManager
+    from fastmcp.server.security.consent.federation import FederatedConsentGraph
     from fastmcp.server.security.provenance.ledger import ProvenanceLedger
+    from fastmcp.server.security.reflexive.introspection import IntrospectionEngine
     from fastmcp.server.security.registry.registry import TrustRegistry
 
 logger = logging.getLogger(__name__)
@@ -109,6 +112,9 @@ class SecurityAPI:
     policy_validator: PolicyValidator | None = None
     policy_monitor: PolicyMonitor | None = None
     policy_governor: PolicyGovernor | None = None
+    broker: ContextBroker | None = None
+    federated_consent_graph: FederatedConsentGraph | None = None
+    introspection_engine: IntrospectionEngine | None = None
     _policy_workbench_store: PolicyWorkbenchStore | None = field(
         default=None,
         init=False,
@@ -147,6 +153,9 @@ class SecurityAPI:
             policy_validator=getattr(ctx, "policy_validator", None),
             policy_monitor=getattr(ctx, "policy_monitor", None),
             policy_governor=getattr(ctx, "policy_governor", None),
+            broker=getattr(ctx, "broker", None),
+            federated_consent_graph=getattr(ctx, "federated_consent_graph", None),
+            introspection_engine=getattr(ctx, "introspection_engine", None),
         )
 
     # ── Dashboard ─────────────────────────────────────────────
@@ -1025,6 +1034,7 @@ class SecurityAPI:
                 "target_environment": target_environment,
                 "source_version_number": current.get("version_number"),
             },
+            force=True,
         )
         proposal = payload.get("proposal", {})
         proposal_id = proposal.get("proposal_id")
@@ -1247,6 +1257,7 @@ class SecurityAPI:
         author: str = "api",
         description_prefix: str = "Imported policy snapshot",
         metadata: dict[str, Any] | None = None,
+        force: bool = False,
     ) -> dict[str, Any]:
         """Import policy JSON by creating one batch governance proposal."""
         if self.policy_engine is None:
@@ -1294,7 +1305,7 @@ class SecurityAPI:
             for index, provider in enumerate(self.policy_engine.providers)
         ]
 
-        if current_configs == imported_configs:
+        if current_configs == imported_configs and not force:
             return {
                 "status": "no_changes",
                 "summary": {
@@ -2263,6 +2274,434 @@ class SecurityAPI:
             )
         return scenarios
 
+    # ── Contracts ─────────────────────────────────────────────
+
+    async def negotiate_contract(
+        self,
+        request_body: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Initiate or continue a contract negotiation.
+
+        Expects a JSON body with ``agent_id``, optional ``session_id``
+        (to continue), ``proposed_terms`` list, and optional ``context``.
+        """
+        if self.broker is None:
+            return {"error": "Contracts not configured", "status": 503}
+
+        from fastmcp.server.security.contracts.schema import (
+            ContractNegotiationRequest,
+            ContractTerm,
+            TermType,
+        )
+
+        raw_terms = request_body.get("proposed_terms", [])
+        terms: list[ContractTerm] = []
+        for raw in raw_terms:
+            term_type_str = raw.get("term_type", "custom")
+            try:
+                term_type = TermType(term_type_str)
+            except ValueError:
+                term_type = TermType.CUSTOM
+            terms.append(
+                ContractTerm(
+                    term_id=raw.get("term_id", ""),
+                    term_type=term_type,
+                    description=raw.get("description", ""),
+                    constraint=raw.get("constraint", {}),
+                    required=raw.get("required", False),
+                    metadata=raw.get("metadata", {}),
+                )
+            )
+
+        request = ContractNegotiationRequest(
+            session_id=request_body.get("session_id", ""),
+            agent_id=request_body.get("agent_id", ""),
+            proposed_terms=terms,
+            context=request_body.get("context", {}),
+        )
+        response = await self.broker.negotiate(request)
+
+        result: dict[str, Any] = {
+            "request_id": response.request_id,
+            "session_id": response.session_id,
+            "status": response.status.value,
+            "reason": response.reason,
+        }
+        if response.contract is not None:
+            result["contract"] = response.contract.to_dict()
+            result["contract"]["signatures"] = dict(response.contract.signatures)
+        if response.counter_terms is not None:
+            result["counter_terms"] = [
+                {
+                    "term_id": t.term_id,
+                    "term_type": t.term_type.value,
+                    "description": t.description,
+                    "constraint": t.constraint,
+                    "required": t.required,
+                }
+                for t in response.counter_terms
+            ]
+        return result
+
+    async def agent_sign_contract_endpoint(
+        self,
+        contract_id: str,
+        signature_body: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Accept an agent's countersignature on a pending contract."""
+        if self.broker is None:
+            return {"error": "Contracts not configured", "status": 503}
+
+        from fastmcp.server.security.contracts.crypto import (
+            SignatureInfo,
+            SigningAlgorithm,
+        )
+
+        try:
+            sig = SignatureInfo(
+                algorithm=SigningAlgorithm(signature_body["algorithm"]),
+                signer_id=signature_body["signer_id"],
+                signature=signature_body["signature"],
+                key_id=signature_body.get("key_id", ""),
+            )
+        except (KeyError, ValueError) as exc:
+            return {"error": f"Invalid signature payload: {exc}", "status": 400}
+
+        success, error = await self.broker.agent_sign_contract(contract_id, sig)
+        if success:
+            contract = self.broker.get_contract(contract_id)
+            return {
+                "success": True,
+                "contract_id": contract_id,
+                "status": contract.status.value if contract else "active",
+            }
+        return {"error": error, "status": 400}
+
+    def get_contract_details(self, contract_id: str) -> dict[str, Any]:
+        """Return details for a single contract."""
+        if self.broker is None:
+            return {"error": "Contracts not configured", "status": 503}
+
+        contract = self.broker.get_contract(contract_id)
+        if contract is None:
+            return {"error": "Contract not found", "status": 404}
+
+        return {
+            "contract": contract.to_dict(),
+            "signatures": dict(contract.signatures),
+            "is_valid": contract.is_valid(),
+            "is_mutually_signed": (
+                contract.server_id in contract.signatures
+                and contract.agent_id in contract.signatures
+            ),
+        }
+
+    def list_agent_contracts(self, agent_id: str) -> dict[str, Any]:
+        """List active contracts for an agent."""
+        if self.broker is None:
+            return {"error": "Contracts not configured", "status": 503}
+
+        contracts = self.broker.get_active_contracts_for_agent(agent_id)
+        return {
+            "agent_id": agent_id,
+            "contracts": [c.to_dict() for c in contracts],
+            "count": len(contracts),
+        }
+
+    async def revoke_contract_endpoint(
+        self,
+        contract_id: str,
+        reason: str = "",
+    ) -> dict[str, Any]:
+        """Revoke a contract."""
+        if self.broker is None:
+            return {"error": "Contracts not configured", "status": 503}
+
+        success = await self.broker.revoke_contract(contract_id, reason=reason)
+        if success:
+            return {"success": True, "contract_id": contract_id}
+        return {"error": "Contract not found", "status": 404}
+
+    def get_exchange_log_entries(
+        self,
+        session_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Export exchange log entries, optionally filtered by session."""
+        if self.broker is None:
+            return {"error": "Contracts not configured", "status": 503}
+
+        entries = self.broker.exchange_log.export_entries(session_id=session_id)
+        return {
+            "session_id": session_id,
+            "entries": entries,
+            "count": len(entries),
+        }
+
+    def verify_exchange_chain(self, session_id: str) -> dict[str, Any]:
+        """Verify hash-chain integrity and return session summary."""
+        if self.broker is None:
+            return {"error": "Contracts not configured", "status": 503}
+
+        summary = self.broker.exchange_log.get_session_summary(session_id)
+        return summary
+
+    # ── Federated Consent ────────────────────────────────────
+
+    def evaluate_federated_consent(
+        self,
+        source_id: str,
+        target_id: str,
+        scope: str,
+        *,
+        geographic_context: dict[str, Any] | None = None,
+        jurisdictions: list[str] | None = None,
+        require_all_jurisdictions: bool = True,
+    ) -> dict[str, Any]:
+        """Evaluate consent with federation and jurisdiction awareness."""
+        if self.federated_consent_graph is None:
+            return {"error": "Federated consent not configured", "status": 503}
+
+        from fastmcp.server.security.consent.models import (
+            FederatedConsentQuery,
+            GeographicContext,
+        )
+
+        geo = GeographicContext(
+            source_jurisdiction=(geographic_context or {}).get(
+                "source_jurisdiction", ""
+            ),
+            target_jurisdiction=(geographic_context or {}).get(
+                "target_jurisdiction", ""
+            ),
+            data_residency=(geographic_context or {}).get("data_residency"),
+            processing_location=(geographic_context or {}).get(
+                "processing_location"
+            ),
+        )
+        query = FederatedConsentQuery(
+            source_id=source_id,
+            target_id=target_id,
+            scope=scope,
+            geographic_context=geo,
+            jurisdictions=jurisdictions,
+            require_all_jurisdictions=require_all_jurisdictions,
+        )
+        decision = self.federated_consent_graph.evaluate_federated_consent(query)
+        return {
+            "granted": decision.granted,
+            "reason": decision.reason,
+            "local_decision": {
+                "granted": decision.local_decision.granted
+                if decision.local_decision
+                else False,
+                "reason": decision.local_decision.reason
+                if decision.local_decision
+                else "",
+            },
+            "jurisdiction_results": {
+                jcode: {
+                    "jurisdiction_code": jr.jurisdiction_code,
+                    "satisfied": jr.satisfied,
+                    "required_scopes": jr.required_scopes,
+                    "satisfied_scopes": jr.satisfied_scopes,
+                    "missing_scopes": jr.missing_scopes,
+                    "applicable_regulations": jr.applicable_regulations,
+                    "reason": jr.reason,
+                }
+                for jcode, jr in decision.jurisdiction_results.items()
+            },
+            "peer_decisions": {
+                pid: {"granted": pd.granted, "reason": pd.reason}
+                for pid, pd in decision.peer_decisions.items()
+            },
+            "access_rights": (
+                {
+                    "agent_id": decision.access_rights.agent_id,
+                    "resource_id": decision.access_rights.resource_id,
+                    "allowed_scopes": decision.access_rights.allowed_scopes,
+                    "jurisdiction_constraints": decision.access_rights.jurisdiction_constraints,
+                    "conditions": decision.access_rights.conditions,
+                    "grant_sources": decision.access_rights.grant_sources,
+                }
+                if decision.access_rights
+                else None
+            ),
+            "evaluated_at": decision.evaluated_at.isoformat(),
+        }
+
+    def get_access_rights(
+        self,
+        agent_id: str,
+        resource_id: str,
+        *,
+        geographic_context: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Compute dynamic access rights for an agent on a resource."""
+        if self.federated_consent_graph is None:
+            return {"error": "Federated consent not configured", "status": 503}
+
+        from fastmcp.server.security.consent.models import GeographicContext
+
+        geo = (
+            GeographicContext(
+                source_jurisdiction=geographic_context.get(
+                    "source_jurisdiction", ""
+                ),
+                target_jurisdiction=geographic_context.get(
+                    "target_jurisdiction", ""
+                ),
+                data_residency=geographic_context.get("data_residency"),
+                processing_location=geographic_context.get(
+                    "processing_location"
+                ),
+            )
+            if geographic_context
+            else None
+        )
+        rights = self.federated_consent_graph.compute_access_rights(
+            agent_id, resource_id, geographic_context=geo
+        )
+        return {
+            "agent_id": rights.agent_id,
+            "resource_id": rights.resource_id,
+            "allowed_scopes": rights.allowed_scopes,
+            "jurisdiction_constraints": rights.jurisdiction_constraints,
+            "expires_at": rights.expires_at.isoformat()
+            if rights.expires_at
+            else None,
+            "conditions": rights.conditions,
+            "grant_sources": rights.grant_sources,
+        }
+
+    def list_jurisdictions(self) -> dict[str, Any]:
+        """List all registered jurisdiction policies."""
+        if self.federated_consent_graph is None:
+            return {"error": "Federated consent not configured", "status": 503}
+
+        policies = self.federated_consent_graph.list_jurisdiction_policies()
+        return {
+            "jurisdictions": {
+                jcode: {
+                    "jurisdiction_id": p.jurisdiction_id,
+                    "jurisdiction_code": p.jurisdiction_code,
+                    "applicable_regulations": p.applicable_regulations,
+                    "required_consent_scopes": p.required_consent_scopes,
+                    "requires_explicit_consent": p.requires_explicit_consent,
+                    "data_residency_required": p.data_residency_required,
+                }
+                for jcode, p in policies.items()
+            },
+            "count": len(policies),
+        }
+
+    def list_institutions(self) -> dict[str, Any]:
+        """List all registered institutions."""
+        if self.federated_consent_graph is None:
+            return {"error": "Federated consent not configured", "status": 503}
+
+        institutions = self.federated_consent_graph.list_institutions()
+        return {
+            "institutions": {
+                iid: {"jurisdiction_code": jcode}
+                for iid, jcode in institutions.items()
+            },
+            "count": len(institutions),
+        }
+
+    def propagate_consent_endpoint(
+        self,
+        edge_id: str,
+        target_peers: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Propagate a consent grant to federation peers."""
+        if self.federated_consent_graph is None:
+            return {"error": "Federated consent not configured", "status": 503}
+
+        results = self.federated_consent_graph.propagate_consent(
+            edge_id, target_peers
+        )
+        return {
+            "edge_id": edge_id,
+            "propagation_results": results,
+            "peers_notified": sum(1 for v in results.values() if v),
+        }
+
+    # ── Reflexive Introspection ────────────────────────────────
+
+    def get_introspection(self, actor_id: str) -> dict[str, Any]:
+        """Full introspection result for an actor."""
+        if self.introspection_engine is None:
+            return {"error": "Introspection engine not configured", "status": 503}
+
+        result = self.introspection_engine.introspect(actor_id)
+        return {
+            "actor_id": result.actor_id,
+            "threat_score": result.threat_score,
+            "threat_level": result.threat_level.value,
+            "drift_summary": result.drift_summary,
+            "active_escalations": result.active_escalations,
+            "compliance_status": result.compliance_status.value,
+            "verdict": result.verdict.value,
+            "should_halt": result.should_halt,
+            "should_require_confirmation": result.should_require_confirmation,
+            "constraints": result.constraints,
+            "assessed_at": result.assessed_at.isoformat(),
+        }
+
+    def get_verdict(self, actor_id: str, operation: str) -> dict[str, Any]:
+        """Execution verdict for a specific operation."""
+        if self.introspection_engine is None:
+            return {"error": "Introspection engine not configured", "status": 503}
+
+        verdict = self.introspection_engine.get_execution_verdict(
+            actor_id, operation
+        )
+        return {
+            "actor_id": actor_id,
+            "operation": operation,
+            "verdict": verdict.value,
+        }
+
+    def get_actor_threat_level(self, actor_id: str) -> dict[str, Any]:
+        """Current threat level for an actor."""
+        if self.introspection_engine is None:
+            return {"error": "Introspection engine not configured", "status": 503}
+
+        level = self.introspection_engine.get_threat_level(actor_id)
+        score = self.introspection_engine.profile_manager.threat_score(actor_id)
+        return {
+            "actor_id": actor_id,
+            "threat_level": level.value,
+            "threat_score": score,
+        }
+
+    def get_actor_constraints(self, actor_id: str) -> dict[str, Any]:
+        """Active operational constraints for an actor."""
+        if self.introspection_engine is None:
+            return {"error": "Introspection engine not configured", "status": 503}
+
+        constraints = self.introspection_engine.get_active_constraints(actor_id)
+        return {
+            "actor_id": actor_id,
+            "constraints": constraints,
+            "count": len(constraints),
+        }
+
+    def get_accountability(
+        self, actor_id: str | None = None, limit: int = 100
+    ) -> dict[str, Any]:
+        """Accountability audit trail for introspection records."""
+        if self.introspection_engine is None:
+            return {"error": "Introspection engine not configured", "status": 503}
+
+        entries = self.introspection_engine.get_accountability_log(
+            actor_id=actor_id, limit=limit
+        )
+        return {
+            "entries": entries,
+            "count": len(entries),
+        }
+
     # ── Health ────────────────────────────────────────────────
 
     def get_health(self) -> dict[str, Any]:
@@ -2297,6 +2736,12 @@ class SecurityAPI:
             components["policy_monitor"] = "ok"
         if self.policy_governor:
             components["policy_governor"] = "ok"
+        if self.broker:
+            components["contracts"] = "ok"
+        if self.federated_consent_graph:
+            components["federated_consent"] = "ok"
+        if self.introspection_engine:
+            components["introspection_engine"] = "ok"
 
         return {
             "status": "healthy" if components else "unconfigured",
@@ -2506,6 +2951,166 @@ def mount_security_routes(
     mount_policy_routes(server, api, prefix)
 
     # Health
+    # Contracts
+    @server.custom_route(f"{prefix}/contracts/negotiate", methods=["POST"])
+    async def contracts_negotiate_endpoint(request: Request) -> JSONResponse:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        return JSONResponse(await api.negotiate_contract(body))
+
+    @server.custom_route(
+        f"{prefix}/contracts/{{contract_id}}/sign", methods=["POST"]
+    )
+    async def contracts_sign_endpoint(request: Request) -> JSONResponse:
+        cid = request.path_params.get("contract_id", "")
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        return JSONResponse(await api.agent_sign_contract_endpoint(cid, body))
+
+    @server.custom_route(f"{prefix}/contracts/{{contract_id}}", methods=["GET"])
+    async def contracts_detail_endpoint(request: Request) -> JSONResponse:
+        cid = request.path_params.get("contract_id", "")
+        return JSONResponse(api.get_contract_details(cid))
+
+    @server.custom_route(f"{prefix}/contracts", methods=["GET"])
+    async def contracts_list_endpoint(request: Request) -> JSONResponse:
+        agent_id = request.query_params.get("agent_id", "")
+        return JSONResponse(api.list_agent_contracts(agent_id))
+
+    @server.custom_route(
+        f"{prefix}/contracts/{{contract_id}}/revoke", methods=["POST"]
+    )
+    async def contracts_revoke_endpoint(request: Request) -> JSONResponse:
+        cid = request.path_params.get("contract_id", "")
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        return JSONResponse(
+            await api.revoke_contract_endpoint(cid, reason=body.get("reason", ""))
+        )
+
+    @server.custom_route(f"{prefix}/contracts/exchange-log", methods=["GET"])
+    async def contracts_exchange_log_endpoint(request: Request) -> JSONResponse:
+        session_id = request.query_params.get("session_id")
+        return JSONResponse(api.get_exchange_log_entries(session_id=session_id))
+
+    @server.custom_route(
+        f"{prefix}/contracts/exchange-log/{{session_id}}/verify",
+        methods=["GET"],
+    )
+    async def contracts_verify_chain_endpoint(request: Request) -> JSONResponse:
+        sid = request.path_params.get("session_id", "")
+        return JSONResponse(api.verify_exchange_chain(sid))
+
+    # Federated Consent
+    @server.custom_route(
+        f"{prefix}/consent/federated/evaluate", methods=["POST"]
+    )
+    async def federated_consent_evaluate(request: Request) -> JSONResponse:
+        body = await request.json()
+        return JSONResponse(
+            api.evaluate_federated_consent(
+                source_id=body.get("source_id", ""),
+                target_id=body.get("target_id", ""),
+                scope=body.get("scope", ""),
+                geographic_context=body.get("geographic_context"),
+                jurisdictions=body.get("jurisdictions"),
+                require_all_jurisdictions=body.get(
+                    "require_all_jurisdictions", True
+                ),
+            )
+        )
+
+    @server.custom_route(
+        f"{prefix}/consent/federated/access-rights/{{agent_id}}/{{resource_id}}",
+        methods=["GET"],
+    )
+    async def federated_access_rights(request: Request) -> JSONResponse:
+        agent_id = request.path_params.get("agent_id", "")
+        resource_id = request.path_params.get("resource_id", "")
+        geo_param = request.query_params.get("geographic_context")
+        geo: dict[str, Any] | None = None
+        if geo_param:
+            import json as _json
+
+            try:
+                geo = _json.loads(geo_param)
+            except Exception:
+                geo = None
+        return JSONResponse(
+            api.get_access_rights(
+                agent_id, resource_id, geographic_context=geo
+            )
+        )
+
+    @server.custom_route(
+        f"{prefix}/consent/federated/propagate", methods=["POST"]
+    )
+    async def federated_consent_propagate(request: Request) -> JSONResponse:
+        body = await request.json()
+        return JSONResponse(
+            api.propagate_consent_endpoint(
+                edge_id=body.get("edge_id", ""),
+                target_peers=body.get("target_peers"),
+            )
+        )
+
+    @server.custom_route(
+        f"{prefix}/consent/federated/jurisdictions", methods=["GET"]
+    )
+    async def federated_jurisdictions(request: Request) -> JSONResponse:
+        return JSONResponse(api.list_jurisdictions())
+
+    @server.custom_route(
+        f"{prefix}/consent/federated/institutions", methods=["GET"]
+    )
+    async def federated_institutions(request: Request) -> JSONResponse:
+        return JSONResponse(api.list_institutions())
+
+    # Reflexive Introspection
+    @server.custom_route(
+        f"{prefix}/reflexive/introspect/{{actor_id}}", methods=["GET"]
+    )
+    async def reflexive_introspect(request: Request) -> JSONResponse:
+        actor_id = request.path_params.get("actor_id", "")
+        return JSONResponse(api.get_introspection(actor_id))
+
+    @server.custom_route(
+        f"{prefix}/reflexive/verdict/{{actor_id}}/{{operation}}", methods=["GET"]
+    )
+    async def reflexive_verdict(request: Request) -> JSONResponse:
+        actor_id = request.path_params.get("actor_id", "")
+        operation = request.path_params.get("operation", "")
+        return JSONResponse(api.get_verdict(actor_id, operation))
+
+    @server.custom_route(
+        f"{prefix}/reflexive/threat-level/{{actor_id}}", methods=["GET"]
+    )
+    async def reflexive_threat_level(request: Request) -> JSONResponse:
+        actor_id = request.path_params.get("actor_id", "")
+        return JSONResponse(api.get_actor_threat_level(actor_id))
+
+    @server.custom_route(
+        f"{prefix}/reflexive/constraints/{{actor_id}}", methods=["GET"]
+    )
+    async def reflexive_constraints(request: Request) -> JSONResponse:
+        actor_id = request.path_params.get("actor_id", "")
+        return JSONResponse(api.get_actor_constraints(actor_id))
+
+    @server.custom_route(
+        f"{prefix}/reflexive/accountability", methods=["GET"]
+    )
+    async def reflexive_accountability(request: Request) -> JSONResponse:
+        actor_id = request.query_params.get("actor_id")
+        limit = int(request.query_params.get("limit", "100"))
+        return JSONResponse(api.get_accountability(actor_id=actor_id, limit=limit))
+
+    # Health
     @server.custom_route(f"{prefix}/health", methods=["GET"])
     async def health_endpoint(request: Request) -> JSONResponse:
         return JSONResponse(api.get_health())
@@ -2540,4 +3145,5 @@ def _build_api_from_server(server: FastMCP) -> SecurityAPI:
         policy_validator=getattr(ctx, "policy_validator", None),
         policy_monitor=getattr(ctx, "policy_monitor", None),
         policy_governor=getattr(ctx, "policy_governor", None),
+        introspection_engine=getattr(ctx, "introspection_engine", None),
     )

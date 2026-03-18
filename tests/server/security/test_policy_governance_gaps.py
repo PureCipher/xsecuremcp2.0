@@ -856,6 +856,208 @@ class TestSecurityAPIGovernance:
         assert bundles["count"] >= 1
         assert bundles["bundles"][0]["provider_count"] >= 1
 
+    def test_compliance_bundles_are_registered(self) -> None:
+        api = self._make_api()
+        bundles = api.get_policy_bundles()
+        bundle_ids = {b["bundle_id"] for b in bundles["bundles"]}
+
+        assert "gdpr-data-protection" in bundle_ids
+        assert "hipaa-health-data" in bundle_ids
+        assert "soc2-trust-services" in bundle_ids
+        assert "zero-trust-lockdown" in bundle_ids
+        assert "pci-dss-cardholder-data" in bundle_ids
+        assert "ccpa-consumer-privacy" in bundle_ids
+        assert "ferpa-student-records" in bundle_ids
+
+    def test_gdpr_bundle_structure(self) -> None:
+        from fastmcp.server.security.policy.workbench import get_policy_bundle
+
+        bundle = get_policy_bundle("gdpr-data-protection")
+        assert bundle is not None
+        assert bundle["risk_posture"] == "strict"
+        assert "compliance" in bundle["tags"]
+        assert "gdpr" in bundle["tags"]
+        assert bundle["provider_count"] == 4
+
+        provider_types = [p.get("type") for p in bundle["providers"]]
+        assert "compliance_rule" in provider_types
+        assert "rbac" in provider_types
+        assert "denylist" in provider_types
+        assert "rate_limit" in provider_types
+
+        core = bundle["providers"][0]
+        assert core["type"] == "compliance_rule"
+        assert core["framework"] == "GDPR"
+        assert len(core["rules"]) >= 1
+        assert core["rules"][0]["name"] == "legal_basis_required"
+
+    def test_hipaa_bundle_structure(self) -> None:
+        from fastmcp.server.security.policy.workbench import get_policy_bundle
+
+        bundle = get_policy_bundle("hipaa-health-data")
+        assert bundle is not None
+        assert bundle["risk_posture"] == "strict"
+        assert "hipaa" in bundle["tags"]
+        assert bundle["provider_count"] == 5
+
+        provider_types = [p.get("type") for p in bundle["providers"]]
+        assert "compliance_rule" in provider_types
+        assert "rbac" in provider_types
+        assert "denylist" in provider_types
+        assert "time_based" in provider_types
+        assert "rate_limit" in provider_types
+
+        core = bundle["providers"][0]
+        assert core["type"] == "compliance_rule"
+        assert core["framework"] == "HIPAA"
+        assert len(core["rules"]) >= 1
+        assert core["rules"][0]["name"] == "authorized_role_required"
+
+    def test_soc2_bundle_structure(self) -> None:
+        from fastmcp.server.security.policy.workbench import get_policy_bundle
+
+        bundle = get_policy_bundle("soc2-trust-services")
+        assert bundle is not None
+        assert bundle["risk_posture"] == "strict"
+        assert "soc2" in bundle["tags"]
+        assert bundle["provider_count"] == 5
+
+        provider_types = [p.get("type") for p in bundle["providers"]]
+        assert "allowlist" in provider_types
+        assert "rbac" in provider_types
+        assert "denylist" in provider_types
+        assert "time_based" in provider_types
+        assert "rate_limit" in provider_types
+
+    def test_zero_trust_bundle_structure(self) -> None:
+        from fastmcp.server.security.policy.workbench import get_policy_bundle
+
+        bundle = get_policy_bundle("zero-trust-lockdown")
+        assert bundle is not None
+        assert bundle["risk_posture"] == "locked_down"
+        assert "zero-trust" in bundle["tags"]
+        assert bundle["provider_count"] == 5
+
+        provider_types = [p.get("type") for p in bundle["providers"]]
+        assert "resource_scoped" in provider_types
+        assert "rbac" in provider_types
+        assert "abac" in provider_types
+        assert "denylist" in provider_types
+        assert "rate_limit" in provider_types
+
+    def test_pci_dss_bundle_structure(self) -> None:
+        from fastmcp.server.security.policy.workbench import get_policy_bundle
+
+        bundle = get_policy_bundle("pci-dss-cardholder-data")
+        assert bundle is not None
+        assert bundle["risk_posture"] == "strict"
+        assert "pci-dss" in bundle["tags"]
+        assert bundle["provider_count"] == 5
+
+        provider_types = [p.get("type") for p in bundle["providers"]]
+        assert "compliance_rule" in provider_types
+        assert "rbac" in provider_types
+        assert "denylist" in provider_types
+        assert "time_based" in provider_types
+        assert "rate_limit" in provider_types
+
+        core = bundle["providers"][0]
+        assert core["type"] == "compliance_rule"
+        assert core["framework"] == "PCI DSS"
+        assert len(core["rules"]) >= 1
+        assert core["rules"][0]["name"] == "cardholder_data_protection"
+
+    def test_ccpa_bundle_structure(self) -> None:
+        from fastmcp.server.security.policy.workbench import get_policy_bundle
+
+        bundle = get_policy_bundle("ccpa-consumer-privacy")
+        assert bundle is not None
+        assert bundle["risk_posture"] == "strict"
+        assert "ccpa" in bundle["tags"]
+        assert bundle["provider_count"] == 4
+
+        provider_types = [p.get("type") for p in bundle["providers"]]
+        assert "compliance_rule" in provider_types
+        assert "rbac" in provider_types
+        assert "denylist" in provider_types
+        assert "rate_limit" in provider_types
+
+        core = bundle["providers"][0]
+        assert core["type"] == "compliance_rule"
+        assert core["framework"] == "CCPA/CPRA"
+        assert len(core["rules"]) == 2
+        assert core["rules"][0]["name"] == "processing_purpose_required"
+        assert core["rules"][1]["name"] == "opt_out_check"
+
+    def test_ferpa_bundle_structure(self) -> None:
+        from fastmcp.server.security.policy.workbench import get_policy_bundle
+
+        bundle = get_policy_bundle("ferpa-student-records")
+        assert bundle is not None
+        assert bundle["risk_posture"] == "strict"
+        assert "ferpa" in bundle["tags"]
+        assert bundle["provider_count"] == 4
+
+        provider_types = [p.get("type") for p in bundle["providers"]]
+        assert "compliance_rule" in provider_types
+        assert "rbac" in provider_types
+        assert "denylist" in provider_types
+        assert "rate_limit" in provider_types
+
+        core = bundle["providers"][0]
+        assert core["type"] == "compliance_rule"
+        assert core["framework"] == "FERPA"
+        assert len(core["rules"]) == 2
+        assert core["rules"][0]["name"] == "educational_interest_required"
+        assert core["rules"][1]["name"] == "directory_information_exception"
+        assert core.get("require_all_rules") is False
+
+    def test_all_bundles_have_required_fields(self) -> None:
+        from fastmcp.server.security.policy.workbench import list_policy_bundles
+
+        required_fields = {
+            "bundle_id",
+            "title",
+            "summary",
+            "description",
+            "risk_posture",
+            "recommended_environments",
+            "tags",
+            "provider_count",
+            "providers",
+            "provider_summaries",
+        }
+        for bundle in list_policy_bundles():
+            missing = required_fields - set(bundle.keys())
+            assert not missing, f"Bundle {bundle['bundle_id']} missing fields: {missing}"
+            assert bundle["provider_count"] >= 1
+            assert len(bundle["providers"]) == bundle["provider_count"]
+            assert len(bundle["provider_summaries"]) == bundle["provider_count"]
+
+    def test_compliance_bundles_recommend_staging_or_production(self) -> None:
+        from fastmcp.server.security.policy.workbench import get_policy_bundle
+
+        for bundle_id in (
+            "gdpr-data-protection",
+            "hipaa-health-data",
+            "soc2-trust-services",
+            "pci-dss-cardholder-data",
+            "ccpa-consumer-privacy",
+            "ferpa-student-records",
+        ):
+            bundle = get_policy_bundle(bundle_id)
+            assert bundle is not None
+            envs = set(bundle["recommended_environments"])
+            assert envs & {"staging", "production"}, (
+                f"{bundle_id} should recommend staging or production"
+            )
+
+    def test_total_bundle_count(self) -> None:
+        from fastmcp.server.security.policy.workbench import list_policy_bundles
+
+        bundles = list_policy_bundles()
+        assert len(bundles) == 10
+
     @pytest.mark.anyio
     async def test_save_stage_and_delete_private_policy_pack(self) -> None:
         api = self._make_api()

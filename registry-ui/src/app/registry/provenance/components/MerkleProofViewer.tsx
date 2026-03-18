@@ -57,6 +57,8 @@ export function MerkleProofViewer({ record, proof, loading }: Props) {
   const mp = bundle.merkle_proof;
   const chain = bundle.chain_context;
   const ledger = bundle.ledger_state;
+  const ledgerRecordCountText =
+    typeof ledger.record_count === "number" ? ledger.record_count.toLocaleString() : "—";
 
   return (
     <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-5 space-y-4">
@@ -172,7 +174,7 @@ export function MerkleProofViewer({ record, proof, loading }: Props) {
           Ledger root: <code className="text-cyan-300/60 font-mono">{truncHash(ledger.root_hash, 16)}</code>
         </span>
         <span>
-          Total records: <span className="text-zinc-300">{ledger.record_count.toLocaleString()}</span>
+          Total records: <span className="text-zinc-300">{ledgerRecordCountText}</span>
         </span>
         <span>
           Exported: <span className="text-zinc-400">{new Date(bundle.exported_at).toLocaleString()}</span>

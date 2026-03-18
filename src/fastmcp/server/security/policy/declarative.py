@@ -64,6 +64,11 @@ from fastmcp.server.security.policy.plugin_registry import (
 # Import built_in to trigger registration of compliance types (gdpr, hipaa, etc.)
 import fastmcp.server.security.policy.built_in as _built_in  # noqa: F401
 from fastmcp.server.security.policy.policies.abac import AttributeBasedPolicy
+from fastmcp.server.security.policy.policies.compliance_rule import (
+    ComplianceRulePolicy,
+    ComplianceRuleSpec,
+    MetadataCheck,
+)
 from fastmcp.server.security.policy.policies.allowlist import (
     AllowlistPolicy,
     DenylistPolicy,
@@ -174,6 +179,62 @@ def _build_abac(config: dict[str, Any]) -> AttributeBasedPolicy:
     )
     object.__setattr__(policy, "_metadata_conditions", dict(conditions))
     return policy
+
+
+def _build_compliance_rule(config: dict[str, Any]) -> ComplianceRulePolicy:
+    """Build a compliance rule policy from declarative JSON.
+
+    Example::
+
+        type: compliance_rule
+        framework: GDPR
+        rules:
+          - name: legal_basis_required
+            description: Requires valid legal basis for PII access
+            tags: [pii, personal_data, gdpr_regulated]
+            checks:
+              - metadata_key: legal_basis
+                allowed_values: [consent, contract, legal_obligation]
+            deny_message: "Access denied: missing or invalid legal basis"
+            allow_message: "Access permitted under stated legal basis"
+    """
+    raw_rules = config.get("rules", [])
+    rules: list[ComplianceRuleSpec] = []
+    for raw in raw_rules:
+        checks: list[MetadataCheck] = []
+        for raw_check in raw.get("checks", []):
+            allowed = raw_check.get("allowed_values")
+            checks.append(
+                MetadataCheck(
+                    metadata_key=str(raw_check.get("metadata_key", "")),
+                    allowed_values=(
+                        frozenset(allowed) if allowed is not None else None
+                    ),
+                    required=raw_check.get("required", True),
+                )
+            )
+        rules.append(
+            ComplianceRuleSpec(
+                name=str(raw.get("name", "unnamed")),
+                description=str(raw.get("description", "")),
+                tags=frozenset(raw.get("tags", [])),
+                checks=tuple(checks),
+                deny_message=str(
+                    raw.get("deny_message", "Access denied by compliance rule")
+                ),
+                allow_message=str(
+                    raw.get("allow_message", "Access permitted by compliance rule")
+                ),
+            )
+        )
+
+    return ComplianceRulePolicy(
+        rules=rules,
+        framework=config.get("framework", ""),
+        require_all_rules=config.get("require_all_rules", True),
+        policy_id=config.get("policy_id", "compliance-rule-policy"),
+        version=config.get("version", "1.0.0"),
+    )
 
 
 def _build_resource_scoped(config: dict[str, Any]) -> ResourceScopedPolicy:
@@ -477,6 +538,60 @@ def _register_builtins() -> None:
             category="access_control",
             field_specs={},
             starter_config={"type": "deny_all"},
+        ),
+        PolicyTypeDescriptor(
+            type_key="compliance_rule",
+            factory=_build_compliance_rule,
+            display_name="Compliance Rule Engine",
+            description="Tag-gated, metadata-checked compliance rules (GDPR, HIPAA, SOC 2, etc.)",
+            category="compliance",
+            field_specs={
+                "framework": {
+                    "label": "Framework name",
+                    "type": "string",
+                    "description": "Human label for the compliance framework (e.g. GDPR, HIPAA).",
+                    "required": False,
+                    "default": "",
+                },
+                "rules": {
+                    "label": "Compliance rules",
+                    "type": "json_list",
+                    "description": (
+                        "List of rules. Each rule has: name, description, "
+                        "tags (trigger tags), checks (metadata requirements), "
+                        "deny_message, allow_message."
+                    ),
+                    "required": True,
+                },
+                "require_all_rules": {
+                    "label": "Require all matching rules to pass",
+                    "type": "bool",
+                    "description": "When true, every rule whose tags match must pass (AND logic).",
+                    "required": False,
+                    "default": True,
+                },
+            },
+            starter_config={
+                "type": "compliance_rule",
+                "policy_id": "compliance-rule-policy",
+                "version": "1.0.0",
+                "framework": "Custom",
+                "rules": [
+                    {
+                        "name": "example_rule",
+                        "description": "Require authorization for tagged resources",
+                        "tags": ["sensitive"],
+                        "checks": [
+                            {
+                                "metadata_key": "authorized",
+                                "allowed_values": ["true"],
+                            }
+                        ],
+                        "deny_message": "Access denied: authorization required",
+                        "allow_message": "Access permitted: authorized",
+                    }
+                ],
+            },
         ),
     ]
     for desc in builtins:

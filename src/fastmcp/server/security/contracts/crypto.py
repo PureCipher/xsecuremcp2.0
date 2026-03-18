@@ -180,6 +180,44 @@ class ContractCryptoHandler:
             logger.warning("Signature verification failed", exc_info=True)
             return False
 
+    def verify_with_external_key(
+        self,
+        data: dict[str, Any],
+        signature: SignatureInfo,
+        key_material: Any,
+    ) -> bool:
+        """Verify a signature using externally provided key material.
+
+        Used for verifying agent signatures where the agent's key is
+        stored in an ``AgentKeyRegistry`` rather than in this handler.
+
+        Args:
+            data: The contract data that was signed.
+            signature: The signature to verify.
+            key_material: The key (bytes for HMAC, public key for RSA/ECDSA).
+
+        Returns:
+            True if the signature is valid, False otherwise.
+        """
+        try:
+            if signature.algorithm == SigningAlgorithm.HMAC_SHA256:
+                temp = ContractCryptoHandler(
+                    algorithm=SigningAlgorithm.HMAC_SHA256,
+                    secret_key=key_material,
+                )
+            elif signature.algorithm in (SigningAlgorithm.RSA_PSS, SigningAlgorithm.ECDSA_P256):
+                temp = ContractCryptoHandler(
+                    algorithm=signature.algorithm,
+                    public_key=key_material,
+                )
+            else:
+                logger.warning("Unsupported algorithm for external verification: %s", signature.algorithm)
+                return False
+            return temp.verify(data, signature)
+        except Exception:
+            logger.warning("External key verification failed", exc_info=True)
+            return False
+
     def _sign_rsa(self, data: bytes) -> bytes:
         """Sign with RSA-PSS (requires cryptography package)."""
         try:

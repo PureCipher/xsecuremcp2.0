@@ -24,6 +24,7 @@ class ContractStatus(Enum):
     ACCEPTED = "accepted"
     REJECTED = "rejected"
     ACTIVE = "active"
+    PENDING_COUNTERSIGN = "pending_countersign"
     EXPIRED = "expired"
     REVOKED = "revoked"
 

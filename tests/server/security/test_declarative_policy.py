@@ -649,6 +649,7 @@ class TestSchema:
             "action_based",
             "gdpr",
             "hipaa",
+            "compliance_rule",
         }
         assert set(types.keys()) == expected
 

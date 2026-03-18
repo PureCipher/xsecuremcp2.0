@@ -32,6 +32,7 @@ class ExchangeEventType(Enum):
     CONTRACT_SIGNED = "contract_signed"
     CONTRACT_EXPIRED = "contract_expired"
     CONTRACT_REVOKED = "contract_revoked"
+    AGENT_SIGNED = "agent_signed"
     VERIFICATION_PASSED = "verification_passed"
     VERIFICATION_FAILED = "verification_failed"
 
@@ -228,6 +229,76 @@ class ExchangeLog:
                 return False
 
         return True
+
+    @staticmethod
+    def entry_to_dict(entry: ExchangeLogEntry) -> dict[str, Any]:
+        """Serialize a single entry to a dictionary for export or API responses."""
+        return {
+            "entry_id": entry.entry_id,
+            "session_id": entry.session_id,
+            "event_type": entry.event_type.value,
+            "timestamp": entry.timestamp.isoformat(),
+            "actor_id": entry.actor_id,
+            "data": entry.data,
+            "data_hash": entry.data_hash,
+            "previous_hash": entry.previous_hash,
+        }
+
+    def export_entries(
+        self,
+        session_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Export entries as serializable dictionaries.
+
+        Args:
+            session_id: If provided, return only entries for this session.
+                Otherwise, return all entries.
+
+        Returns:
+            List of entry dictionaries.
+        """
+        if session_id is not None:
+            entries = self.get_session_entries(session_id)
+        else:
+            entries = self.get_all_entries()
+        return [self.entry_to_dict(e) for e in entries]
+
+    def get_session_summary(self, session_id: str) -> dict[str, Any]:
+        """Get an audit summary for a negotiation session.
+
+        Returns:
+            Dictionary with entry count, event list, verification stats,
+            and chain integrity status.
+        """
+        chain = self._session_chains.get(session_id, [])
+        if not chain:
+            return {
+                "session_id": session_id,
+                "entry_count": 0,
+                "events": [],
+                "verification_passed": 0,
+                "verification_failed": 0,
+                "chain_verified": True,
+            }
+
+        events = [e.event_type.value for e in chain]
+        verification_passed = sum(
+            1 for e in chain if e.event_type == ExchangeEventType.VERIFICATION_PASSED
+        )
+        verification_failed = sum(
+            1 for e in chain if e.event_type == ExchangeEventType.VERIFICATION_FAILED
+        )
+
+        return {
+            "session_id": session_id,
+            "entry_count": len(chain),
+            "started_at": chain[0].timestamp.isoformat(),
+            "ended_at": chain[-1].timestamp.isoformat(),
+            "events": events,
+            "verification_passed": verification_passed,
+            "verification_failed": verification_failed,
+            "chain_verified": self.verify_chain(session_id),
+        }
 
     @property
     def entry_count(self) -> int:
