@@ -26,7 +26,7 @@ export function highlightJson(text: string): string {
     // Strings (keys and values)
     .replace(
       /("(?:[^"\\]|\\.)*")\s*:/g,
-      '<span class="text-emerald-300">$1</span>:',
+      '<span class="text-[--app-muted]">$1</span>:',
     )
     .replace(
       /:\s*("(?:[^"\\]|\\.)*")/g,
@@ -171,18 +171,18 @@ export function JsonEditor({
         className={`relative overflow-hidden rounded-2xl border transition ${
           isFocused
             ? validation.valid || !hasContent
-              ? "border-emerald-400"
+              ? "border-[--app-accent]"
               : "border-rose-400"
             : validation.valid || !hasContent
-              ? "border-emerald-700/70"
+              ? "border-[--app-border]"
               : "border-rose-500/70"
-        } bg-emerald-950`}
+        } bg-[--app-chrome-bg]`}
         style={{ minHeight }}
       >
         {/* Syntax-highlighted layer (behind) */}
         <pre
           ref={preRef}
-          className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words px-4 py-3 font-mono text-xs leading-6 text-emerald-50"
+          className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words px-4 py-3 font-mono text-xs leading-6 text-[--app-fg]"
           aria-hidden="true"
           dangerouslySetInnerHTML={{ __html: highlighted || "&nbsp;" }}
         />
@@ -198,7 +198,7 @@ export function JsonEditor({
           onBlur={() => setIsFocused(false)}
           placeholder={placeholder}
           spellCheck={false}
-          className="relative w-full resize-y bg-transparent px-4 py-3 font-mono text-xs leading-6 text-transparent caret-emerald-50 outline-none selection:bg-emerald-500/30 selection:text-transparent placeholder:text-emerald-400/50"
+          className="relative w-full resize-y bg-transparent px-4 py-3 font-mono text-xs leading-6 text-transparent caret-[--app-fg] outline-none selection:bg-[--app-control-active-bg] selection:text-transparent placeholder:text-[--app-muted]"
           style={{ minHeight }}
         />
       </div>
@@ -208,13 +208,13 @@ export function JsonEditor({
         <div
           className={`flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-medium ${
             validation.valid
-              ? "bg-emerald-500/10 text-emerald-300"
+              ? "bg-[--app-control-active-bg] text-[--app-muted]"
               : "bg-rose-500/10 text-rose-200"
           }`}
         >
           <span
             className={`inline-block h-1.5 w-1.5 rounded-full ${
-              validation.valid ? "bg-emerald-400" : "bg-rose-400"
+              validation.valid ? "bg-[--app-accent]" : "bg-rose-400"
             }`}
           />
           {validation.valid

@@ -12,7 +12,7 @@ export default async function ProvenancePage() {
   const records = recordsResp?.records ?? [];
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6">
+    <div>
       <ProvenanceDashboard records={records} chainStatus={chainStatus} />
     </div>
   );

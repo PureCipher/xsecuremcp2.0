@@ -50,7 +50,7 @@ export function ProvenanceStats({ records, chainStatus }: Props) {
         <div className="flex items-center gap-2">
           <span
             className={`h-3 w-3 rounded-full ${
-              chainStatus?.chain_valid ? "bg-emerald-400" : "bg-rose-400"
+              chainStatus?.chain_valid ? "bg-[--app-accent]" : "bg-rose-400"
             }`}
           />
           <span className="text-lg font-semibold text-zinc-100">

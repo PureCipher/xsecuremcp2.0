@@ -72,7 +72,7 @@ export function MerkleProofViewer({ record, proof, loading }: Props) {
             Record: {truncHash(record.record_id, 24)}
           </p>
         </div>
-        <span className="rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-[11px] font-medium text-emerald-300">
+        <span className="rounded-full bg-[--app-control-active-bg] px-2.5 py-0.5 text-[11px] font-medium text-[--app-muted]">
           Verifiable
         </span>
       </div>
@@ -138,8 +138,8 @@ export function MerkleProofViewer({ record, proof, loading }: Props) {
           {/* Leaf */}
           <div className="flex items-center gap-2">
             <span className="w-12 text-right text-[10px] text-zinc-600">leaf</span>
-            <span className="h-px w-3 bg-emerald-500/30" />
-            <code className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-mono text-emerald-300">
+            <span className="h-px w-3 bg-[--app-accent]" />
+            <code className="rounded bg-[--app-control-active-bg] px-1.5 py-0.5 text-[10px] font-mono text-[--app-muted]">
               {showFull ? mp.leaf_hash : truncHash(mp.leaf_hash, 20)}
             </code>
           </div>

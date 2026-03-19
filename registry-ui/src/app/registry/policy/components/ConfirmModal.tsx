@@ -48,7 +48,7 @@ export function ConfirmModal({
 
   const confirmClasses = isDangerous
     ? "bg-rose-500 text-white hover:bg-rose-400 disabled:opacity-60"
-    : "bg-emerald-500 text-emerald-950 hover:bg-emerald-400 disabled:opacity-60";
+    : "bg-[--app-accent] text-[--app-accent-contrast] hover:opacity-90 disabled:opacity-60";
 
   return (
     <div
@@ -60,11 +60,11 @@ export function ConfirmModal({
       aria-modal="true"
       aria-label={title}
     >
-      <div className="mx-4 w-full max-w-md rounded-3xl bg-emerald-950 p-6 ring-1 ring-emerald-700/60 shadow-2xl">
-        <h3 className="text-lg font-semibold text-emerald-50">{title}</h3>
+      <div className="mx-4 w-full max-w-md rounded-3xl border border-[--app-border] bg-[--app-chrome-bg] p-6 ring-1 ring-[--app-surface-ring] shadow-2xl">
+        <h3 className="text-lg font-semibold text-[--app-fg]">{title}</h3>
 
         {description ? (
-          <p className="mt-2 text-xs text-emerald-100/90">{description}</p>
+          <p className="mt-2 text-xs text-[--app-muted]">{description}</p>
         ) : null}
 
         {children ? <div className="mt-4">{children}</div> : null}
@@ -74,7 +74,7 @@ export function ConfirmModal({
             type="button"
             onClick={onCancel}
             disabled={isLoading}
-            className="rounded-full border border-emerald-600/80 px-4 py-2 text-[11px] font-semibold text-emerald-100 transition hover:bg-emerald-700/30 disabled:opacity-60"
+            className="rounded-full border border-[--app-border] px-4 py-2 text-[11px] font-semibold text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg] disabled:opacity-60"
           >
             {cancelLabel}
           </button>

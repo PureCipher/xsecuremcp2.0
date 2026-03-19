@@ -36,41 +36,41 @@ export function PolicyAnalyticsBundlesSection({
 }) {
   return (
     <section className="grid gap-4 xl:grid-cols-[1.1fr,0.9fr]">
-      <div className="rounded-3xl bg-emerald-900/40 p-5 ring-1 ring-emerald-700/60">
+      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
         <div className="space-y-1">
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-300">
+          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[--app-muted]">
             Policy analytics
           </p>
-          <h2 className="text-xl font-semibold text-emerald-50">
+          <h2 className="text-xl font-semibold text-[--app-fg]">
             See what is blocked, changed, and risky
           </h2>
-          <p className="text-[11px] text-emerald-100/80">
+          <p className="text-[11px] text-[--app-muted]">
             This view keeps reviewer attention on live deny patterns, recent
             changes, and rollout risk before another proposal is approved.
           </p>
         </div>
 
         <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <div className="rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/60">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+          <div className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
               Blocked now
             </p>
-            <p className="mt-2 text-2xl font-semibold text-emerald-50">
+            <p className="mt-2 text-2xl font-semibold text-[--app-fg]">
               {String(
                 (analytics.blocked?.audit?.current_deny as number | undefined) ??
                   analytics.overview?.deny_count ??
                   0,
               )}
             </p>
-            <p className="mt-1 text-[10px] text-emerald-200/90">
+            <p className="mt-1 text-[10px] text-[--app-muted]">
               Denials in the current window
             </p>
           </div>
-          <div className="rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/60">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+          <div className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
               Deny rate
             </p>
-            <p className="mt-2 text-2xl font-semibold text-emerald-50">
+            <p className="mt-2 text-2xl font-semibold text-[--app-fg]">
               {`${Math.round(
                 Number(
                   (analytics.blocked?.audit?.deny_rate as number | undefined) ??
@@ -80,52 +80,52 @@ export function PolicyAnalyticsBundlesSection({
                 ) * 100,
               )}%`}
             </p>
-            <p className="mt-1 text-[10px] text-emerald-200/90">
+            <p className="mt-1 text-[10px] text-[--app-muted]">
               Recent blocked traffic share
             </p>
           </div>
-          <div className="rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/60">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+          <div className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
               Active risks
             </p>
-            <p className="mt-2 text-2xl font-semibold text-emerald-50">
+            <p className="mt-2 text-2xl font-semibold text-[--app-fg]">
               {String(analytics.risks?.length ?? 0)}
             </p>
-            <p className="mt-1 text-[10px] text-emerald-200/90">
+            <p className="mt-1 text-[10px] text-[--app-muted]">
               Review items worth attention
             </p>
           </div>
         </div>
 
         <div className="mt-4 grid gap-4 lg:grid-cols-[1fr,1fr]">
-          <div className="rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/60">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+          <div className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
               Most blocked resources
             </p>
-            <ul className="mt-3 space-y-2 text-[11px] text-emerald-100/90">
+            <ul className="mt-3 space-y-2 text-[11px] text-[--app-muted]">
               {topDeniedResources.slice(0, 4).map((item, index) => (
                 <li
                   key={`top-denied-${index}`}
-                  className="rounded-2xl bg-emerald-900/20 px-3 py-2 ring-1 ring-emerald-700/30"
+                  className="rounded-2xl border border-[--app-border] bg-[--app-hover-bg] px-3 py-2 ring-1 ring-[--app-surface-ring]"
                 >
                   {String(item.resource_id ?? "unknown")} ·{" "}
                   {String(item.count ?? 0)} denials
                 </li>
               ))}
               {topDeniedResources.length === 0 ? (
-                <li className="text-[11px] text-emerald-200/90">
+                <li className="text-[11px] text-[--app-muted]">
                   No deny hot spots have been recorded yet.
                 </li>
               ) : null}
             </ul>
           </div>
 
-          <div className="rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/60">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+          <div className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
               Recent version change
             </p>
             {analytics.changes?.latest_version_summary ? (
-              <div className="mt-3 space-y-2 text-[11px] text-emerald-100/90">
+              <div className="mt-3 space-y-2 text-[11px] text-[--app-muted]">
                 <p>
                   Compared v{analytics.changes.latest_version_from ?? "?"} to v
                   {analytics.changes.latest_version_to ?? "?"}.
@@ -149,22 +149,22 @@ export function PolicyAnalyticsBundlesSection({
                 </p>
               </div>
             ) : (
-              <p className="mt-3 text-[11px] text-emerald-200/90">
+              <p className="mt-3 text-[11px] text-[--app-muted]">
                 No prior version delta is available yet.
               </p>
             )}
             {(analytics.risks ?? []).slice(0, 3).map((risk, index) => (
               <div
                 key={`risk-${index}`}
-                className="mt-3 rounded-2xl bg-emerald-900/20 p-3 ring-1 ring-emerald-700/30"
+                className="mt-3 rounded-2xl border border-[--app-border] bg-[--app-hover-bg] p-3 ring-1 ring-[--app-surface-ring]"
               >
-                <p className="text-[11px] font-semibold text-emerald-50">
+                <p className="text-[11px] font-semibold text-[--app-fg]">
                   {risk.title}
                 </p>
-                <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-emerald-300">
+                <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-[--app-muted]">
                   {risk.level}
                 </p>
-                <p className="mt-2 text-[11px] text-emerald-100/90">
+                <p className="mt-2 text-[11px] text-[--app-muted]">
                   {risk.detail}
                 </p>
               </div>
@@ -172,49 +172,49 @@ export function PolicyAnalyticsBundlesSection({
           </div>
         </div>
 
-        <div className="mt-4 rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/60">
+        <div className="mt-4 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
                 Trend history
               </p>
-              <p className="mt-1 text-[11px] text-emerald-100/90">
+              <p className="mt-1 text-[11px] text-[--app-muted]">
                 Recent analytics snapshots keep rollouts grounded in how the
                 policy set has actually behaved over time.
               </p>
             </div>
-            <span className="rounded-full bg-emerald-900/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-200">
+            <span className="rounded-full bg-[--app-surface] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
               {String(analytics.history?.sample_count ?? 0)} samples
             </span>
           </div>
 
           <div className="mt-4 grid gap-3 sm:grid-cols-4">
-            <div className="rounded-2xl bg-emerald-900/20 p-3 ring-1 ring-emerald-700/30">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-300">
+            <div className="rounded-2xl border border-[--app-border] bg-[--app-hover-bg] p-3 ring-1 ring-[--app-surface-ring]">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[--app-muted]">
                 Eval trend
               </p>
-              <p className="mt-2 text-lg font-semibold text-emerald-50">
+              <p className="mt-2 text-lg font-semibold text-[--app-fg]">
                 {String(
                   (analytics.history?.deltas?.evaluation_count as number | undefined) ??
                     0,
                 )}
               </p>
             </div>
-            <div className="rounded-2xl bg-emerald-900/20 p-3 ring-1 ring-emerald-700/30">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-300">
+            <div className="rounded-2xl border border-[--app-border] bg-[--app-hover-bg] p-3 ring-1 ring-[--app-surface-ring]">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[--app-muted]">
                 Deny trend
               </p>
-              <p className="mt-2 text-lg font-semibold text-emerald-50">
+              <p className="mt-2 text-lg font-semibold text-[--app-fg]">
                 {String(
                   (analytics.history?.deltas?.deny_count as number | undefined) ?? 0,
                 )}
               </p>
             </div>
-            <div className="rounded-2xl bg-emerald-900/20 p-3 ring-1 ring-emerald-700/30">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-300">
+            <div className="rounded-2xl border border-[--app-border] bg-[--app-hover-bg] p-3 ring-1 ring-[--app-surface-ring]">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[--app-muted]">
                 Queue trend
               </p>
-              <p className="mt-2 text-lg font-semibold text-emerald-50">
+              <p className="mt-2 text-lg font-semibold text-[--app-fg]">
                 {String(
                   (analytics.history?.deltas?.pending_proposals as
                     | number
@@ -222,11 +222,11 @@ export function PolicyAnalyticsBundlesSection({
                 )}
               </p>
             </div>
-            <div className="rounded-2xl bg-emerald-900/20 p-3 ring-1 ring-emerald-700/30">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-300">
+            <div className="rounded-2xl border border-[--app-border] bg-[--app-hover-bg] p-3 ring-1 ring-[--app-surface-ring]">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[--app-muted]">
                 Risk trend
               </p>
-              <p className="mt-2 text-lg font-semibold text-emerald-50">
+              <p className="mt-2 text-lg font-semibold text-[--app-fg]">
                 {String(
                   (analytics.history?.deltas?.risk_count as number | undefined) ?? 0,
                 )}
@@ -235,8 +235,8 @@ export function PolicyAnalyticsBundlesSection({
           </div>
 
           <div className="mt-4 grid gap-3 lg:grid-cols-[1.2fr,0.8fr]">
-            <div className="rounded-2xl bg-emerald-900/20 p-3 ring-1 ring-emerald-700/30">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-300">
+            <div className="rounded-2xl border border-[--app-border] bg-[--app-hover-bg] p-3 ring-1 ring-[--app-surface-ring]">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[--app-muted]">
                 Recent snapshots
               </p>
               <div className="mt-3 space-y-2">
@@ -245,13 +245,13 @@ export function PolicyAnalyticsBundlesSection({
                   .map((snapshot, index) => (
                     <div
                       key={`analytics-snapshot-${index}`}
-                      className="rounded-2xl bg-emerald-950/80 px-3 py-2 ring-1 ring-emerald-700/30"
+                      className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] px-3 py-2 ring-1 ring-[--app-surface-ring]"
                     >
-                      <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-emerald-300">
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-[--app-muted]">
                         <span>{String(snapshot.captured_at ?? "Unknown time")}</span>
                         <span>v{String(snapshot.current_version ?? "live")}</span>
                       </div>
-                      <p className="mt-2 text-[11px] text-emerald-100/90">
+                      <p className="mt-2 text-[11px] text-[--app-muted]">
                         {String(snapshot.deny_count ?? 0)} denials ·{" "}
                         {String(snapshot.pending_proposals ?? 0)} open proposals ·{" "}
                         {String(snapshot.risk_count ?? 0)} active risks
@@ -260,7 +260,7 @@ export function PolicyAnalyticsBundlesSection({
                   ))}
                 {(((analytics.history?.snapshots as RegistryPayload[] | undefined) ?? [])
                   .length === 0) ? (
-                  <p className="text-[11px] text-emerald-200/90">
+                  <p className="text-[11px] text-[--app-muted]">
                     Trend history will start filling in as this workbench is
                     used and policy changes are reviewed.
                   </p>
@@ -268,32 +268,32 @@ export function PolicyAnalyticsBundlesSection({
               </div>
             </div>
 
-            <div className="rounded-2xl bg-emerald-900/20 p-3 ring-1 ring-emerald-700/30">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-300">
+            <div className="rounded-2xl border border-[--app-border] bg-[--app-hover-bg] p-3 ring-1 ring-[--app-surface-ring]">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[--app-muted]">
                 Recent promotions
               </p>
               <div className="mt-3 space-y-2">
                 {(analytics.history?.recent_promotions ?? []).slice(0, 4).map((promotion, index) => (
                   <div
                     key={`analytics-promotion-${promotion.promotion_id ?? index}`}
-                    className="rounded-2xl bg-emerald-950/80 px-3 py-2 ring-1 ring-emerald-700/30"
+                    className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] px-3 py-2 ring-1 ring-[--app-surface-ring]"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-[11px] font-semibold text-emerald-50">
+                      <p className="text-[11px] font-semibold text-[--app-fg]">
                         {promotion.source_environment ?? "source"} →{" "}
                         {promotion.target_environment ?? "target"}
                       </p>
-                      <span className="rounded-full bg-emerald-900/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-200">
+                      <span className="rounded-full bg-[--app-surface] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
                         {promotion.status ?? "staged"}
                       </span>
                     </div>
-                    <p className="mt-2 text-[11px] text-emerald-100/90">
+                    <p className="mt-2 text-[11px] text-[--app-muted]">
                       {promotion.note || "Promotion tracked through the policy workflow."}
                     </p>
                   </div>
                 ))}
                 {((analytics.history?.recent_promotions ?? []).length === 0) ? (
-                  <p className="text-[11px] text-emerald-200/90">
+                  <p className="text-[11px] text-[--app-muted]">
                     No environment promotions have been staged yet.
                   </p>
                 ) : null}
@@ -303,15 +303,15 @@ export function PolicyAnalyticsBundlesSection({
         </div>
       </div>
 
-      <div className="rounded-3xl bg-emerald-900/40 p-5 ring-1 ring-emerald-700/60">
+      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
         <div className="space-y-1">
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-300">
+          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[--app-muted]">
             Reusable bundles
           </p>
-          <h2 className="text-xl font-semibold text-emerald-50">
+          <h2 className="text-xl font-semibold text-[--app-fg]">
             Start from proven policy packs
           </h2>
-          <p className="text-[11px] text-emerald-100/80">
+          <p className="text-[11px] text-[--app-muted]">
             Bundles stage full-chain proposals for common registry operating
             modes.
           </p>
@@ -319,8 +319,8 @@ export function PolicyAnalyticsBundlesSection({
 
         <div className="mt-4 flex flex-col gap-3">
           {bundles.length === 0 ? (
-            <div className="rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/60">
-              <p className="text-[12px] text-emerald-100/90">
+            <div className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
+              <p className="text-[12px] text-[--app-muted]">
                 No reusable bundles are available yet.
               </p>
             </div>
@@ -328,22 +328,22 @@ export function PolicyAnalyticsBundlesSection({
             bundles.map((bundle) => (
               <article
                 key={bundle.bundle_id}
-                className="rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/60"
+                className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-[12px] font-semibold text-emerald-50">
+                      <p className="text-[12px] font-semibold text-[--app-fg]">
                         {bundle.title ?? bundle.bundle_id}
                       </p>
-                      <span className="rounded-full bg-emerald-900/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-200">
+                      <span className="rounded-full bg-[--app-surface] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
                         {bundle.risk_posture ?? "bundle"}
                       </span>
                     </div>
-                    <p className="text-[11px] text-emerald-100/90">
+                    <p className="text-[11px] text-[--app-muted]">
                       {bundle.summary ?? bundle.description}
                     </p>
-                    <p className="text-[10px] text-emerald-300/90">
+                    <p className="text-[10px] text-[--app-muted]">
                       {bundle.provider_count ?? 0} steps · Best for{" "}
                       {(bundle.recommended_environments ?? []).join(", ") ||
                         "any environment"}
@@ -353,14 +353,14 @@ export function PolicyAnalyticsBundlesSection({
                     type="button"
                     onClick={() => void onStageBundle(bundle)}
                     disabled={busyKey === `bundle-${bundle.bundle_id}`}
-                    className="rounded-full bg-emerald-500 px-4 py-2 text-[11px] font-semibold text-emerald-950 transition hover:bg-emerald-400 disabled:opacity-60"
+                    className="rounded-full bg-[--app-accent] px-4 py-2 text-[11px] font-semibold text-[--app-accent-contrast] transition hover:opacity-90 disabled:opacity-60"
                   >
                     {busyKey === `bundle-${bundle.bundle_id}`
                       ? "Staging…"
                       : "Stage bundle"}
                   </button>
                 </div>
-                <ul className="mt-3 space-y-1 text-[10px] text-emerald-200/90">
+                <ul className="mt-3 space-y-1 text-[10px] text-[--app-muted]">
                   {(bundle.provider_summaries ?? [])
                     .slice(0, 3)
                     .map((summary, index) => (
@@ -445,28 +445,28 @@ export function PolicyWorkbenchSidebar({
 }) {
   return (
     <aside className="flex flex-col gap-4">
-      <div className="rounded-3xl bg-emerald-900/40 p-5 ring-1 ring-emerald-700/60">
+      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
         <div className="space-y-1">
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-300">
+          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[--app-muted]">
             Schema guide
           </p>
-          <h2 className="text-xl font-semibold text-emerald-50">
+          <h2 className="text-xl font-semibold text-[--app-fg]">
             See the supported JSON shape
           </h2>
-          <p className="text-[11px] text-emerald-100/80">
+          <p className="text-[11px] text-[--app-muted]">
             Use this guide when you hand-edit JSON, prepare imports, or want a
             quick reminder of the fields each policy type supports.
           </p>
         </div>
 
-        <div className="mt-4 rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/70">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+        <div className="mt-4 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
             Common fields
           </p>
-          <ul className="mt-2 space-y-1 text-[11px] text-emerald-100/90">
+          <ul className="mt-2 space-y-1 text-[11px] text-[--app-muted]">
             {commonFieldEntries.map(([fieldName, description]) => (
               <li key={fieldName}>
-                <span className="font-semibold text-emerald-50">{fieldName}</span>:{" "}
+                <span className="font-semibold text-[--app-fg]">{fieldName}</span>:{" "}
                 {description}
               </li>
             ))}
@@ -477,26 +477,26 @@ export function PolicyWorkbenchSidebar({
           {policyTypeEntries.map(([typeName, definition]) => (
             <div
               key={typeName}
-              className="rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/70"
+              className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]"
             >
               <div className="flex flex-wrap items-center gap-2">
-                <p className="text-[11px] font-semibold capitalize text-emerald-50">
+                <p className="text-[11px] font-semibold capitalize text-[--app-fg]">
                   {typeName.replaceAll("_", " ")}
                 </p>
                 {definition.aliases?.length ? (
-                  <span className="text-[10px] text-emerald-300/90">
+                  <span className="text-[10px] text-[--app-muted]">
                     Aliases: {definition.aliases.join(", ")}
                   </span>
                 ) : null}
               </div>
-              <p className="mt-2 text-[11px] text-emerald-100/90">
+              <p className="mt-2 text-[11px] text-[--app-muted]">
                 {definition.description}
               </p>
-              <ul className="mt-2 space-y-1 text-[10px] text-emerald-200/90">
+              <ul className="mt-2 space-y-1 text-[10px] text-[--app-muted]">
                 {Object.entries(definition.fields ?? {}).map(
                   ([fieldName, description]) => (
                     <li key={`${typeName}-${fieldName}`}>
-                      <span className="font-semibold text-emerald-100">
+                      <span className="font-semibold text-[--app-fg]">
                         {fieldName}
                       </span>
                       : {description}
@@ -508,14 +508,14 @@ export function PolicyWorkbenchSidebar({
           ))}
         </div>
 
-        <div className="mt-4 rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/70">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+        <div className="mt-4 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
             Composition helpers
           </p>
-          <ul className="mt-2 space-y-2 text-[11px] text-emerald-100/90">
+          <ul className="mt-2 space-y-2 text-[11px] text-[--app-muted]">
             {compositionEntries.map(([name, definition]) => (
               <li key={name}>
-                <span className="font-semibold text-emerald-50">
+                <span className="font-semibold text-[--app-fg]">
                   {name.replaceAll("_", " ")}
                 </span>
                 : {definition.description}
@@ -533,22 +533,22 @@ export function PolicyWorkbenchSidebar({
         </div>
       </div>
 
-      <div className="rounded-3xl bg-emerald-900/40 p-5 ring-1 ring-emerald-700/60">
+      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
         <div className="space-y-1">
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-300">
+          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[--app-muted]">
             Guided builder
           </p>
-          <h2 className="text-xl font-semibold text-emerald-50">
+          <h2 className="text-xl font-semibold text-[--app-fg]">
             Author a rule from the schema
           </h2>
-          <p className="text-[11px] text-emerald-100/80">
+          <p className="text-[11px] text-[--app-muted]">
             Pick a policy type, fill in guided fields, and only drop to raw
             JSON for nested or advanced cases.
           </p>
         </div>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <label className="flex flex-col gap-1 text-[11px] text-emerald-100/90">
+          <label className="flex flex-col gap-1 text-[11px] text-[--app-muted]">
             Builder mode
             <select
               value={guidedKind}
@@ -557,19 +557,19 @@ export function PolicyWorkbenchSidebar({
                   event.target.value as "policy" | "composition",
                 )
               }
-              className="rounded-2xl border border-emerald-700/70 bg-emerald-950 px-4 py-2 text-[11px] text-emerald-50 outline-none focus:border-emerald-400"
+              className="rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-[11px] text-[--app-fg] outline-none focus:border-[--app-accent]"
             >
               <option value="policy">Single policy</option>
               <option value="composition">Composition</option>
             </select>
           </label>
 
-          <label className="flex flex-col gap-1 text-[11px] text-emerald-100/90">
+          <label className="flex flex-col gap-1 text-[11px] text-[--app-muted]">
             Template
             <select
               value={guidedSelection}
               onChange={(event) => onGuidedSelectionChange(event.target.value)}
-              className="rounded-2xl border border-emerald-700/70 bg-emerald-950 px-4 py-2 text-[11px] text-emerald-50 outline-none focus:border-emerald-400"
+              className="rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-[11px] text-[--app-fg] outline-none focus:border-[--app-accent]"
             >
               {(guidedKind === "policy"
                 ? policyTypeEntries
@@ -587,7 +587,7 @@ export function PolicyWorkbenchSidebar({
           {commonFieldSpecs.map(([fieldName, spec]) => (
             <label
               key={`guided-common-${fieldName}`}
-              className="flex flex-col gap-1 text-[11px] text-emerald-100/90"
+              className="flex flex-col gap-1 text-[11px] text-[--app-muted]"
             >
               {spec.label ?? fieldName}
               <input
@@ -596,9 +596,9 @@ export function PolicyWorkbenchSidebar({
                   onGuidedCommonFieldChange(fieldName, event.target.value)
                 }
                 placeholder={spec.placeholder}
-                className="rounded-2xl border border-emerald-700/70 bg-emerald-950 px-4 py-2 text-[11px] text-emerald-50 outline-none focus:border-emerald-400"
+                className="rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-[11px] text-[--app-fg] outline-none focus:border-[--app-accent]"
               />
-              <span className="text-[10px] text-emerald-300/90">
+              <span className="text-[10px] text-[--app-muted]">
                 {spec.description}
               </span>
             </label>
@@ -615,15 +615,15 @@ export function PolicyWorkbenchSidebar({
               return (
                 <div
                   key={`guided-field-${fieldName}`}
-                  className="rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/70"
+                  className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]"
                 >
-                  <p className="text-[11px] font-semibold text-emerald-50">
+                  <p className="text-[11px] font-semibold text-[--app-fg]">
                     {spec.label ?? fieldName}
                   </p>
-                  <p className="mt-2 text-[11px] text-emerald-100/90">
+                  <p className="mt-2 text-[11px] text-[--app-muted]">
                     {spec.description}
                   </p>
-                  <p className="mt-2 text-[10px] text-emerald-300/90">
+                  <p className="mt-2 text-[10px] text-[--app-muted]">
                     Nested rules still use the JSON preview below. Start from
                     the starter config and refine the preview if you need
                     compositions or resource-specific children.
@@ -637,7 +637,7 @@ export function PolicyWorkbenchSidebar({
             return (
               <label
                 key={`guided-field-${fieldName}`}
-                className="flex flex-col gap-1 text-[11px] text-emerald-100/90"
+                className="flex flex-col gap-1 text-[11px] text-[--app-muted]"
               >
                 {spec.label ?? fieldName}
                 {spec.type === "bool" ? (
@@ -646,7 +646,7 @@ export function PolicyWorkbenchSidebar({
                     onChange={(event) =>
                       onGuidedFieldChange(fieldName, event.target.value)
                     }
-                    className="rounded-2xl border border-emerald-700/70 bg-emerald-950 px-4 py-2 text-[11px] text-emerald-50 outline-none focus:border-emerald-400"
+                    className="rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-[11px] text-[--app-fg] outline-none focus:border-[--app-accent]"
                   >
                     <option value="true">True</option>
                     <option value="false">False</option>
@@ -657,7 +657,7 @@ export function PolicyWorkbenchSidebar({
                     onChange={(event) =>
                       onGuidedFieldChange(fieldName, event.target.value)
                     }
-                    className="rounded-2xl border border-emerald-700/70 bg-emerald-950 px-4 py-2 text-[11px] text-emerald-50 outline-none focus:border-emerald-400"
+                    className="rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-[11px] text-[--app-fg] outline-none focus:border-[--app-accent]"
                   >
                     {(spec.enum ?? []).map((option) => (
                       <option key={`${fieldName}-${option}`} value={option}>
@@ -672,7 +672,7 @@ export function PolicyWorkbenchSidebar({
                     onChange={(event) =>
                       onGuidedFieldChange(fieldName, event.target.value)
                     }
-                    className="min-h-[120px] rounded-2xl border border-emerald-700/70 bg-emerald-950 px-4 py-3 font-mono text-[11px] leading-6 text-emerald-50 outline-none focus:border-emerald-400"
+                    className="min-h-[120px] rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-3 font-mono text-[11px] leading-6 text-[--app-fg] outline-none focus:border-[--app-accent]"
                   />
                 ) : (
                   <input
@@ -682,10 +682,10 @@ export function PolicyWorkbenchSidebar({
                     }
                     placeholder={spec.placeholder}
                     type={spec.type === "int" ? "number" : "text"}
-                    className="rounded-2xl border border-emerald-700/70 bg-emerald-950 px-4 py-2 text-[11px] text-emerald-50 outline-none focus:border-emerald-400"
+                    className="rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-[11px] text-[--app-fg] outline-none focus:border-[--app-accent]"
                   />
                 )}
-                <span className="text-[10px] text-emerald-300/90">
+                <span className="text-[10px] text-[--app-muted]">
                   {spec.description}
                 </span>
               </label>
@@ -693,34 +693,34 @@ export function PolicyWorkbenchSidebar({
           })}
         </div>
 
-        <div className="mt-4 rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/70">
+        <div className="mt-4 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
               Guided JSON preview
             </p>
             <button
               type="button"
               onClick={() => onLoadGuidedDraft()}
-              className="rounded-full border border-emerald-600/80 px-3 py-1 text-[10px] font-semibold text-emerald-100 transition hover:bg-emerald-700/30"
+              className="rounded-full border border-[--app-border] px-3 py-1 text-[10px] font-semibold text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg]"
             >
               Load into proposal editor
             </button>
           </div>
-          <pre className="mt-3 max-h-[280px] overflow-auto whitespace-pre-wrap break-words text-[11px] leading-6 text-emerald-50">
+          <pre className="mt-3 max-h-[280px] overflow-auto whitespace-pre-wrap break-words text-[11px] leading-6 text-[--app-fg]">
             {JSON.stringify(guidedDraft, null, 2)}
           </pre>
         </div>
       </div>
 
-      <div className="rounded-3xl bg-emerald-900/40 p-5 ring-1 ring-emerald-700/60">
+      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
         <div className="space-y-1">
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-300">
+          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[--app-muted]">
             Proposal editor
           </p>
-          <h2 className="text-xl font-semibold text-emerald-50">
+          <h2 className="text-xl font-semibold text-[--app-fg]">
             Refine or hand-edit the JSON
           </h2>
-          <p className="text-[11px] text-emerald-100/80">
+          <p className="text-[11px] text-[--app-muted]">
             Use the guided builder above or start from a quick template, then
             create a proposal that reviewers can approve before it goes live.
           </p>
@@ -732,16 +732,16 @@ export function PolicyWorkbenchSidebar({
               key={template.key}
               type="button"
               onClick={() => onChooseTemplate(template.key)}
-              className={`rounded-2xl px-3 py-3 text-left text-[11px] ring-1 transition ${
+              className={`rounded-2xl border border-[--app-border] px-3 py-3 text-left text-[11px] ring-1 transition ${
                 selectedTemplate === template.key
-                  ? "bg-emerald-500/15 text-emerald-50 ring-emerald-400/70"
-                  : "bg-emerald-950/70 text-emerald-100 ring-emerald-700/70 hover:bg-emerald-900/60"
+                  ? "bg-[--app-control-active-bg] text-[--app-fg] ring-[--app-accent]"
+                  : "bg-[--app-control-bg] text-[--app-muted] ring-[--app-surface-ring] hover:bg-[--app-hover-bg] hover:text-[--app-fg]"
               }`}
             >
               <span className="block font-semibold capitalize">
                 {template.title}
               </span>
-              <span className="mt-1 block text-[10px] text-emerald-200/80">
+              <span className="mt-1 block text-[10px] text-[--app-muted]">
                 {template.summary}
               </span>
             </button>
@@ -751,35 +751,35 @@ export function PolicyWorkbenchSidebar({
         <textarea
           value={createConfigText}
           onChange={(event) => onCreateConfigTextChange(event.target.value)}
-          className="mt-4 min-h-[280px] w-full rounded-2xl border border-emerald-700/70 bg-emerald-950 px-4 py-3 font-mono text-[11px] leading-6 text-emerald-50 outline-none focus:border-emerald-400"
+          className="mt-4 min-h-[280px] w-full rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-3 font-mono text-[11px] leading-6 text-[--app-fg] outline-none focus:border-[--app-accent]"
         />
 
         <input
           value={createDescription}
           onChange={(event) => onCreateDescriptionChange(event.target.value)}
           placeholder="What change should this proposal make?"
-          className="mt-3 w-full rounded-full border border-emerald-700/70 bg-emerald-950 px-4 py-2 text-[11px] text-emerald-50 outline-none focus:border-emerald-400"
+          className="mt-3 w-full rounded-full border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-[11px] text-[--app-fg] outline-none focus:border-[--app-accent]"
         />
 
         <button
           type="button"
           onClick={() => void onCreateProposal()}
           disabled={creating}
-          className="mt-4 rounded-full bg-emerald-500 px-4 py-2 text-[11px] font-semibold text-emerald-950 transition hover:bg-emerald-400 disabled:opacity-60"
+          className="mt-4 rounded-full bg-[--app-accent] px-4 py-2 text-[11px] font-semibold text-[--app-accent-contrast] transition hover:opacity-90 disabled:opacity-60"
         >
           {creating ? "Creating proposal…" : "Create proposal"}
         </button>
       </div>
 
-      <div className="rounded-3xl bg-emerald-900/40 p-5 ring-1 ring-emerald-700/60">
+      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
         <div className="space-y-1">
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-300">
+          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[--app-muted]">
             Import and export
           </p>
-          <h2 className="text-xl font-semibold text-emerald-50">
+          <h2 className="text-xl font-semibold text-[--app-fg]">
             Move policy JSON in and out safely
           </h2>
-          <p className="text-[11px] text-emerald-100/80">
+          <p className="text-[11px] text-[--app-muted]">
             Export the live chain or a saved version, then import a snapshot,
             provider list, or single rule. Imports become batch proposals that
             still go through validation, simulation, approval, and deploy.
@@ -791,13 +791,13 @@ export function PolicyWorkbenchSidebar({
             type="button"
             onClick={() => void onImportPolicy()}
             disabled={busyKey === "import-policy"}
-            className="rounded-full bg-emerald-500 px-4 py-2 text-[11px] font-semibold text-emerald-950 transition hover:bg-emerald-400 disabled:opacity-60"
+            className="rounded-full bg-[--app-accent] px-4 py-2 text-[11px] font-semibold text-[--app-accent-contrast] transition hover:opacity-90 disabled:opacity-60"
           >
             {busyKey === "import-policy"
               ? "Importing…"
               : "Stage import as proposals"}
           </button>
-          <label className="cursor-pointer rounded-full border border-emerald-600/80 px-3 py-1 text-[10px] font-semibold text-emerald-100 transition hover:bg-emerald-700/30">
+          <label className="cursor-pointer rounded-full border border-[--app-border] px-3 py-1 text-[10px] font-semibold text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg]">
             Load JSON file
             <input
               type="file"
@@ -812,7 +812,7 @@ export function PolicyWorkbenchSidebar({
           value={importText}
           onChange={(event) => onImportTextChange(event.target.value)}
           placeholder="Paste a policy snapshot, provider list, or single policy rule JSON."
-          className="mt-4 min-h-[220px] w-full rounded-2xl border border-emerald-700/70 bg-emerald-950 px-4 py-3 font-mono text-[11px] leading-6 text-emerald-50 outline-none focus:border-emerald-400"
+          className="mt-4 min-h-[220px] w-full rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-3 font-mono text-[11px] leading-6 text-[--app-fg] outline-none focus:border-[--app-accent]"
         />
 
         <input
@@ -821,28 +821,28 @@ export function PolicyWorkbenchSidebar({
             onImportDescriptionPrefixChange(event.target.value)
           }
           placeholder="Imported policy snapshot"
-          className="mt-3 w-full rounded-full border border-emerald-700/70 bg-emerald-950 px-4 py-2 text-[11px] text-emerald-50 outline-none focus:border-emerald-400"
+          className="mt-3 w-full rounded-full border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-[11px] text-[--app-fg] outline-none focus:border-[--app-accent]"
         />
 
-        <div className="mt-3 rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/70">
+        <div className="mt-3 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
           {importPreview instanceof Error ? (
             <p className="text-[11px] text-rose-100">{importPreview.message}</p>
           ) : importPreview ? (
             <div className="space-y-2">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
                 Import preview
               </p>
-              <p className="text-[11px] text-emerald-100/90">
+              <p className="text-[11px] text-[--app-muted]">
                 {importPreview.label} · {importPreview.providerCount}{" "}
                 {importPreview.providerCount === 1 ? "provider" : "providers"}
               </p>
-              <p className="text-[10px] text-emerald-300/90">
+              <p className="text-[10px] text-[--app-muted]">
                 The import will stage a batch proposal against the current live
                 chain instead of changing it directly.
               </p>
             </div>
           ) : (
-            <p className="text-[11px] text-emerald-100/90">
+            <p className="text-[11px] text-[--app-muted]">
               Paste JSON to see what kind of policy import it is before staging
               it.
             </p>
@@ -854,7 +854,7 @@ export function PolicyWorkbenchSidebar({
             type="button"
             onClick={() => onLoadIntoDraft()}
             disabled={importPreview.kind !== "single_provider"}
-            className="mt-4 rounded-full border border-emerald-600/80 px-4 py-2 text-[11px] font-semibold text-emerald-100 transition hover:bg-emerald-700/30 disabled:opacity-60"
+            className="mt-4 rounded-full border border-[--app-border] px-4 py-2 text-[11px] font-semibold text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg] disabled:opacity-60"
           >
             Load single rule into draft
           </button>

@@ -6,11 +6,11 @@ function StatusDot({ ok }: { ok: boolean }) {
   return (
     <span className="relative flex h-3 w-3">
       {ok && (
-        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-40" />
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[--app-accent] opacity-40" />
       )}
       <span
         className={`relative inline-flex h-3 w-3 rounded-full ${
-          ok ? "bg-emerald-400" : "bg-rose-400"
+          ok ? "bg-[--app-accent]" : "bg-rose-400"
         }`}
       />
     </span>
@@ -58,7 +58,7 @@ export function ChainIntegrityPanel({ status }: Props) {
         <span
           className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
             allValid
-              ? "bg-emerald-500/15 text-emerald-300"
+              ? "bg-[--app-control-active-bg] text-[--app-muted]"
               : "bg-rose-500/15 text-rose-300"
           }`}
         >
@@ -72,7 +72,7 @@ export function ChainIntegrityPanel({ status }: Props) {
           <div className="flex items-center gap-2 mb-1">
             <span
               className={`h-2 w-2 rounded-full ${
-                status.chain_valid ? "bg-emerald-400" : "bg-rose-400"
+                status.chain_valid ? "bg-[--app-accent]" : "bg-rose-400"
               }`}
             />
             <span className="text-xs font-medium text-zinc-300">Hash Chain</span>
@@ -88,7 +88,7 @@ export function ChainIntegrityPanel({ status }: Props) {
           <div className="flex items-center gap-2 mb-1">
             <span
               className={`h-2 w-2 rounded-full ${
-                status.tree_valid ? "bg-emerald-400" : "bg-rose-400"
+                status.tree_valid ? "bg-[--app-accent]" : "bg-rose-400"
               }`}
             />
             <span className="text-xs font-medium text-zinc-300">Merkle Tree</span>
@@ -123,7 +123,7 @@ export function ChainIntegrityPanel({ status }: Props) {
           <div className="text-zinc-300 font-mono">{scheme?.leaf_count?.toLocaleString() ?? "—"}</div>
 
           <div className="text-zinc-500">Tree valid</div>
-          <div className={scheme?.tree_valid ? "text-emerald-300" : "text-rose-300"}>
+          <div className={scheme?.tree_valid ? "text-[--app-muted]" : "text-rose-300"}>
             {scheme?.tree_valid ? "Yes" : "No"}
           </div>
 
@@ -133,7 +133,7 @@ export function ChainIntegrityPanel({ status }: Props) {
               <div className="text-zinc-300 font-mono">{scheme.anchor_count ?? 0}</div>
 
               <div className="text-zinc-500">Anchors valid</div>
-              <div className={scheme.anchors_valid ? "text-emerald-300" : "text-rose-300"}>
+              <div className={scheme.anchors_valid ? "text-[--app-muted]" : "text-rose-300"}>
                 {scheme.anchors_valid ? "Yes" : "No"}
               </div>
 

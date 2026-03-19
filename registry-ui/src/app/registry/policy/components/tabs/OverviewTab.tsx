@@ -23,7 +23,7 @@ function riskLevelClass(level: string | undefined): string {
     case "medium":
       return "bg-amber-500/15 text-amber-200 ring-1 ring-amber-400/50";
     case "low":
-      return "bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-400/50";
+      return "bg-[--app-control-active-bg] text-[--app-muted] ring-1 ring-[--app-accent]";
     default:
       return "bg-zinc-500/15 text-zinc-200 ring-1 ring-zinc-400/40";
   }
@@ -33,7 +33,7 @@ function TrendIndicator({ value, invertColor }: { value: number | undefined; inv
   const num = Number(value ?? 0);
   if (num === 0) {
     return (
-      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-300/70">
+      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[--app-muted]">
         <span className="text-sm">&mdash;</span> no change
       </span>
     );
@@ -47,7 +47,7 @@ function TrendIndicator({ value, invertColor }: { value: number | undefined; inv
   return (
     <span
       className={`inline-flex items-center gap-1 text-[11px] font-semibold ${
-        isGood ? "text-emerald-300" : "text-rose-300"
+        isGood ? "text-[--app-muted]" : "text-rose-300"
       }`}
     >
       <svg viewBox="0 0 12 12" className={`h-3 w-3 ${isUp ? "" : "rotate-180"}`} fill="currentColor">
@@ -78,15 +78,15 @@ export function OverviewTab({
     <div className="flex flex-col gap-6">
       {/* ── Analytics ─────────────────────────────────────────────── */}
       <section className="grid gap-4 xl:grid-cols-[1.1fr,0.9fr]">
-        <div className="rounded-3xl bg-emerald-900/40 p-5 ring-1 ring-emerald-700/60">
+        <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
           <div className="space-y-1">
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-300">
+            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[--app-muted]">
               Policy analytics
             </p>
-            <h2 className="text-xl font-semibold text-emerald-50">
+            <h2 className="text-xl font-semibold text-[--app-fg]">
               See what is blocked, changed, and risky
             </h2>
-            <p className="text-xs text-emerald-100/80">
+            <p className="text-xs text-[--app-muted]">
               Live deny patterns, recent changes, and rollout risk at a glance.
             </p>
           </div>
@@ -121,34 +121,34 @@ export function OverviewTab({
 
           {/* Most blocked + version changes */}
           <div className="mt-4 grid gap-4 lg:grid-cols-[1fr,1fr]">
-            <div className="rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/60">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+            <div className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
                 Most blocked resources
               </p>
-              <ul className="mt-3 space-y-2 text-xs text-emerald-100/90">
+              <ul className="mt-3 space-y-2 text-xs text-[--app-muted]">
                 {topDeniedResources.slice(0, 4).map((item, index) => (
                   <li
                     key={`top-denied-${index}`}
-                    className="rounded-2xl bg-emerald-900/20 px-3 py-2 ring-1 ring-emerald-700/30"
+                    className="rounded-2xl border border-[--app-border] bg-[--app-surface] px-3 py-2 ring-1 ring-[--app-surface-ring]"
                   >
                     {String(item.resource_id ?? "unknown")} ·{" "}
                     {String(item.count ?? 0)} denials
                   </li>
                 ))}
                 {topDeniedResources.length === 0 ? (
-                  <li className="text-xs text-emerald-200/90">
+                  <li className="text-xs text-[--app-muted]">
                     No deny hot spots have been recorded yet.
                   </li>
                 ) : null}
               </ul>
             </div>
 
-            <div className="rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/60">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+            <div className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
                 Recent version change
               </p>
               {analytics.changes?.latest_version_summary ? (
-                <div className="mt-3 space-y-2 text-xs text-emerald-100/90">
+                <div className="mt-3 space-y-2 text-xs text-[--app-muted]">
                   <p>
                     Compared v{analytics.changes.latest_version_from ?? "?"} to v
                     {analytics.changes.latest_version_to ?? "?"}.
@@ -160,41 +160,41 @@ export function OverviewTab({
                   </p>
                 </div>
               ) : (
-                <p className="mt-3 text-xs text-emerald-200/90">
+                <p className="mt-3 text-xs text-[--app-muted]">
                   No prior version delta is available yet.
                 </p>
               )}
               {(analytics.risks ?? []).slice(0, 3).map((risk, index) => (
                 <div
                   key={`risk-${index}`}
-                  className="mt-3 rounded-2xl bg-emerald-900/20 p-3 ring-1 ring-emerald-700/30"
+                  className="mt-3 rounded-2xl border border-[--app-border] bg-[--app-surface] p-3 ring-1 ring-[--app-surface-ring]"
                 >
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-xs font-semibold text-emerald-50">{risk.title}</p>
+                    <p className="text-xs font-semibold text-[--app-fg]">{risk.title}</p>
                     <span
                       className={`rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] ${riskLevelClass(risk.level)}`}
                     >
                       {risk.level}
                     </span>
                   </div>
-                  <p className="mt-2 text-xs text-emerald-100/90">{risk.detail}</p>
+                  <p className="mt-2 text-xs text-[--app-muted]">{risk.detail}</p>
                 </div>
               ))}
             </div>
           </div>
 
           {/* Trend history */}
-          <div className="mt-4 rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/60">
+          <div className="mt-4 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
                   Trend history
                 </p>
-                <p className="mt-1 text-xs text-emerald-100/90">
+                <p className="mt-1 text-xs text-[--app-muted]">
                   Recent analytics snapshots show how the policy set has behaved over time.
                 </p>
               </div>
-              <span className="rounded-full bg-emerald-900/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-200">
+              <span className="rounded-full bg-[--app-surface] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
                 {String(analytics.history?.sample_count ?? 0)} samples
               </span>
             </div>
@@ -206,8 +206,8 @@ export function OverviewTab({
                 { label: "Queue trend", value: analytics.history?.deltas?.pending_proposals, invertColor: false },
                 { label: "Risk trend", value: analytics.history?.deltas?.risk_count, invertColor: false },
               ].map((item) => (
-                <div key={item.label} className="rounded-2xl bg-emerald-900/20 p-3 ring-1 ring-emerald-700/30">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-300">
+                <div key={item.label} className="rounded-2xl border border-[--app-border] bg-[--app-surface] p-3 ring-1 ring-[--app-surface-ring]">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[--app-muted]">
                     {item.label}
                   </p>
                   <div className="mt-2">
@@ -221,8 +221,8 @@ export function OverviewTab({
             </div>
 
             <div className="mt-4 grid gap-3 lg:grid-cols-[1.2fr,0.8fr]">
-              <div className="rounded-2xl bg-emerald-900/20 p-3 ring-1 ring-emerald-700/30">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-300">
+              <div className="rounded-2xl border border-[--app-border] bg-[--app-surface] p-3 ring-1 ring-[--app-surface-ring]">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[--app-muted]">
                   Recent snapshots
                 </p>
                 <div className="mt-3 space-y-2">
@@ -231,13 +231,13 @@ export function OverviewTab({
                     .map((snapshot, index) => (
                       <div
                         key={`analytics-snapshot-${index}`}
-                        className="rounded-2xl bg-emerald-950/80 px-3 py-2 ring-1 ring-emerald-700/30"
+                        className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] px-3 py-2 ring-1 ring-[--app-surface-ring]"
                       >
-                        <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-emerald-300">
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-[--app-muted]">
                           <span>{String(snapshot.captured_at ?? "Unknown time")}</span>
                           <span>v{String(snapshot.current_version ?? "live")}</span>
                         </div>
-                        <p className="mt-2 text-xs text-emerald-100/90">
+                        <p className="mt-2 text-xs text-[--app-muted]">
                           {String(snapshot.deny_count ?? 0)} denials ·{" "}
                           {String(snapshot.pending_proposals ?? 0)} open proposals ·{" "}
                           {String(snapshot.risk_count ?? 0)} active risks
@@ -245,39 +245,39 @@ export function OverviewTab({
                       </div>
                     ))}
                   {(((analytics.history?.snapshots as RegistryPayload[] | undefined) ?? []).length === 0) ? (
-                    <p className="text-xs text-emerald-200/90">
+                    <p className="text-xs text-[--app-muted]">
                       Trend history will start filling in as policy changes are reviewed.
                     </p>
                   ) : null}
                 </div>
               </div>
 
-              <div className="rounded-2xl bg-emerald-900/20 p-3 ring-1 ring-emerald-700/30">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-300">
+              <div className="rounded-2xl border border-[--app-border] bg-[--app-surface] p-3 ring-1 ring-[--app-surface-ring]">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[--app-muted]">
                   Recent promotions
                 </p>
                 <div className="mt-3 space-y-2">
                   {(analytics.history?.recent_promotions ?? []).slice(0, 4).map((promotion, index) => (
                     <div
                       key={`analytics-promotion-${promotion.promotion_id ?? index}`}
-                      className="rounded-2xl bg-emerald-950/80 px-3 py-2 ring-1 ring-emerald-700/30"
+                      className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] px-3 py-2 ring-1 ring-[--app-surface-ring]"
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-xs font-semibold text-emerald-50">
+                        <p className="text-xs font-semibold text-[--app-fg]">
                           {promotion.source_environment ?? "source"} →{" "}
                           {promotion.target_environment ?? "target"}
                         </p>
-                        <span className="rounded-full bg-emerald-900/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-200">
+                        <span className="rounded-full bg-[--app-surface] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
                           {promotion.status ?? "staged"}
                         </span>
                       </div>
-                      <p className="mt-2 text-xs text-emerald-100/90">
+                      <p className="mt-2 text-xs text-[--app-muted]">
                         {promotion.note || "Promotion tracked through the policy workflow."}
                       </p>
                     </div>
                   ))}
                   {((analytics.history?.recent_promotions ?? []).length === 0) ? (
-                    <p className="text-xs text-emerald-200/90">
+                    <p className="text-xs text-[--app-muted]">
                       No environment promotions have been staged yet.
                     </p>
                   ) : null}
@@ -288,23 +288,23 @@ export function OverviewTab({
         </div>
 
         {/* ── Bundles ──────────────────────────────────────────────── */}
-        <div className="rounded-3xl bg-emerald-900/40 p-5 ring-1 ring-emerald-700/60">
+        <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
           <div className="space-y-1">
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-300">
+            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[--app-muted]">
               Reusable bundles
             </p>
-            <h2 className="text-xl font-semibold text-emerald-50">
+            <h2 className="text-xl font-semibold text-[--app-fg]">
               Start from proven policy packs
             </h2>
-            <p className="text-xs text-emerald-100/80">
+            <p className="text-xs text-[--app-muted]">
               Bundles stage full-chain proposals for common registry operating modes.
             </p>
           </div>
 
           <div className="mt-4 flex flex-col gap-3">
             {bundles.length === 0 ? (
-              <div className="rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/60">
-                <p className="text-xs text-emerald-100/90">
+              <div className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
+                <p className="text-xs text-[--app-muted]">
                   No reusable bundles are available yet.
                 </p>
               </div>
@@ -312,22 +312,22 @@ export function OverviewTab({
               bundles.map((bundle) => (
                 <article
                   key={bundle.bundle_id}
-                  className="rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/60"
+                  className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-xs font-semibold text-emerald-50">
+                        <p className="text-xs font-semibold text-[--app-fg]">
                           {bundle.title ?? bundle.bundle_id}
                         </p>
-                        <span className="rounded-full bg-emerald-900/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-200">
+                        <span className="rounded-full bg-[--app-surface] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
                           {bundle.risk_posture ?? "bundle"}
                         </span>
                       </div>
-                      <p className="text-xs text-emerald-100/90">
+                      <p className="text-xs text-[--app-muted]">
                         {bundle.summary ?? bundle.description}
                       </p>
-                      <p className="text-[11px] text-emerald-300/90">
+                      <p className="text-[11px] text-[--app-muted]">
                         {bundle.provider_count ?? 0} steps · Best for{" "}
                         {(bundle.recommended_environments ?? []).join(", ") || "any environment"}
                       </p>
@@ -336,12 +336,12 @@ export function OverviewTab({
                       type="button"
                       onClick={() => void onStageBundle(bundle.bundle_id, bundle.title ?? bundle.bundle_id)}
                       disabled={busyKey === `bundle-${bundle.bundle_id}`}
-                      className="rounded-full bg-emerald-500 px-4 py-2 text-[11px] font-semibold text-emerald-950 transition hover:bg-emerald-400 disabled:opacity-60"
+                      className="rounded-full bg-[--app-accent] px-4 py-2 text-[11px] font-semibold text-[--app-accent-contrast] transition hover:opacity-90 disabled:opacity-60"
                     >
                       {busyKey === `bundle-${bundle.bundle_id}` ? "Staging\u2026" : "Stage bundle"}
                     </button>
                   </div>
-                  <ul className="mt-3 space-y-1 text-[10px] text-emerald-200/90">
+                  <ul className="mt-3 space-y-1 text-[10px] text-[--app-muted]">
                     {(bundle.provider_summaries ?? []).slice(0, 3).map((summary, index) => (
                       <li key={`${bundle.bundle_id}-summary-${index}`}>
                         \u2022 {summary}
@@ -368,12 +368,12 @@ function MetricCard({
   subtitle: string;
 }) {
   return (
-    <div className="rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/60">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+    <div className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
         {label}
       </p>
-      <p className="mt-2 text-2xl font-semibold text-emerald-50">{value}</p>
-      <p className="mt-1 text-[11px] text-emerald-200/90">{subtitle}</p>
+      <p className="mt-2 text-2xl font-semibold text-[--app-fg]">{value}</p>
+      <p className="mt-1 text-[11px] text-[--app-muted]">{subtitle}</p>
     </div>
   );
 }

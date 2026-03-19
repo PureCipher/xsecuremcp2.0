@@ -74,15 +74,15 @@ export function VersionsTab({
   return (
     <div className="flex flex-col gap-4">
       {/* Version history */}
-      <div className="rounded-3xl bg-emerald-900/40 p-5 ring-1 ring-emerald-700/60">
+      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
         <div className="space-y-1">
-          <p className="text-xs font-medium uppercase tracking-[0.18em] text-emerald-300">
+          <p className="text-xs font-medium uppercase tracking-[0.18em] text-[--app-muted]">
             Version history
           </p>
-          <h2 className="text-xl font-semibold text-emerald-50">
+          <h2 className="text-xl font-semibold text-[--app-fg]">
             Roll back with confidence
           </h2>
-          <p className="max-w-2xl text-xs text-emerald-100/80">
+          <p className="max-w-2xl text-xs text-[--app-muted]">
             Every live apply creates a saved version of the policy chain. Roll back when
             a change needs to be reversed quickly.
           </p>
@@ -90,8 +90,8 @@ export function VersionsTab({
 
         <div className="mt-4 flex flex-col gap-3">
           {versions.length === 0 ? (
-            <div className="rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/70">
-              <p className="text-xs text-emerald-100/90">
+            <div className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
+              <p className="text-xs text-[--app-muted]">
                 No saved versions yet. The first live policy change will create one
                 automatically.
               </p>
@@ -102,28 +102,28 @@ export function VersionsTab({
               return (
                 <article
                   key={version.version_id}
-                  className="rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/70"
+                  className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-xs font-semibold text-emerald-50">
+                        <span className="text-xs font-semibold text-[--app-fg]">
                           Version {version.version_number}
                         </span>
                         {isCurrent ? (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-100">
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-[--app-control-active-bg] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-fg]">
                             <span className="relative flex h-2 w-2">
-                              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[--app-accent] opacity-75" />
+                              <span className="relative inline-flex h-2 w-2 rounded-full bg-[--app-accent]" />
                             </span>
                             Live now
                           </span>
                         ) : null}
                       </div>
-                      <p className="text-xs text-emerald-100/90">
+                      <p className="text-xs text-[--app-muted]">
                         {version.description || "No description recorded."}
                       </p>
-                      <p className="text-[11px] text-emerald-300/90">
+                      <p className="text-[11px] text-[--app-muted]">
                         Saved by {version.author || "unknown"} ·{" "}
                         {formatTimestamp(version.created_at)}
                       </p>
@@ -134,7 +134,7 @@ export function VersionsTab({
                           type="button"
                           onClick={() => void onExportVersion(version.version_number)}
                           disabled={busyKey === `export-${version.version_number}`}
-                          className="rounded-full border border-emerald-600/80 px-3 py-1 text-[11px] font-semibold text-emerald-100 transition hover:bg-emerald-700/30 disabled:opacity-60"
+                          className="rounded-full border border-[--app-border] px-3 py-1 text-[11px] font-semibold text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg] disabled:opacity-60"
                         >
                           {busyKey === `export-${version.version_number}`
                             ? "Downloading\u2026"
@@ -147,7 +147,7 @@ export function VersionsTab({
                             setRollbackModal(version.version_number);
                           }}
                           disabled={busyKey === `rollback-${version.version_number}`}
-                          className="rounded-full border border-emerald-600/80 px-3 py-1 text-[11px] font-semibold text-emerald-100 transition hover:bg-emerald-700/30 disabled:opacity-60"
+                          className="rounded-full border border-[--app-border] px-3 py-1 text-[11px] font-semibold text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg] disabled:opacity-60"
                         >
                           {busyKey === `rollback-${version.version_number}`
                             ? "Rolling back\u2026"
@@ -159,7 +159,7 @@ export function VersionsTab({
                         type="button"
                         onClick={() => void onExportVersion(version.version_number)}
                         disabled={busyKey === `export-${version.version_number}`}
-                        className="rounded-full border border-emerald-600/80 px-3 py-1 text-[11px] font-semibold text-emerald-100 transition hover:bg-emerald-700/30 disabled:opacity-60"
+                        className="rounded-full border border-[--app-border] px-3 py-1 text-[11px] font-semibold text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg] disabled:opacity-60"
                       >
                         {busyKey === `export-${version.version_number}`
                           ? "Downloading\u2026"
@@ -175,32 +175,32 @@ export function VersionsTab({
       </div>
 
       {/* Version diff */}
-      <div className="rounded-3xl bg-emerald-900/40 p-5 ring-1 ring-emerald-700/60">
+      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
         <div className="space-y-1">
-          <p className="text-xs font-medium uppercase tracking-[0.18em] text-emerald-300">
+          <p className="text-xs font-medium uppercase tracking-[0.18em] text-[--app-muted]">
             Version diff
           </p>
-          <h2 className="text-xl font-semibold text-emerald-50">See what changed</h2>
-          <p className="max-w-2xl text-xs text-emerald-100/80">
+          <h2 className="text-xl font-semibold text-[--app-fg]">See what changed</h2>
+          <p className="max-w-2xl text-xs text-[--app-muted]">
             Compare two saved versions before you roll back or stage another change.
           </p>
         </div>
 
         {versionNumbers.length < 2 ? (
-          <div className="mt-4 rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/70">
-            <p className="text-xs text-emerald-100/90">
+          <div className="mt-4 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
+            <p className="text-xs text-[--app-muted]">
               You need at least two saved versions before comparison is useful.
             </p>
           </div>
         ) : (
           <>
             <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
-              <label className="flex flex-col gap-1 text-xs text-emerald-100/90">
+              <label className="flex flex-col gap-1 text-xs text-[--app-muted]">
                 From version
                 <select
                   value={diffFrom}
                   onChange={(event) => setDiffFrom(Number(event.target.value))}
-                  className="rounded-2xl border border-emerald-700/70 bg-emerald-950 px-4 py-2 text-xs text-emerald-50 outline-none focus:border-emerald-400"
+                  className="rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
                 >
                   {versionNumbers.map((versionNumber) => (
                     <option key={`from-${versionNumber}`} value={versionNumber}>
@@ -210,12 +210,12 @@ export function VersionsTab({
                 </select>
               </label>
 
-              <label className="flex flex-col gap-1 text-xs text-emerald-100/90">
+              <label className="flex flex-col gap-1 text-xs text-[--app-muted]">
                 To version
                 <select
                   value={diffTo}
                   onChange={(event) => setDiffTo(Number(event.target.value))}
-                  className="rounded-2xl border border-emerald-700/70 bg-emerald-950 px-4 py-2 text-xs text-emerald-50 outline-none focus:border-emerald-400"
+                  className="rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
                 >
                   {versionNumbers.map((versionNumber) => (
                     <option key={`to-${versionNumber}`} value={versionNumber}>
@@ -229,22 +229,22 @@ export function VersionsTab({
                 type="button"
                 onClick={() => void handleLoadDiff()}
                 disabled={diffLoading}
-                className="self-end rounded-full bg-emerald-500 px-4 py-2 text-xs font-semibold text-emerald-950 transition hover:bg-emerald-400 disabled:opacity-60"
+                className="self-end rounded-full bg-[--app-accent] px-4 py-2 text-xs font-semibold text-[--app-accent-contrast] transition hover:opacity-90 disabled:opacity-60"
               >
                 {diffLoading ? "Comparing\u2026" : "Compare versions"}
               </button>
             </div>
 
-            <div className="mt-4 rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/70">
+            <div className="mt-4 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
               {versionDiff?.diff ? (
                 <pre
-                  className="max-h-[320px] overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-6 text-emerald-50"
+                  className="max-h-[320px] overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-6 text-[--app-fg]"
                   dangerouslySetInnerHTML={{
                     __html: highlightJson(prettyJson(versionDiff.diff)),
                   }}
                 />
               ) : (
-                <p className="text-xs text-emerald-100/90">
+                <p className="text-xs text-[--app-muted]">
                   Choose two versions to inspect the saved diff before you act on it.
                 </p>
               )}
@@ -272,7 +272,7 @@ export function VersionsTab({
           value={rollbackReason}
           onChange={(event) => setRollbackReason(event.target.value)}
           placeholder="Why are you rolling back?"
-          className="w-full rounded-full border border-emerald-700/70 bg-emerald-950 px-4 py-2 text-xs text-emerald-50 outline-none focus:border-emerald-400"
+          className="w-full rounded-full border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
         />
       </ConfirmModal>
     </div>

@@ -3,6 +3,75 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  /* Default app theme tokens (fallback for pages outside RegistryShell, e.g. /login). */
+  --app-bg: rgba(2, 44, 34, 0.95);
+  --app-fg: #ecfdf5;
+  --app-muted: rgba(167, 243, 208, 0.9);
+  --app-border: rgba(236, 253, 245, 0.18);
+
+  --app-chrome-bg: rgba(2, 44, 34, 0.95);
+  --app-chrome-border: rgba(236, 253, 245, 0.16);
+  --app-scrim: rgba(2, 44, 34, 0.7);
+
+  --app-surface: rgba(6, 78, 59, 0.4);
+  --app-surface-ring: rgba(16, 185, 129, 0.66);
+
+  --app-accent: #10b981;
+  --app-accent-contrast: #022c22;
+  --app-active-bg: rgba(6, 95, 70, 0.6);
+  --app-active-ring: rgba(16, 185, 129, 0.7);
+  --app-hover-bg: rgba(6, 78, 59, 0.6);
+  --app-control-bg: rgba(2, 44, 34, 0.4);
+  --app-control-border: rgba(236, 253, 245, 0.22);
+  --app-control-active-bg: rgba(16, 185, 129, 0.12);
+}
+
+/* Registry app chrome theme tokens (Iteration 1: define tokens only, no usage yet). */
+[data-app-theme="emerald-forest"] {
+  --app-bg: rgba(2, 44, 34, 0.95);
+  --app-fg: #ecfdf5;
+  --app-muted: rgba(167, 243, 208, 0.9);
+  --app-border: rgba(236, 253, 245, 0.18);
+
+  --app-chrome-bg: rgba(2, 44, 34, 0.95);
+  --app-chrome-border: rgba(236, 253, 245, 0.16);
+  --app-scrim: rgba(2, 44, 34, 0.7);
+
+  --app-surface: rgba(6, 78, 59, 0.4);
+  --app-surface-ring: rgba(16, 185, 129, 0.66);
+
+  --app-accent: #10b981;
+  --app-accent-contrast: #022c22;
+  --app-active-bg: rgba(6, 95, 70, 0.6);
+  --app-active-ring: rgba(16, 185, 129, 0.7);
+  --app-hover-bg: rgba(6, 78, 59, 0.6);
+  --app-control-bg: rgba(2, 44, 34, 0.4);
+  --app-control-border: rgba(236, 253, 245, 0.22);
+  --app-control-active-bg: rgba(16, 185, 129, 0.12);
+}
+
+[data-app-theme="slate-night"] {
+  --app-bg: rgba(2, 6, 23, 0.96); /* slate-950-ish */
+  --app-fg: #f8fafc; /* slate-50 */
+  --app-muted: rgba(226, 232, 240, 0.86); /* slate-200 */
+  --app-border: rgba(248, 250, 252, 0.16); /* slate-50-ish */
+
+  --app-chrome-bg: rgba(2, 6, 23, 0.95);
+  --app-chrome-border: rgba(248, 250, 252, 0.14);
+  --app-scrim: rgba(2, 6, 23, 0.72);
+
+  --app-surface: rgba(15, 23, 42, 0.55); /* slate-900 */
+  --app-surface-ring: rgba(148, 163, 184, 0.5); /* stronger panel separation */
+
+  --app-accent: #38bdf8; /* sky-400 */
+  --app-accent-contrast: #020617;
+  --app-active-bg: rgba(30, 41, 59, 0.72); /* slate-800 */
+  --app-active-ring: rgba(56, 189, 248, 0.6);
+  --app-hover-bg: rgba(15, 23, 42, 0.6); /* slate-900 */
+  --app-control-bg: rgba(2, 6, 23, 0.42);
+  --app-control-border: rgba(248, 250, 252, 0.18);
+  --app-control-active-bg: rgba(56, 189, 248, 0.12);
 }
 
 @theme inline {
@@ -20,7 +89,7 @@
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--app-bg);
+  color: var(--app-fg);
   font-family: Arial, Helvetica, sans-serif;
 }

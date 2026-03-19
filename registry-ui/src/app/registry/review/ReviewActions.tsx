@@ -21,10 +21,10 @@ export function ReviewActions({ listingId, availableActions }: Props) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          moderator_id: "nextjs-ui",
+          moderator_id: "registry-ui",
           reason:
             reasonOverride ??
-            (action === "approve" ? "Approved from Next.js UI." : "Updated from Next.js review queue."),
+            (action === "approve" ? "Approved from registry UI." : "Updated from registry review queue."),
         }),
       });
       const payload = await response.json().catch(() => null);
@@ -64,24 +64,24 @@ export function ReviewActions({ listingId, availableActions }: Props) {
                 void runAction(action);
               }
             }}
-            className="rounded-full border border-emerald-500/70 px-2.5 py-1 text-[10px] font-semibold text-emerald-100 transition hover:bg-emerald-500/10 disabled:opacity-60"
+            className="rounded-full border border-[--app-accent] px-2.5 py-1 text-[10px] font-semibold text-[--app-muted] transition hover:bg-[--app-control-active-bg] disabled:opacity-60"
           >
             {busyAction === action ? "Working…" : action.replace("-", " ").toUpperCase()}
           </button>
         ))}
       </div>
       {expandedAction ? (
-        <div className="space-y-1 rounded-2xl bg-emerald-950/80 p-2 ring-1 ring-emerald-700/70">
+        <div className="space-y-1 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-2 ring-1 ring-[--app-surface-ring]">
           <textarea
             value={reasonText}
             onChange={(e) => setReasonText(e.target.value)}
             placeholder="Add a short reason for this decision."
-            className="h-16 w-full rounded-md border border-emerald-700/70 bg-transparent px-2 py-1 text-[10px] text-emerald-50 outline-none ring-0 transition focus:border-emerald-400 focus:ring-1 focus:ring-emerald-500/70"
+            className="h-16 w-full rounded-md border border-[--app-border] bg-transparent px-2 py-1 text-[10px] text-[--app-fg] outline-none ring-0 transition focus:border-[--app-accent] focus:ring-1 focus:ring-[--app-accent]"
           />
           <div className="flex justify-end gap-2">
             <button
               type="button"
-              className="rounded-full px-2 py-1 text-[10px] text-emerald-200 hover:text-emerald-100"
+              className="rounded-full px-2 py-1 text-[10px] text-[--app-muted] hover:text-[--app-fg]"
               onClick={() => {
                 setExpandedAction(null);
                 setReasonText("");
@@ -97,7 +97,7 @@ export function ReviewActions({ listingId, availableActions }: Props) {
                 setExpandedAction(null);
                 setReasonText("");
               }}
-              className="rounded-full bg-emerald-400 px-3 py-1 text-[10px] font-semibold text-emerald-950 shadow-sm transition hover:bg-emerald-300 disabled:opacity-60"
+              className="rounded-full bg-[--app-accent] px-3 py-1 text-[10px] font-semibold text-[--app-accent-contrast] shadow-sm transition hover:opacity-90 disabled:opacity-60"
             >
               Confirm
             </button>

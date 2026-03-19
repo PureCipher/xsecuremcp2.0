@@ -10,7 +10,7 @@ export function TabBar({
   onTabChange: (key: string) => void;
 }) {
   return (
-    <div className="flex gap-1 border-b border-emerald-700/50 pb-px">
+    <div className="flex gap-1 border-b border-[--app-border] pb-px">
       {tabs.map((tab) => (
         <button
           key={tab.key}
@@ -18,8 +18,8 @@ export function TabBar({
           onClick={() => onTabChange(tab.key)}
           className={`rounded-t-lg px-3 py-2 text-[11px] font-medium transition ${
             activeTab === tab.key
-              ? "border-b-2 border-emerald-400 text-emerald-50"
-              : "text-emerald-300/70 hover:text-emerald-200"
+              ? "border-b-2 border-[--app-accent] text-[--app-fg]"
+              : "text-[--app-muted] hover:text-[--app-fg]"
           }`}
         >
           {tab.label}

@@ -42,8 +42,8 @@ export function PolicyTabs({
             onClick={() => onTabChange(item.key)}
             className={`rounded-full px-4 py-2 text-xs font-semibold transition ${
               isActive
-                ? "bg-emerald-500 text-emerald-950"
-                : "border border-emerald-700/70 text-emerald-100 hover:bg-emerald-700/20"
+                ? "bg-[--app-accent] text-[--app-accent-contrast]"
+                : "border border-[--app-border] text-[--app-muted] hover:bg-[--app-hover-bg] hover:text-[--app-fg]"
             }`}
             aria-selected={isActive}
             role="tab"
@@ -53,8 +53,8 @@ export function PolicyTabs({
               <span
                 className={`ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-bold ${
                   isActive
-                    ? "bg-emerald-950/30 text-emerald-50"
-                    : "bg-emerald-700/40 text-emerald-200"
+                    ? "bg-[--app-control-bg] text-[--app-fg]"
+                    : "bg-[--app-surface] text-[--app-muted]"
                 }`}
               >
                 {badge}

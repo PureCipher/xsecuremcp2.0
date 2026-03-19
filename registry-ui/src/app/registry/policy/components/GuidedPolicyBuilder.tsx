@@ -81,28 +81,28 @@ export function GuidedPolicyBuilder({
   return (
     <div className="flex flex-col gap-4">
       {/* Schema guide */}
-      <div className="rounded-3xl bg-emerald-900/40 p-5 ring-1 ring-emerald-700/60">
+      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
         <div className="space-y-1">
-          <p className="text-xs font-medium uppercase tracking-[0.18em] text-emerald-300">
+          <p className="text-xs font-medium uppercase tracking-[0.18em] text-[--app-muted]">
             Schema guide
           </p>
-          <h2 className="text-xl font-semibold text-emerald-50">
+          <h2 className="text-xl font-semibold text-[--app-fg]">
             See the supported JSON shape
           </h2>
-          <p className="text-xs text-emerald-100/80">
+          <p className="text-xs text-[--app-muted]">
             Use this guide when you hand-edit JSON, prepare imports, or want a
             quick reminder of the fields each policy type supports.
           </p>
         </div>
 
-        <div className="mt-4 rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/70">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+        <div className="mt-4 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
             Common fields
           </p>
-          <ul className="mt-2 space-y-1 text-xs text-emerald-100/90">
+          <ul className="mt-2 space-y-1 text-xs text-[--app-muted]">
             {commonFieldEntries.map(([fieldName, description]) => (
               <li key={fieldName}>
-                <span className="font-semibold text-emerald-50">{fieldName}</span>:{" "}
+                <span className="font-semibold text-[--app-fg]">{fieldName}</span>:{" "}
                 {description}
               </li>
             ))}
@@ -113,26 +113,26 @@ export function GuidedPolicyBuilder({
           {policyTypeEntries.map(([typeName, definition]) => (
             <div
               key={typeName}
-              className="rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/70"
+              className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]"
             >
               <div className="flex flex-wrap items-center gap-2">
-                <p className="text-xs font-semibold capitalize text-emerald-50">
+                <p className="text-xs font-semibold capitalize text-[--app-fg]">
                   {typeName.replaceAll("_", " ")}
                 </p>
                 {definition.aliases?.length ? (
-                  <span className="text-[11px] text-emerald-300/90">
+                  <span className="text-[11px] text-[--app-muted]">
                     Aliases: {definition.aliases.join(", ")}
                   </span>
                 ) : null}
               </div>
-              <p className="mt-2 text-xs text-emerald-100/90">
+              <p className="mt-2 text-xs text-[--app-muted]">
                 {definition.description}
               </p>
-              <ul className="mt-2 space-y-1 text-[11px] text-emerald-200/90">
+              <ul className="mt-2 space-y-1 text-[11px] text-[--app-muted]">
                 {Object.entries(definition.fields ?? {}).map(
                   ([fieldName, description]) => (
                     <li key={`${typeName}-${fieldName}`}>
-                      <span className="font-semibold text-emerald-100">
+                      <span className="font-semibold text-[--app-fg]">
                         {fieldName}
                       </span>
                       : {description}
@@ -144,14 +144,14 @@ export function GuidedPolicyBuilder({
           ))}
         </div>
 
-        <div className="mt-4 rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/70">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+        <div className="mt-4 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
             Composition helpers
           </p>
-          <ul className="mt-2 space-y-2 text-xs text-emerald-100/90">
+          <ul className="mt-2 space-y-2 text-xs text-[--app-muted]">
             {compositionEntries.map(([name, definition]) => (
               <li key={name}>
-                <span className="font-semibold text-emerald-50">
+                <span className="font-semibold text-[--app-fg]">
                   {name.replaceAll("_", " ")}
                 </span>
                 : {definition.description}
@@ -170,22 +170,22 @@ export function GuidedPolicyBuilder({
       </div>
 
       {/* Guided builder */}
-      <div className="rounded-3xl bg-emerald-900/40 p-5 ring-1 ring-emerald-700/60">
+      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
         <div className="space-y-1">
-          <p className="text-xs font-medium uppercase tracking-[0.18em] text-emerald-300">
+          <p className="text-xs font-medium uppercase tracking-[0.18em] text-[--app-muted]">
             Guided builder
           </p>
-          <h2 className="text-xl font-semibold text-emerald-50">
+          <h2 className="text-xl font-semibold text-[--app-fg]">
             Author a rule from the schema
           </h2>
-          <p className="text-xs text-emerald-100/80">
+          <p className="text-xs text-[--app-muted]">
             Pick a policy type, fill in guided fields, and only drop to raw
             JSON for nested or advanced cases.
           </p>
         </div>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <label className="flex flex-col gap-1 text-xs text-emerald-100/90">
+          <label className="flex flex-col gap-1 text-xs text-[--app-muted]">
             Builder mode
             <select
               value={guidedKind}
@@ -197,21 +197,21 @@ export function GuidedPolicyBuilder({
                     : (compositionEntries[0]?.[0] ?? "all_of"),
                 )
               }
-              className="rounded-2xl border border-emerald-700/70 bg-emerald-950 px-4 py-2 text-xs text-emerald-50 outline-none focus:border-emerald-400"
+              className="rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
             >
               <option value="policy">Single policy</option>
               <option value="composition">Composition</option>
             </select>
           </label>
 
-          <label className="flex flex-col gap-1 text-xs text-emerald-100/90">
+          <label className="flex flex-col gap-1 text-xs text-[--app-muted]">
             Template
             <select
               value={guidedSelection}
               onChange={(event) =>
                 chooseGuidedTemplate(guidedKind, event.target.value)
               }
-              className="rounded-2xl border border-emerald-700/70 bg-emerald-950 px-4 py-2 text-xs text-emerald-50 outline-none focus:border-emerald-400"
+              className="rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
             >
               {(guidedKind === "policy"
                 ? policyTypeEntries
@@ -229,7 +229,7 @@ export function GuidedPolicyBuilder({
           {commonFieldSpecs.map(([fieldName, spec]) => (
             <label
               key={`guided-common-${fieldName}`}
-              className="flex flex-col gap-1 text-xs text-emerald-100/90"
+              className="flex flex-col gap-1 text-xs text-[--app-muted]"
             >
               {spec.label ?? fieldName}
               <input
@@ -238,9 +238,9 @@ export function GuidedPolicyBuilder({
                   updateGuidedCommonField(fieldName, event.target.value)
                 }
                 placeholder={spec.placeholder}
-                className="rounded-2xl border border-emerald-700/70 bg-emerald-950 px-4 py-2 text-xs text-emerald-50 outline-none focus:border-emerald-400"
+                className="rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
               />
-              <span className="text-[11px] text-emerald-300/90">
+              <span className="text-[11px] text-[--app-muted]">
                 {spec.description}
               </span>
             </label>
@@ -257,15 +257,15 @@ export function GuidedPolicyBuilder({
               return (
                 <div
                   key={`guided-field-${fieldName}`}
-                  className="rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/70"
+                  className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]"
                 >
-                  <p className="text-xs font-semibold text-emerald-50">
+                  <p className="text-xs font-semibold text-[--app-fg]">
                     {spec.label ?? fieldName}
                   </p>
-                  <p className="mt-2 text-xs text-emerald-100/90">
+                  <p className="mt-2 text-xs text-[--app-muted]">
                     {spec.description}
                   </p>
-                  <p className="mt-2 text-[11px] text-emerald-300/90">
+                  <p className="mt-2 text-[11px] text-[--app-muted]">
                     Nested rules still use the JSON preview below. Start from
                     the starter config and refine the preview if you need
                     compositions or resource-specific children.
@@ -279,7 +279,7 @@ export function GuidedPolicyBuilder({
             return (
               <label
                 key={`guided-field-${fieldName}`}
-                className="flex flex-col gap-1 text-xs text-emerald-100/90"
+                className="flex flex-col gap-1 text-xs text-[--app-muted]"
               >
                 {spec.label ?? fieldName}
                 {spec.type === "bool" ? (
@@ -288,7 +288,7 @@ export function GuidedPolicyBuilder({
                     onChange={(event) =>
                       updateGuidedField(fieldName, event.target.value)
                     }
-                    className="rounded-2xl border border-emerald-700/70 bg-emerald-950 px-4 py-2 text-xs text-emerald-50 outline-none focus:border-emerald-400"
+                    className="rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
                   >
                     <option value="true">True</option>
                     <option value="false">False</option>
@@ -299,7 +299,7 @@ export function GuidedPolicyBuilder({
                     onChange={(event) =>
                       updateGuidedField(fieldName, event.target.value)
                     }
-                    className="rounded-2xl border border-emerald-700/70 bg-emerald-950 px-4 py-2 text-xs text-emerald-50 outline-none focus:border-emerald-400"
+                    className="rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
                   >
                     {(spec.enum ?? []).map((option) => (
                       <option key={`${fieldName}-${option}`} value={option}>
@@ -324,10 +324,10 @@ export function GuidedPolicyBuilder({
                     }
                     placeholder={spec.placeholder}
                     type={spec.type === "int" ? "number" : "text"}
-                    className="rounded-2xl border border-emerald-700/70 bg-emerald-950 px-4 py-2 text-xs text-emerald-50 outline-none focus:border-emerald-400"
+                    className="rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
                   />
                 )}
-                <span className="text-[11px] text-emerald-300/90">
+                <span className="text-[11px] text-[--app-muted]">
                   {spec.description}
                 </span>
               </label>
@@ -335,9 +335,9 @@ export function GuidedPolicyBuilder({
           })}
         </div>
 
-        <div className="mt-4 rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/70">
+        <div className="mt-4 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
               Guided JSON preview
             </p>
             <button
@@ -349,13 +349,13 @@ export function GuidedPolicyBuilder({
                   message: "Loaded the guided draft into the proposal editor.",
                 });
               }}
-              className="rounded-full border border-emerald-600/80 px-3 py-1 text-[11px] font-semibold text-emerald-100 transition hover:bg-emerald-700/30"
+              className="rounded-full border border-[--app-border] px-3 py-1 text-[11px] font-semibold text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg]"
             >
               Load into proposal editor
             </button>
           </div>
           <pre
-            className="mt-3 max-h-[280px] overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-6 text-emerald-50"
+            className="mt-3 max-h-[280px] overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-6 text-[--app-fg]"
             dangerouslySetInnerHTML={{
               __html: highlightJson(prettyJson(guidedDraft)),
             }}

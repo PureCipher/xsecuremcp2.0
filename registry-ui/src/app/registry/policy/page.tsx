@@ -13,38 +13,35 @@ export default async function PolicyPage() {
 
   if (!allowed) {
     return (
-      <main className="min-h-screen bg-emerald-950/95 px-4 py-10 text-sm text-emerald-50">
-        <div className="mx-auto max-w-3xl rounded-3xl bg-emerald-900/40 p-6 ring-1 ring-emerald-700/60">
-          <h1 className="text-xl font-semibold text-emerald-50">Policy management</h1>
-          <p className="mt-2 text-[12px] text-emerald-100/90">
+      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-6 ring-1 ring-[--app-surface-ring]">
+          <h1 className="text-xl font-semibold text-[--app-fg]">Policy management</h1>
+          <p className="mt-2 text-[12px] text-[--app-muted]">
             Reviewer or admin role required to manage live SecureMCP policies.
           </p>
           <p className="mt-4">
             <Link
               href="/registry/app"
-              className="text-[11px] font-medium text-emerald-200 hover:text-emerald-100"
+              className="text-[11px] font-medium text-[--app-muted] hover:text-[--app-fg]"
             >
               ← Back to tools
             </Link>
           </p>
-        </div>
-      </main>
+      </div>
     );
   }
 
   const policyData = await getPolicyManagement();
 
   return (
-    <main className="min-h-screen bg-emerald-950/95 px-4 py-10 text-sm text-emerald-50">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6">
+    <div className="flex flex-col gap-6">
         <header className="space-y-1">
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-300">
+          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[--app-muted]">
             Policy management
           </p>
-          <h1 className="text-2xl font-semibold text-emerald-50">
+          <h1 className="text-2xl font-semibold text-[--app-fg]">
             Propose, review, and apply SecureMCP rules
           </h1>
-          <p className="max-w-2xl text-[11px] text-emerald-100/80">
+          <p className="max-w-2xl text-[11px] text-[--app-muted]">
             Draft changes first, run a quick simulation, approve them before they go live,
             and keep every draft tied to the live policy version it came from.
           </p>
@@ -54,7 +51,6 @@ export default async function PolicyPage() {
           initialData={policyData ?? {}}
           currentUsername={username}
         />
-      </div>
-    </main>
+    </div>
   );
 }

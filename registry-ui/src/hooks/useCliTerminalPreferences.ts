@@ -1,0 +1,95 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+
+import { DEFAULT_CLI_THEME_ID } from "@/lib/cliTerminalThemes";
+
+export const CLI_TERMINAL_PREFS_STORAGE_KEY = "purecipher.registry.cliTerminal.v1";
+
+export type CliTerminalPreferences = {
+  themeId: string;
+  /** xterm font size in px */
+  fontSize: number;
+};
+
+const DEFAULT_PREFERENCES: CliTerminalPreferences = {
+  themeId: DEFAULT_CLI_THEME_ID,
+  fontSize: 13,
+};
+
+function readPrefsFromStorage(): CliTerminalPreferences {
+  if (typeof window === "undefined") return DEFAULT_PREFERENCES;
+  try {
+    const raw = localStorage.getItem(CLI_TERMINAL_PREFS_STORAGE_KEY);
+    if (!raw) return DEFAULT_PREFERENCES;
+    const parsed = JSON.parse(raw) as Partial<CliTerminalPreferences>;
+    return {
+      themeId: typeof parsed.themeId === "string" ? parsed.themeId : DEFAULT_PREFERENCES.themeId,
+      fontSize:
+        typeof parsed.fontSize === "number" && parsed.fontSize >= 10 && parsed.fontSize <= 22
+          ? parsed.fontSize
+          : DEFAULT_PREFERENCES.fontSize,
+    };
+  } catch {
+    return DEFAULT_PREFERENCES;
+  }
+}
+
+function writePrefsToStorage(prefs: CliTerminalPreferences) {
+  try {
+    localStorage.setItem(CLI_TERMINAL_PREFS_STORAGE_KEY, JSON.stringify(prefs));
+    window.dispatchEvent(new Event("purecipher-cli-terminal-prefs"));
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+/**
+ * Browser CLI terminal preferences (theme, font). Shared by /registry/cli and /registry/settings.
+ */
+export function useCliTerminalPreferences(): {
+  prefs: CliTerminalPreferences;
+  setPrefs: (next: Partial<CliTerminalPreferences>) => void;
+  setThemeId: (themeId: string) => void;
+  setFontSize: (fontSize: number) => void;
+} {
+  const [prefs, setPrefsState] = useState<CliTerminalPreferences>(() =>
+    typeof window !== "undefined" ? readPrefsFromStorage() : DEFAULT_PREFERENCES,
+  );
+
+  useEffect(() => {
+    const sync = () => setPrefsState(readPrefsFromStorage());
+    window.addEventListener("storage", sync);
+    window.addEventListener("purecipher-cli-terminal-prefs", sync);
+    return () => {
+      window.removeEventListener("storage", sync);
+      window.removeEventListener("purecipher-cli-terminal-prefs", sync);
+    };
+  }, []);
+
+  const setPrefs = useCallback((next: Partial<CliTerminalPreferences>) => {
+    setPrefsState((prev) => {
+      const merged: CliTerminalPreferences = { ...prev, ...next };
+      if (merged.fontSize < 10) merged.fontSize = 10;
+      if (merged.fontSize > 22) merged.fontSize = 22;
+      writePrefsToStorage(merged);
+      return merged;
+    });
+  }, []);
+
+  const setThemeId = useCallback(
+    (themeId: string) => {
+      setPrefs({ themeId });
+    },
+    [setPrefs],
+  );
+
+  const setFontSize = useCallback(
+    (fontSize: number) => {
+      setPrefs({ fontSize });
+    },
+    [setPrefs],
+  );
+
+  return { prefs, setPrefs, setThemeId, setFontSize };
+}

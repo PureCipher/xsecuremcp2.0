@@ -48,7 +48,7 @@ export function AutoRefreshToggle({
         type="button"
         onClick={onManualRefresh}
         disabled={isRefreshing}
-        className="rounded-full border border-emerald-700/60 px-3 py-1 text-[10px] font-medium text-emerald-200 transition hover:bg-emerald-900/50 disabled:opacity-40"
+        className="rounded-full border border-[--app-border] px-3 py-1 text-[10px] font-medium text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg] disabled:opacity-40"
       >
         {isRefreshing ? "Refreshing…" : "Refresh"}
       </button>
@@ -57,12 +57,12 @@ export function AutoRefreshToggle({
           type="checkbox"
           checked={enabled}
           onChange={(e) => onToggle(e.target.checked)}
-          className="h-3 w-3 rounded border-emerald-600 bg-emerald-950 text-emerald-500 focus:ring-emerald-500"
+          className="h-3 w-3 rounded border-[--app-border] bg-[--app-chrome-bg] text-[--app-accent] focus:ring-[--app-accent]"
         />
-        <span className="text-[10px] text-emerald-300/70">Auto-refresh</span>
+        <span className="text-[10px] text-[--app-muted]">Auto-refresh</span>
       </label>
       {lastRefreshed ? (
-        <span className="text-[10px] text-emerald-400/50">
+        <span className="text-[10px] text-[--app-muted]">
           Last: {lastRefreshed.toLocaleTimeString()}
         </span>
       ) : null}

@@ -350,15 +350,15 @@ export function ToolsTab({
         />
 
         {/* Proposal editor */}
-        <div className="rounded-3xl bg-emerald-900/40 p-5 ring-1 ring-emerald-700/60">
+        <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
           <div className="space-y-1">
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-emerald-300">
+            <p className="text-xs font-medium uppercase tracking-[0.18em] text-[--app-muted]">
               Proposal editor
             </p>
-            <h2 className="text-xl font-semibold text-emerald-50">
+            <h2 className="text-xl font-semibold text-[--app-fg]">
               Refine or hand-edit the JSON
             </h2>
-            <p className="text-xs text-emerald-100/80">
+            <p className="text-xs text-[--app-muted]">
               Use the guided builder above or start from a quick template, then
               create a proposal that reviewers can approve before it goes live.
             </p>
@@ -366,14 +366,14 @@ export function ToolsTab({
 
           {jurisdictions.length > 0 ? (
             <div className="mt-4 flex flex-wrap items-center gap-2">
-              <span className="text-[11px] font-medium text-emerald-200/90">Filter:</span>
+              <span className="text-[11px] font-medium text-[--app-muted]">Filter:</span>
               <button
                 type="button"
                 onClick={() => setPluginFilter("all")}
                 className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
                   pluginFilter === "all"
-                    ? "bg-emerald-500 text-emerald-950"
-                    : "border border-emerald-700/70 text-emerald-100 hover:bg-emerald-700/20"
+                    ? "bg-[--app-accent] text-[--app-accent-contrast]"
+                    : "border border-[--app-border] text-[--app-muted] hover:bg-[--app-hover-bg] hover:text-[--app-fg]"
                 }`}
               >
                 All
@@ -383,8 +383,8 @@ export function ToolsTab({
                 onClick={() => setPluginFilter("universal")}
                 className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
                   pluginFilter === "universal"
-                    ? "bg-emerald-500 text-emerald-950"
-                    : "border border-emerald-700/70 text-emerald-100 hover:bg-emerald-700/20"
+                    ? "bg-[--app-accent] text-[--app-accent-contrast]"
+                    : "border border-[--app-border] text-[--app-muted] hover:bg-[--app-hover-bg] hover:text-[--app-fg]"
                 }`}
               >
                 Universal
@@ -396,8 +396,8 @@ export function ToolsTab({
                   onClick={() => setPluginFilter(j)}
                   className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
                     pluginFilter === j
-                      ? "bg-emerald-500 text-emerald-950"
-                      : "border border-emerald-700/70 text-emerald-100 hover:bg-emerald-700/20"
+                      ? "bg-[--app-accent] text-[--app-accent-contrast]"
+                      : "border border-[--app-border] text-[--app-muted] hover:bg-[--app-hover-bg] hover:text-[--app-fg]"
                   }`}
                 >
                   {j}
@@ -412,10 +412,10 @@ export function ToolsTab({
                 key={template.key}
                 type="button"
                 onClick={() => chooseTemplate(template.key)}
-                className={`rounded-2xl px-3 py-3 text-left text-xs ring-1 transition ${
+                className={`rounded-2xl border border-[--app-border] px-3 py-3 text-left text-xs ring-1 transition ${
                   createTemplate === template.key
-                    ? "bg-emerald-500/15 text-emerald-50 ring-emerald-400/70"
-                    : "bg-emerald-950/70 text-emerald-100 ring-emerald-700/70 hover:bg-emerald-900/60"
+                    ? "bg-[--app-control-active-bg] text-[--app-fg] ring-[--app-accent]"
+                    : "bg-[--app-control-bg] text-[--app-muted] ring-[--app-surface-ring] hover:bg-[--app-hover-bg] hover:text-[--app-fg]"
                 }`}
               >
                 <div className="flex items-center gap-2">
@@ -423,17 +423,17 @@ export function ToolsTab({
                     {template.title}
                   </span>
                   {template.jurisdiction ? (
-                    <span className="rounded-full bg-emerald-900/70 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-emerald-300">
+                    <span className="rounded-full bg-[--app-surface] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-[--app-muted]">
                       {template.jurisdiction}
                     </span>
                   ) : null}
                   {template.version ? (
-                    <span className="rounded-full bg-emerald-800/60 px-1.5 py-0.5 text-[9px] font-medium tracking-wide text-emerald-400/90">
+                    <span className="rounded-full bg-[--app-surface] px-1.5 py-0.5 text-[9px] font-medium tracking-wide text-[--app-muted]">
                       v{template.version}
                     </span>
                   ) : null}
                 </div>
-                <span className="mt-1 block text-[11px] leading-snug text-emerald-200/80">
+                <span className="mt-1 block text-[11px] leading-snug text-[--app-muted]">
                   {template.summary.length > 80
                     ? `${template.summary.slice(0, 80)}…`
                     : template.summary}
@@ -454,14 +454,14 @@ export function ToolsTab({
             value={createDescription}
             onChange={(event) => setCreateDescription(event.target.value)}
             placeholder="What change should this proposal make?"
-            className="mt-3 w-full rounded-full border border-emerald-700/70 bg-emerald-950 px-4 py-2 text-xs text-emerald-50 outline-none focus:border-emerald-400"
+            className="mt-3 w-full rounded-full border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
           />
 
           <button
             type="button"
             onClick={() => void handleCreateProposal()}
             disabled={creating || busyKey === "create-proposal"}
-            className="mt-4 rounded-full bg-emerald-500 px-4 py-2 text-xs font-semibold text-emerald-950 transition hover:bg-emerald-400 disabled:opacity-60"
+            className="mt-4 rounded-full bg-[--app-accent] px-4 py-2 text-xs font-semibold text-[--app-accent-contrast] transition hover:opacity-90 disabled:opacity-60"
           >
             {creating || busyKey === "create-proposal"
               ? "Creating proposal\u2026"
@@ -470,15 +470,15 @@ export function ToolsTab({
         </div>
 
         {/* Import and export */}
-        <div className="rounded-3xl bg-emerald-900/40 p-5 ring-1 ring-emerald-700/60">
+        <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
           <div className="space-y-1">
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-emerald-300">
+            <p className="text-xs font-medium uppercase tracking-[0.18em] text-[--app-muted]">
               Import and export
             </p>
-            <h2 className="text-xl font-semibold text-emerald-50">
+            <h2 className="text-xl font-semibold text-[--app-fg]">
               Move policy JSON in and out safely
             </h2>
-            <p className="text-xs text-emerald-100/80">
+            <p className="text-xs text-[--app-muted]">
               Export the live chain or a saved version, then import a snapshot,
               provider list, or single rule. Imports become batch proposals that
               still go through validation, simulation, approval, and deploy.
@@ -490,13 +490,13 @@ export function ToolsTab({
               type="button"
               onClick={() => void handleImportPolicy()}
               disabled={busyKey === "import-policy"}
-              className="rounded-full bg-emerald-500 px-4 py-2 text-xs font-semibold text-emerald-950 transition hover:bg-emerald-400 disabled:opacity-60"
+              className="rounded-full bg-[--app-accent] px-4 py-2 text-xs font-semibold text-[--app-accent-contrast] transition hover:opacity-90 disabled:opacity-60"
             >
               {busyKey === "import-policy"
                 ? "Importing\u2026"
                 : "Stage import as proposals"}
             </button>
-            <label className="cursor-pointer rounded-full border border-emerald-600/80 px-3 py-1 text-[11px] font-semibold text-emerald-100 transition hover:bg-emerald-700/30">
+            <label className="cursor-pointer rounded-full border border-[--app-border] px-3 py-1 text-[11px] font-semibold text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg]">
               Load JSON file
               <input
                 type="file"
@@ -520,28 +520,28 @@ export function ToolsTab({
             value={importDescriptionPrefix}
             onChange={(event) => setImportDescriptionPrefix(event.target.value)}
             placeholder="Imported policy snapshot"
-            className="mt-3 w-full rounded-full border border-emerald-700/70 bg-emerald-950 px-4 py-2 text-xs text-emerald-50 outline-none focus:border-emerald-400"
+            className="mt-3 w-full rounded-full border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
           />
 
-          <div className="mt-3 rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/70">
+          <div className="mt-3 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
             {importPreview instanceof Error ? (
               <p className="text-xs text-rose-100">{importPreview.message}</p>
             ) : importPreview ? (
               <div className="space-y-2">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
                   Import preview
                 </p>
-                <p className="text-xs text-emerald-100/90">
+                <p className="text-xs text-[--app-muted]">
                   {importPreview.label} · {importPreview.providerCount}{" "}
                   {importPreview.providerCount === 1 ? "provider" : "providers"}
                 </p>
-                <p className="text-[11px] text-emerald-300/90">
+                <p className="text-[11px] text-[--app-muted]">
                   The import will stage a batch proposal against the current live
                   chain instead of changing it directly.
                 </p>
               </div>
             ) : (
-              <p className="text-xs text-emerald-100/90">
+              <p className="text-xs text-[--app-muted]">
                 Paste JSON to see what kind of policy import it is before staging
                 it.
               </p>
@@ -553,7 +553,7 @@ export function ToolsTab({
               type="button"
               onClick={() => handleLoadIntoDraft()}
               disabled={importPreview.kind !== "single_provider"}
-              className="mt-4 rounded-full border border-emerald-600/80 px-4 py-2 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-700/30 disabled:opacity-60"
+              className="mt-4 rounded-full border border-[--app-border] px-4 py-2 text-xs font-semibold text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg] disabled:opacity-60"
             >
               Load single rule into draft
             </button>
@@ -563,36 +563,36 @@ export function ToolsTab({
 
       {/* Right column: Private packs */}
       <div className="flex flex-col gap-4">
-        <div className="rounded-3xl bg-emerald-900/40 p-5 ring-1 ring-emerald-700/60">
+        <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
           <div className="space-y-1">
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-emerald-300">
+            <p className="text-xs font-medium uppercase tracking-[0.18em] text-[--app-muted]">
               Private packs
             </p>
-            <h2 className="text-xl font-semibold text-emerald-50">
+            <h2 className="text-xl font-semibold text-[--app-fg]">
               Save reusable policy starting points for your team
             </h2>
-            <p className="text-xs text-emerald-100/80">
+            <p className="text-xs text-[--app-muted]">
               Turn a draft, the live chain, or a saved version into a private
               pack that reviewers can stage again later.
             </p>
           </div>
 
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <label className="flex flex-col gap-1 text-xs text-emerald-100/90">
+            <label className="flex flex-col gap-1 text-xs text-[--app-muted]">
               Pack title
               <input
                 value={packTitle}
                 onChange={(event) => setPackTitle(event.target.value)}
                 placeholder="Production baseline"
-                className="rounded-2xl border border-emerald-700/70 bg-emerald-950 px-4 py-2 text-xs text-emerald-50 outline-none focus:border-emerald-400"
+                className="rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
               />
             </label>
-            <label className="flex flex-col gap-1 text-xs text-emerald-100/90">
+            <label className="flex flex-col gap-1 text-xs text-[--app-muted]">
               Source
               <select
                 value={packSource}
                 onChange={(event) => setPackSource(event.target.value)}
-                className="rounded-2xl border border-emerald-700/70 bg-emerald-950 px-4 py-2 text-xs text-emerald-50 outline-none focus:border-emerald-400"
+                className="rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
               >
                 <option value="editor">Current draft editor</option>
                 <option value="live">Live policy chain</option>
@@ -610,26 +610,26 @@ export function ToolsTab({
               value={packSummary}
               onChange={(event) => setPackSummary(event.target.value)}
               placeholder="Short summary for reviewers"
-              className="w-full rounded-full border border-emerald-700/70 bg-emerald-950 px-4 py-2 text-xs text-emerald-50 outline-none focus:border-emerald-400"
+              className="w-full rounded-full border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
             />
             <textarea
               value={packDescription}
               onChange={(event) => setPackDescription(event.target.value)}
               placeholder="What this pack is for and when to use it"
-              className="min-h-[100px] rounded-2xl border border-emerald-700/70 bg-emerald-950 px-4 py-3 text-xs leading-6 text-emerald-50 outline-none focus:border-emerald-400"
+              className="min-h-[100px] rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-3 text-xs leading-6 text-[--app-fg] outline-none focus:border-[--app-accent]"
             />
             <div className="grid gap-3 sm:grid-cols-2">
               <input
                 value={packTags}
                 onChange={(event) => setPackTags(event.target.value)}
                 placeholder="Tags: registry, strict, rollout"
-                className="rounded-full border border-emerald-700/70 bg-emerald-950 px-4 py-2 text-xs text-emerald-50 outline-none focus:border-emerald-400"
+                className="rounded-full border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
               />
               <input
                 value={packEnvironments}
                 onChange={(event) => setPackEnvironments(event.target.value)}
                 placeholder="Best for: development, staging"
-                className="rounded-full border border-emerald-700/70 bg-emerald-950 px-4 py-2 text-xs text-emerald-50 outline-none focus:border-emerald-400"
+                className="rounded-full border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
               />
             </div>
           </div>
@@ -638,15 +638,15 @@ export function ToolsTab({
             type="button"
             onClick={() => void handleSavePack()}
             disabled={busyKey === "save-pack"}
-            className="mt-4 rounded-full bg-emerald-500 px-4 py-2 text-xs font-semibold text-emerald-950 transition hover:bg-emerald-400 disabled:opacity-60"
+            className="mt-4 rounded-full bg-[--app-accent] px-4 py-2 text-xs font-semibold text-[--app-accent-contrast] transition hover:opacity-90 disabled:opacity-60"
           >
             {busyKey === "save-pack" ? "Saving\u2026" : "Save private pack"}
           </button>
 
           <div className="mt-5 space-y-3">
             {packs.length === 0 ? (
-              <div className="rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/70">
-                <p className="text-xs text-emerald-100/90">
+              <div className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
+                <p className="text-xs text-[--app-muted]">
                   No private packs saved yet. Save a draft or the live chain to
                   build a reusable library for the team.
                 </p>
@@ -655,22 +655,22 @@ export function ToolsTab({
               packs.map((pack) => (
                 <article
                   key={pack.pack_id}
-                  className="rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/70"
+                  className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-xs font-semibold text-emerald-50">
+                        <p className="text-xs font-semibold text-[--app-fg]">
                           {pack.title ?? pack.pack_id}
                         </p>
-                        <span className="rounded-full bg-emerald-900/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-200">
+                        <span className="rounded-full bg-[--app-surface] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
                           private
                         </span>
                       </div>
-                      <p className="text-xs text-emerald-100/90">
+                      <p className="text-xs text-[--app-muted]">
                         {pack.summary || pack.description || "Saved policy pack"}
                       </p>
-                      <p className="text-[11px] text-emerald-300/90">
+                      <p className="text-[11px] text-[--app-muted]">
                         {pack.provider_count ?? 0} rules · revision{" "}
                         {pack.current_revision_number ?? pack.revision_count ?? 1} ·
                         owner {pack.owner ?? "unknown"}
@@ -680,7 +680,7 @@ export function ToolsTab({
                       <button
                         type="button"
                         onClick={() => handleLoadPackIntoDraft(pack)}
-                        className="rounded-full border border-emerald-600/80 px-3 py-1 text-[11px] font-semibold text-emerald-100 transition hover:bg-emerald-700/30"
+                        className="rounded-full border border-[--app-border] px-3 py-1 text-[11px] font-semibold text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg]"
                       >
                         Load
                       </button>
@@ -690,7 +690,7 @@ export function ToolsTab({
                           void onStagePack(pack.pack_id, pack.title ?? pack.pack_id)
                         }
                         disabled={busyKey === `pack-${pack.pack_id}`}
-                        className="rounded-full bg-emerald-500 px-3 py-1 text-[11px] font-semibold text-emerald-950 transition hover:bg-emerald-400 disabled:opacity-60"
+                        className="rounded-full bg-[--app-accent] px-3 py-1 text-[11px] font-semibold text-[--app-accent-contrast] transition hover:opacity-90 disabled:opacity-60"
                       >
                         {busyKey === `pack-${pack.pack_id}` ? "Staging\u2026" : "Stage"}
                       </button>
@@ -710,7 +710,7 @@ export function ToolsTab({
                     </div>
                   </div>
                   {(pack.provider_summaries ?? []).length > 0 ? (
-                    <ul className="mt-3 space-y-1 text-[11px] text-emerald-200/90">
+                    <ul className="mt-3 space-y-1 text-[11px] text-[--app-muted]">
                       {(pack.provider_summaries ?? []).slice(0, 3).map((summary, index) => (
                         <li key={`${pack.pack_id}-summary-${index}`}>\u2022 {summary}</li>
                       ))}

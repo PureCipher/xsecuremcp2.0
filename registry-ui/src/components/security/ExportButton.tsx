@@ -55,7 +55,7 @@ export function ExportButton({
     <button
       type="button"
       onClick={handleExport}
-      className="rounded-full border border-emerald-700/60 px-3 py-1 text-[10px] font-medium text-emerald-200 transition hover:bg-emerald-900/50"
+      className="rounded-full border border-[--app-border] px-3 py-1 text-[10px] font-medium text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg]"
     >
       {label ?? `Export ${format.toUpperCase()}`}
     </button>

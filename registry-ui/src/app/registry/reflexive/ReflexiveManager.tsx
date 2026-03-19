@@ -71,7 +71,7 @@ interface ReflexiveManagerProps {
 }
 
 const SEVERITY_COLORS = {
-  info: "bg-emerald-600/60 text-emerald-50",
+  info: "bg-[--app-accent] text-[--app-accent-contrast]",
   low: "bg-sky-600/60 text-sky-50",
   medium: "bg-amber-600/60 text-amber-50",
   high: "bg-orange-600/60 text-orange-50",
@@ -79,7 +79,7 @@ const SEVERITY_COLORS = {
 };
 
 const SEVERITY_BAR_COLORS = {
-  info: "bg-emerald-500",
+  info: "bg-[--app-accent]",
   low: "bg-sky-500",
   medium: "bg-amber-500",
   high: "bg-orange-500",
@@ -205,13 +205,13 @@ export function ReflexiveManager({
     driftData?: IntrospectionResult["drift_summary"]
   ) => {
     if (!driftData || Object.keys(driftData).length === 0) {
-      return <p className="text-[12px] text-emerald-100/70">No drift detected</p>;
+      return <p className="text-[12px] text-[--app-muted]">No drift detected</p>;
     }
 
     const total = Object.values(driftData).reduce((a, b) => a + (b || 0), 0);
 
     if (total === 0) {
-      return <p className="text-[12px] text-emerald-100/70">No drift detected</p>;
+      return <p className="text-[12px] text-[--app-muted]">No drift detected</p>;
     }
 
     const severities = ["critical", "high", "medium", "low", "info"] as const;
@@ -225,10 +225,10 @@ export function ReflexiveManager({
 
           return (
             <div key={severity} className="flex items-center gap-3">
-              <span className="w-16 text-[11px] font-medium capitalize text-emerald-200">
+              <span className="w-16 text-[11px] font-medium capitalize text-[--app-muted]">
                 {severity}
               </span>
-              <div className="flex-1 rounded-full bg-emerald-950/60 h-6 overflow-hidden">
+              <div className="flex-1 rounded-full bg-[--app-control-bg] h-6 overflow-hidden ring-1 ring-[--app-surface-ring]">
                 {percentage > 0 && (
                   <div
                     className={`h-full transition-all ${SEVERITY_BAR_COLORS[severity]}`}
@@ -236,7 +236,7 @@ export function ReflexiveManager({
                   />
                 )}
               </div>
-              <span className="w-8 text-right text-[11px] text-emerald-100">
+              <span className="w-8 text-right text-[11px] text-[--app-muted]">
                 {count}
               </span>
             </div>
@@ -259,7 +259,7 @@ export function ReflexiveManager({
     return (
       <span
         key={constraint}
-        className="inline-flex items-center gap-1.5 rounded-full bg-emerald-700/40 px-2.5 py-1 text-[11px] font-medium text-emerald-100 ring-1 ring-emerald-600/50"
+        className="inline-flex items-center gap-1.5 rounded-full bg-[--app-control-bg] px-2.5 py-1 text-[11px] font-medium text-[--app-muted] ring-1 ring-[--app-surface-ring]"
       >
         {labels[constraint] || constraint}
       </span>
@@ -276,12 +276,12 @@ export function ReflexiveManager({
           value={introspectActorId}
           onChange={(e) => setIntrospectActorId(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleIntrospect()}
-          className="flex-1 rounded-xl bg-emerald-950/80 px-3 py-2 text-[12px] text-emerald-100 ring-1 ring-emerald-700/50 focus:ring-emerald-500 focus:outline-none"
+          className="flex-1 rounded-xl bg-[--app-chrome-bg] px-3 py-2 text-[12px] text-[--app-fg] ring-1 ring-[--app-border] focus:ring-2 focus:ring-[--app-accent] focus:outline-none"
         />
         <button
           onClick={handleIntrospect}
           disabled={introspectionLoading}
-          className="rounded-full bg-emerald-600/80 px-4 py-1.5 text-[11px] font-semibold text-emerald-50 hover:bg-emerald-600 transition disabled:opacity-50"
+          className="rounded-full bg-[--app-accent] px-4 py-1.5 text-[11px] font-semibold text-[--app-accent-contrast] transition hover:opacity-90 disabled:opacity-50"
         >
           {introspectionLoading ? "Loading..." : "Inspect"}
         </button>
@@ -297,7 +297,7 @@ export function ReflexiveManager({
 
       {introspectionResult && (
         <div className="space-y-4">
-          <div className="rounded-3xl bg-emerald-900/40 p-4 ring-1 ring-emerald-700/60">
+          <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
             <div className="flex items-center gap-4">
               <ThreatGauge
                 level={introspectionResult.threat_level}
@@ -325,8 +325,8 @@ export function ReflexiveManager({
           />
 
           {introspectionResult.drift_summary && (
-            <div className="rounded-3xl bg-emerald-900/40 p-4 ring-1 ring-emerald-700/60">
-              <h3 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-200 mb-3">
+            <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
+              <h3 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted] mb-3">
                 Drift Summary
               </h3>
               {renderDriftSummary(introspectionResult.drift_summary)}
@@ -335,8 +335,8 @@ export function ReflexiveManager({
 
           {introspectionResult.active_escalations &&
             introspectionResult.active_escalations.length > 0 && (
-              <div className="rounded-3xl bg-emerald-900/40 p-4 ring-1 ring-emerald-700/60">
-                <h3 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-200 mb-3">
+              <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
+                <h3 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted] mb-3">
                   Active Escalations
                 </h3>
                 <div className="space-y-2">
@@ -349,8 +349,8 @@ export function ReflexiveManager({
 
           {introspectionResult.active_constraints &&
             introspectionResult.active_constraints.length > 0 && (
-              <div className="rounded-3xl bg-emerald-900/40 p-4 ring-1 ring-emerald-700/60">
-                <h3 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-200 mb-3">
+              <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
+                <h3 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted] mb-3">
                   Active Constraints
                 </h3>
                 <div className="flex flex-wrap gap-2">
@@ -377,13 +377,13 @@ export function ReflexiveManager({
   // Verdicts tab content
   const renderVerdictsTab = () => (
     <div className="space-y-4">
-      <div className="rounded-3xl bg-emerald-900/40 p-4 ring-1 ring-emerald-700/60">
-        <h3 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-200 mb-3">
+      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
+        <h3 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted] mb-3">
           Check Execution Verdict
         </h3>
         <div className="space-y-3">
           <div>
-            <label className="block text-[11px] font-medium text-emerald-200 mb-1">
+            <label className="block text-[11px] font-medium text-[--app-muted] mb-1">
               Actor ID
             </label>
             <input
@@ -391,18 +391,18 @@ export function ReflexiveManager({
               placeholder="e.g., agent-123"
               value={verdictActorId}
               onChange={(e) => setVerdictActorId(e.target.value)}
-              className="w-full rounded-xl bg-emerald-950/80 px-3 py-2 text-[12px] text-emerald-100 ring-1 ring-emerald-700/50 focus:ring-emerald-500 focus:outline-none"
+              className="w-full rounded-xl bg-[--app-chrome-bg] px-3 py-2 text-[12px] text-[--app-fg] ring-1 ring-[--app-border] focus:ring-2 focus:ring-[--app-accent] focus:outline-none"
             />
           </div>
 
           <div>
-            <label className="block text-[11px] font-medium text-emerald-200 mb-1">
+            <label className="block text-[11px] font-medium text-[--app-muted] mb-1">
               Operation
             </label>
             <select
               value={verdictOperation}
               onChange={(e) => setVerdictOperation(e.target.value)}
-              className="w-full rounded-xl bg-emerald-950/80 px-3 py-2 text-[12px] text-emerald-100 ring-1 ring-emerald-700/50 focus:ring-emerald-500 focus:outline-none"
+              className="w-full rounded-xl bg-[--app-chrome-bg] px-3 py-2 text-[12px] text-[--app-fg] ring-1 ring-[--app-border] focus:ring-2 focus:ring-[--app-accent] focus:outline-none"
             >
               <option value="call_tool">Call Tool</option>
               <option value="read_resource">Read Resource</option>
@@ -411,7 +411,7 @@ export function ReflexiveManager({
           </div>
 
           <div>
-            <label className="block text-[11px] font-medium text-emerald-200 mb-1">
+            <label className="block text-[11px] font-medium text-[--app-muted] mb-1">
               Resource ID (optional)
             </label>
             <input
@@ -419,14 +419,14 @@ export function ReflexiveManager({
               placeholder="e.g., resource-456"
               value={verdictResourceId}
               onChange={(e) => setVerdictResourceId(e.target.value)}
-              className="w-full rounded-xl bg-emerald-950/80 px-3 py-2 text-[12px] text-emerald-100 ring-1 ring-emerald-700/50 focus:ring-emerald-500 focus:outline-none"
+              className="w-full rounded-xl bg-[--app-chrome-bg] px-3 py-2 text-[12px] text-[--app-fg] ring-1 ring-[--app-border] focus:ring-2 focus:ring-[--app-accent] focus:outline-none"
             />
           </div>
 
           <button
             onClick={handleCheckVerdict}
             disabled={verdictLoading}
-            className="w-full rounded-full bg-emerald-600/80 px-4 py-2 text-[11px] font-semibold text-emerald-50 hover:bg-emerald-600 transition disabled:opacity-50"
+            className="w-full rounded-full bg-[--app-accent] px-4 py-2 text-[11px] font-semibold text-[--app-accent-contrast] transition hover:opacity-90 disabled:opacity-50"
           >
             {verdictLoading ? "Checking..." : "Check Verdict"}
           </button>
@@ -443,14 +443,14 @@ export function ReflexiveManager({
 
       {verdictResult && (
         <div className="space-y-4">
-          <div className="rounded-3xl bg-emerald-900/40 p-6 ring-1 ring-emerald-700/60 text-center">
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-200 mb-3">
+          <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-6 ring-1 ring-[--app-surface-ring] text-center">
+            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[--app-muted] mb-3">
               Verdict
             </p>
             <div
               className={`inline-block rounded-full px-6 py-3 text-sm font-bold ${
                 verdictResult.verdict === "PROCEED"
-                  ? "bg-emerald-600/80 text-emerald-50"
+                  ? "bg-[--app-accent] text-[--app-accent-contrast]"
                   : verdictResult.verdict === "THROTTLE"
                     ? "bg-amber-600/80 text-amber-50"
                     : verdictResult.verdict === "REQUIRE_CONFIRMATION"
@@ -460,10 +460,10 @@ export function ReflexiveManager({
             >
               {verdictResult.verdict}
             </div>
-            <p className="mt-4 text-[12px] text-emerald-100/80">
+            <p className="mt-4 text-[12px] text-[--app-muted]">
               {verdictResult.explanation}
             </p>
-            <p className="mt-2 text-[11px] text-emerald-100/60">
+            <p className="mt-2 text-[11px] text-[--app-muted]">
               Confidence: {(verdictResult.confidence * 100).toFixed(1)}%
             </p>
           </div>
@@ -513,20 +513,20 @@ export function ReflexiveManager({
         placeholder="Filter by actor ID..."
         value={accountabilityFilter}
         onChange={(e) => setAccountabilityFilter(e.target.value)}
-        className="w-full rounded-xl bg-emerald-950/80 px-3 py-2 text-[12px] text-emerald-100 ring-1 ring-emerald-700/50 focus:ring-emerald-500 focus:outline-none"
+        className="w-full rounded-xl bg-[--app-chrome-bg] px-3 py-2 text-[12px] text-[--app-fg] ring-1 ring-[--app-border] focus:ring-2 focus:ring-[--app-accent] focus:outline-none"
       />
 
       {filteredAccountability.length === 0 ? (
         <EmptyState title="No Log Entries" message="No accountability log entries to display." />
       ) : (
-        <div className="rounded-3xl bg-emerald-900/40 ring-1 ring-emerald-700/60 overflow-hidden">
+        <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] ring-1 ring-[--app-surface-ring] overflow-hidden">
           <table className="w-full text-[11px]">
             <thead>
-              <tr className="border-b border-emerald-700/40 bg-emerald-900/60">
+              <tr className="border-b border-[--app-border] bg-[--app-hover-bg]">
                 {accountabilityColumns.map((col) => (
                   <th
                     key={col.key}
-                    className="px-4 py-2 text-left font-semibold text-emerald-200"
+                    className="px-4 py-2 text-left font-semibold text-[--app-muted]"
                   >
                     {col.header}
                   </th>
@@ -538,7 +538,7 @@ export function ReflexiveManager({
                 <tr key={idx}>
                   <td
                     colSpan={accountabilityColumns.length}
-                    className="border-b border-emerald-700/20"
+                    className="border-b border-[--app-border]"
                   >
                     <button
                       onClick={() =>
@@ -546,7 +546,7 @@ export function ReflexiveManager({
                           expandedAccountabilityRow === idx ? null : idx
                         )
                       }
-                      className="w-full text-left px-4 py-2 hover:bg-emerald-900/30 transition"
+                      className="w-full text-left px-4 py-2 hover:bg-[--app-hover-bg] transition"
                     >
                       <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(6, 1fr)" }}>
                         {accountabilityColumns.map((col) => {
@@ -567,7 +567,7 @@ export function ReflexiveManager({
                           return (
                             <span
                               key={col.key}
-                              className="text-emerald-100 truncate"
+                              className="text-[--app-muted] truncate"
                             >
                               {cellContent}
                             </span>
@@ -577,7 +577,7 @@ export function ReflexiveManager({
                     </button>
 
                     {expandedAccountabilityRow === idx && (
-                      <div className="border-t border-emerald-700/20 bg-emerald-950/30 px-4 py-3">
+                      <div className="border-t border-[--app-border] bg-[--app-control-bg] px-4 py-3">
                         <JsonViewer title="Full Entry" data={entry} />
                       </div>
                     )}
@@ -602,28 +602,28 @@ export function ReflexiveManager({
 
     return (
       <div className="space-y-4">
-        <div className="rounded-3xl bg-emerald-900/40 p-4 ring-1 ring-emerald-700/60">
+        <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
           <div className="space-y-3">
             <div>
-              <p className="text-[11px] font-medium text-emerald-200 mb-1">
+              <p className="text-[11px] font-medium text-[--app-muted] mb-1">
                 Overall Status
               </p>
               <StatusBadge status={overallStatus} />
             </div>
             <div>
-              <p className="text-[11px] font-medium text-emerald-200 mb-1">
+              <p className="text-[11px] font-medium text-[--app-muted] mb-1">
                 Components Configured
               </p>
-              <p className="text-[12px] text-emerald-100">
+              <p className="text-[12px] text-[--app-muted]">
                 {initialHealth.component_count}
               </p>
             </div>
             {initialHealth.timestamp && (
               <div>
-                <p className="text-[11px] font-medium text-emerald-200 mb-1">
+                <p className="text-[11px] font-medium text-[--app-muted] mb-1">
                   Last Updated
                 </p>
-                <p className="text-[12px] text-emerald-100">
+                <p className="text-[12px] text-[--app-muted]">
                   {new Date(initialHealth.timestamp).toLocaleString()}
                 </p>
               </div>
@@ -667,7 +667,7 @@ export function ReflexiveManager({
         onTabChange={setActiveTab}
       />
 
-      <div className="rounded-3xl bg-emerald-900/40 p-6 ring-1 ring-emerald-700/60">
+      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-6 ring-1 ring-[--app-surface-ring]">
         {activeTab === "introspection" && renderIntrospectionTab()}
         {activeTab === "verdicts" && renderVerdictsTab()}
         {activeTab === "accountability" && renderAccountabilityTab()}

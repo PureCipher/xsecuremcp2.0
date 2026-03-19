@@ -247,75 +247,75 @@ function EvaluateTab({
   return (
     <div className="flex flex-col gap-6">
       {/* Form */}
-      <div className="rounded-3xl bg-emerald-900/40 p-6 ring-1 ring-emerald-700/60">
-        <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-200">
+      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-6 ring-1 ring-[--app-surface-ring]">
+        <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
           Query parameters
         </p>
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           <div>
-            <label className="text-[10px] font-medium text-emerald-300">Source ID</label>
+            <label className="text-[10px] font-medium text-[--app-muted]">Source ID</label>
             <input
               type="text"
               value={sourceId}
               onChange={(e) => setSourceId(e.target.value)}
               placeholder="Agent or subject ID"
-              className="mt-1 w-full rounded-xl bg-emerald-950/80 px-3 py-2 text-[12px] text-emerald-100 ring-1 ring-emerald-700/50 focus:outline-none focus:ring-emerald-500"
+              className="mt-1 w-full rounded-xl bg-[--app-chrome-bg] px-3 py-2 text-[12px] text-[--app-fg] ring-1 ring-[--app-border] focus:outline-none focus:ring-2 focus:ring-[--app-accent]"
             />
           </div>
 
           <div>
-            <label className="text-[10px] font-medium text-emerald-300">Target ID</label>
+            <label className="text-[10px] font-medium text-[--app-muted]">Target ID</label>
             <input
               type="text"
               value={targetId}
               onChange={(e) => setTargetId(e.target.value)}
               placeholder="Resource ID"
-              className="mt-1 w-full rounded-xl bg-emerald-950/80 px-3 py-2 text-[12px] text-emerald-100 ring-1 ring-emerald-700/50 focus:outline-none focus:ring-emerald-500"
+              className="mt-1 w-full rounded-xl bg-[--app-chrome-bg] px-3 py-2 text-[12px] text-[--app-fg] ring-1 ring-[--app-border] focus:outline-none focus:ring-2 focus:ring-[--app-accent]"
             />
           </div>
 
           <div>
-            <label className="text-[10px] font-medium text-emerald-300">Scope</label>
+            <label className="text-[10px] font-medium text-[--app-muted]">Scope</label>
             <input
               type="text"
               value={scope}
               onChange={(e) => setScope(e.target.value)}
               placeholder="read, write, delete"
-              className="mt-1 w-full rounded-xl bg-emerald-950/80 px-3 py-2 text-[12px] text-emerald-100 ring-1 ring-emerald-700/50 focus:outline-none focus:ring-emerald-500"
+              className="mt-1 w-full rounded-xl bg-[--app-chrome-bg] px-3 py-2 text-[12px] text-[--app-fg] ring-1 ring-[--app-border] focus:outline-none focus:ring-2 focus:ring-[--app-accent]"
             />
           </div>
 
           <div>
-            <label className="text-[10px] font-medium text-emerald-300">Source Jurisdiction</label>
+            <label className="text-[10px] font-medium text-[--app-muted]">Source Jurisdiction</label>
             <input
               type="text"
               value={sourceJurisdiction}
               onChange={(e) => setSourceJurisdiction(e.target.value)}
               placeholder="e.g., US"
-              className="mt-1 w-full rounded-xl bg-emerald-950/80 px-3 py-2 text-[12px] text-emerald-100 ring-1 ring-emerald-700/50 focus:outline-none focus:ring-emerald-500"
+              className="mt-1 w-full rounded-xl bg-[--app-chrome-bg] px-3 py-2 text-[12px] text-[--app-fg] ring-1 ring-[--app-border] focus:outline-none focus:ring-2 focus:ring-[--app-accent]"
             />
           </div>
 
           <div>
-            <label className="text-[10px] font-medium text-emerald-300">Target Jurisdiction</label>
+            <label className="text-[10px] font-medium text-[--app-muted]">Target Jurisdiction</label>
             <input
               type="text"
               value={targetJurisdiction}
               onChange={(e) => setTargetJurisdiction(e.target.value)}
               placeholder="e.g., EU"
-              className="mt-1 w-full rounded-xl bg-emerald-950/80 px-3 py-2 text-[12px] text-emerald-100 ring-1 ring-emerald-700/50 focus:outline-none focus:ring-emerald-500"
+              className="mt-1 w-full rounded-xl bg-[--app-chrome-bg] px-3 py-2 text-[12px] text-[--app-fg] ring-1 ring-[--app-border] focus:outline-none focus:ring-2 focus:ring-[--app-accent]"
             />
           </div>
 
           <div>
-            <label className="text-[10px] font-medium text-emerald-300">Jurisdictions (CSV)</label>
+            <label className="text-[10px] font-medium text-[--app-muted]">Jurisdictions (CSV)</label>
             <input
               type="text"
               value={jurisdictions}
               onChange={(e) => setJurisdictions(e.target.value)}
               placeholder="US, EU, CA"
-              className="mt-1 w-full rounded-xl bg-emerald-950/80 px-3 py-2 text-[12px] text-emerald-100 ring-1 ring-emerald-700/50 focus:outline-none focus:ring-emerald-500"
+              className="mt-1 w-full rounded-xl bg-[--app-chrome-bg] px-3 py-2 text-[12px] text-[--app-fg] ring-1 ring-[--app-border] focus:outline-none focus:ring-2 focus:ring-[--app-accent]"
             />
           </div>
         </div>
@@ -328,7 +328,7 @@ function EvaluateTab({
             onChange={(e) => setRequireAll(e.target.checked)}
             className="h-4 w-4 rounded"
           />
-          <label htmlFor="require-all" className="text-[11px] text-emerald-200">
+          <label htmlFor="require-all" className="text-[11px] text-[--app-muted]">
             Require all jurisdictions
           </label>
         </div>
@@ -336,7 +336,7 @@ function EvaluateTab({
         <button
           onClick={onSubmit}
           disabled={loading}
-          className="mt-6 rounded-full bg-emerald-600/80 px-6 py-2 text-[11px] font-semibold text-emerald-50 transition hover:bg-emerald-600 disabled:opacity-50"
+          className="mt-6 rounded-full bg-[--app-accent] px-6 py-2 text-[11px] font-semibold text-[--app-accent-contrast] transition hover:opacity-90 disabled:opacity-50"
         >
           {loading ? "Evaluating..." : "Evaluate Consent"}
         </button>
@@ -355,13 +355,13 @@ function EvaluationResultDisplay({ result }: { result: ConsentEvaluationResponse
   return (
     <div className="flex flex-col gap-4">
       {/* Decision Badge */}
-      <div className="rounded-3xl bg-emerald-900/40 p-6 ring-1 ring-emerald-700/60">
-        <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-200">
+      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-6 ring-1 ring-[--app-surface-ring]">
+        <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
           Decision
         </p>
         <div className="flex items-center gap-3">
           <StatusBadge status={result.granted ? "granted" : "denied"} className="text-base" />
-          <p className="text-[12px] text-emerald-100">{result.reason}</p>
+          <p className="text-[12px] text-[--app-muted]">{result.reason}</p>
         </div>
       </div>
 
@@ -379,18 +379,18 @@ function EvaluationResultDisplay({ result }: { result: ConsentEvaluationResponse
 
       {/* Jurisdiction Results */}
       {Object.keys(jurisdictionResults).length > 0 && (
-        <div className="rounded-3xl bg-emerald-900/40 p-4 ring-1 ring-emerald-700/60">
-          <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-200">
+        <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
+          <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
             Jurisdiction Results
           </p>
           <div className="space-y-3">
             {Object.entries(jurisdictionResults).map(([code, jr]) => (
-              <div key={code} className="rounded-lg bg-emerald-950/40 p-3">
+              <div key={code} className="rounded-lg border border-[--app-border] bg-[--app-control-bg] p-3 ring-1 ring-[--app-surface-ring]">
                 <div className="mb-2 flex items-center justify-between">
-                  <p className="text-[11px] font-medium text-emerald-100">{code}</p>
+                  <p className="text-[11px] font-medium text-[--app-fg]">{code}</p>
                   <StatusBadge status={jr.satisfied ? "satisfied" : "unsatisfied"} />
                 </div>
-                <dl className="space-y-1 text-[10px] text-emerald-200">
+                <dl className="space-y-1 text-[10px] text-[--app-muted]">
                   <div className="flex justify-between">
                     <dt>Required Scopes:</dt>
                     <dd>{jr.required_scopes?.join(", ") || "—"}</dd>
@@ -420,17 +420,17 @@ function EvaluationResultDisplay({ result }: { result: ConsentEvaluationResponse
 
       {/* Peer Decisions */}
       {Object.keys(peerDecisions).length > 0 && (
-        <div className="rounded-3xl bg-emerald-900/40 p-4 ring-1 ring-emerald-700/60">
-          <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-200">
+        <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
+          <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
             Peer Decisions
           </p>
           <div className="space-y-2">
             {Object.entries(peerDecisions).map(([peer, decision]) => (
-              <div key={peer} className="flex items-center justify-between rounded-lg bg-emerald-950/40 p-2">
-                <p className="text-[11px] font-medium text-emerald-100">{peer}</p>
+              <div key={peer} className="flex items-center justify-between rounded-lg border border-[--app-border] bg-[--app-control-bg] p-2 ring-1 ring-[--app-surface-ring]">
+                <p className="text-[11px] font-medium text-[--app-fg]">{peer}</p>
                 <div className="flex items-center gap-2">
                   <StatusBadge status={decision.granted ? "granted" : "denied"} />
-                  <p className="text-[10px] text-emerald-200">{decision.reason}</p>
+                  <p className="text-[10px] text-[--app-muted]">{decision.reason}</p>
                 </div>
               </div>
             ))}
@@ -474,31 +474,31 @@ function AccessRightsTab({
 }) {
   return (
     <div className="flex flex-col gap-6">
-      <div className="rounded-3xl bg-emerald-900/40 p-6 ring-1 ring-emerald-700/60">
-        <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-200">
+      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-6 ring-1 ring-[--app-surface-ring]">
+        <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
           Lookup
         </p>
 
         <div className="grid gap-4 md:grid-cols-2">
           <div>
-            <label className="text-[10px] font-medium text-emerald-300">Agent ID</label>
+            <label className="text-[10px] font-medium text-[--app-muted]">Agent ID</label>
             <input
               type="text"
               value={agentId}
               onChange={(e) => setAgentId(e.target.value)}
               placeholder="e.g., agent-123"
-              className="mt-1 w-full rounded-xl bg-emerald-950/80 px-3 py-2 text-[12px] text-emerald-100 ring-1 ring-emerald-700/50 focus:outline-none focus:ring-emerald-500"
+              className="mt-1 w-full rounded-xl bg-[--app-chrome-bg] px-3 py-2 text-[12px] text-[--app-fg] ring-1 ring-[--app-border] focus:outline-none focus:ring-2 focus:ring-[--app-accent]"
             />
           </div>
 
           <div>
-            <label className="text-[10px] font-medium text-emerald-300">Resource ID</label>
+            <label className="text-[10px] font-medium text-[--app-muted]">Resource ID</label>
             <input
               type="text"
               value={resourceId}
               onChange={(e) => setResourceId(e.target.value)}
               placeholder="e.g., resource-456"
-              className="mt-1 w-full rounded-xl bg-emerald-950/80 px-3 py-2 text-[12px] text-emerald-100 ring-1 ring-emerald-700/50 focus:outline-none focus:ring-emerald-500"
+              className="mt-1 w-full rounded-xl bg-[--app-chrome-bg] px-3 py-2 text-[12px] text-[--app-fg] ring-1 ring-[--app-border] focus:outline-none focus:ring-2 focus:ring-[--app-accent]"
             />
           </div>
         </div>
@@ -506,7 +506,7 @@ function AccessRightsTab({
         <button
           onClick={onSubmit}
           disabled={loading}
-          className="mt-6 rounded-full bg-emerald-600/80 px-6 py-2 text-[11px] font-semibold text-emerald-50 transition hover:bg-emerald-600 disabled:opacity-50"
+          className="mt-6 rounded-full bg-[--app-accent] px-6 py-2 text-[11px] font-semibold text-[--app-accent-contrast] transition hover:opacity-90 disabled:opacity-50"
         >
           {loading ? "Loading..." : "Lookup Access Rights"}
         </button>
@@ -536,8 +536,8 @@ function AccessRightsDisplay({ rights }: { rights: ConsentAccessRights }) {
 
       {/* Allowed Scopes */}
       {rights.allowed_scopes && rights.allowed_scopes.length > 0 && (
-        <div className="rounded-3xl bg-emerald-900/40 p-4 ring-1 ring-emerald-700/60">
-          <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-200">
+        <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
+          <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
             Allowed Scopes
           </p>
           <div className="flex flex-wrap gap-2">
@@ -550,15 +550,15 @@ function AccessRightsDisplay({ rights }: { rights: ConsentAccessRights }) {
 
       {/* Jurisdiction Constraints */}
       {Object.keys(jurisdictionConstraints).length > 0 && (
-        <div className="rounded-3xl bg-emerald-900/40 p-4 ring-1 ring-emerald-700/60">
-          <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-200">
+        <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
+          <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
             Jurisdiction Constraints
           </p>
           <div className="space-y-2">
             {Object.entries(jurisdictionConstraints).map(([jurisdiction, constraints]) => (
-              <div key={jurisdiction} className="rounded-lg bg-emerald-950/40 p-2">
-                <p className="text-[10px] font-medium text-emerald-100">{jurisdiction}</p>
-                <p className="text-[10px] text-emerald-200">{constraints.join(", ")}</p>
+              <div key={jurisdiction} className="rounded-lg border border-[--app-border] bg-[--app-control-bg] p-2 ring-1 ring-[--app-surface-ring]">
+                <p className="text-[10px] font-medium text-[--app-fg]">{jurisdiction}</p>
+                <p className="text-[10px] text-[--app-muted]">{constraints.join(", ")}</p>
               </div>
             ))}
           </div>
@@ -567,13 +567,13 @@ function AccessRightsDisplay({ rights }: { rights: ConsentAccessRights }) {
 
       {/* Conditions */}
       {rights.conditions && rights.conditions.length > 0 && (
-        <div className="rounded-3xl bg-emerald-900/40 p-4 ring-1 ring-emerald-700/60">
-          <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-200">
+        <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
+          <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
             Conditions
           </p>
           <ul className="space-y-1">
             {rights.conditions.map((condition, i) => (
-              <li key={i} className="text-[11px] text-emerald-100">
+              <li key={i} className="text-[11px] text-[--app-muted]">
                 • {condition}
               </li>
             ))}
@@ -583,8 +583,8 @@ function AccessRightsDisplay({ rights }: { rights: ConsentAccessRights }) {
 
       {/* Grant Sources */}
       {rights.grant_sources && rights.grant_sources.length > 0 && (
-        <div className="rounded-3xl bg-emerald-900/40 p-4 ring-1 ring-emerald-700/60">
-          <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-200">
+        <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
+          <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
             Grant Sources
           </p>
           <div className="flex flex-wrap gap-2">
@@ -658,7 +658,7 @@ function JurisdictionsTab({
     <div className="flex flex-col gap-6">
       {/* Jurisdictions Table */}
       <div>
-        <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-200">
+        <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
           Jurisdictions
         </p>
         <DataTable
@@ -675,34 +675,34 @@ function JurisdictionsTab({
           const jurisdiction = jurisdictions.find((j) => j.id === expandedJurisdiction);
           if (!jurisdiction) return null;
           return (
-            <div className="rounded-3xl bg-emerald-900/40 p-4 ring-1 ring-emerald-700/60">
-              <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-200">
+            <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
                 {jurisdiction.jurisdiction_code} Details
               </p>
               <dl className="space-y-2">
                 <div className="flex justify-between">
-                  <dt className="text-[11px] text-emerald-300">ID</dt>
-                  <dd className="text-[11px] text-emerald-100">{jurisdiction.id}</dd>
+                  <dt className="text-[11px] text-[--app-muted]">ID</dt>
+                  <dd className="text-[11px] text-[--app-fg]">{jurisdiction.id}</dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-[11px] text-emerald-300">Code</dt>
-                  <dd className="text-[11px] text-emerald-100">{jurisdiction.jurisdiction_code}</dd>
+                  <dt className="text-[11px] text-[--app-muted]">Code</dt>
+                  <dd className="text-[11px] text-[--app-fg]">{jurisdiction.jurisdiction_code}</dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-[11px] text-emerald-300">Regulations</dt>
-                  <dd className="text-[11px] text-emerald-100">{jurisdiction.applicable_regulations?.join(", ") || "—"}</dd>
+                  <dt className="text-[11px] text-[--app-muted]">Regulations</dt>
+                  <dd className="text-[11px] text-[--app-fg]">{jurisdiction.applicable_regulations?.join(", ") || "—"}</dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-[11px] text-emerald-300">Consent Scopes</dt>
-                  <dd className="text-[11px] text-emerald-100">{jurisdiction.required_consent_scopes?.join(", ") || "—"}</dd>
+                  <dt className="text-[11px] text-[--app-muted]">Consent Scopes</dt>
+                  <dd className="text-[11px] text-[--app-fg]">{jurisdiction.required_consent_scopes?.join(", ") || "—"}</dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-[11px] text-emerald-300">Explicit Consent Required</dt>
-                  <dd className="text-[11px] text-emerald-100">{jurisdiction.requires_explicit_consent ? "Yes" : "No"}</dd>
+                  <dt className="text-[11px] text-[--app-muted]">Explicit Consent Required</dt>
+                  <dd className="text-[11px] text-[--app-fg]">{jurisdiction.requires_explicit_consent ? "Yes" : "No"}</dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-[11px] text-emerald-300">Data Residency Required</dt>
-                  <dd className="text-[11px] text-emerald-100">{jurisdiction.data_residency_required ? "Yes" : "No"}</dd>
+                  <dt className="text-[11px] text-[--app-muted]">Data Residency Required</dt>
+                  <dd className="text-[11px] text-[--app-fg]">{jurisdiction.data_residency_required ? "Yes" : "No"}</dd>
                 </div>
               </dl>
             </div>
@@ -712,7 +712,7 @@ function JurisdictionsTab({
 
       {/* Institutions Table */}
       <div>
-        <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-200">
+        <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
           Institutions
         </p>
         <DataTable
@@ -745,18 +745,18 @@ function GraphExplorerTab({
       </div>
 
       {/* Placeholder */}
-      <div className="rounded-3xl bg-emerald-900/40 p-8 ring-1 ring-emerald-700/60">
-        <p className="text-center text-[12px] font-medium text-emerald-200">
+      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-8 ring-1 ring-[--app-surface-ring]">
+        <p className="text-center text-[12px] font-medium text-[--app-muted]">
           Consent graph visualization
         </p>
-        <p className="mt-2 text-center text-[11px] text-emerald-100/80">
+        <p className="mt-2 text-center text-[11px] text-[--app-muted]">
           Connect subjects, resources, and institutions to visualize consent relationships
         </p>
 
         {/* Grid placeholder */}
         <div className="mt-6 grid gap-3 md:grid-cols-2">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-20 rounded-lg bg-emerald-950/40" />
+            <div key={i} className="h-20 rounded-lg border border-[--app-border] bg-[--app-control-bg] ring-1 ring-[--app-surface-ring]" />
           ))}
         </div>
       </div>

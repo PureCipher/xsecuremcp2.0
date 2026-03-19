@@ -5,8 +5,8 @@ import type { ProvenanceRecord } from "@/lib/registryClient";
 
 /* ── action → color map ─────────────────────────────────────── */
 const ACTION_COLORS: Record<string, { dot: string; bg: string; text: string }> = {
-  tool_called:       { dot: "bg-emerald-400", bg: "bg-emerald-500/10", text: "text-emerald-300" },
-  tool_result:       { dot: "bg-emerald-400", bg: "bg-emerald-500/10", text: "text-emerald-300" },
+  tool_called:       { dot: "bg-[--app-accent]", bg: "bg-[--app-control-active-bg]", text: "text-[--app-muted]" },
+  tool_result:       { dot: "bg-[--app-accent]", bg: "bg-[--app-control-active-bg]", text: "text-[--app-muted]" },
   resource_read:     { dot: "bg-sky-400",     bg: "bg-sky-500/10",     text: "text-sky-300" },
   resource_listed:   { dot: "bg-sky-400",     bg: "bg-sky-500/10",     text: "text-sky-300" },
   prompt_rendered:   { dot: "bg-violet-400",  bg: "bg-violet-500/10",  text: "text-violet-300" },

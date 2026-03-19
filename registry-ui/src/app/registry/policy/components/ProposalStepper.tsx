@@ -87,12 +87,12 @@ export function ProposalStepper({
                 <span
                   className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-bold ${
                     isComplete
-                      ? "bg-emerald-500 text-emerald-950"
+                      ? "bg-[--app-accent] text-[--app-accent-contrast]"
                       : isCurrent
                         ? failed
                           ? "bg-rose-500 text-rose-950 ring-2 ring-rose-400/50"
-                          : "bg-emerald-400 text-emerald-950 ring-2 ring-emerald-300/50"
-                        : "bg-emerald-900/50 text-emerald-400/60"
+                          : "bg-[--app-accent] text-[--app-accent-contrast] ring-2 ring-[--app-accent]"
+                        : "bg-[--app-surface] text-[--app-muted]"
                   }`}
                 >
                   {isComplete ? (
@@ -112,12 +112,12 @@ export function ProposalStepper({
                 <span
                   className={`text-[10px] font-semibold ${
                     isComplete
-                      ? "text-emerald-300"
+                      ? "text-[--app-muted]"
                       : isCurrent
                         ? failed
                           ? "text-rose-200"
-                          : "text-emerald-50"
-                        : "text-emerald-400/50"
+                          : "text-[--app-fg]"
+                        : "text-[--app-muted]"
                   }`}
                 >
                   {isCurrent && failed ? "Failed" : step.label}
@@ -129,8 +129,8 @@ export function ProposalStepper({
                 <div
                   className={`h-px w-4 sm:w-6 ${
                     isComplete
-                      ? "bg-emerald-500"
-                      : "bg-emerald-700/40"
+                      ? "bg-[--app-accent]"
+                      : "bg-[--app-border]"
                   }`}
                 />
               ) : null}

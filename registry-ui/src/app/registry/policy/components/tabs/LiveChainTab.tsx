@@ -50,15 +50,15 @@ export function LiveChainTab({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="rounded-3xl bg-emerald-900/40 p-5 ring-1 ring-emerald-700/60">
+      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
         <div className="flex flex-col gap-1">
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-300">
+          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[--app-muted]">
             Live policy chain
           </p>
-          <h2 className="text-xl font-semibold text-emerald-50">
+          <h2 className="text-xl font-semibold text-[--app-fg]">
             See what is active right now
           </h2>
-          <p className="max-w-2xl text-xs text-emerald-100/80">
+          <p className="max-w-2xl text-xs text-[--app-muted]">
             These rules are live today. Draft a change or removal first, then approve
             and apply it from the Proposals tab.
           </p>
@@ -69,14 +69,14 @@ export function LiveChainTab({
             type="button"
             onClick={() => void onExportLive()}
             disabled={busyKey === "export-live"}
-            className="rounded-full border border-emerald-600/80 px-3 py-1 text-[11px] font-semibold text-emerald-100 transition hover:bg-emerald-700/30 disabled:opacity-60"
+            className="rounded-full border border-[--app-border] px-3 py-1 text-[11px] font-semibold text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg] disabled:opacity-60"
           >
             {busyKey === "export-live" ? "Downloading\u2026" : "Export live JSON"}
           </button>
           <button
             type="button"
             onClick={() => downloadJsonFile("securemcp-policy-schema.json", schema)}
-            className="rounded-full border border-emerald-600/80 px-3 py-1 text-[11px] font-semibold text-emerald-100 transition hover:bg-emerald-700/30"
+            className="rounded-full border border-[--app-border] px-3 py-1 text-[11px] font-semibold text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg]"
           >
             Download schema
           </button>
@@ -84,8 +84,8 @@ export function LiveChainTab({
 
         <div className="mt-5 flex flex-col gap-4">
           {providers.length === 0 ? (
-            <div className="rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/70">
-              <p className="text-xs text-emerald-100/90">
+            <div className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
+              <p className="text-xs text-[--app-muted]">
                 No providers are active right now. Start by drafting the first rule
                 from the Tools tab.
               </p>
@@ -99,20 +99,20 @@ export function LiveChainTab({
               return (
                 <article
                   key={provider.index}
-                  className="rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/70"
+                  className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="rounded-full bg-emerald-900/80 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-200">
+                        <span className="rounded-full bg-[--app-surface] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
                           Step {provider.index + 1}
                         </span>
-                        <span className="text-xs font-semibold text-emerald-50">
+                        <span className="text-xs font-semibold text-[--app-fg]">
                           {provider.type}
                         </span>
                       </div>
-                      <p className="text-xs text-emerald-100/90">{provider.summary}</p>
-                      <p className="text-[11px] text-emerald-300/90">
+                      <p className="text-xs text-[--app-muted]">{provider.summary}</p>
+                      <p className="text-[11px] text-[--app-muted]">
                         Policy ID: {provider.policy_id ?? "n/a"} · Version:{" "}
                         {provider.policy_version ?? "n/a"}
                       </p>
@@ -128,7 +128,7 @@ export function LiveChainTab({
                           }));
                         }}
                         disabled={!provider.editable}
-                        className="rounded-full border border-emerald-600/80 px-3 py-1 text-[11px] font-semibold text-emerald-100 transition hover:bg-emerald-700/30 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="rounded-full border border-[--app-border] px-3 py-1 text-[11px] font-semibold text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg] disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {isEditing
                           ? "Close draft"
@@ -170,14 +170,14 @@ export function LiveChainTab({
                           }))
                         }
                         placeholder="What should change and why?"
-                        className="rounded-full border border-emerald-700/70 bg-emerald-950 px-4 py-2 text-xs text-emerald-50 outline-none focus:border-emerald-400"
+                        className="rounded-full border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
                       />
                       <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
                           onClick={() => void handleDraftEdit(provider.index)}
                           disabled={busyKey === `draft-${provider.index}`}
-                          className="rounded-full bg-emerald-500 px-4 py-2 text-[11px] font-semibold text-emerald-950 transition hover:bg-emerald-400 disabled:opacity-60"
+                          className="rounded-full bg-[--app-accent] px-4 py-2 text-[11px] font-semibold text-[--app-accent-contrast] transition hover:opacity-90 disabled:opacity-60"
                         >
                           {busyKey === `draft-${provider.index}` ? "Saving draft\u2026" : "Create proposal"}
                         </button>
@@ -218,7 +218,7 @@ export function LiveChainTab({
             )
           }
           placeholder="Why should this rule be removed?"
-          className="min-h-[80px] w-full rounded-2xl border border-emerald-700/70 bg-emerald-950 px-4 py-3 text-xs leading-6 text-emerald-50 outline-none focus:border-emerald-400"
+          className="min-h-[80px] w-full rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-3 text-xs leading-6 text-[--app-fg] outline-none focus:border-[--app-accent]"
         />
       </ConfirmModal>
     </div>

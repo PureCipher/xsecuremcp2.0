@@ -2,25 +2,25 @@
 
 const STATUS_COLORS: Record<string, string> = {
   // General
-  ok: "bg-emerald-500/20 text-emerald-300",
-  healthy: "bg-emerald-500/20 text-emerald-300",
-  active: "bg-emerald-500/20 text-emerald-300",
+  ok: "bg-[--app-control-active-bg] text-[--app-fg]",
+  healthy: "bg-[--app-control-active-bg] text-[--app-fg]",
+  active: "bg-[--app-control-active-bg] text-[--app-fg]",
 
   // Compliance
-  compliant: "bg-emerald-500/20 text-emerald-300",
+  compliant: "bg-[--app-control-active-bg] text-[--app-fg]",
   elevated_risk: "bg-amber-500/20 text-amber-300",
   non_compliant: "bg-red-500/20 text-red-300",
   unknown: "bg-zinc-500/20 text-zinc-300",
 
   // Threat levels
-  none: "bg-emerald-500/20 text-emerald-300",
+  none: "bg-[--app-control-active-bg] text-[--app-fg]",
   low: "bg-sky-500/20 text-sky-300",
   medium: "bg-amber-500/20 text-amber-300",
   high: "bg-orange-500/20 text-orange-300",
   critical: "bg-red-500/20 text-red-300",
 
   // Verdicts
-  proceed: "bg-emerald-500/20 text-emerald-300",
+  proceed: "bg-[--app-control-active-bg] text-[--app-fg]",
   throttle: "bg-amber-500/20 text-amber-300",
   require_confirmation: "bg-orange-500/20 text-orange-300",
   halt: "bg-red-500/20 text-red-300",
@@ -28,14 +28,14 @@ const STATUS_COLORS: Record<string, string> = {
   // Contract statuses
   proposed: "bg-sky-500/20 text-sky-300",
   negotiating: "bg-amber-500/20 text-amber-300",
-  accepted: "bg-emerald-500/20 text-emerald-300",
+  accepted: "bg-[--app-control-active-bg] text-[--app-fg]",
   rejected: "bg-red-500/20 text-red-300",
   expired: "bg-zinc-500/20 text-zinc-300",
   revoked: "bg-red-500/20 text-red-300",
   pending: "bg-amber-500/20 text-amber-300",
 
   // Consent
-  granted: "bg-emerald-500/20 text-emerald-300",
+  granted: "bg-[--app-control-active-bg] text-[--app-fg]",
   denied: "bg-red-500/20 text-red-300",
   conditional: "bg-amber-500/20 text-amber-300",
 

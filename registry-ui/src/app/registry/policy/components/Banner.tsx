@@ -9,7 +9,7 @@ type BannerProps = {
 export function Banner({ tone, message, onDismiss }: BannerProps) {
   const colors =
     tone === "success"
-      ? "bg-emerald-900/40 text-emerald-50 ring-emerald-600/60"
+      ? "bg-[--app-surface] text-[--app-fg] ring-[--app-surface-ring]"
       : "bg-rose-950/40 text-rose-50 ring-rose-700/60";
 
   return (

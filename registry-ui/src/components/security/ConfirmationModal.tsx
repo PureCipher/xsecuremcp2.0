@@ -35,14 +35,14 @@ export function ConfirmationModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-3xl bg-emerald-950 p-6 ring-1 ring-emerald-700/60">
-        <h3 className="text-sm font-semibold text-emerald-50">{title}</h3>
-        <p className="mt-2 text-[12px] text-emerald-200/80">{message}</p>
+      <div className="w-full max-w-md rounded-3xl border border-[--app-border] bg-[--app-chrome-bg] p-6 ring-1 ring-[--app-surface-ring]">
+        <h3 className="text-sm font-semibold text-[--app-fg]">{title}</h3>
+        <p className="mt-2 text-[12px] text-[--app-muted]">{message}</p>
         <div className="mt-5 flex justify-end gap-2">
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-full border border-emerald-700/60 px-4 py-1.5 text-[11px] font-medium text-emerald-200 transition hover:bg-emerald-900/50"
+            className="rounded-full border border-[--app-border] px-4 py-1.5 text-[11px] font-medium text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg]"
           >
             {cancelLabel}
           </button>
@@ -52,7 +52,7 @@ export function ConfirmationModal({
             className={`rounded-full px-4 py-1.5 text-[11px] font-semibold transition ${
               danger
                 ? "bg-red-600/80 text-red-50 hover:bg-red-600"
-                : "bg-emerald-600/80 text-emerald-50 hover:bg-emerald-600"
+                : "bg-[--app-accent] text-[--app-accent-contrast] hover:opacity-90"
             }`}
           >
             {confirmLabel}

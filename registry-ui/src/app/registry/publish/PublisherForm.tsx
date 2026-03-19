@@ -108,12 +108,12 @@ export function PublisherForm() {
 
   return (
     <section className="grid gap-6 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.2fr)]">
-      <div className="space-y-4 rounded-3xl bg-emerald-900/40 p-5 ring-1 ring-emerald-700/60">
+      <div className="space-y-4 rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
         <div className="space-y-2">
-          <label className="block text-xs font-medium text-emerald-100">
+          <label className="block text-xs font-medium text-[--app-muted]">
             Display name
             <input
-              className="mt-1 w-full rounded-xl border border-emerald-700/70 bg-emerald-950/60 px-3 py-2 text-emerald-50 outline-none ring-0 transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/70"
+              className="mt-1 w-full rounded-xl border border-[--app-border] bg-[--app-control-bg] px-3 py-2 text-[--app-fg] outline-none ring-0 transition focus:border-[--app-accent] focus:ring-2 focus:ring-[--app-accent]"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder="Weather Lookup"
@@ -121,21 +121,21 @@ export function PublisherForm() {
           </label>
         </div>
         <div className="space-y-2">
-          <label className="block text-xs font-medium text-emerald-100">
+          <label className="block text-xs font-medium text-[--app-muted]">
             Categories (comma-separated)
             <input
-              className="mt-1 w-full rounded-xl border border-emerald-700/70 bg-emerald-950/60 px-3 py-2 text-emerald-50 outline-none ring-0 transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/70"
+              className="mt-1 w-full rounded-xl border border-[--app-border] bg-[--app-control-bg] px-3 py-2 text-[--app-fg] outline-none ring-0 transition focus:border-[--app-accent] focus:ring-2 focus:ring-[--app-accent]"
               value={categories}
               onChange={(e) => setCategories(e.target.value)}
               placeholder="network,utility"
             />
           </label>
         </div>
-        <div className="flex flex-wrap gap-2 text-[11px] text-emerald-200/90">
+        <div className="flex flex-wrap gap-2 text-[11px] text-[--app-muted]">
           <button
             type="button"
             onClick={runPreflight}
-            className="rounded-full bg-emerald-400 px-4 py-2 text-[11px] font-semibold text-emerald-950 shadow-sm transition hover:bg-emerald-300"
+            className="rounded-full bg-[--app-accent] px-4 py-2 text-[11px] font-semibold text-[--app-accent-contrast] shadow-sm transition hover:opacity-90"
           >
             Run preflight
           </button>
@@ -143,42 +143,42 @@ export function PublisherForm() {
             type="button"
             disabled={submitting}
             onClick={runSubmit}
-            className="rounded-full border border-emerald-500/80 px-4 py-2 text-[11px] font-semibold text-emerald-100 transition hover:bg-emerald-500/10 disabled:opacity-60"
+            className="rounded-full border border-[--app-accent] px-4 py-2 text-[11px] font-semibold text-[--app-muted] transition hover:bg-[--app-control-active-bg] disabled:opacity-60"
           >
             {submitting ? "Publishing…" : "Publish"}
           </button>
         </div>
         {error ? <p className="text-[11px] text-rose-300">{error}</p> : null}
-        {success ? <p className="text-[11px] text-emerald-200">{success}</p> : null}
+        {success ? <p className="text-[11px] text-[--app-muted]">{success}</p> : null}
         {preflight ? (
-          <div className="mt-2 space-y-2 rounded-2xl bg-emerald-950/70 p-3 text-[11px] ring-1 ring-emerald-700/70">
+          <div className="mt-2 space-y-2 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-3 text-[11px] ring-1 ring-[--app-surface-ring]">
             <div className="flex items-center justify-between gap-2">
-              <p className="font-semibold text-emerald-50">Preflight result</p>
+              <p className="font-semibold text-[--app-fg]">Preflight result</p>
               <span
                 className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                   preflight.ready_for_publish
-                    ? "bg-emerald-500/20 text-emerald-200"
+                    ? "bg-[--app-control-active-bg] text-[--app-muted]"
                     : "bg-amber-500/20 text-amber-100"
                 }`}
               >
                 {preflight.ready_for_publish ? "Ready to publish" : "Needs changes"}
               </span>
             </div>
-            <p className="text-emerald-100/90">{preflight.summary}</p>
-            <div className="mt-1 grid gap-2 text-emerald-200/90 sm:grid-cols-2">
+            <p className="text-[--app-muted]">{preflight.summary}</p>
+            <div className="mt-1 grid gap-2 text-[--app-muted] sm:grid-cols-2">
               <div>
-                <span className="font-semibold text-emerald-50">Effective level:</span>{" "}
+                <span className="font-semibold text-[--app-fg]">Effective level:</span>{" "}
                 {preflight.effective_certification_level}
               </div>
               <div>
-                <span className="font-semibold text-emerald-50">Registry minimum:</span>{" "}
+                <span className="font-semibold text-[--app-fg]">Registry minimum:</span>{" "}
                 {preflight.minimum_required_level}
               </div>
             </div>
             {Array.isArray(preflight.report?.findings) && preflight.report.findings.length > 0 ? (
                   <div className="mt-2 space-y-1">
-                <p className="font-semibold text-emerald-50">Guardrail findings</p>
-                <ul className="space-y-1 text-emerald-200/90">
+                <p className="font-semibold text-[--app-fg]">Guardrail findings</p>
+                <ul className="space-y-1 text-[--app-muted]">
                   {preflight.report.findings.slice(0, 4).map((finding, index) => (
                     <li key={index} className="text-[10px] leading-snug">
                       <span className="font-semibold">
@@ -188,7 +188,7 @@ export function PublisherForm() {
                     </li>
                   ))}
                   {preflight.report.findings.length > 4 ? (
-                    <li className="text-[10px] text-emerald-300/90">
+                    <li className="text-[10px] text-[--app-muted]">
                       +{preflight.report.findings.length - 4} more finding
                       {preflight.report.findings.length - 4 === 1 ? "" : "s"} in the full report.
                     </li>
@@ -201,24 +201,24 @@ export function PublisherForm() {
       </div>
 
       <div className="space-y-4">
-        <div className="space-y-2 rounded-3xl bg-emerald-900/40 p-5 ring-1 ring-emerald-700/60">
-          <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-200">
+        <div className="space-y-2 rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
+          <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
             Manifest JSON
           </h2>
           <textarea
             value={manifestText}
             onChange={(e) => setManifestText(e.target.value)}
-            className="h-48 w-full rounded-xl border border-emerald-700/70 bg-emerald-950/60 p-3 text-[11px] font-mono text-emerald-50 outline-none ring-0 transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/70"
+            className="h-48 w-full rounded-xl border border-[--app-border] bg-[--app-control-bg] p-3 text-[11px] font-mono text-[--app-fg] outline-none ring-0 transition focus:border-[--app-accent] focus:ring-2 focus:ring-[--app-accent]"
           />
         </div>
-        <div className="space-y-2 rounded-3xl bg-emerald-900/40 p-5 ring-1 ring-emerald-700/60">
-          <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-200">
+        <div className="space-y-2 rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
+          <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
             Runtime metadata JSON
           </h2>
           <textarea
             value={runtimeText}
             onChange={(e) => setRuntimeText(e.target.value)}
-            className="h-36 w-full rounded-xl border border-emerald-700/70 bg-emerald-950/60 p-3 text-[11px] font-mono text-emerald-50 outline-none ring-0 transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/70"
+            className="h-36 w-full rounded-xl border border-[--app-border] bg-[--app-control-bg] p-3 text-[11px] font-mono text-[--app-fg] outline-none ring-0 transition focus:border-[--app-accent] focus:ring-2 focus:ring-[--app-accent]"
           />
         </div>
       </div>

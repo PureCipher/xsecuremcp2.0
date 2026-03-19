@@ -13,19 +13,20 @@ export default async function ReflexivePage() {
 
   if (!canAdmin) {
     return (
-      <main className="min-h-screen bg-emerald-950/95 px-4 py-10 text-sm text-emerald-50">
-        <div className="mx-auto max-w-3xl rounded-3xl bg-emerald-900/40 p-6 ring-1 ring-emerald-700/60">
-          <h1 className="text-xl font-semibold text-emerald-50">Reflexive Execution Engine</h1>
-          <p className="mt-2 text-[12px] text-emerald-100/90">
+      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-6 ring-1 ring-[--app-surface-ring]">
+          <h1 className="text-xl font-semibold text-[--app-fg]">Reflexive Execution Engine</h1>
+          <p className="mt-2 text-[12px] text-[--app-muted]">
             Admin role required to access the reflexive execution engine.
           </p>
           <p className="mt-4">
-            <Link href="/registry/app" className="text-[11px] font-medium text-emerald-200 hover:text-emerald-100">
+            <Link
+              href="/registry/app"
+              className="text-[11px] font-medium text-[--app-muted] hover:text-[--app-fg]"
+            >
               ← Back to tools
             </Link>
           </p>
-        </div>
-      </main>
+      </div>
     );
   }
 
@@ -33,16 +34,15 @@ export default async function ReflexivePage() {
   const healthData = await getSecurityHealth();
 
   return (
-    <main className="min-h-screen bg-emerald-950/95 px-4 py-10 text-sm text-emerald-50">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6">
+    <div className="flex flex-col gap-6">
         <header className="space-y-1">
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-300">
+          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[--app-muted]">
             Reflexive Execution
           </p>
-          <h1 className="text-2xl font-semibold text-emerald-50">
+          <h1 className="text-2xl font-semibold text-[--app-fg]">
             Monitor, introspect, and gate agent behavior
           </h1>
-          <p className="max-w-2xl text-[11px] text-emerald-100/80">
+          <p className="max-w-2xl text-[11px] text-[--app-muted]">
             Examine behavioral drift, threat levels, compliance status, and execution verdicts
             for every actor in the system. Pre-execution gating halts, throttles, or requires
             confirmation for high-risk operations.
@@ -74,7 +74,6 @@ export default async function ReflexivePage() {
               : undefined
           }
         />
-      </div>
-    </main>
+    </div>
   );
 }

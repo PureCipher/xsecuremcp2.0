@@ -1,7 +1,7 @@
 "use client";
 
 const LEVEL_CONFIG: Record<string, { color: string; bg: string; pct: number }> = {
-  none: { color: "text-emerald-400", bg: "stroke-emerald-500", pct: 5 },
+  none: { color: "text-[--app-accent]", bg: "stroke-[--app-accent]", pct: 5 },
   low: { color: "text-sky-400", bg: "stroke-sky-500", pct: 25 },
   medium: { color: "text-amber-400", bg: "stroke-amber-500", pct: 50 },
   high: { color: "text-orange-400", bg: "stroke-orange-500", pct: 75 },
@@ -32,7 +32,7 @@ export function ThreatGauge({
           d={`M ${strokeWidth / 2} ${dims / 2} A ${radius} ${radius} 0 0 1 ${dims - strokeWidth / 2} ${dims / 2}`}
           fill="none"
           stroke="currentColor"
-          className="text-emerald-800/40"
+          className="text-[--app-surface-ring]"
           strokeWidth={strokeWidth}
           strokeLinecap="round"
         />
@@ -51,7 +51,7 @@ export function ThreatGauge({
         {level}
       </p>
       {score !== undefined ? (
-        <p className="text-[10px] text-emerald-300/70">Score: {score.toFixed(1)}</p>
+        <p className="text-[10px] text-[--app-muted]">Score: {score.toFixed(1)}</p>
       ) : null}
     </div>
   );

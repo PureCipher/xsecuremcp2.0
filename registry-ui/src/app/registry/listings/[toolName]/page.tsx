@@ -9,6 +9,8 @@ import {
   type RegistryDataFlow,
   type RegistryToolListing,
 } from "@/lib/registryClient";
+import { CertificationBadge } from "@/components/security";
+import { RecipeTabs } from "../RecipeTabs";
 
 function isToolDetail(detail: unknown): detail is RegistryToolListing {
   return (
@@ -57,14 +59,13 @@ export default async function ListingDetailPage(props: { params: Promise<{ toolN
   );
 
   return (
-    <main className="px-4 py-8 text-sm text-emerald-50">
-      <div className="mx-auto flex max-w-5xl flex-col gap-6">
+    <div className="flex flex-col gap-6">
         <div className="flex items-baseline justify-between gap-3">
           <div className="space-y-1">
-            <div className="flex flex-wrap items-center gap-2 text-[11px] text-emerald-200/90">
+            <div className="flex flex-wrap items-center gap-2 text-[11px] text-[--app-muted]">
               <Link
                 href="/registry/app"
-                className="hover:text-emerald-100"
+                className="hover:text-[--app-fg]"
               >
                 Tools
               </Link>
@@ -73,43 +74,41 @@ export default async function ListingDetailPage(props: { params: Promise<{ toolN
                 <>
                   <Link
                     href={`/registry/publishers/${encodeURIComponent(tool.publisher_id)}`}
-                    className="hover:text-emerald-100"
+                    className="hover:text-[--app-fg]"
                   >
                     {tool.publisher_id}
                   </Link>
                   <span>/</span>
                 </>
               ) : null}
-              <span className="text-emerald-100">
+              <span className="text-[--app-fg]">
                 {tool.display_name ?? tool.tool_name}
               </span>
             </div>
-            <h1 className="text-2xl font-semibold text-emerald-50">
+            <h1 className="text-2xl font-semibold text-[--app-fg]">
               {tool.display_name ?? tool.tool_name}
             </h1>
-            <p className="mt-1 text-[11px] text-emerald-200/90">
+            <p className="mt-1 text-[11px] text-[--app-muted]">
               {tool.tool_name} · v{tool.version} · {tool.author}
             </p>
           </div>
-          <span className="rounded-full bg-emerald-900/80 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-200">
-            {tool.certification_level?.toUpperCase?.() ?? "UNRATED"}
-          </span>
+          <CertificationBadge level={tool.certification_level} size="md" />
         </div>
 
-        <section className="grid gap-4 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-          <div className="space-y-3 rounded-3xl bg-emerald-900/40 p-5 ring-1 ring-emerald-700/60">
-            <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-200">
+        <section className="grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+          <div className="space-y-3 rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
+            <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
               Overview
             </h2>
-            <p className="text-[13px] leading-relaxed text-emerald-100/90">
+            <p className="text-[13px] leading-relaxed text-[--app-muted]">
               {tool.description ?? "No description provided."}
             </p>
-            <div className="flex flex-wrap gap-2 pt-1 text-[10px] text-emerald-200/90">
+            <div className="flex flex-wrap gap-2 pt-1 text-[10px] text-[--app-muted]">
               {Array.isArray(tool.categories)
                 ? tool.categories.map((cat: string) => (
                     <span
                       key={cat}
-                      className="rounded-full bg-emerald-950/70 px-2 py-0.5 text-[10px] font-medium text-emerald-100"
+                      className="rounded-full bg-[--app-control-bg] px-2 py-0.5 text-[10px] font-medium text-[--app-fg]"
                     >
                       {cat}
                     </span>
@@ -117,11 +116,11 @@ export default async function ListingDetailPage(props: { params: Promise<{ toolN
                 : null}
             </div>
             {tool.manifest ? (
-              <div className="mt-3 space-y-2 rounded-2xl bg-emerald-950/70 p-3 text-[11px] ring-1 ring-emerald-700/70">
-                <p className="font-semibold text-emerald-50">Data flows</p>
+              <div className="mt-3 space-y-2 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-3 text-[11px] ring-1 ring-[--app-surface-ring]">
+                <p className="font-semibold text-[--app-fg]">Data flows</p>
                 {Array.isArray(tool.manifest.data_flows) &&
                 tool.manifest.data_flows.length > 0 ? (
-                  <ul className="space-y-1 text-[10px] text-emerald-200/90">
+                  <ul className="space-y-1 text-[10px] text-[--app-muted]">
                     {tool.manifest.data_flows.map((flow: RegistryDataFlow, idx: number) => (
                       <li key={idx}>
                         <span className="font-semibold">
@@ -133,62 +132,8 @@ export default async function ListingDetailPage(props: { params: Promise<{ toolN
                     ))}
                   </ul>
                 ) : (
-                  <p className="text-[10px] text-emerald-200/90">
+                  <p className="text-[10px] text-[--app-muted]">
                     No explicit data_flows were declared in the manifest.
-                  </p>
-                )}
-              </div>
-            ) : null}
-          </div>
-
-          <div className="space-y-3 rounded-3xl bg-emerald-900/40 p-5 ring-1 ring-emerald-700/60">
-            <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-200">
-              Start here
-            </h2>
-            {primaryRecipe ? (
-              <div className="space-y-2">
-                <p className="text-[12px] text-emerald-100/90">{primaryRecipe.title}</p>
-                <pre className="max-h-56 overflow-auto rounded-2xl bg-emerald-950/90 p-3 text-[11px] leading-relaxed text-emerald-50">
-                  {primaryRecipe.content}
-                </pre>
-              </div>
-            ) : (
-              <p className="text-[12px] text-emerald-100/80">
-                This listing doesn&apos;t expose runtime recipes yet.
-              </p>
-            )}
-            {verification ? (
-              <div className="mt-3 space-y-1 rounded-2xl bg-emerald-950/70 p-3 text-[11px] ring-1 ring-emerald-700/70">
-                <p className="font-semibold text-emerald-50">Verification</p>
-                <p className="text-emerald-100/90">
-                  Signature:{" "}
-                  <span className="font-semibold">
-                    {verification.verification?.signature_valid ? "valid" : "invalid"}
-                  </span>
-                  {" · "}
-                  Manifest match:{" "}
-                  <span className="font-semibold">
-                    {verification.verification?.manifest_match ? "yes" : "no"}
-                  </span>
-                </p>
-                {Array.isArray(verification.verification?.issues) &&
-                verification.verification.issues.length > 0 ? (
-                  <ul className="mt-1 space-y-1 text-emerald-200/90">
-                    {verification.verification.issues.slice(0, 3).map((issue: string, idx: number) => (
-                      <li key={idx} className="text-[10px] leading-snug">
-                        • {issue}
-                      </li>
-                    ))}
-                    {verification.verification.issues.length > 3 ? (
-                      <li className="text-[10px] text-emerald-300/90">
-                        +{verification.verification.issues.length - 3} more issue
-                        {verification.verification.issues.length - 3 === 1 ? "" : "s"}.
-                      </li>
-                    ) : null}
-                  </ul>
-                ) : (
-                  <p className="text-[10px] text-emerald-200/90">
-                    No verification issues were reported for this listing.
                   </p>
                 )}
               </div>
@@ -196,19 +141,53 @@ export default async function ListingDetailPage(props: { params: Promise<{ toolN
           </div>
         </section>
 
-        {secondaryRecipes.length > 0 ? (
-          <section className="space-y-4">
-            {clientRecipes.length > 0 && (
-              <RecipeGroup title="Client setup" recipes={clientRecipes} />
-            )}
-            {dockerRecipes.length > 0 && (
-              <RecipeGroup title="Docker & runtime" recipes={dockerRecipes} />
-            )}
-            {verifyRecipes.length > 0 && (
-              <RecipeGroup title="Verification" recipes={verifyRecipes} />
-            )}
-            {otherRecipes.length > 0 && (
-              <RecipeGroup title="Other recipes" recipes={otherRecipes} />
+        <RecipeTabs
+          primaryRecipe={primaryRecipe ?? null}
+          clientRecipes={clientRecipes}
+          dockerRecipes={dockerRecipes}
+          verifyRecipes={verifyRecipes}
+          otherRecipes={otherRecipes}
+        />
+
+        {verification ? (
+          <section className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
+                Verification
+              </h2>
+              <span
+                className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ring-1 ${
+                  verification.verification?.signature_valid
+                    ? "bg-[--app-control-active-bg] text-[--app-fg] ring-[--app-accent]"
+                    : "bg-rose-500/15 text-rose-100 ring-rose-400/25"
+                }`}
+              >
+                {verification.verification?.signature_valid ? "Signature valid" : "Signature invalid"}
+              </span>
+            </div>
+            <p className="mt-2 text-[11px] text-[--app-muted]">
+              Manifest match:{" "}
+              <span className="font-semibold">
+                {verification.verification?.manifest_match ? "yes" : "no"}
+              </span>
+            </p>
+            {Array.isArray(verification.verification?.issues) &&
+            verification.verification.issues.length > 0 ? (
+              <ul className="mt-3 space-y-1 text-[11px] text-[--app-muted]">
+                {verification.verification.issues.slice(0, 6).map((issue: string, idx: number) => (
+                  <li key={idx} className="text-[10px] leading-snug">
+                    • {issue}
+                  </li>
+                ))}
+                {verification.verification.issues.length > 6 ? (
+                  <li className="text-[10px] text-[--app-muted]">
+                    +{verification.verification.issues.length - 6} more issue
+                    {verification.verification.issues.length - 6 === 1 ? "" : "s"}.
+                  </li>
+                ) : null}
+              </ul>
+            ) : (
+              <p className="mt-3 text-[11px] text-[--app-muted]">No verification issues reported.</p>
             )}
           </section>
         ) : null}
@@ -216,35 +195,11 @@ export default async function ListingDetailPage(props: { params: Promise<{ toolN
         <div className="pt-2">
           <Link
             href="/registry/app"
-            className="text-[11px] font-medium text-emerald-200 hover:text-emerald-100"
+            className="text-[11px] font-medium text-[--app-muted] hover:text-[--app-fg]"
           >
             ← Back to all tools
           </Link>
         </div>
-      </div>
-    </main>
-  );
-}
-
-function RecipeGroup({ title, recipes }: { title: string; recipes: InstallRecipe[] }) {
-  return (
-    <div className="space-y-2">
-      <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-200">
-        {title}
-      </h2>
-      <div className="grid gap-3 md:grid-cols-3">
-        {recipes.map((recipe) => (
-          <article
-            key={recipe.recipe_id}
-            className="flex flex-col gap-2 rounded-2xl bg-emerald-900/40 p-4 ring-1 ring-emerald-700/60"
-          >
-            <h3 className="text-[12px] font-semibold text-emerald-50">{recipe.title}</h3>
-            <pre className="max-h-40 overflow-auto rounded-xl bg-emerald-950/90 p-2 text-[11px] leading-relaxed text-emerald-50">
-              {recipe.content}
-            </pre>
-          </article>
-        ))}
-      </div>
     </div>
   );
 }

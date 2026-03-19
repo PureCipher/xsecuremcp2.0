@@ -57,7 +57,7 @@ function proposalStatusClass(status: string | undefined): string {
     case "simulated":
     case "approved":
     case "deployed":
-      return "bg-emerald-500/15 text-emerald-100 ring-emerald-400/60";
+      return "bg-[--app-control-active-bg] text-[--app-fg] ring-[--app-accent]";
     case "validation_failed":
     case "rejected":
       return "bg-rose-500/15 text-rose-100 ring-rose-400/60";
@@ -130,15 +130,15 @@ export function ProposalLaneTab({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="rounded-3xl bg-emerald-900/40 p-5 ring-1 ring-emerald-700/60">
+      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
         <div className="space-y-1">
-          <p className="text-xs font-medium uppercase tracking-[0.18em] text-emerald-300">
+          <p className="text-xs font-medium uppercase tracking-[0.18em] text-[--app-muted]">
             Proposal lane
           </p>
-          <h2 className="text-xl font-semibold text-emerald-50">
+          <h2 className="text-xl font-semibold text-[--app-fg]">
             Review changes before they go live
           </h2>
-          <p className="max-w-2xl text-xs text-emerald-100/80">
+          <p className="max-w-2xl text-xs text-[--app-muted]">
             Drafts land here first. Approve and apply ready proposals, or reject and
             withdraw them when they should not ship.
           </p>
@@ -155,7 +155,7 @@ export function ProposalLaneTab({
         ) : null}
 
         {/* Filter bar */}
-        <div className="mt-4 rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/70">
+        <div className="mt-4 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap gap-2">
               {(
@@ -174,8 +174,8 @@ export function ProposalLaneTab({
                   onClick={() => setFilterKey(key)}
                   className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] transition ${
                     filterKey === key
-                      ? "bg-emerald-500 text-emerald-950"
-                      : "border border-emerald-700/70 text-emerald-100 hover:bg-emerald-700/20"
+                      ? "bg-[--app-accent] text-[--app-accent-contrast]"
+                      : "border border-[--app-border] text-[--app-muted] hover:bg-[--app-hover-bg] hover:text-[--app-fg]"
                   }`}
                 >
                   {label} · {counts[key]}
@@ -186,7 +186,7 @@ export function ProposalLaneTab({
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
               placeholder="Search proposals, owners, or actions"
-              className="w-full max-w-xs rounded-full border border-emerald-700/70 bg-emerald-950 px-4 py-2 text-xs text-emerald-50 outline-none focus:border-emerald-400"
+              className="w-full max-w-xs rounded-full border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
             />
           </div>
         </div>
@@ -194,8 +194,8 @@ export function ProposalLaneTab({
         {/* Active proposals */}
         <div className="mt-4 flex flex-col gap-3">
           {filteredProposals.length === 0 ? (
-            <div className="rounded-2xl bg-emerald-950/70 p-4 ring-1 ring-emerald-700/70">
-              <p className="text-xs text-emerald-100/90">
+            <div className="rounded-2xl bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
+              <p className="text-xs text-[--app-muted]">
                 {activeProposalCount === 0
                   ? "No policy changes are waiting right now. Draft a change from the Live Chain or Tools tab."
                   : "No proposals match the current reviewer filter."}
@@ -236,7 +236,7 @@ export function ProposalLaneTab({
               return (
                 <article
                   key={proposalId}
-                  className="rounded-2xl bg-emerald-950/70 ring-1 ring-emerald-700/70"
+                  className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] ring-1 ring-[--app-surface-ring]"
                 >
                   {/* Stepper bar */}
                   <div className="px-4 pt-4">
@@ -262,27 +262,27 @@ export function ProposalLaneTab({
                             Out of date
                           </span>
                         ) : null}
-                        <span className="text-xs font-semibold text-emerald-50">
+                        <span className="text-xs font-semibold text-[--app-fg]">
                           {actionLabel(proposal.action)}
                         </span>
                       </div>
                       <div className="space-y-1">
-                        <p className="text-xs text-emerald-100/90">
+                        <p className="text-xs text-[--app-muted]">
                           {proposal.description || "No reason captured for this proposal."}
                         </p>
-                        <p className="text-[11px] text-emerald-300/90">
+                        <p className="text-[11px] text-[--app-muted]">
                           Proposed by {proposal.author ?? "unknown"} ·{" "}
                           {formatTimestamp(proposal.created_at)}
                         </p>
-                        <p className="text-[11px] text-emerald-300/90">
+                        <p className="text-[11px] text-[--app-muted]">
                           Owner: {proposal.assigned_reviewer ?? "Unassigned"}
                         </p>
-                        <p className="text-[11px] text-emerald-300/90">
+                        <p className="text-[11px] text-[--app-muted]">
                           Drafted for v{proposal.base_version_number ?? "?"} · live v
                           {proposal.live_version_number ?? "?"}
                         </p>
                         {proposal.replacement_provider_count ? (
-                          <p className="text-[11px] text-emerald-200/90">
+                          <p className="text-[11px] text-[--app-muted]">
                             Imported chain: {proposal.replacement_provider_count}{" "}
                             {proposal.replacement_provider_count === 1
                               ? "step"
@@ -290,13 +290,13 @@ export function ProposalLaneTab({
                           </p>
                         ) : null}
                         {proposal.provider?.summary ? (
-                          <p className="text-[11px] text-emerald-200/90">
+                          <p className="text-[11px] text-[--app-muted]">
                             Draft: {proposal.provider.summary}
                           </p>
                         ) : null}
                         {proposal.target_index !== null &&
                         proposal.target_index !== undefined ? (
-                          <p className="text-[11px] text-emerald-200/90">
+                          <p className="text-[11px] text-[--app-muted]">
                             Applies to step {proposal.target_index + 1}
                           </p>
                         ) : null}
@@ -318,7 +318,7 @@ export function ProposalLaneTab({
                           busyKey === `assign-${proposalId}` ||
                           proposal.assigned_reviewer === currentUsername
                         }
-                        className="rounded-full border border-emerald-600/80 px-3 py-1 text-[11px] font-semibold text-emerald-100 transition hover:bg-emerald-700/30 disabled:opacity-60"
+                        className="rounded-full border border-[--app-border] px-3 py-1 text-[11px] font-semibold text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg] disabled:opacity-60"
                       >
                         {busyKey === `assign-${proposalId}`
                           ? "Assigning\u2026"
@@ -343,7 +343,7 @@ export function ProposalLaneTab({
                           type="button"
                           onClick={() => setDeployModal(proposal)}
                           disabled={busyKey === `approve-${proposalId}`}
-                          className="rounded-full bg-emerald-500 px-3 py-1 text-[11px] font-semibold text-emerald-950 transition hover:bg-emerald-400 disabled:opacity-60"
+                          className="rounded-full bg-[--app-accent] px-3 py-1 text-[11px] font-semibold text-[--app-accent-contrast] transition hover:opacity-90 disabled:opacity-60"
                         >
                           {busyKey === `approve-${proposalId}`
                             ? "Applying\u2026"
@@ -355,7 +355,7 @@ export function ProposalLaneTab({
                           type="button"
                           onClick={() => setDeployModal(proposal)}
                           disabled={busyKey === `approve-${proposalId}`}
-                          className="rounded-full bg-emerald-500 px-3 py-1 text-[11px] font-semibold text-emerald-950 transition hover:bg-emerald-400 disabled:opacity-60"
+                          className="rounded-full bg-[--app-accent] px-3 py-1 text-[11px] font-semibold text-[--app-accent-contrast] transition hover:opacity-90 disabled:opacity-60"
                         >
                           {busyKey === `approve-${proposalId}`
                             ? "Applying\u2026"
@@ -366,7 +366,7 @@ export function ProposalLaneTab({
                         type="button"
                         onClick={() => setWithdrawModal(proposalId)}
                         disabled={busyKey === `withdraw-${proposalId}`}
-                        className="rounded-full border border-emerald-600/80 px-3 py-1 text-[11px] font-semibold text-emerald-100 transition hover:bg-emerald-700/30 disabled:opacity-60"
+                        className="rounded-full border border-[--app-border] px-3 py-1 text-[11px] font-semibold text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg] disabled:opacity-60"
                       >
                         {busyKey === `withdraw-${proposalId}`
                           ? "Withdrawing\u2026"
@@ -401,7 +401,7 @@ export function ProposalLaneTab({
                   <button
                     type="button"
                     onClick={() => toggleCard(proposalId)}
-                    className="mt-3 flex items-center gap-1.5 text-[11px] font-semibold text-emerald-300/80 transition hover:text-emerald-200"
+                    className="mt-3 flex items-center gap-1.5 text-[11px] font-semibold text-[--app-muted] transition hover:text-[--app-fg]"
                   >
                     <svg
                       viewBox="0 0 12 12"
@@ -416,11 +416,11 @@ export function ProposalLaneTab({
                   <div className={`${isExpanded ? "" : "hidden"} mt-3`}>
                   <div className="grid gap-3 lg:grid-cols-[0.95fr,1fr,0.9fr]">
                     {/* Ownership panel */}
-                    <div className="rounded-2xl bg-emerald-900/20 p-3 ring-1 ring-emerald-700/40">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+                    <div className="rounded-2xl border border-[--app-border] bg-[--app-hover-bg] p-3 ring-1 ring-[--app-surface-ring]">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
                         Ownership
                       </p>
-                      <p className="mt-2 text-xs text-emerald-100/90">
+                      <p className="mt-2 text-xs text-[--app-muted]">
                         {proposal.assigned_reviewer
                           ? `Currently owned by ${proposal.assigned_reviewer}.`
                           : "No owner yet. Assign someone before final approval if you want a clear reviewer."}
@@ -435,7 +435,7 @@ export function ProposalLaneTab({
                             }))
                           }
                           placeholder="Reviewer username"
-                          className="w-full rounded-full border border-emerald-700/70 bg-emerald-950 px-4 py-2 text-xs text-emerald-50 outline-none focus:border-emerald-400"
+                          className="w-full rounded-full border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
                         />
                         <div className="flex flex-wrap gap-2">
                           <button
@@ -448,7 +448,7 @@ export function ProposalLaneTab({
                               )
                             }
                             disabled={busyKey === `assign-${proposalId}`}
-                            className="rounded-full border border-emerald-600/80 px-3 py-1 text-[11px] font-semibold text-emerald-100 transition hover:bg-emerald-700/30 disabled:opacity-60"
+                            className="rounded-full border border-[--app-border] px-3 py-1 text-[11px] font-semibold text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg] disabled:opacity-60"
                           >
                             {busyKey === `assign-${proposalId}`
                               ? "Assigning\u2026"
@@ -463,7 +463,7 @@ export function ProposalLaneTab({
                                   [proposalId]: currentUsername,
                                 }))
                               }
-                              className="rounded-full border border-emerald-700/70 px-3 py-1 text-[11px] font-semibold text-emerald-100 transition hover:bg-emerald-700/20"
+                              className="rounded-full border border-[--app-border] px-3 py-1 text-[11px] font-semibold text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg]"
                             >
                               Fill with my username
                             </button>
@@ -473,8 +473,8 @@ export function ProposalLaneTab({
                     </div>
 
                     {/* Review note */}
-                    <div className="rounded-2xl bg-emerald-900/20 p-3 ring-1 ring-emerald-700/40">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+                    <div className="rounded-2xl border border-[--app-border] bg-[--app-hover-bg] p-3 ring-1 ring-[--app-surface-ring]">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
                         Review note
                       </p>
                       <input
@@ -486,22 +486,22 @@ export function ProposalLaneTab({
                           }))
                         }
                         placeholder="Optional note for reject or follow-up"
-                        className="mt-2 w-full rounded-full border border-emerald-700/70 bg-emerald-950 px-4 py-2 text-xs text-emerald-50 outline-none focus:border-emerald-400"
+                        className="mt-2 w-full rounded-full border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
                       />
                     </div>
 
                     {/* Validation */}
-                    <div className="rounded-2xl bg-emerald-900/20 p-3 ring-1 ring-emerald-700/40">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+                    <div className="rounded-2xl border border-[--app-border] bg-[--app-hover-bg] p-3 ring-1 ring-[--app-surface-ring]">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
                         Validation
                       </p>
-                      <p className="mt-2 text-xs text-emerald-100/90">
+                      <p className="mt-2 text-xs text-[--app-muted]">
                         {proposal.validation?.valid === false
                           ? "This proposal needs fixes before it can be approved."
                           : "This proposal is structurally ready to move forward."}
                       </p>
                       {validationFindings.length > 0 ? (
-                        <ul className="mt-2 space-y-1 text-[11px] text-emerald-200/90">
+                        <ul className="mt-2 space-y-1 text-[11px] text-[--app-muted]">
                           {validationFindings.slice(0, 3).map((finding, index) => (
                             <li key={`${proposalId}-finding-${index}`}>
                               {finding.severity?.toUpperCase()}: {finding.message}
@@ -519,12 +519,12 @@ export function ProposalLaneTab({
 
                   {/* Decision trail */}
                   {decisionTrail.length > 0 ? (
-                    <div className="mt-3 rounded-2xl bg-emerald-900/20 p-3 ring-1 ring-emerald-700/40">
+                    <div className="mt-3 rounded-2xl border border-[--app-border] bg-[--app-hover-bg] p-3 ring-1 ring-[--app-surface-ring]">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
                           Decision trail
                         </p>
-                        <p className="text-[11px] text-emerald-200/90">
+                        <p className="text-[11px] text-[--app-muted]">
                           {proposal.decision_trail?.length ?? 0} recorded steps
                         </p>
                       </div>
@@ -532,21 +532,21 @@ export function ProposalLaneTab({
                         {decisionTrail.map((event: PolicyProposalEvent, index) => (
                           <li
                             key={`${proposalId}-trail-${event.created_at ?? index}`}
-                            className="rounded-2xl bg-emerald-950/60 p-3 ring-1 ring-emerald-700/30"
+                            className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-3 ring-1 ring-[--app-surface-ring]"
                           >
                             <div className="flex flex-wrap items-center justify-between gap-2">
-                              <p className="text-xs font-semibold text-emerald-50">
+                              <p className="text-xs font-semibold text-[--app-fg]">
                                 {trailEventLabel(event.event)}
                               </p>
-                              <p className="text-[11px] text-emerald-300/90">
+                              <p className="text-[11px] text-[--app-muted]">
                                 {formatTimestamp(event.created_at)}
                               </p>
                             </div>
-                            <p className="mt-1 text-[11px] text-emerald-300/90">
+                            <p className="mt-1 text-[11px] text-[--app-muted]">
                               {event.actor ?? "unknown"}
                             </p>
                             {event.note ? (
-                              <p className="mt-2 text-xs text-emerald-100/90">
+                              <p className="mt-2 text-xs text-[--app-muted]">
                                 {event.note}
                               </p>
                             ) : null}
@@ -558,12 +558,12 @@ export function ProposalLaneTab({
 
                   {/* Imported chain preview */}
                   {proposal.provider_set?.length ? (
-                    <div className="mt-3 rounded-2xl bg-emerald-900/20 p-3 ring-1 ring-emerald-700/40">
+                    <div className="mt-3 rounded-2xl border border-[--app-border] bg-[--app-hover-bg] p-3 ring-1 ring-[--app-surface-ring]">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
                           Imported chain preview
                         </p>
-                        <p className="text-[11px] text-emerald-200/90">
+                        <p className="text-[11px] text-[--app-muted]">
                           {proposal.provider_set.length}{" "}
                           {proposal.provider_set.length === 1 ? "step" : "steps"}
                         </p>
@@ -572,18 +572,18 @@ export function ProposalLaneTab({
                         {proposal.provider_set.slice(0, 4).map((providerItem) => (
                           <li
                             key={`${proposalId}-provider-set-${providerItem.index}`}
-                            className="rounded-2xl bg-emerald-950/60 p-3 ring-1 ring-emerald-700/30"
+                            className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-3 ring-1 ring-[--app-surface-ring]"
                           >
-                            <p className="text-xs font-semibold text-emerald-50">
+                            <p className="text-xs font-semibold text-[--app-fg]">
                               Step {providerItem.index + 1}: {providerItem.type}
                             </p>
-                            <p className="mt-1 text-[11px] text-emerald-300/90">
+                            <p className="mt-1 text-[11px] text-[--app-muted]">
                               {providerItem.summary}
                             </p>
                           </li>
                         ))}
                         {proposal.provider_set.length > 4 ? (
-                          <li className="text-[11px] text-emerald-200/90">
+                          <li className="text-[11px] text-[--app-muted]">
                             +{proposal.provider_set.length - 4} more imported steps
                           </li>
                         ) : null}
@@ -593,23 +593,23 @@ export function ProposalLaneTab({
 
                   {/* Simulation results */}
                   {simulationSummary ? (
-                    <div className="mt-3 rounded-2xl bg-emerald-900/20 p-3 ring-1 ring-emerald-700/40">
+                    <div className="mt-3 rounded-2xl border border-[--app-border] bg-[--app-hover-bg] p-3 ring-1 ring-[--app-surface-ring]">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
                           Simulation
                         </p>
-                        <p className="text-[11px] text-emerald-200/90">
+                        <p className="text-[11px] text-[--app-muted]">
                           {simulationSummary.allowed ?? 0} allowed ·{" "}
                           {simulationSummary.denied ?? 0} denied ·{" "}
                           {simulationSummary.errors ?? 0} errors
                         </p>
                       </div>
-                      <p className="mt-2 text-xs text-emerald-100/90">
+                      <p className="mt-2 text-xs text-[--app-muted]">
                         Tested against {simulationSummary.total ?? 0} registry access
                         scenarios.
                       </p>
                       {simulationResults.length > 0 ? (
-                        <ul className="mt-2 space-y-1 text-[11px] text-emerald-200/90">
+                        <ul className="mt-2 space-y-1 text-[11px] text-[--app-muted]">
                           {simulationResults.slice(0, 4).map((result, index) => (
                             <li key={`${proposalId}-simulation-${index}`}>
                               {result.label || result.resource_id || "Scenario"}:{" "}
@@ -636,15 +636,15 @@ export function ProposalLaneTab({
 
         {/* History */}
         {historyProposals.length > 0 ? (
-          <div className="mt-5 rounded-2xl bg-emerald-950/60 p-4 ring-1 ring-emerald-700/60">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+          <div className="mt-5 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
               Recent decisions
             </p>
             <div className="mt-3 flex flex-col gap-2">
               {historyProposals.slice(0, 4).map((proposal) => (
                 <div
                   key={`history-${proposal.proposal_id ?? "unknown"}`}
-                  className="rounded-2xl bg-emerald-900/20 p-3 ring-1 ring-emerald-700/30"
+                  className="rounded-2xl border border-[--app-border] bg-[--app-hover-bg] p-3 ring-1 ring-[--app-surface-ring]"
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <span
@@ -654,14 +654,14 @@ export function ProposalLaneTab({
                     >
                       {proposalStatusLabel(proposal.status)}
                     </span>
-                    <span className="text-xs font-semibold text-emerald-50">
+                    <span className="text-xs font-semibold text-[--app-fg]">
                       {actionLabel(proposal.action)}
                     </span>
                   </div>
-                  <p className="mt-2 text-xs text-emerald-100/90">
+                  <p className="mt-2 text-xs text-[--app-muted]">
                     {proposal.description || "No description recorded."}
                   </p>
-                  <p className="mt-1 text-[11px] text-emerald-300/90">
+                  <p className="mt-1 text-[11px] text-[--app-muted]">
                     {proposal.status === "deployed"
                       ? `Went live ${formatTimestamp(proposal.deployed_at)}`
                       : proposal.status === "rejected"
@@ -727,7 +727,7 @@ export function ProposalLaneTab({
             }))
           }
           placeholder="Rejection reason"
-          className="w-full rounded-full border border-emerald-700/70 bg-emerald-950 px-4 py-2 text-xs text-emerald-50 outline-none focus:border-emerald-400"
+          className="w-full rounded-full border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
         />
       </ConfirmModal>
 

@@ -12,3 +12,6 @@ export { ThreatGauge } from "./ThreatGauge";
 export { TabBar } from "./TabBar";
 export { ExportButton } from "./ExportButton";
 export { useAutoRefresh, AutoRefreshToggle } from "./AutoRefresh";
+export { CopyButton } from "./CopyButton";
+export { CertificationBadge } from "./CertificationBadge";
+export { NavIcon } from "./NavIcons";

@@ -49,10 +49,10 @@ export function LoginForm() {
   return (
     <form
       onSubmit={handleSubmit}
-      className="w-full max-w-xs space-y-4 rounded-2xl bg-emerald-950/80 p-5 ring-1 ring-emerald-700/80"
+      className="w-full max-w-xs space-y-4 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-5 ring-1 ring-[--app-surface-ring]"
     >
       <div className="space-y-1">
-        <label htmlFor="username" className="block text-xs font-medium text-emerald-100">
+        <label htmlFor="username" className="block text-xs font-medium text-[--app-muted]">
           Username
         </label>
         <input
@@ -60,11 +60,11 @@ export function LoginForm() {
           name="username"
           placeholder="admin"
           autoComplete="username"
-          className="w-full rounded-xl border border-emerald-700/70 bg-emerald-950/60 px-3 py-2 text-emerald-50 shadow-sm outline-none ring-0 transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/70"
+          className="w-full rounded-xl border border-[--app-border] bg-[--app-chrome-bg] px-3 py-2 text-[--app-fg] shadow-sm outline-none ring-0 transition focus:border-[--app-accent] focus:ring-2 focus:ring-[--app-accent]"
         />
       </div>
       <div className="space-y-1">
-        <label htmlFor="password" className="block text-xs font-medium text-emerald-100">
+        <label htmlFor="password" className="block text-xs font-medium text-[--app-muted]">
           Password
         </label>
         <input
@@ -73,7 +73,7 @@ export function LoginForm() {
           name="password"
           placeholder="••••••••"
           autoComplete="current-password"
-          className="w-full rounded-xl border border-emerald-700/70 bg-emerald-950/60 px-3 py-2 text-emerald-50 shadow-sm outline-none ring-0 transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/70"
+          className="w-full rounded-xl border border-[--app-border] bg-[--app-chrome-bg] px-3 py-2 text-[--app-fg] shadow-sm outline-none ring-0 transition focus:border-[--app-accent] focus:ring-2 focus:ring-[--app-accent]"
         />
       </div>
       {error ? (
@@ -84,7 +84,7 @@ export function LoginForm() {
       <button
         type="submit"
         disabled={submitting}
-        className="inline-flex w-full items-center justify-center rounded-full bg-emerald-400 px-4 py-2.5 text-xs font-semibold text-emerald-950 shadow-sm transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200 focus-visible:ring-offset-2 focus-visible:ring-offset-emerald-950"
+        className="inline-flex w-full items-center justify-center rounded-full bg-[--app-accent] px-4 py-2.5 text-xs font-semibold text-[--app-accent-contrast] shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[--app-accent] focus-visible:ring-offset-2 focus-visible:ring-offset-[--app-bg]"
       >
         {submitting ? "Signing in…" : "Sign in"}
       </button>

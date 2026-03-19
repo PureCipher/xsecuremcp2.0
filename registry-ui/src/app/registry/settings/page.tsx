@@ -1,18 +1,20 @@
 import Link from "next/link";
 import { getRegistryHealth } from "@/lib/registryClient";
 
+import { AppThemePreferencesPanel } from "./AppThemePreferencesPanel";
+import { CliTerminalPreferencesPanel } from "./CliTerminalPreferencesPanel";
+
 export default async function RegistrySettingsPage() {
   const health = await getRegistryHealth();
 
   return (
-    <main className="min-h-screen bg-emerald-950/95 px-4 py-10 text-sm text-emerald-50">
-      <div className="mx-auto flex max-w-5xl flex-col gap-6">
+    <div className="flex flex-col gap-6">
         <header className="space-y-1">
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-300">
+          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[--app-muted]">
             Registry settings
           </p>
-          <h1 className="text-2xl font-semibold text-emerald-50">Policy overview</h1>
-          <p className="max-w-xl text-[11px] text-emerald-100/80">
+          <h1 className="text-2xl font-semibold text-[--app-fg]">Policy overview</h1>
+          <p className="max-w-xl text-[11px] text-[--app-muted]">
             Read-only view of how this SecureMCP registry is configured. Use the dedicated Policy
             page to manage live access rules and rollbacks.
           </p>
@@ -20,53 +22,56 @@ export default async function RegistrySettingsPage() {
 
         {health ? (
           <section className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-3xl bg-emerald-900/40 p-4 ring-1 ring-emerald-700/60">
-              <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-200">
+            <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
+              <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
                 Certification & moderation
               </h2>
-              <ul className="mt-2 space-y-1 text-[11px] text-emerald-200/90">
+              <ul className="mt-2 space-y-1 text-[11px] text-[--app-muted]">
                 <li>
                   Minimum certification level:{" "}
-                  <span className="font-semibold text-emerald-50">
+                  <span className="font-semibold text-[--app-fg]">
                     {health.minimum_certification}
                   </span>
                 </li>
                 <li>
                   Moderation required:{" "}
-                  <span className="font-semibold text-emerald-50">
+                  <span className="font-semibold text-[--app-fg]">
                     {health.require_moderation ? "Yes" : "No"}
                   </span>
                 </li>
               </ul>
             </div>
 
-            <div className="rounded-3xl bg-emerald-900/40 p-4 ring-1 ring-emerald-700/60">
-              <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-200">
+            <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
+              <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
                 Authentication
               </h2>
-              <ul className="mt-2 space-y-1 text-[11px] text-emerald-200/90">
+              <ul className="mt-2 space-y-1 text-[11px] text-[--app-muted]">
                 <li>
                   Auth enabled:{" "}
-                  <span className="font-semibold text-emerald-50">
+                  <span className="font-semibold text-[--app-fg]">
                     {health.auth_enabled ? "Yes" : "No"}
                   </span>
                 </li>
                 <li>
                   Issuer ID:{" "}
-                  <span className="font-mono text-emerald-100">{health.issuer_id}</span>
+                  <span className="font-mono text-[--app-muted]">{health.issuer_id}</span>
                 </li>
               </ul>
             </div>
           </section>
         ) : (
-          <section className="rounded-3xl bg-emerald-900/40 p-4 ring-1 ring-emerald-700/60">
-            <p className="text-[12px] text-emerald-100/90">
+          <section className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
+            <p className="text-[12px] text-[--app-muted]">
               Unable to load settings from the registry. Check that the registry is running and reachable.
             </p>
           </section>
         )}
 
-        <p className="text-[10px] text-emerald-300/80">
+        <AppThemePreferencesPanel />
+        <CliTerminalPreferencesPanel />
+
+        <p className="text-[10px] text-[--app-muted]">
           Policy changes now live in{" "}
           <Link href="/registry/policy" className="underline">
             Policy
@@ -77,7 +82,6 @@ export default async function RegistrySettingsPage() {
           </Link>
           .
         </p>
-      </div>
-    </main>
+    </div>
   );
 }

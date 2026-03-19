@@ -10,12 +10,12 @@ export function StatsBar({ stats }: StatsBarProps) {
       {stats.map((item) => (
         <div
           key={item.label}
-          className="rounded-3xl bg-emerald-900/40 p-4 ring-1 ring-emerald-700/60"
+          className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]"
         >
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-300">
+          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[--app-muted]">
             {item.label}
           </p>
-          <p className="mt-2 text-2xl font-semibold text-emerald-50">
+          <p className="mt-2 text-2xl font-semibold text-[--app-fg]">
             {item.value}
           </p>
         </div>
