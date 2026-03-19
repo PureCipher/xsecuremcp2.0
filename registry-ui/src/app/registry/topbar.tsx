@@ -42,8 +42,8 @@ export function RegistryTopBar({
   }
 
   return (
-    <header className="fixed inset-x-0 top-0 z-50 border-b border-[--app-chrome-border] bg-[--app-chrome-bg] px-4 py-3 text-xs text-[--app-muted]">
-      <div className="flex w-full items-center gap-3">
+    <header className="fixed inset-x-0 top-0 z-50 h-14 border-b border-[--app-chrome-border] bg-[--app-chrome-bg] px-4 text-xs text-[--app-muted]">
+      <div className="flex h-full w-full items-center gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <button
             type="button"

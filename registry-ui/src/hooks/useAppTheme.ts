@@ -21,7 +21,14 @@ function readThemeFromStorage(): StoredTheme {
     if (!raw) return DEFAULT_STORED_THEME;
     const parsed = JSON.parse(raw) as Partial<StoredTheme>;
     const validThemeId: AppThemeId | null =
-      parsed.themeId === "emerald-forest" || parsed.themeId === "slate-night" ? parsed.themeId : null;
+      parsed.themeId === "emerald-forest" ||
+      parsed.themeId === "slate-night" ||
+      parsed.themeId === "amethyst-velvet" ||
+      parsed.themeId === "aurora-glacier" ||
+      parsed.themeId === "ember-noir" ||
+      parsed.themeId === "sandstone-day"
+        ? parsed.themeId
+        : null;
     return {
       themeId: validThemeId ?? DEFAULT_STORED_THEME.themeId,
     };

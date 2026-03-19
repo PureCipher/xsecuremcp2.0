@@ -10,11 +10,19 @@ export type CliTerminalPreferences = {
   themeId: string;
   /** xterm font size in px */
   fontSize: number;
+  fontFamily: string;
+  /** xterm fontWeight */
+  fontWeight: "normal" | "bold";
+  /** xterm fontWeightBold */
+  fontWeightBold: "normal" | "bold";
 };
 
 const DEFAULT_PREFERENCES: CliTerminalPreferences = {
   themeId: DEFAULT_CLI_THEME_ID,
   fontSize: 13,
+  fontFamily: "JetBrains Mono",
+  fontWeight: "normal",
+  fontWeightBold: "bold",
 };
 
 function readPrefsFromStorage(): CliTerminalPreferences {
@@ -29,6 +37,18 @@ function readPrefsFromStorage(): CliTerminalPreferences {
         typeof parsed.fontSize === "number" && parsed.fontSize >= 10 && parsed.fontSize <= 22
           ? parsed.fontSize
           : DEFAULT_PREFERENCES.fontSize,
+      fontFamily:
+        typeof parsed.fontFamily === "string" && parsed.fontFamily.trim()
+          ? parsed.fontFamily
+          : DEFAULT_PREFERENCES.fontFamily,
+      fontWeight:
+        parsed.fontWeight === "normal" || parsed.fontWeight === "bold"
+          ? parsed.fontWeight
+          : DEFAULT_PREFERENCES.fontWeight,
+      fontWeightBold:
+        parsed.fontWeightBold === "normal" || parsed.fontWeightBold === "bold"
+          ? parsed.fontWeightBold
+          : DEFAULT_PREFERENCES.fontWeightBold,
     };
   } catch {
     return DEFAULT_PREFERENCES;
@@ -52,6 +72,9 @@ export function useCliTerminalPreferences(): {
   setPrefs: (next: Partial<CliTerminalPreferences>) => void;
   setThemeId: (themeId: string) => void;
   setFontSize: (fontSize: number) => void;
+  setFontFamily: (fontFamily: string) => void;
+  setFontWeight: (fontWeight: "normal" | "bold") => void;
+  setFontWeightBold: (fontWeightBold: "normal" | "bold") => void;
 } {
   const [prefs, setPrefsState] = useState<CliTerminalPreferences>(() =>
     typeof window !== "undefined" ? readPrefsFromStorage() : DEFAULT_PREFERENCES,
@@ -91,5 +114,34 @@ export function useCliTerminalPreferences(): {
     [setPrefs],
   );
 
-  return { prefs, setPrefs, setThemeId, setFontSize };
+  const setFontFamily = useCallback(
+    (fontFamily: string) => {
+      setPrefs({ fontFamily });
+    },
+    [setPrefs],
+  );
+
+  const setFontWeight = useCallback(
+    (fontWeight: "normal" | "bold") => {
+      setPrefs({ fontWeight });
+    },
+    [setPrefs],
+  );
+
+  const setFontWeightBold = useCallback(
+    (fontWeightBold: "normal" | "bold") => {
+      setPrefs({ fontWeightBold });
+    },
+    [setPrefs],
+  );
+
+  return {
+    prefs,
+    setPrefs,
+    setThemeId,
+    setFontSize,
+    setFontFamily,
+    setFontWeight,
+    setFontWeightBold,
+  };
 }

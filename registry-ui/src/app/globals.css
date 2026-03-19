@@ -74,6 +74,98 @@
   --app-control-active-bg: rgba(56, 189, 248, 0.12);
 }
 
+[data-app-theme="amethyst-velvet"] {
+  --app-bg: rgba(24, 9, 43, 0.96);
+  --app-fg: #faf5ff;
+  --app-muted: rgba(233, 213, 255, 0.86);
+  --app-border: rgba(250, 245, 255, 0.17);
+
+  --app-chrome-bg: rgba(24, 9, 43, 0.95);
+  --app-chrome-border: rgba(250, 245, 255, 0.14);
+  --app-scrim: rgba(24, 9, 43, 0.72);
+
+  --app-surface: rgba(46, 16, 101, 0.5);
+  --app-surface-ring: rgba(216, 180, 254, 0.5);
+
+  --app-accent: #c084fc;
+  --app-accent-contrast: #18092b;
+  --app-active-bg: rgba(88, 28, 135, 0.62);
+  --app-active-ring: rgba(192, 132, 252, 0.65);
+  --app-hover-bg: rgba(46, 16, 101, 0.62);
+  --app-control-bg: rgba(24, 9, 43, 0.42);
+  --app-control-border: rgba(250, 245, 255, 0.2);
+  --app-control-active-bg: rgba(192, 132, 252, 0.12);
+}
+
+[data-app-theme="aurora-glacier"] {
+  --app-bg: rgba(2, 10, 20, 0.97);
+  --app-fg: #ecfeff;
+  --app-muted: rgba(165, 243, 252, 0.82);
+  --app-border: rgba(236, 254, 255, 0.16);
+
+  --app-chrome-bg: rgba(2, 10, 20, 0.96);
+  --app-chrome-border: rgba(236, 254, 255, 0.13);
+  --app-scrim: rgba(2, 10, 20, 0.74);
+
+  --app-surface: rgba(6, 78, 88, 0.46);
+  --app-surface-ring: rgba(125, 211, 252, 0.48);
+
+  --app-accent: #22d3ee;
+  --app-accent-contrast: #020a14;
+  --app-active-bg: rgba(8, 145, 178, 0.22);
+  --app-active-ring: rgba(34, 211, 238, 0.62);
+  --app-hover-bg: rgba(6, 78, 88, 0.6);
+  --app-control-bg: rgba(2, 10, 20, 0.44);
+  --app-control-border: rgba(236, 254, 255, 0.18);
+  --app-control-active-bg: rgba(34, 211, 238, 0.12);
+}
+
+[data-app-theme="ember-noir"] {
+  --app-bg: rgba(6, 6, 6, 0.97);
+  --app-fg: #fff7ed;
+  --app-muted: rgba(254, 215, 170, 0.78);
+  --app-border: rgba(255, 247, 237, 0.16);
+
+  --app-chrome-bg: rgba(6, 6, 6, 0.96);
+  --app-chrome-border: rgba(255, 247, 237, 0.13);
+  --app-scrim: rgba(6, 6, 6, 0.74);
+
+  --app-surface: rgba(24, 24, 27, 0.6);
+  --app-surface-ring: rgba(251, 146, 60, 0.42);
+
+  --app-accent: #fb923c;
+  --app-accent-contrast: #060606;
+  --app-active-bg: rgba(124, 45, 18, 0.25);
+  --app-active-ring: rgba(251, 146, 60, 0.62);
+  --app-hover-bg: rgba(39, 39, 42, 0.7);
+  --app-control-bg: rgba(6, 6, 6, 0.5);
+  --app-control-border: rgba(255, 247, 237, 0.18);
+  --app-control-active-bg: rgba(251, 146, 60, 0.12);
+}
+
+[data-app-theme="sandstone-day"] {
+  --app-bg: #f7f2e9;
+  --app-fg: #1f2937;
+  --app-muted: rgba(31, 41, 55, 0.72);
+  --app-border: rgba(31, 41, 55, 0.16);
+
+  --app-chrome-bg: rgba(247, 242, 233, 0.94);
+  --app-chrome-border: rgba(31, 41, 55, 0.14);
+  --app-scrim: rgba(31, 41, 55, 0.28);
+
+  --app-surface: rgba(255, 255, 255, 0.7);
+  --app-surface-ring: rgba(31, 41, 55, 0.2);
+
+  --app-accent: #0ea5a3;
+  --app-accent-contrast: #062a2a;
+  --app-active-bg: rgba(14, 165, 163, 0.12);
+  --app-active-ring: rgba(14, 165, 163, 0.45);
+  --app-hover-bg: rgba(255, 255, 255, 0.9);
+  --app-control-bg: rgba(255, 255, 255, 0.65);
+  --app-control-border: rgba(31, 41, 55, 0.18);
+  --app-control-active-bg: rgba(14, 165, 163, 0.14);
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -92,4 +184,12 @@ body {
   background: var(--app-bg);
   color: var(--app-fg);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* CLI terminal font variables (loaded via next/font in `src/app/layout.tsx`). */
+:root {
+  --cli-font-jetbrains-mono: var(--font-cli-jetbrains-mono);
+  --cli-font-fira-code: var(--font-cli-fira-code);
+  --cli-font-ibm-plex-mono: var(--font-cli-ibm-plex-mono);
+  --cli-font-source-code-pro: var(--font-cli-source-code-pro);
 }

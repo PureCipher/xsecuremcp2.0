@@ -15,11 +15,22 @@ type Props = {
   defaultMcpUrl: string;
   theme: CliTerminalTheme;
   fontSize: number;
+  fontFamily: string;
+  fontWeight: "normal" | "bold";
+  fontWeightBold: "normal" | "bold";
   /** When true, terminal is on top and receives focus + fit */
   visible: boolean;
 };
 
-export function SecureCliTerminal({ defaultMcpUrl, theme, fontSize, visible }: Props) {
+export function SecureCliTerminal({
+  defaultMcpUrl,
+  theme,
+  fontSize,
+  fontFamily,
+  fontWeight,
+  fontWeightBold,
+  visible,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -86,7 +97,20 @@ export function SecureCliTerminal({ defaultMcpUrl, theme, fontSize, visible }: P
 
     const term = new Terminal({
       cursorBlink: true,
-      fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+      fontFamily:
+        fontFamily === "ui-monospace"
+          ? "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+          : fontFamily === "JetBrains Mono"
+            ? "var(--cli-font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+            : fontFamily === "Fira Code"
+              ? "var(--cli-font-fira-code), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+              : fontFamily === "IBM Plex Mono"
+                ? "var(--cli-font-ibm-plex-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+                : fontFamily === "Source Code Pro"
+                  ? "var(--cli-font-source-code-pro), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+                  : `${fontFamily}, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace`,
+      fontWeight,
+      fontWeightBold,
       fontSize,
       theme: theme.xterm,
     });
@@ -191,7 +215,17 @@ export function SecureCliTerminal({ defaultMcpUrl, theme, fontSize, visible }: P
       termRef.current = null;
       fitRef.current = null;
     };
-  }, [defaultMcpUrl, fontSize, prompt, runLine, theme.ansi, theme.xterm]);
+  }, [
+    defaultMcpUrl,
+    fontFamily,
+    fontWeight,
+    fontWeightBold,
+    fontSize,
+    prompt,
+    runLine,
+    theme.ansi,
+    theme.xterm,
+  ]);
 
   useEffect(() => {
     const term = termRef.current;

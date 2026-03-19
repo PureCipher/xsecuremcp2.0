@@ -174,6 +174,9 @@ export function CliDeveloperWorkspace({ defaultMcpUrl, allowedOrigin }: Props) {
                   defaultMcpUrl={defaultMcpUrl}
                   theme={theme}
                   fontSize={prefs.fontSize}
+                  fontFamily={prefs.fontFamily}
+                  fontWeight={prefs.fontWeight}
+                  fontWeightBold={prefs.fontWeightBold}
                   visible={t.id === activeId}
                 />
               </div>

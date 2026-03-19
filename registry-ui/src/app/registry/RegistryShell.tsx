@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { NavIcon } from "@/components/security";
 import { RegistryTopBar } from "./topbar";
@@ -29,6 +29,12 @@ export function RegistryShell({ canSubmit, canReview, canAdmin, children }: Prop
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const { themeId } = useAppTheme();
   const year = new Date().getFullYear();
+
+  useEffect(() => {
+    // Apply theme to document root so `body { background: var(--app-bg) }` updates.
+    if (typeof document === "undefined") return;
+    document.documentElement.dataset.appTheme = themeId;
+  }, [themeId]);
 
   const toolkitItems: NavItem[] = useMemo(
     () => [
@@ -131,8 +137,8 @@ export function RegistryShell({ canSubmit, canReview, canAdmin, children }: Prop
         }}
       />
 
-      <footer className="fixed inset-x-0 bottom-0 z-40 border-t border-[--app-chrome-border] bg-[--app-chrome-bg] px-4 py-3 text-[11px] text-[--app-muted]">
-        <div className="flex w-full items-center justify-between">
+      <footer className="fixed inset-x-0 bottom-0 z-40 h-12 border-t border-[--app-chrome-border] bg-[--app-chrome-bg] px-4 text-[11px] text-[--app-muted]">
+        <div className="flex h-full w-full items-center justify-between">
           <span>© {year} PureCipher. All rights reserved.</span>
           <span className="hidden sm:inline">Secured MCP Registry</span>
         </div>
