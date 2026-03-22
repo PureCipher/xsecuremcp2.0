@@ -205,6 +205,7 @@
                 "pages": [
                   "apps/overview",
                   "apps/prefab",
+                  "apps/interactive-apps",
                   "apps/patterns",
                   "apps/development",
                   "apps/low-level"
