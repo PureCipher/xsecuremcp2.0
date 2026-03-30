@@ -10,6 +10,9 @@ type Props = {
     | "consent"
     | "reflexive"
     | "cli"
+    | "servers"
+    | "clients"
+    | "access"
     | "health"
     | "settings";
   className?: string;
@@ -105,6 +108,30 @@ export function NavIcon({ name, className = "h-4 w-4" }: Props) {
           <path d="M4 6h16v12H4z" />
           <path d="M8 10l2 2-2 2" />
           <path d="M12 14h4" />
+        </svg>
+      );
+    case "servers":
+      return (
+        <svg {...common}>
+          <path d="M4 7h16v4H4z" />
+          <path d="M4 13h16v4H4z" />
+          <path d="M8 9h.01" />
+          <path d="M8 15h.01" />
+        </svg>
+      );
+    case "clients":
+      return (
+        <svg {...common}>
+          <path d="M16 11c0 2.2-1.8 4-4 4s-4-1.8-4-4 1.8-4 4-4 4 1.8 4 4Z" />
+          <path d="M4.5 21c1.2-3.5 4-5 7.5-5s6.3 1.5 7.5 5" />
+        </svg>
+      );
+    case "access":
+      return (
+        <svg {...common}>
+          <path d="M12 2l7 4v6c0 5-3 9-7 10-4-1-7-5-7-10V6l7-4Z" />
+          <path d="M9 12h6" />
+          <path d="M12 9v6" />
         </svg>
       );
     case "health":

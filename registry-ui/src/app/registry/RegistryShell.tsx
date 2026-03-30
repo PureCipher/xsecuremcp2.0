@@ -39,11 +39,32 @@ export function RegistryShell({ canSubmit, canReview, canAdmin, children }: Prop
   const toolkitItems: NavItem[] = useMemo(
     () => [
       {
+        href: "/registry/servers",
+        label: "MCP Servers",
+        icon: "servers",
+        enabled: true,
+        active: pathname.startsWith("/registry/servers"),
+      },
+      {
+        href: "/registry/clients",
+        label: "Clients",
+        icon: "clients",
+        enabled: true,
+        active: pathname.startsWith("/registry/clients"),
+      },
+      {
         href: "/registry/app",
         label: "Tools",
         icon: "tools",
         enabled: true,
         active: pathname.startsWith("/registry/app"),
+      },
+      {
+        href: "/registry/access",
+        label: "Access Studio",
+        icon: "access",
+        enabled: true,
+        active: pathname.startsWith("/registry/access"),
       },
       {
         href: "/registry/publish",
