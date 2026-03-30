@@ -152,8 +152,7 @@
                       "servers/providers/proxy",
                       "servers/providers/skills",
                       "servers/providers/custom"
-                    ],
-                    "tag": "NEW"
+                    ]
                   },
                   {
                     "collapsed": true,
@@ -168,25 +167,30 @@
                       "servers/transforms/tool-search",
                       "servers/transforms/resources-as-tools",
                       "servers/transforms/prompts-as-tools"
-                    ],
-                    "tag": "NEW"
+                    ]
                   },
                   {
                     "collapsed": true,
-                    "group": "Authentication",
-                    "icon": "key",
+                    "group": "Auth",
+                    "icon": "shield-check",
                     "pages": [
-                      "servers/auth/authentication",
-                      "servers/auth/token-verification",
-                      "servers/auth/remote-oauth",
-                      "servers/auth/oauth-proxy",
-                      "servers/auth/oidc-proxy",
-                      "servers/auth/full-oauth-server",
-                      "servers/auth/multi-auth"
-                    ],
-                    "tag": "UPDATED"
+                      {
+                        "collapsed": true,
+                        "group": "Authentication",
+                        "icon": "key",
+                        "pages": [
+                          "servers/auth/authentication",
+                          "servers/auth/token-verification",
+                          "servers/auth/remote-oauth",
+                          "servers/auth/oauth-proxy",
+                          "servers/auth/oidc-proxy",
+                          "servers/auth/full-oauth-server",
+                          "servers/auth/multi-auth"
+                        ]
+                      },
+                      "servers/authorization"
+                    ]
                   },
-                  "servers/authorization",
                   {
                     "collapsed": true,
                     "group": "Deployment",
@@ -204,10 +208,43 @@
                 "group": "Apps",
                 "pages": [
                   "apps/overview",
-                  "apps/prefab",
-                  "apps/patterns",
-                  "apps/development",
-                  "apps/low-level"
+                  "apps/quickstart",
+                  {
+                    "collapsed": true,
+                    "group": "Building Apps",
+                    "icon": "hammer",
+                    "pages": [
+                      "apps/prefab",
+                      "apps/interactive-apps",
+                      "apps/generative",
+                      "apps/patterns"
+                    ],
+                    "tag": "NEW"
+                  },
+                  {
+                    "collapsed": true,
+                    "group": "Providers",
+                    "icon": "layer-group",
+                    "pages": [
+                      "apps/providers/approval",
+                      "apps/providers/choice",
+                      "apps/providers/file-upload",
+                      "apps/providers/form",
+                      "apps/providers/generative"
+                    ],
+                    "tag": "NEW"
+                  },
+                  {
+                    "collapsed": true,
+                    "group": "Advanced",
+                    "icon": "gear",
+                    "pages": [
+                      "apps/development",
+                      "apps/architecture",
+                      "apps/low-level"
+                    ],
+                    "tag": "NEW"
+                  }
                 ]
               },
               {
@@ -376,6 +413,20 @@
                   "python-sdk/fastmcp-mcp_config",
                   "python-sdk/fastmcp-settings",
                   "python-sdk/fastmcp-telemetry",
+                  "python-sdk/fastmcp-types",
+                  {
+                    "group": "fastmcp.apps",
+                    "pages": [
+                      "python-sdk/fastmcp-apps-__init__",
+                      "python-sdk/fastmcp-apps-app",
+                      "python-sdk/fastmcp-apps-approval",
+                      "python-sdk/fastmcp-apps-choice",
+                      "python-sdk/fastmcp-apps-config",
+                      "python-sdk/fastmcp-apps-file_upload",
+                      "python-sdk/fastmcp-apps-form",
+                      "python-sdk/fastmcp-apps-generative"
+                    ]
+                  },
                   {
                     "group": "fastmcp.cli",
                     "pages": [
@@ -537,6 +588,7 @@
                               "python-sdk/fastmcp-server-auth-providers-auth0",
                               "python-sdk/fastmcp-server-auth-providers-aws",
                               "python-sdk/fastmcp-server-auth-providers-azure",
+                              "python-sdk/fastmcp-server-auth-providers-clerk",
                               "python-sdk/fastmcp-server-auth-providers-debug",
                               "python-sdk/fastmcp-server-auth-providers-descope",
                               "python-sdk/fastmcp-server-auth-providers-discord",
@@ -750,6 +802,7 @@
                           }
                         ]
                       },
+                      "python-sdk/fastmcp-utilities-mime",
                       {
                         "group": "openapi",
                         "pages": [
