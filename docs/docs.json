@@ -209,6 +209,7 @@
                 "pages": [
                   "apps/overview",
                   "apps/quickstart",
+                  "apps/examples",
                   {
                     "collapsed": true,
                     "group": "Building Apps",
