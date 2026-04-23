@@ -108,6 +108,7 @@ class ProxyTool(Tool):
             icons=mcp_tool.icons,
             meta=mcp_tool.meta,
             tags=get_fastmcp_metadata(mcp_tool.meta).get("tags", []),
+            execution=mcp_tool.execution,
         )
 
     async def run(
@@ -118,7 +119,10 @@ class ProxyTool(Tool):
         """Executes the tool by making a call through the client."""
         backend_name = self._backend_name or self.name
         with client_span(
-            f"tools/call {backend_name}", "tools/call", backend_name
+            f"tools/call {backend_name}",
+            "tools/call",
+            backend_name,
+            tool_name=backend_name,
         ) as span:
             span.set_attribute("fastmcp.provider.type", "ProxyProvider")
             client = await self._get_client()
@@ -157,7 +161,13 @@ class ProxyTool(Tool):
                     name=backend_name, arguments=arguments, meta=meta
                 )
             if result.isError:
-                raise ToolError(cast(mcp.types.TextContent, result.content[0]).text)
+                first = result.content[0] if result.content else None
+                if isinstance(first, mcp.types.TextContent):
+                    raise ToolError(first.text)
+                elif first is None:
+                    raise ToolError("Tool returned an error with no content")
+                else:
+                    raise ToolError(f"Tool returned an error ({type(first).__name__})")
             # Preserve backend's meta (includes task metadata for background tasks)
             return ToolResult(
                 content=result.content,
@@ -234,7 +244,7 @@ class ProxyResource(Resource):
 
         backend_uri = self._backend_uri or str(self.uri)
         with client_span(
-            f"resources/read {backend_uri}",
+            "resources/read",
             "resources/read",
             backend_uri,
             resource_uri=backend_uri,
@@ -449,7 +459,10 @@ class ProxyPrompt(Prompt):
         """Render the prompt by making a call through the client."""
         backend_name = self._backend_name or self.name
         with client_span(
-            f"prompts/get {backend_name}", "prompts/get", backend_name
+            f"prompts/get {backend_name}",
+            "prompts/get",
+            backend_name,
+            prompt_name=backend_name,
         ) as span:
             span.set_attribute("fastmcp.provider.type", "ProxyProvider")
             client = await self._get_client()
@@ -751,6 +764,15 @@ def _create_client_factory(
     """
     if isinstance(target, Client):
         client = target
+
+        # Plain Clients used as proxy backends also need header forwarding,
+        # same as ProxyClient (which sets this in __init__).
+        from fastmcp.client.transports.http import StreamableHttpTransport
+        from fastmcp.client.transports.sse import SSETransport
+
+        if isinstance(client.transport, StreamableHttpTransport | SSETransport):
+            client.transport.forward_incoming_headers = True
+
         if client.is_connected() and type(client) is ProxyClient:
             logger.info(
                 "Proxy detected connected ProxyClient - creating fresh sessions for each "
@@ -995,6 +1017,15 @@ class ProxyClient(Client[ClientTransportT]):
         if "progress_handler" not in kwargs:
             kwargs["progress_handler"] = default_proxy_progress_handler
         super().__init__(**kwargs | {"transport": transport})
+
+        # Enable forwarding of inbound HTTP headers (e.g. authorization) to
+        # the upstream server. This is only appropriate for proxy clients,
+        # where the caller's credentials should be propagated.
+        from fastmcp.client.transports.http import StreamableHttpTransport
+        from fastmcp.client.transports.sse import SSETransport
+
+        if isinstance(self.transport, StreamableHttpTransport | SSETransport):
+            self.transport.forward_incoming_headers = True
 
 
 class StatefulProxyClient(ProxyClient[ClientTransportT]):

@@ -233,6 +233,7 @@ class Tool(FastMCPComponent):
         task: bool | TaskConfig | None = None,
         timeout: float | None = None,
         auth: AuthCheck | list[AuthCheck] | None = None,
+        run_in_thread: bool | None = None,
     ) -> FunctionTool:
         """Create a Tool from a function."""
         from fastmcp.tools.function_tool import FunctionTool
@@ -253,6 +254,7 @@ class Tool(FastMCPComponent):
             task=task,
             timeout=timeout,
             auth=auth,
+            run_in_thread=run_in_thread,
         )
 
     async def run(self, arguments: dict[str, Any]) -> ToolResult:
@@ -290,6 +292,10 @@ class Tool(FastMCPComponent):
 
         content = _convert_to_content(raw_value, serializer=self.serializer)
 
+        # Bytes can't be represented as structured JSON content
+        if isinstance(raw_value, bytes):
+            return ToolResult(content=content)
+
         # Skip structured content for ContentBlock types only if no output_schema
         # (if output_schema exists, MCP SDK requires structured_content)
         if self.output_schema is None and (
@@ -303,7 +309,7 @@ class Tool(FastMCPComponent):
 
         try:
             structured = pydantic_core.to_jsonable_python(raw_value)
-        except pydantic_core.PydanticSerializationError:
+        except (pydantic_core.PydanticSerializationError, UnicodeDecodeError):
             return ToolResult(content=content)
 
         if self.output_schema is None:
@@ -492,6 +498,14 @@ def _convert_to_single_content_block(
     if isinstance(item, str):
         return TextContent(type="text", text=item)
 
+    if isinstance(item, bytes):
+        try:
+            return TextContent(type="text", text=item.decode("utf-8"))
+        except UnicodeDecodeError:
+            import base64
+
+            return TextContent(type="text", text=base64.b64encode(item).decode("ascii"))
+
     return TextContent(type="text", text=_serialize_with_fallback(item, serializer))
 
 
@@ -499,7 +513,7 @@ _PREFAB_TEXT_FALLBACK = "[Rendered Prefab UI]"
 
 
 def _get_tool_resolver(app_name: str | None = None) -> Callable[..., str] | None:
-    """Get the FastMCPApp callable resolver, if available."""
+    """Get the Prefab peer-reference resolver bound to an app name."""
     try:
         from fastmcp.apps.app import _make_resolver
 
@@ -509,11 +523,12 @@ def _get_tool_resolver(app_name: str | None = None) -> Callable[..., str] | None
 
 
 def _prefab_to_json(app: Any, fastmcp_app_name: str | None = None) -> dict[str, Any]:
-    """Call PrefabApp.to_json() with the FastMCPApp callable resolver.
+    """Call PrefabApp.to_json() with the hash-based resolver.
 
-    The resolver prefixes tool names with the app name (e.g.
-    ``"store_files"`` → ``"Files___store_files"``) so the server can
-    find them via the bypass lookup regardless of transforms.
+    The resolver prefixes peer-tool references with a deterministic hash
+    derived from the app name + tool name. The dispatcher recognizes that
+    format and routes calls via ``get_tool_by_hash`` which walks the
+    provider tree recursively — same pattern as the old ``get_app_tool``.
     """
     data = app.to_json(tool_resolver=_get_tool_resolver(fastmcp_app_name))
     return data

@@ -26,6 +26,7 @@ DEFAULT_ACCESS_TOKEN_EXPIRY_SECONDS: Final[int] = 60 * 60  # 1 hour
 DEFAULT_ACCESS_TOKEN_EXPIRY_NO_REFRESH_SECONDS: Final[int] = (
     60 * 60 * 24 * 365
 )  # 1 year
+DEFAULT_REFRESH_TOKEN_EXPIRY_SECONDS: Final[int] = 60 * 60 * 24 * 365  # 1 year
 DEFAULT_AUTH_CODE_EXPIRY_SECONDS: Final[int] = 5 * 60  # 5 minutes
 
 # HTTP client timeout
@@ -242,11 +243,19 @@ class ProxyDCRClient(OAuthClientInformationFull):
             if pattern_matches:
                 return redirect_uri
 
-            # Patterns configured but didn't match
-            if self.allowed_redirect_uri_patterns:
+            # Patterns configured but didn't match (None means "allow all"; [] means "block all")
+            if self.allowed_redirect_uri_patterns is not None:
                 raise InvalidRedirectUriError(
                     f"Redirect URI '{redirect_uri}' does not match allowed patterns."
                 )
 
-        # No redirect_uri provided or no patterns configured — use base validation
-        return super().validate_redirect_uri(redirect_uri)
+        # redirect_uri is None with no CIMD document: let base class resolve the URI
+        # (handles the single-registered-URI shortcut for DCR clients), then validate
+        # the resolved URI against patterns so [] and other restrictions are enforced.
+        resolved = super().validate_redirect_uri(redirect_uri)
+        if self.allowed_redirect_uri_patterns is not None:
+            if not validate_redirect_uri(resolved, self.allowed_redirect_uri_patterns):
+                raise InvalidRedirectUriError(
+                    f"Redirect URI '{resolved}' does not match allowed patterns."
+                )
+        return resolved

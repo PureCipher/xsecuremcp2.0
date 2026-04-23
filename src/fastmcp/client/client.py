@@ -70,7 +70,6 @@ from .transports import (
     PythonStdioTransport,
     SessionKwargs,
     SSETransport,
-    StdioTransport,
     StreamableHttpTransport,
     infer_transport,
 )
@@ -433,9 +432,25 @@ class Client(
         """
         new_client = copy.copy(self)
 
-        if not isinstance(self.transport, StdioTransport):
-            # Reset session state to fresh state
-            new_client._session_state = ClientSessionState()
+        # Always reset session state so cloned clients start disconnected and do not
+        # share lifecycle state with the original instance.
+        new_client._session_state = ClientSessionState()
+
+        # Reset mutable task tracking state so new client is independent
+        new_client._task_registry = {}
+        new_client._submitted_task_ids = set()
+
+        # Create a fresh session kwargs dict so the clone doesn't share
+        # the original's mutable dict. Rebind the task notification handler
+        # to the new client if the default handler is in use; preserve any
+        # custom message handler the user may have set.
+        new_client._session_kwargs = {**self._session_kwargs}  # type: ignore[typeddict-item]
+        if isinstance(
+            self._session_kwargs.get("message_handler"), TaskNotificationHandler
+        ):
+            new_client._session_kwargs["message_handler"] = TaskNotificationHandler(
+                new_client
+            )
 
         new_client.name += f":{secrets.token_hex(2)}"
 
@@ -513,11 +528,7 @@ class Client(
         return await self._connect()
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        # Use a timeout to prevent hanging during cleanup if the connection is in a bad
-        # state (e.g., rate-limited). The MCP SDK's transport may try to terminate the
-        # session which can hang if the server is unresponsive.
-        with anyio.move_on_after(self._disconnect_timeout):
-            await self._disconnect()
+        await self._disconnect()
 
     async def _connect(self):
         """
@@ -642,10 +653,28 @@ class Client(
             # stop the active session
             if self._session_state.session_task is None:
                 return
+            session_task = self._session_state.session_task
             self._session_state.stop_event.set()
-            # wait for session to finish to ensure state has been reset
-            await self._session_state.session_task
-            self._session_state.session_task = None
+            # Wait (bounded) for the runner to unwind gracefully. If it
+            # overruns — e.g. the transport's termination POST is blocked on
+            # a stale HTTP keep-alive connection — cancel the background
+            # task so transport resources (httpx connections, subprocess
+            # pipes) are actually released instead of leaking into the
+            # event loop. Force paths additionally shield the wait so an
+            # outer cancellation can't abandon cleanup half-done.
+            try:
+                with anyio.CancelScope(shield=force):
+                    with anyio.move_on_after(self._disconnect_timeout):
+                        with suppress(asyncio.CancelledError):
+                            await session_task
+            finally:
+                if not session_task.done():
+                    session_task.cancel()
+                    with anyio.CancelScope(shield=True):
+                        with anyio.move_on_after(self._disconnect_timeout):
+                            with suppress(Exception):
+                                await session_task
+                self._session_state.session_task = None
 
     async def _session_runner(self):
         """

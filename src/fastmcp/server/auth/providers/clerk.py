@@ -277,6 +277,7 @@ class ClerkProvider(OAuthProxy):
         client_id: str,
         client_secret: str | None = None,
         base_url: AnyHttpUrl | str,
+        resource_base_url: AnyHttpUrl | str | None = None,
         issuer_url: AnyHttpUrl | str | None = None,
         redirect_path: str | None = None,
         required_scopes: list[str] | None = None,
@@ -285,8 +286,10 @@ class ClerkProvider(OAuthProxy):
         allowed_client_redirect_uris: list[str] | None = None,
         client_storage: AsyncKeyValue | None = None,
         jwt_signing_key: str | bytes | None = None,
-        require_authorization_consent: bool | Literal["external"] = True,
+        require_authorization_consent: bool | Literal["remember", "external"] = True,
         consent_csp_policy: str | None = None,
+        forward_resource: bool = True,
+        fallback_refresh_token_expiry_seconds: int | None = None,
         extra_authorize_params: dict[str, str] | None = None,
         http_client: httpx.AsyncClient | None = None,
         enable_cimd: bool = True,
@@ -300,6 +303,8 @@ class ClerkProvider(OAuthProxy):
             client_secret: Clerk OAuth application client secret.
                 Optional for PKCE public clients. When omitted, jwt_signing_key must be provided.
             base_url: Public URL where OAuth endpoints will be accessible (includes any mount path)
+            resource_base_url: Optional public base URL for the protected resource metadata
+                and token audience. Defaults to ``base_url``.
             issuer_url: Issuer URL for OAuth metadata (defaults to base_url). Use root-level URL
                 to avoid 404s during discovery when mounting under a path.
             redirect_path: Redirect path configured in Clerk OAuth app (defaults to "/auth/callback")
@@ -363,6 +368,7 @@ class ClerkProvider(OAuthProxy):
             upstream_client_secret=client_secret,
             token_verifier=token_verifier,
             base_url=base_url,
+            resource_base_url=resource_base_url,
             redirect_path=redirect_path,
             issuer_url=issuer_url or base_url,
             allowed_client_redirect_uris=allowed_client_redirect_uris,
@@ -370,6 +376,8 @@ class ClerkProvider(OAuthProxy):
             jwt_signing_key=jwt_signing_key,
             require_authorization_consent=require_authorization_consent,
             consent_csp_policy=consent_csp_policy,
+            forward_resource=forward_resource,
+            fallback_refresh_token_expiry_seconds=fallback_refresh_token_expiry_seconds,
             extra_authorize_params=extra_authorize_params_final or None,
             valid_scopes=parsed_valid_scopes,
             enable_cimd=enable_cimd,

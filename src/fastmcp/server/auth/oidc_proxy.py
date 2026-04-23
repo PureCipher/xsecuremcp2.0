@@ -214,6 +214,7 @@ class OIDCProxy(OAuthProxy):
         verify_id_token: bool = False,
         # FastMCP server configuration
         base_url: AnyHttpUrl | str,
+        resource_base_url: AnyHttpUrl | str | None = None,
         issuer_url: AnyHttpUrl | str | None = None,
         redirect_path: str | None = None,
         # Client configuration
@@ -224,13 +225,15 @@ class OIDCProxy(OAuthProxy):
         # Token validation configuration
         token_endpoint_auth_method: str | None = None,
         # Consent screen configuration
-        require_authorization_consent: bool | Literal["external"] = True,
+        require_authorization_consent: bool | Literal["remember", "external"] = True,
         consent_csp_policy: str | None = None,
+        forward_resource: bool = True,
         # Extra parameters
         extra_authorize_params: dict[str, str] | None = None,
         extra_token_params: dict[str, str] | None = None,
         # Token expiry fallback
         fallback_access_token_expiry_seconds: int | None = None,
+        fallback_refresh_token_expiry_seconds: int | None = None,
         # CIMD configuration
         enable_cimd: bool = True,
     ) -> None:
@@ -254,6 +257,8 @@ class OIDCProxy(OAuthProxy):
                 Useful for providers that issue opaque (non-JWT) access tokens, since the
                 id_token is always a standard JWT verifiable via the provider's JWKS.
             base_url: Public URL where OAuth endpoints will be accessible (includes any mount path)
+            resource_base_url: Optional public base URL for the protected resource metadata
+                and token audience. Defaults to ``base_url``.
             issuer_url: Issuer URL for OAuth metadata (defaults to base_url). Use root-level URL
                 to avoid 404s during discovery when mounting under a path.
             redirect_path: Redirect path configured in upstream OAuth app (defaults to "/auth/callback")
@@ -290,6 +295,11 @@ class OIDCProxy(OAuthProxy):
                 doesn't return `expires_in` in the token response. If not set, uses smart
                 defaults: 1 hour if a refresh token is available (since we can refresh),
                 or 1 year if no refresh token (for API-key-style tokens like GitHub OAuth Apps).
+            fallback_refresh_token_expiry_seconds: Expiry time to use when upstream provider
+                doesn't return `refresh_expires_in` (e.g. Cognito, GitHub, many OIDC IdPs).
+                Defaults to 1 year. The actual upstream refresh remains the source of
+                truth — if upstream rejects the refresh, the client gets `invalid_grant`
+                and re-auths.
             enable_cimd: Whether to enable CIMD (Client ID Metadata Document) client support.
                 When True, clients can use their metadata document URL as client_id instead of
                 Dynamic Client Registration. Default is True.
@@ -369,6 +379,7 @@ class OIDCProxy(OAuthProxy):
             "upstream_revocation_endpoint": revocation_endpoint,
             "token_verifier": token_verifier,
             "base_url": base_url,
+            "resource_base_url": resource_base_url,
             "issuer_url": issuer_url or base_url,
             "service_documentation_url": self.oidc_config.service_documentation,
             "allowed_client_redirect_uris": allowed_client_redirect_uris,
@@ -377,7 +388,9 @@ class OIDCProxy(OAuthProxy):
             "token_endpoint_auth_method": token_endpoint_auth_method,
             "require_authorization_consent": require_authorization_consent,
             "consent_csp_policy": consent_csp_policy,
+            "forward_resource": forward_resource,
             "fallback_access_token_expiry_seconds": fallback_access_token_expiry_seconds,
+            "fallback_refresh_token_expiry_seconds": fallback_refresh_token_expiry_seconds,
             "enable_cimd": enable_cimd,
         }
 

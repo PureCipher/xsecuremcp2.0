@@ -77,27 +77,26 @@ class LifespanMixin:
                 return
 
             # Docket is available AND there are task-enabled components
-            from docket import Docket, Worker
+            from docket import Depends, Docket, Worker
 
             from fastmcp import settings
             from fastmcp.server.dependencies import (
                 _current_docket,
                 _current_worker,
             )
+            from fastmcp.server.tasks.context import restore_task_snapshot
 
             # Create Docket instance using configured name and URL
             async with Docket(
                 name=settings.docket.name,
                 url=settings.docket.url,
             ) as docket:
-                # Store on server instance for cross-task access (FastMCPTransport)
                 self._docket = docket
 
                 # Register task-enabled components with Docket
                 for component in task_components:
                     component.register_with_docket(docket)
 
-                # Set Docket in ContextVar so CurrentDocket can access it
                 docket_token = _current_docket.set(docket)
                 try:
                     # Build worker kwargs from settings
@@ -110,11 +109,16 @@ class LifespanMixin:
                     if settings.docket.worker_name:
                         worker_kwargs["name"] = settings.docket.worker_name
 
-                    # Create and start Worker
-                    async with Worker(docket, **worker_kwargs) as worker:
-                        # Store on server instance for cross-context access
+                    # Create and start Worker.  The restore_task_snapshot
+                    # worker-level dependency runs before every task so the
+                    # per-task snapshot ContextVar is populated before user
+                    # code or task-scoped dependencies observe it.
+                    async with Worker(
+                        docket,
+                        dependencies=[Depends(restore_task_snapshot)],
+                        **worker_kwargs,
+                    ) as worker:
                         self._worker = worker
-                        # Set Worker in ContextVar so CurrentWorker can access it
                         worker_token = _current_worker.set(worker)
                         try:
                             worker_task = asyncio.create_task(worker.run_forever())
@@ -128,9 +132,7 @@ class LifespanMixin:
                             _current_worker.reset(worker_token)
                             self._worker = None
                 finally:
-                    # Reset ContextVar
                     _current_docket.reset(docket_token)
-                    # Clear instance attribute
                     self._docket = None
         finally:
             # Reset server ContextVar

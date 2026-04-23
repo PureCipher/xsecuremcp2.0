@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import functools
 import inspect
 import warnings
 from collections.abc import Callable
@@ -28,12 +27,7 @@ import fastmcp
 from fastmcp.decorators import resolve_task_config
 from fastmcp.exceptions import FastMCPDeprecationWarning
 from fastmcp.server.auth.authorization import AuthCheck
-from fastmcp.server.dependencies import (
-    _restore_task_http_headers,
-    _task_http_headers,
-    get_task_context,
-    without_injected_parameters,
-)
+from fastmcp.server.dependencies import without_injected_parameters
 from fastmcp.server.tasks.config import TaskConfig
 from fastmcp.tools.base import (
     Tool,
@@ -91,11 +85,27 @@ class ToolMeta:
     timeout: float | None = None
     auth: AuthCheck | list[AuthCheck] | None = None
     enabled: bool = True
+    run_in_thread: bool = True
 
 
 class FunctionTool(Tool):
     fn: SkipJsonSchema[Callable[..., Any]]
     return_type: Annotated[SkipJsonSchema[Any], Field(exclude=True)] = None
+    run_in_thread: Annotated[
+        bool,
+        Field(
+            description=(
+                "Applies to sync tool functions only. When True (default), sync "
+                "functions are dispatched to a worker thread so they don't block "
+                "the event loop. Set to False to run the sync function inline on "
+                "the event loop thread — useful for libraries with thread "
+                "affinity (e.g. Windows COM, tkinter). Ignored for async functions, "
+                "which always run on the event loop. Cannot be combined with "
+                "`timeout` on a sync function: inline calls have no cancellation "
+                "checkpoints, so the timeout would be a silent no-op."
+            )
+        ),
+    ] = True
 
     @classmethod
     def from_function(
@@ -118,6 +128,7 @@ class FunctionTool(Tool):
         task: bool | TaskConfig | None = None,
         timeout: float | None = None,
         auth: AuthCheck | list[AuthCheck] | None = None,
+        run_in_thread: bool | None = None,
     ) -> FunctionTool:
         """Create a FunctionTool from a function.
 
@@ -145,6 +156,7 @@ class FunctionTool(Tool):
                     serializer,
                     timeout,
                     auth,
+                    run_in_thread,
                 ]
             )
             or output_schema is not NotSet
@@ -174,6 +186,7 @@ class FunctionTool(Tool):
                 serializer=serializer,
                 timeout=timeout,
                 auth=auth,
+                run_in_thread=True if run_in_thread is None else run_in_thread,
             )
 
         if metadata.serializer is not None and fastmcp.settings.deprecation_warnings:
@@ -198,6 +211,26 @@ class FunctionTool(Tool):
 
         if func_name == "<lambda>":
             raise ValueError("You must provide a name for lambda functions")
+
+        # Inline sync execution has no cancellation checkpoints, so
+        # anyio.fail_after cannot preempt the call — the timeout would be
+        # silently ignored. Reject the combination so users make an
+        # explicit choice. Async generators are async even though
+        # is_coroutine_function returns False for them; the generator's
+        # iteration has checkpoints, so timeout enforcement still works.
+        if (
+            metadata.timeout is not None
+            and not metadata.run_in_thread
+            and not is_coroutine_function(fn)
+            and not inspect.isasyncgenfunction(fn)
+        ):
+            raise ValueError(
+                f"Tool {func_name!r}: timeout cannot be enforced when "
+                "run_in_thread=False on a sync function. Inline execution has "
+                "no cancellation checkpoints, so the timeout would be a no-op. "
+                "Either drop the timeout or remove run_in_thread=False and "
+                "accept worker-thread dispatch."
+            )
 
         # Normalize task to TaskConfig
         task_value = metadata.task
@@ -228,7 +261,9 @@ class FunctionTool(Tool):
             name=metadata.name or parsed_fn.name,
             version=str(metadata.version) if metadata.version is not None else None,
             title=metadata.title,
-            description=metadata.description or parsed_fn.description,
+            description=metadata.description
+            if metadata.description is not None
+            else parsed_fn.description,
             icons=metadata.icons,
             parameters=parsed_fn.input_schema,
             output_schema=final_output_schema,
@@ -239,14 +274,20 @@ class FunctionTool(Tool):
             task_config=task_config,
             timeout=metadata.timeout,
             auth=metadata.auth,
+            run_in_thread=metadata.run_in_thread,
         )
 
     async def run(self, arguments: dict[str, Any]) -> ToolResult:
         """Run the tool with arguments."""
-        wrapper_fn = without_injected_parameters(self.fn)
+        wrapper_fn = without_injected_parameters(
+            self.fn, run_in_thread=self.run_in_thread
+        )
         type_adapter = get_cached_typeadapter(wrapper_fn)
 
-        # Apply timeout if configured
+        # Apply timeout if configured. Combining timeout with
+        # run_in_thread=False on a sync function is rejected at
+        # registration (see FunctionTool.from_function), so the timeout
+        # path here only needs to handle async and threadpool-sync.
         if self.timeout is not None:
             try:
                 with anyio.fail_after(self.timeout):
@@ -261,6 +302,9 @@ class FunctionTool(Tool):
                         # Handle sync wrappers that return awaitables
                         if inspect.isawaitable(result):
                             result = await result
+                    # Materialize generators inside timeout scope so slow
+                    # generators don't run past the configured timeout
+                    result = await self._materialize_generator(result)
             except TimeoutError:
                 logger.warning(
                     f"Tool '{self.name}' timed out after {self.timeout}s. "
@@ -277,26 +321,44 @@ class FunctionTool(Tool):
             # No timeout: use existing execution path
             if is_coroutine_function(wrapper_fn):
                 result = await type_adapter.validate_python(arguments)
-            else:
+            elif self.run_in_thread:
                 result = await call_sync_fn_in_threadpool(
                     type_adapter.validate_python, arguments
                 )
                 if inspect.isawaitable(result):
                     result = await result
+            else:
+                result = type_adapter.validate_python(arguments)
+                if inspect.isawaitable(result):
+                    result = await result
+            result = await self._materialize_generator(result)
 
         return self.convert_result(result)
+
+    @staticmethod
+    async def _materialize_generator(result: Any) -> Any:
+        """Consume generators/async generators into lists.
+
+        Without this, async generators pass through as objects (repr string),
+        and sync generators get consumed during text serialization but are
+        exhausted by the time structured content is built.
+        """
+        if inspect.isasyncgen(result):
+            return [item async for item in result]
+        if inspect.isgenerator(result):
+            return list(result)
+        return result
 
     def register_with_docket(self, docket: Docket) -> None:
         """Register this tool with docket for background execution.
 
-        FunctionTool registers the underlying function, which has the user's
-        Depends parameters for docket to resolve. The function is wrapped to
-        eagerly restore HTTP headers from Redis so that get_http_request()
-        works even without explicit dependency injection.
+        Registers the raw function so Docket sees and resolves ALL
+        dependencies — both FastMCP's (CurrentContext, Progress) and
+        Docket-native ones (Retry, Timeout, ConcurrencyLimit).
         """
         if not self.task_config.supports_tasks():
             return
-        docket.register(_wrap_for_task_http_headers(self.fn), names=[self.key])
+        docket.register(self.fn, names=[self.key])
 
     async def add_to_docket(
         self,
@@ -324,34 +386,6 @@ class FunctionTool(Tool):
         return await docket.add(lookup_key, **kwargs)(**arguments)
 
 
-def _wrap_for_task_http_headers(fn: Callable[..., Any]) -> Callable[..., Any]:
-    """Wrap a function to restore HTTP headers in background task workers.
-
-    Uses functools.wraps so docket sees the original signature for dependency
-    resolution while the wrapper eagerly populates _task_http_headers before
-    the user's function runs.
-    """
-
-    @functools.wraps(fn)
-    async def wrapper(*args: Any, **kwargs: Any) -> Any:
-        task_info = get_task_context()
-        token = None
-        if task_info is not None and _task_http_headers.get() is None:
-            token = await _restore_task_http_headers(
-                task_info.session_id, task_info.task_id
-            )
-        try:
-            result = fn(*args, **kwargs)
-            if inspect.isawaitable(result):
-                result = await result
-            return result
-        finally:
-            if token is not None:
-                _task_http_headers.reset(token)
-
-    return wrapper
-
-
 @overload
 def tool(fn: F) -> F: ...
 @overload
@@ -371,6 +405,7 @@ def tool(
     serializer: Any | None = None,
     timeout: float | None = None,
     auth: AuthCheck | list[AuthCheck] | None = None,
+    run_in_thread: bool = True,
 ) -> Callable[[F], F]: ...
 @overload
 def tool(
@@ -390,6 +425,7 @@ def tool(
     serializer: Any | None = None,
     timeout: float | None = None,
     auth: AuthCheck | list[AuthCheck] | None = None,
+    run_in_thread: bool = True,
 ) -> Callable[[F], F]: ...
 
 
@@ -410,11 +446,22 @@ def tool(
     serializer: Any | None = None,
     timeout: float | None = None,
     auth: AuthCheck | list[AuthCheck] | None = None,
+    run_in_thread: bool = True,
 ) -> Any:
     """Standalone decorator to mark a function as an MCP tool.
 
     Returns the original function with metadata attached. Register with a server
     using mcp.add_tool().
+
+    Args:
+        run_in_thread: Applies to sync tool functions only. When True (default),
+            the sync function is dispatched to a worker thread so it does not
+            block the event loop. Set to False to run the function inline on the
+            event loop thread — useful for libraries with thread affinity
+            (e.g. Windows COM via `uiautomation`/`comtypes`/`pywin32`, `tkinter`,
+            some GPU/driver bindings). Ignored for async functions. Cannot be
+            combined with `timeout` on a sync function: inline calls have no
+            cancellation checkpoints, so the timeout would be a silent no-op.
     """
     if isinstance(annotations, dict):
         annotations = ToolAnnotations(**annotations)
@@ -442,6 +489,7 @@ def tool(
             serializer=serializer,
             timeout=timeout,
             auth=auth,
+            run_in_thread=run_in_thread,
         )
         return FunctionTool.from_function(fn, metadata=tool_meta)
 
@@ -461,6 +509,7 @@ def tool(
             serializer=serializer,
             timeout=timeout,
             auth=auth,
+            run_in_thread=run_in_thread,
         )
         target = fn.__func__ if hasattr(fn, "__func__") else fn
         target.__fastmcp__ = metadata
