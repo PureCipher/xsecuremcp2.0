@@ -1,8 +1,12 @@
+import { Box, CircularProgress, Typography } from "@mui/material";
+
 export function LoadingState({ message = "Loading..." }: { message?: string }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16">
-      <div className="h-8 w-8 animate-spin rounded-full border-2 border-[--app-accent] border-t-transparent" />
-      <p className="mt-3 text-[11px] text-[--app-muted]">{message}</p>
-    </div>
+    <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", py: 8 }}>
+      <CircularProgress size={28} sx={{ color: "var(--app-accent)" }} />
+      <Typography sx={{ mt: 1.5, fontSize: 13, color: "var(--app-muted)" }}>
+        {message}
+      </Typography>
+    </Box>
   );
 }

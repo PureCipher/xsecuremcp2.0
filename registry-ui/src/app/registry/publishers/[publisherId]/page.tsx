@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Box, Card, CardActionArea, CardContent, Chip, Typography } from "@mui/material";
 import {
   getPublisherProfile,
   type PublisherSummary,
@@ -13,37 +14,67 @@ export default async function PublisherProfilePage(props: { params: Promise<{ pu
 
   if (!profile) {
     return (
-      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-6 ring-1 ring-[--app-surface-ring]">
-          <h1 className="text-base font-semibold text-[--app-fg]">Publisher not found</h1>
-          <p className="mt-2 text-[12px] text-[--app-muted]">
-            No publisher profile is available for <span className="font-mono">{decodedId}</span>.
-          </p>
-          <p className="mt-3">
-            <Link
-              href="/registry/publishers"
-              className="text-[11px] font-medium text-[--app-muted] hover:text-[--app-fg]"
-            >
-              ← Back to all publishers
+      <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+        <CardContent sx={{ p: 2.5 }}>
+          <Typography variant="h6" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+            Publisher not found
+          </Typography>
+          <Typography sx={{ mt: 1, fontSize: 12, color: "var(--app-muted)" }}>
+            No publisher profile is available for{" "}
+            <Box component="span" sx={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}>
+              {decodedId}
+            </Box>
+            .
+          </Typography>
+          <Box sx={{ mt: 2 }}>
+            <Link href="/registry/publishers" legacyBehavior passHref>
+              <Box
+                component="a"
+                sx={{
+                  display: "inline-flex",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: "var(--app-muted)",
+                  textDecoration: "none",
+                  "&:hover": { color: "var(--app-fg)" },
+                }}
+              >
+                ← Back to all publishers
+              </Box>
             </Link>
-          </p>
-      </div>
+          </Box>
+        </CardContent>
+      </Card>
     );
   }
 
   if (profile.error) {
     return (
-      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-6 ring-1 ring-[--app-surface-ring]">
-          <h1 className="text-base font-semibold text-[--app-fg]">Unable to load publisher</h1>
-          <p className="mt-2 text-[12px] text-[--app-muted]">{profile.error}</p>
-          <p className="mt-3">
-            <Link
-              href="/registry/publishers"
-              className="text-[11px] font-medium text-[--app-muted] hover:text-[--app-fg]"
-            >
-              ← Back to all publishers
+      <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+        <CardContent sx={{ p: 2.5 }}>
+          <Typography variant="h6" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+            Unable to load publisher
+          </Typography>
+          <Typography sx={{ mt: 1, fontSize: 12, color: "var(--app-muted)" }}>{profile.error}</Typography>
+          <Box sx={{ mt: 2 }}>
+            <Link href="/registry/publishers" legacyBehavior passHref>
+              <Box
+                component="a"
+                sx={{
+                  display: "inline-flex",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: "var(--app-muted)",
+                  textDecoration: "none",
+                  "&:hover": { color: "var(--app-fg)" },
+                }}
+              >
+                ← Back to all publishers
+              </Box>
             </Link>
-          </p>
-      </div>
+          </Box>
+        </CardContent>
+      </Card>
     );
   }
 
@@ -51,97 +82,122 @@ export default async function PublisherProfilePage(props: { params: Promise<{ pu
   const listings: RegistryToolListing[] = profile.listings ?? [];
 
   return (
-    <div className="flex flex-col gap-6">
-        <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[--app-muted]">
-              Publisher profile
-            </p>
-            <h1 className="mt-1 text-2xl font-semibold text-[--app-fg]">
-              {summary.display_name ?? summary.publisher_id}
-            </h1>
-            <p className="mt-1 text-[11px] text-[--app-muted]">
-              {summary.publisher_id} · {summary.tool_count ?? 0} tool
-              {(summary.tool_count ?? 0) === 1 ? "" : "s"} in this registry
-            </p>
-          </div>
-          {summary.trust_score?.overall != null ? (
-            <span className="rounded-full bg-[--app-surface] px-3 py-1 text-[10px] font-semibold text-[--app-muted]">
-              Trust score {summary.trust_score.overall.toFixed(1)}
-            </span>
-          ) : null}
-        </header>
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+      <Box component="header" sx={{ display: "flex", flexDirection: { xs: "column", sm: "row" }, gap: 2, alignItems: { sm: "flex-end" }, justifyContent: "space-between" }}>
+        <Box>
+          <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+            Publisher profile
+          </Typography>
+          <Typography variant="h4" sx={{ mt: 0.5, fontWeight: 700, color: "var(--app-fg)" }}>
+            {summary.display_name ?? summary.publisher_id}
+          </Typography>
+          <Typography sx={{ mt: 0.5, fontSize: 12, color: "var(--app-muted)" }}>
+            {summary.publisher_id} · {summary.tool_count ?? 0} tool{(summary.tool_count ?? 0) === 1 ? "" : "s"} in this registry
+          </Typography>
+        </Box>
+        {summary.trust_score?.overall != null ? (
+          <Chip
+            size="small"
+            label={`Trust score ${summary.trust_score.overall.toFixed(1)}`}
+            sx={{ borderRadius: 999, bgcolor: "var(--app-surface)", color: "var(--app-muted)", fontWeight: 700, fontSize: 11, alignSelf: { xs: "flex-start", sm: "auto" } }}
+          />
+        ) : null}
+      </Box>
 
-        <section className="grid gap-4 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
-          <div className="space-y-3 rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
-            <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
+      <Box component="section" sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "minmax(0,1.2fr) minmax(0,1fr)" } }}>
+        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+          <CardContent sx={{ p: 2.5 }}>
+            <Typography sx={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
               About
-            </h2>
-            <p className="text-[13px] leading-relaxed text-[--app-muted]">
+            </Typography>
+            <Typography sx={{ mt: 1.5, fontSize: 13, color: "var(--app-muted)" }}>
               {summary.description ?? "This publisher has not added a profile description yet."}
-            </p>
-          </div>
-          <div className="space-y-3 rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
-            <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
+            </Typography>
+          </CardContent>
+        </Card>
+        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+          <CardContent sx={{ p: 2.5 }}>
+            <Typography sx={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
               Snapshot
-            </h2>
-            <ul className="space-y-1 text-[11px] text-[--app-muted]">
+            </Typography>
+            <Box component="ul" sx={{ mt: 1.5, pl: 2, color: "var(--app-muted)", fontSize: 12 }}>
               <li>
-                <span className="font-medium text-[--app-fg]">Tools:</span>{" "}
-                {summary.tool_count ?? listings.length}
+                <Box component="span" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>Tools:</Box> {summary.tool_count ?? listings.length}
               </li>
               {summary.verified_tool_count != null ? (
                 <li>
-                  <span className="font-medium text-[--app-fg]">Verified tools:</span>{" "}
-                  {summary.verified_tool_count}
+                  <Box component="span" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>Verified tools:</Box> {summary.verified_tool_count}
                 </li>
               ) : null}
-            </ul>
-          </div>
-        </section>
+            </Box>
+          </CardContent>
+        </Card>
+      </Box>
 
-        <section className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-6 ring-1 ring-[--app-surface-ring]">
-          <h2 className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
+      <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+        <CardContent sx={{ p: 2.5 }}>
+          <Typography sx={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
             Tools from this publisher
-          </h2>
+          </Typography>
           {listings.length === 0 ? (
-            <p className="text-[12px] text-[--app-muted]">
+            <Typography sx={{ mt: 1.5, fontSize: 12, color: "var(--app-muted)" }}>
               This publisher does not have any live verified tools yet.
-            </p>
+            </Typography>
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2">
+            <Box sx={{ mt: 2, display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" } }}>
               {listings.map((tool) => (
-                <Link
+                <Card
                   key={tool.tool_name}
-                  href={`/registry/listings/${encodeURIComponent(tool.tool_name)}`}
-                  className="flex flex-col gap-2 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring] transition hover:border-[--app-accent] hover:ring-[--app-accent]"
+                  variant="outlined"
+                  sx={{
+                    borderRadius: 3,
+                    borderColor: "var(--app-border)",
+                    bgcolor: "var(--app-control-bg)",
+                    boxShadow: "none",
+                  }}
                 >
-                  <div className="flex items-baseline justify-between gap-2">
-                    <div>
-                      <h3 className="text-sm font-semibold text-[--app-fg]">
-                        {tool.display_name ?? tool.tool_name}
-                      </h3>
-                      <p className="text-[10px] text-[--app-muted]">{tool.tool_name}</p>
-                    </div>
-                    <CertificationBadge level={tool.certification_level} />
-                  </div>
-                  <p className="line-clamp-3 text-[11px] leading-relaxed text-[--app-muted]">
-                    {tool.description ?? "No description provided."}
-                  </p>
-                </Link>
+                  <Link href={`/registry/listings/${encodeURIComponent(tool.tool_name)}`} legacyBehavior passHref>
+                    <CardActionArea component="a" sx={{ borderRadius: 3 }}>
+                      <CardContent sx={{ p: 2 }}>
+                        <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 1 }}>
+                          <Box>
+                            <Typography sx={{ fontSize: 14, fontWeight: 700, color: "var(--app-fg)" }}>
+                              {tool.display_name ?? tool.tool_name}
+                            </Typography>
+                            <Typography sx={{ fontSize: 11, color: "var(--app-muted)" }}>{tool.tool_name}</Typography>
+                          </Box>
+                          <CertificationBadge level={tool.certification_level} />
+                        </Box>
+                        <Typography sx={{ mt: 1, fontSize: 12, color: "var(--app-muted)" }}>
+                          {tool.description ?? "No description provided."}
+                        </Typography>
+                      </CardContent>
+                    </CardActionArea>
+                  </Link>
+                </Card>
               ))}
-            </div>
+            </Box>
           )}
-        </section>
+        </CardContent>
+      </Card>
 
-        <div className="pt-2">
-          <Link
-            href="/registry/publishers"
-            className="text-[11px] font-medium text-[--app-muted] hover:text-[--app-fg]"
+      <Box sx={{ pt: 1 }}>
+        <Link href="/registry/publishers" legacyBehavior passHref>
+          <Box
+            component="a"
+            sx={{
+              display: "inline-flex",
+              fontSize: 11,
+              fontWeight: 700,
+              color: "var(--app-muted)",
+              textDecoration: "none",
+              "&:hover": { color: "var(--app-fg)" },
+            }}
           >
             ← Back to all publishers
-          </Link>
-        </div>
-    </div>
+          </Box>
+        </Link>
+      </Box>
+    </Box>
   );
 }

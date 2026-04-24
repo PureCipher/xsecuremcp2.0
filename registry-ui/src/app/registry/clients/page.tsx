@@ -2,43 +2,65 @@ import Link from "next/link";
 
 import { EmptyState } from "@/components/security";
 
+import { Box, Button, Card, CardContent, Typography } from "@mui/material";
+
 export default function ClientsPage() {
   return (
-    <div className="flex flex-col gap-6">
-      <header className="space-y-1">
-        <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[--app-muted]">
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+      <Box component="header" sx={{ display: "grid", gap: 0.5 }}>
+        <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
           Clients
-        </p>
-        <h1 className="text-2xl font-semibold text-[--app-fg]">Onboard and bind clients</h1>
-        <p className="max-w-2xl text-[11px] text-[--app-muted]">
+        </Typography>
+        <Typography variant="h4" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+          Onboard and bind clients
+        </Typography>
+        <Typography sx={{ mt: 0.5, maxWidth: 900, fontSize: 12, color: "var(--app-muted)" }}>
           UI skeleton for connecting client identities to MCP servers with effective Policy/Contract/Consent controls.
-        </p>
-      </header>
+        </Typography>
+      </Box>
 
-      <section className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-6 ring-1 ring-[--app-surface-ring]">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-sm font-semibold text-[--app-fg]">Client registry</h2>
-            <p className="mt-1 text-[11px] text-[--app-muted]">
-              After backend integration, this will list onboarded clients and their access bindings.
-            </p>
-          </div>
-          <Link
-            href="/registry/clients/onboard"
-            className="inline-flex items-center justify-center rounded-full bg-[--app-accent] px-4 py-2 text-[11px] font-semibold text-[--app-accent-contrast] shadow-sm transition hover:opacity-90"
+      <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+        <CardContent sx={{ p: 2.5 }}>
+          <Box
+            sx={{
+              display: "flex",
+              flexDirection: { xs: "column", sm: "row" },
+              gap: 2,
+              alignItems: { sm: "center" },
+              justifyContent: "space-between",
+            }}
           >
-            Onboard client
-          </Link>
-        </div>
+            <Box>
+              <Typography sx={{ fontSize: 14, fontWeight: 700, color: "var(--app-fg)" }}>Client registry</Typography>
+              <Typography sx={{ mt: 0.5, fontSize: 12, color: "var(--app-muted)" }}>
+                After backend integration, this will list onboarded clients and their access bindings.
+              </Typography>
+            </Box>
+            <Link href="/registry/clients/onboard" style={{ textDecoration: "none" }}>
+              <Button
+                variant="contained"
+                sx={{
+                  borderRadius: 999,
+                  bgcolor: "var(--app-accent)",
+                  color: "var(--app-accent-contrast)",
+                  "&:hover": { bgcolor: "var(--app-accent)" },
+                  alignSelf: { xs: "flex-start", sm: "auto" },
+                }}
+              >
+                Onboard client
+              </Button>
+            </Link>
+          </Box>
 
-        <div className="mt-6">
-          <EmptyState
-            title="No clients onboarded yet"
-            message="Connect a client identity, select the MCP servers (and optionally tool scope), then run a simulation to validate effective access."
-          />
-        </div>
-      </section>
-    </div>
+          <Box sx={{ mt: 3 }}>
+            <EmptyState
+              title="No clients onboarded yet"
+              message="Connect a client identity, select the MCP servers (and optionally tool scope), then run a simulation to validate effective access."
+            />
+          </Box>
+        </CardContent>
+      </Card>
+    </Box>
   );
 }
 

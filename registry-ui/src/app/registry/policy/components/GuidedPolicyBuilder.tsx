@@ -1,10 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import type {
-  PolicyConfig,
-  PolicySchemaResponse,
-} from "@/lib/registryClient";
+import type { PolicyConfig, PolicySchemaResponse } from "@/lib/registryClient";
+import {
+  Box,
+  Button,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
+  Stack,
+  TextField,
+  Typography,
+} from "@mui/material";
 import {
   formatFieldInput,
   parseFieldInput,
@@ -26,10 +34,35 @@ function prettyJson(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
-export function GuidedPolicyBuilder({
-  schema,
-  onLoadDraft,
-}: GuidedPolicyBuilderProps) {
+const fieldSx = {
+  "& .MuiOutlinedInput-root": {
+    borderRadius: 3,
+    bgcolor: "var(--app-chrome-bg)",
+    "& fieldset": { borderColor: "var(--app-border)" },
+    "&:hover fieldset": { borderColor: "var(--app-border)" },
+    "&.Mui-focused fieldset": { borderColor: "var(--app-accent)" },
+  },
+  "& .MuiInputBase-input": { fontSize: 12, color: "var(--app-fg)" },
+} as const;
+
+const panelSx = {
+  borderRadius: 4,
+  border: "1px solid var(--app-border)",
+  bgcolor: "var(--app-surface)",
+  p: 2.5,
+  boxShadow: "0 0 0 1px var(--app-surface-ring)",
+} as const;
+
+const insetPanelSx = {
+  mt: 2,
+  borderRadius: 3,
+  border: "1px solid var(--app-border)",
+  bgcolor: "var(--app-control-bg)",
+  p: 2,
+  boxShadow: "0 0 0 1px var(--app-surface-ring)",
+} as const;
+
+export function GuidedPolicyBuilder({ schema, onLoadDraft }: GuidedPolicyBuilderProps) {
   const { setBanner } = usePolicyContext();
 
   const policyTypeEntries = schemaTypeEntries(schema);
@@ -66,8 +99,7 @@ export function GuidedPolicyBuilder({
     } catch (error) {
       setBanner({
         tone: "error",
-        message:
-          error instanceof Error ? error.message : `Unable to update ${fieldName}.`,
+        message: error instanceof Error ? error.message : `Unable to update ${fieldName}.`,
       });
     }
   }
@@ -79,115 +111,150 @@ export function GuidedPolicyBuilder({
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      {/* Schema guide */}
-      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
-        <div className="space-y-1">
-          <p className="text-xs font-medium uppercase tracking-[0.18em] text-[--app-muted]">
+    <Stack spacing={3}>
+      <Box sx={panelSx}>
+        <Stack spacing={0.5}>
+          <Typography
+            variant="caption"
+            sx={{
+              fontWeight: 600,
+              letterSpacing: "0.18em",
+              textTransform: "uppercase",
+              color: "var(--app-muted)",
+            }}
+          >
             Schema guide
-          </p>
-          <h2 className="text-xl font-semibold text-[--app-fg]">
+          </Typography>
+          <Typography variant="h6" sx={{ fontWeight: 600, color: "var(--app-fg)" }}>
             See the supported JSON shape
-          </h2>
-          <p className="text-xs text-[--app-muted]">
-            Use this guide when you hand-edit JSON, prepare imports, or want a
-            quick reminder of the fields each policy type supports.
-          </p>
-        </div>
+          </Typography>
+          <Typography variant="caption" sx={{ color: "var(--app-muted)" }}>
+            Use this guide when you hand-edit JSON, prepare imports, or want a quick reminder of the
+            fields each policy type supports.
+          </Typography>
+        </Stack>
 
-        <div className="mt-4 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
+        <Box sx={insetPanelSx}>
+          <Typography
+            variant="caption"
+            sx={{
+              fontWeight: 700,
+              letterSpacing: "0.16em",
+              textTransform: "uppercase",
+              color: "var(--app-muted)",
+              fontSize: 10,
+            }}
+          >
             Common fields
-          </p>
-          <ul className="mt-2 space-y-1 text-xs text-[--app-muted]">
+          </Typography>
+          <Stack component="ul" spacing={0.5} sx={{ mt: 1, pl: 2, m: 0, color: "var(--app-muted)" }}>
             {commonFieldEntries.map(([fieldName, description]) => (
-              <li key={fieldName}>
-                <span className="font-semibold text-[--app-fg]">{fieldName}</span>:{" "}
-                {description}
-              </li>
+              <Typography key={fieldName} component="li" variant="caption">
+                <Box component="span" sx={{ fontWeight: 600, color: "var(--app-fg)" }}>
+                  {fieldName}
+                </Box>
+                : {description}
+              </Typography>
             ))}
-          </ul>
-        </div>
+          </Stack>
+        </Box>
 
-        <div className="mt-4 grid gap-3">
+        <Stack spacing={1.5} sx={{ mt: 2 }}>
           {policyTypeEntries.map(([typeName, definition]) => (
-            <div
-              key={typeName}
-              className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]"
-            >
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="text-xs font-semibold capitalize text-[--app-fg]">
+            <Box key={typeName} sx={insetPanelSx}>
+              <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", alignItems: "center" }}>
+                <Typography variant="caption" sx={{ fontWeight: 600, textTransform: "capitalize", color: "var(--app-fg)" }}>
                   {typeName.replaceAll("_", " ")}
-                </p>
+                </Typography>
                 {definition.aliases?.length ? (
-                  <span className="text-[11px] text-[--app-muted]">
+                  <Typography variant="caption" sx={{ fontSize: 11, color: "var(--app-muted)" }}>
                     Aliases: {definition.aliases.join(", ")}
-                  </span>
+                  </Typography>
                 ) : null}
-              </div>
-              <p className="mt-2 text-xs text-[--app-muted]">
+              </Stack>
+              <Typography variant="caption" sx={{ mt: 1, display: "block", color: "var(--app-muted)" }}>
                 {definition.description}
-              </p>
-              <ul className="mt-2 space-y-1 text-[11px] text-[--app-muted]">
-                {Object.entries(definition.fields ?? {}).map(
-                  ([fieldName, description]) => (
-                    <li key={`${typeName}-${fieldName}`}>
-                      <span className="font-semibold text-[--app-fg]">
-                        {fieldName}
-                      </span>
-                      : {description}
-                    </li>
-                  ),
-                )}
-              </ul>
-            </div>
+              </Typography>
+              <Stack component="ul" spacing={0.5} sx={{ mt: 1, pl: 2, m: 0 }}>
+                {Object.entries(definition.fields ?? {}).map(([fieldName, description]) => (
+                  <Typography
+                    key={`${typeName}-${fieldName}`}
+                    component="li"
+                    variant="caption"
+                    sx={{ fontSize: 11, color: "var(--app-muted)" }}
+                  >
+                    <Box component="span" sx={{ fontWeight: 600, color: "var(--app-fg)" }}>
+                      {fieldName}
+                    </Box>
+                    : {description}
+                  </Typography>
+                ))}
+              </Stack>
+            </Box>
           ))}
-        </div>
+        </Stack>
 
-        <div className="mt-4 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
+        <Box sx={{ ...insetPanelSx, mt: 2 }}>
+          <Typography
+            variant="caption"
+            sx={{
+              fontWeight: 700,
+              letterSpacing: "0.16em",
+              textTransform: "uppercase",
+              color: "var(--app-muted)",
+              fontSize: 10,
+            }}
+          >
             Composition helpers
-          </p>
-          <ul className="mt-2 space-y-2 text-xs text-[--app-muted]">
+          </Typography>
+          <Stack component="ul" spacing={1} sx={{ mt: 1, pl: 2, m: 0 }}>
             {compositionEntries.map(([name, definition]) => (
-              <li key={name}>
-                <span className="font-semibold text-[--app-fg]">
+              <Typography key={name} component="li" variant="caption" sx={{ color: "var(--app-muted)" }}>
+                <Box component="span" sx={{ fontWeight: 600, color: "var(--app-fg)" }}>
                   {name.replaceAll("_", " ")}
-                </span>
+                </Box>
                 : {definition.description}
                 {definition.extra_fields
                   ? ` Extra fields: ${Object.entries(definition.extra_fields)
-                      .map(
-                        ([fieldName, description]) =>
-                          `${fieldName} (${description})`,
-                      )
+                      .map(([fieldName, description]) => `${fieldName} (${description})`)
                       .join(", ")}`
                   : ""}
-              </li>
+              </Typography>
             ))}
-          </ul>
-        </div>
-      </div>
+          </Stack>
+        </Box>
+      </Box>
 
-      {/* Guided builder */}
-      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
-        <div className="space-y-1">
-          <p className="text-xs font-medium uppercase tracking-[0.18em] text-[--app-muted]">
+      <Box sx={panelSx}>
+        <Stack spacing={0.5}>
+          <Typography
+            variant="caption"
+            sx={{
+              fontWeight: 600,
+              letterSpacing: "0.18em",
+              textTransform: "uppercase",
+              color: "var(--app-muted)",
+            }}
+          >
             Guided builder
-          </p>
-          <h2 className="text-xl font-semibold text-[--app-fg]">
+          </Typography>
+          <Typography variant="h6" sx={{ fontWeight: 600, color: "var(--app-fg)" }}>
             Author a rule from the schema
-          </h2>
-          <p className="text-xs text-[--app-muted]">
-            Pick a policy type, fill in guided fields, and only drop to raw
-            JSON for nested or advanced cases.
-          </p>
-        </div>
+          </Typography>
+          <Typography variant="caption" sx={{ color: "var(--app-muted)" }}>
+            Pick a policy type, fill in guided fields, and only drop to raw JSON for nested or advanced
+            cases.
+          </Typography>
+        </Stack>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <label className="flex flex-col gap-1 text-xs text-[--app-muted]">
-            Builder mode
-            <select
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ mt: 2 }}>
+          <FormControl fullWidth size="small" sx={fieldSx}>
+            <InputLabel id="guided-kind-label" sx={{ color: "var(--app-muted)", fontSize: 12 }}>
+              Builder mode
+            </InputLabel>
+            <Select
+              labelId="guided-kind-label"
+              label="Builder mode"
               value={guidedKind}
               onChange={(event) =>
                 chooseGuidedTemplate(
@@ -197,57 +264,52 @@ export function GuidedPolicyBuilder({
                     : (compositionEntries[0]?.[0] ?? "all_of"),
                 )
               }
-              className="rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
             >
-              <option value="policy">Single policy</option>
-              <option value="composition">Composition</option>
-            </select>
-          </label>
+              <MenuItem value="policy">Single policy</MenuItem>
+              <MenuItem value="composition">Composition</MenuItem>
+            </Select>
+          </FormControl>
 
-          <label className="flex flex-col gap-1 text-xs text-[--app-muted]">
-            Template
-            <select
+          <FormControl fullWidth size="small" sx={fieldSx}>
+            <InputLabel id="guided-template-label" sx={{ color: "var(--app-muted)", fontSize: 12 }}>
+              Template
+            </InputLabel>
+            <Select
+              labelId="guided-template-label"
+              label="Template"
               value={guidedSelection}
-              onChange={(event) =>
-                chooseGuidedTemplate(guidedKind, event.target.value)
-              }
-              className="rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
+              onChange={(event) => chooseGuidedTemplate(guidedKind, event.target.value)}
             >
-              {(guidedKind === "policy"
-                ? policyTypeEntries
-                : compositionEntries
-              ).map(([key]) => (
-                <option key={key} value={key}>
+              {(guidedKind === "policy" ? policyTypeEntries : compositionEntries).map(([key]) => (
+                <MenuItem key={key} value={key}>
                   {key.replaceAll("_", " ")}
-                </option>
+                </MenuItem>
               ))}
-            </select>
-          </label>
-        </div>
+            </Select>
+          </FormControl>
+        </Stack>
 
-        <div className="mt-4 grid gap-3">
+        <Stack spacing={1.5} sx={{ mt: 2 }}>
           {commonFieldSpecs.map(([fieldName, spec]) => (
-            <label
-              key={`guided-common-${fieldName}`}
-              className="flex flex-col gap-1 text-xs text-[--app-muted]"
-            >
-              {spec.label ?? fieldName}
-              <input
+            <Stack key={`guided-common-${fieldName}`} spacing={0.5}>
+              <Typography variant="caption" sx={{ color: "var(--app-muted)" }}>
+                {spec.label ?? fieldName}
+              </Typography>
+              <TextField
+                size="small"
                 value={formatFieldInput(spec, guidedDraft[fieldName])}
-                onChange={(event) =>
-                  updateGuidedCommonField(fieldName, event.target.value)
-                }
+                onChange={(event) => updateGuidedCommonField(fieldName, event.target.value)}
                 placeholder={spec.placeholder}
-                className="rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
+                sx={fieldSx}
               />
-              <span className="text-[11px] text-[--app-muted]">
+              <Typography variant="caption" sx={{ fontSize: 11, color: "var(--app-muted)" }}>
                 {spec.description}
-              </span>
-            </label>
+              </Typography>
+            </Stack>
           ))}
-        </div>
+        </Stack>
 
-        <div className="mt-4 grid gap-3">
+        <Stack spacing={1.5} sx={{ mt: 2 }}>
           {guidedFieldSpecs.map(([fieldName, spec]) => {
             const unsupported =
               spec.type === "policy_config" ||
@@ -255,93 +317,97 @@ export function GuidedPolicyBuilder({
               spec.type === "policy_config_map";
             if (unsupported) {
               return (
-                <div
-                  key={`guided-field-${fieldName}`}
-                  className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]"
-                >
-                  <p className="text-xs font-semibold text-[--app-fg]">
+                <Box key={`guided-field-${fieldName}`} sx={insetPanelSx}>
+                  <Typography variant="caption" sx={{ fontWeight: 600, color: "var(--app-fg)" }}>
                     {spec.label ?? fieldName}
-                  </p>
-                  <p className="mt-2 text-xs text-[--app-muted]">
+                  </Typography>
+                  <Typography variant="caption" sx={{ mt: 1, display: "block", color: "var(--app-muted)" }}>
                     {spec.description}
-                  </p>
-                  <p className="mt-2 text-[11px] text-[--app-muted]">
-                    Nested rules still use the JSON preview below. Start from
-                    the starter config and refine the preview if you need
-                    compositions or resource-specific children.
-                  </p>
-                </div>
+                  </Typography>
+                  <Typography variant="caption" sx={{ mt: 1, display: "block", fontSize: 11, color: "var(--app-muted)" }}>
+                    Nested rules still use the JSON preview below. Start from the starter config and refine
+                    the preview if you need compositions or resource-specific children.
+                  </Typography>
+                </Box>
               );
             }
 
             const currentValue = guidedDraft[fieldName];
             const inputValue = formatFieldInput(spec, currentValue);
             return (
-              <label
-                key={`guided-field-${fieldName}`}
-                className="flex flex-col gap-1 text-xs text-[--app-muted]"
-              >
-                {spec.label ?? fieldName}
+              <Stack key={`guided-field-${fieldName}`} spacing={0.5}>
+                <Typography variant="caption" sx={{ color: "var(--app-muted)" }}>
+                  {spec.label ?? fieldName}
+                </Typography>
                 {spec.type === "bool" ? (
-                  <select
-                    value={inputValue || String(Boolean(spec.default))}
-                    onChange={(event) =>
-                      updateGuidedField(fieldName, event.target.value)
-                    }
-                    className="rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
-                  >
-                    <option value="true">True</option>
-                    <option value="false">False</option>
-                  </select>
+                  <FormControl fullWidth size="small" sx={fieldSx}>
+                    <Select
+                      value={inputValue || String(Boolean(spec.default))}
+                      onChange={(event) => updateGuidedField(fieldName, event.target.value)}
+                    >
+                      <MenuItem value="true">True</MenuItem>
+                      <MenuItem value="false">False</MenuItem>
+                    </Select>
+                  </FormControl>
                 ) : spec.type === "enum" ? (
-                  <select
-                    value={inputValue || String(spec.default ?? "")}
-                    onChange={(event) =>
-                      updateGuidedField(fieldName, event.target.value)
-                    }
-                    className="rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
-                  >
-                    {(spec.enum ?? []).map((option) => (
-                      <option key={`${fieldName}-${option}`} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                ) : spec.type === "json_map" ||
-                  spec.type === "string_map_string_list" ? (
+                  <FormControl fullWidth size="small" sx={fieldSx}>
+                    <Select
+                      value={inputValue || String(spec.default ?? "")}
+                      onChange={(event) => updateGuidedField(fieldName, event.target.value)}
+                    >
+                      {(spec.enum ?? []).map((option) => (
+                        <MenuItem key={`${fieldName}-${option}`} value={option}>
+                          {option}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                ) : spec.type === "json_map" || spec.type === "string_map_string_list" ? (
                   <JsonEditor
                     value={inputValue}
-                    onChange={(newText) =>
-                      updateGuidedField(fieldName, newText)
-                    }
+                    onChange={(newText) => updateGuidedField(fieldName, newText)}
                     minHeight="120px"
                   />
                 ) : (
-                  <input
+                  <TextField
+                    size="small"
                     value={inputValue}
-                    onChange={(event) =>
-                      updateGuidedField(fieldName, event.target.value)
-                    }
+                    onChange={(event) => updateGuidedField(fieldName, event.target.value)}
                     placeholder={spec.placeholder}
                     type={spec.type === "int" ? "number" : "text"}
-                    className="rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
+                    sx={fieldSx}
                   />
                 )}
-                <span className="text-[11px] text-[--app-muted]">
+                <Typography variant="caption" sx={{ fontSize: 11, color: "var(--app-muted)" }}>
                   {spec.description}
-                </span>
-              </label>
+                </Typography>
+              </Stack>
             );
           })}
-        </div>
+        </Stack>
 
-        <div className="mt-4 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
+        <Box sx={{ ...insetPanelSx, mt: 2 }}>
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{ flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}
+          >
+            <Typography
+              variant="caption"
+              sx={{
+                fontWeight: 700,
+                letterSpacing: "0.16em",
+                textTransform: "uppercase",
+                color: "var(--app-muted)",
+                fontSize: 10,
+              }}
+            >
               Guided JSON preview
-            </p>
-            <button
+            </Typography>
+            <Button
               type="button"
+              variant="outlined"
+              size="small"
               onClick={() => {
                 onLoadDraft(prettyJson(guidedDraft));
                 setBanner({
@@ -349,19 +415,37 @@ export function GuidedPolicyBuilder({
                   message: "Loaded the guided draft into the proposal editor.",
                 });
               }}
-              className="rounded-full border border-[--app-border] px-3 py-1 text-[11px] font-semibold text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg]"
+              sx={{
+                borderRadius: 999,
+                textTransform: "none",
+                fontSize: 11,
+                fontWeight: 700,
+                borderColor: "var(--app-border)",
+                color: "var(--app-muted)",
+                "&:hover": { borderColor: "var(--app-border)", bgcolor: "var(--app-hover-bg)", color: "var(--app-fg)" },
+              }}
             >
               Load into proposal editor
-            </button>
-          </div>
-          <pre
-            className="mt-3 max-h-[280px] overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-6 text-[--app-fg]"
-            dangerouslySetInnerHTML={{
-              __html: highlightJson(prettyJson(guidedDraft)),
+            </Button>
+          </Stack>
+          <Box
+            component="pre"
+            sx={{
+              mt: 1.5,
+              maxHeight: 280,
+              overflow: "auto",
+              whiteSpace: "pre-wrap",
+              overflowWrap: "anywhere",
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+              fontSize: 12,
+              lineHeight: 1.8,
+              color: "var(--app-fg)",
+              m: 0,
             }}
+            dangerouslySetInnerHTML={{ __html: highlightJson(prettyJson(guidedDraft)) }}
           />
-        </div>
-      </div>
-    </div>
+        </Box>
+      </Box>
+    </Stack>
   );
 }

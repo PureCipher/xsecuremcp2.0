@@ -1,8 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 
-import { DEFAULT_APP_THEME_ID, type AppThemeId } from "@/lib/appThemes";
+import {
+  DEFAULT_APP_THEME_ID,
+  isAppThemeId,
+  type AppThemeId,
+} from "@/lib/appThemes";
 
 export const APP_THEME_STORAGE_KEY = "purecipher.registry.appTheme.v1";
 
@@ -20,17 +24,12 @@ function readThemeFromStorage(): StoredTheme {
     const raw = localStorage.getItem(APP_THEME_STORAGE_KEY);
     if (!raw) return DEFAULT_STORED_THEME;
     const parsed = JSON.parse(raw) as Partial<StoredTheme>;
-    const validThemeId: AppThemeId | null =
-      parsed.themeId === "emerald-forest" ||
-      parsed.themeId === "slate-night" ||
-      parsed.themeId === "amethyst-velvet" ||
-      parsed.themeId === "aurora-glacier" ||
-      parsed.themeId === "ember-noir" ||
-      parsed.themeId === "sandstone-day"
-        ? parsed.themeId
-        : null;
+    const candidate = parsed.themeId;
     return {
-      themeId: validThemeId ?? DEFAULT_STORED_THEME.themeId,
+      themeId:
+        typeof candidate === "string" && isAppThemeId(candidate)
+          ? candidate
+          : DEFAULT_STORED_THEME.themeId,
     };
   } catch {
     return DEFAULT_STORED_THEME;
@@ -50,9 +49,13 @@ export function useAppTheme(): {
   themeId: AppThemeId;
   setThemeId: (themeId: AppThemeId) => void;
 } {
-  const [stored, setStored] = useState<StoredTheme>(() =>
-    typeof window !== "undefined" ? readThemeFromStorage() : DEFAULT_STORED_THEME,
-  );
+  // Must match SSR first paint: never read localStorage in the useState initializer
+  // (client would hydrate with a different MUI tree than the server → React #418).
+  const [stored, setStored] = useState<StoredTheme>(DEFAULT_STORED_THEME);
+
+  useLayoutEffect(() => {
+    setStored(readThemeFromStorage());
+  }, []);
 
   useEffect(() => {
     const sync = () => setStored(readThemeFromStorage());
@@ -74,4 +77,3 @@ export function useAppTheme(): {
 
   return { themeId: stored.themeId, setThemeId };
 }
-

@@ -1,28 +1,56 @@
-import Link from "next/link";
-import { requirePublisherRole } from "@/lib/registryClient";
+import { redirect } from "next/navigation";
+
+import { getMyListings, requirePublisherRole } from "@/lib/registryClient";
 import { PublisherForm } from "./PublisherForm";
 
-export default async function PublishPage() {
+export default async function PublishPage(props: { searchParams?: Promise<Record<string, string | string[]>> }) {
   const { allowed } = await requirePublisherRole();
 
   if (!allowed) {
-    return (
-      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-6 ring-1 ring-[--app-surface-ring]">
-          <h1 className="text-xl font-semibold text-[--app-fg]">Share a tool</h1>
-          <p className="mt-2 text-[12px] text-[--app-muted]">
-            Publisher, reviewer, or admin role required to publish listings into the registry.
-          </p>
-          <p className="mt-4">
-            <Link
-              href="/registry/app"
-              className="text-[11px] font-medium text-[--app-muted] hover:text-[--app-fg]"
-            >
-              ← Back to tools
-            </Link>
-          </p>
-      </div>
-    );
+    redirect("/registry/app");
   }
+
+  const sp = (await props.searchParams) ?? {};
+  const from = typeof sp.from === "string" ? sp.from : Array.isArray(sp.from) ? sp.from[0] : "";
+  const publishMode =
+    typeof sp.publish_mode === "string"
+      ? sp.publish_mode
+      : Array.isArray(sp.publish_mode)
+        ? sp.publish_mode[0]
+        : "";
+  const serverType =
+    typeof sp.server_type === "string"
+      ? sp.server_type
+      : Array.isArray(sp.server_type)
+        ? sp.server_type[0]
+        : "";
+  const mine = (await getMyListings()) ?? {};
+  const tools = Array.isArray(mine.tools) ? mine.tools : [];
+  if (!from && tools.length === 0) {
+    redirect("/registry/publish/get-started");
+  }
+  const selected = from ? tools.find((t) => String(t?.listing_id ?? "") === from) : null;
+
+  const initialManifestText = selected?.manifest ? JSON.stringify(selected.manifest, null, 2) : undefined;
+  const selectedRuntimeText = selected?.metadata ? JSON.stringify(selected.metadata, null, 2) : undefined;
+  const initialRuntimeText = (() => {
+    if (selectedRuntimeText) return selectedRuntimeText;
+    if (publishMode !== "external") return undefined;
+    const st = serverType === "mcp" ? "mcp" : "securemcp";
+    return JSON.stringify(
+      {
+        server_type: st,
+        transport: "streamable-http",
+        endpoint: "",
+      },
+      null,
+      2,
+    );
+  })();
+  const initialDisplayName = typeof selected?.display_name === "string" ? selected.display_name : undefined;
+  const initialCategories = Array.isArray(selected?.categories)
+    ? selected.categories.join(",")
+    : undefined;
 
   return (
     <div className="flex flex-col gap-6">
@@ -36,7 +64,12 @@ export default async function PublishPage() {
             publish.
           </p>
         </header>
-        <PublisherForm />
+        <PublisherForm
+          initialDisplayName={initialDisplayName}
+          initialCategories={initialCategories}
+          initialManifestText={initialManifestText}
+          initialRuntimeText={initialRuntimeText}
+        />
     </div>
   );
 }

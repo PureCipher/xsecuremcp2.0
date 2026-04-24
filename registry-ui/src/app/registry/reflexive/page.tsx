@@ -1,54 +1,39 @@
-import Link from "next/link";
+import { redirect } from "next/navigation";
+
+import { Box, Typography } from "@mui/material";
+
 import {
-  getRegistrySession,
   getAccountabilityLog,
   getSecurityHealth,
+  requireAdminRole,
 } from "@/lib/registryClient";
 import { ReflexiveManager } from "./ReflexiveManager";
 
 export default async function ReflexivePage() {
-  const sessionPayload = await getRegistrySession();
-  const role = sessionPayload?.session?.role ?? null;
-  const canAdmin = role === "admin";
+  const { allowed } = await requireAdminRole();
 
-  if (!canAdmin) {
-    return (
-      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-6 ring-1 ring-[--app-surface-ring]">
-          <h1 className="text-xl font-semibold text-[--app-fg]">Reflexive Execution Engine</h1>
-          <p className="mt-2 text-[12px] text-[--app-muted]">
-            Admin role required to access the reflexive execution engine.
-          </p>
-          <p className="mt-4">
-            <Link
-              href="/registry/app"
-              className="text-[11px] font-medium text-[--app-muted] hover:text-[--app-fg]"
-            >
-              ← Back to tools
-            </Link>
-          </p>
-      </div>
-    );
+  if (!allowed) {
+    redirect("/registry/app");
   }
 
   const accountabilityData = await getAccountabilityLog();
   const healthData = await getSecurityHealth();
 
   return (
-    <div className="flex flex-col gap-6">
-        <header className="space-y-1">
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[--app-muted]">
-            Reflexive Execution
-          </p>
-          <h1 className="text-2xl font-semibold text-[--app-fg]">
-            Monitor, introspect, and gate agent behavior
-          </h1>
-          <p className="max-w-2xl text-[11px] text-[--app-muted]">
-            Examine behavioral drift, threat levels, compliance status, and execution verdicts
-            for every actor in the system. Pre-execution gating halts, throttles, or requires
-            confirmation for high-risk operations.
-          </p>
-        </header>
-        <ReflexiveManager
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+      <Box component="header" sx={{ display: "grid", gap: 0.5 }}>
+        <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+          Reflexive Execution
+        </Typography>
+        <Typography variant="h4" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+          Monitor, introspect, and gate agent behavior
+        </Typography>
+        <Typography sx={{ mt: 0.5, maxWidth: 900, fontSize: 12, color: "var(--app-muted)" }}>
+          Examine behavioral drift, threat levels, compliance status, and execution verdicts for every actor in the system. Pre-execution gating halts, throttles, or requires confirmation for high-risk operations.
+        </Typography>
+      </Box>
+
+      <ReflexiveManager
           initialAccountability={
             accountabilityData?.entries?.map(entry => ({
               ...entry,
@@ -74,6 +59,6 @@ export default async function ReflexivePage() {
               : undefined
           }
         />
-    </div>
+    </Box>
   );
 }

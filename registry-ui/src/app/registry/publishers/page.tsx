@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Box, Card, CardActionArea, CardContent, Chip, Typography } from "@mui/material";
 import { listPublishers, type PublisherSummary } from "@/lib/registryClient";
 
 export default async function PublishersPage() {
@@ -6,57 +7,68 @@ export default async function PublishersPage() {
   const publishers: PublisherSummary[] = payload.publishers ?? [];
 
   return (
-    <div className="flex flex-col gap-6">
-        <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[--app-muted]">
-              Publisher directory
-            </p>
-            <h1 className="mt-1 text-2xl font-semibold text-[--app-fg]">
-              People and teams behind the tools
-            </h1>
-            <p className="mt-1 max-w-xl text-[11px] text-[--app-muted]">
-              Browse publishers with live listings in the registry. Open any profile to see their tools and trust
-              signals.
-            </p>
-          </div>
-        </header>
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+      <Box component="header" sx={{ display: "grid", gap: 0.5 }}>
+        <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+          Publisher directory
+        </Typography>
+        <Typography variant="h4" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+          People and teams behind the tools
+        </Typography>
+        <Typography sx={{ mt: 0.5, maxWidth: 720, fontSize: 12, color: "var(--app-muted)" }}>
+          Browse publishers with live listings in the registry. Open any profile to see their tools and trust signals.
+        </Typography>
+      </Box>
 
-        <section className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-6 ring-1 ring-[--app-surface-ring]">
+      <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+        <CardContent sx={{ p: 2.5 }}>
           {publishers.length === 0 ? (
-            <p className="text-[--app-muted]">
+            <Typography sx={{ color: "var(--app-muted)" }}>
               No publishers are visible yet. Once tools are in the registry, their publishers will appear here.
-            </p>
+            </Typography>
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2">
+            <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" } }}>
               {publishers.map((publisher) => (
-                <Link
+                <Card
                   key={publisher.publisher_id}
-                  href={`/registry/publishers/${encodeURIComponent(publisher.publisher_id)}`}
-                  className="flex flex-col gap-2 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring] transition hover:border-[--app-accent] hover:ring-[--app-accent]"
+                  variant="outlined"
+                  sx={{
+                    borderRadius: 3,
+                    borderColor: "var(--app-border)",
+                    bgcolor: "var(--app-control-bg)",
+                    boxShadow: "none",
+                  }}
                 >
-                  <div className="flex items-baseline justify-between gap-2">
-                    <h2 className="text-sm font-semibold text-[--app-fg]">
-                      {publisher.display_name ?? publisher.publisher_id}
-                    </h2>
-                    {publisher.trust_score?.overall != null ? (
-                      <span className="rounded-full bg-[--app-surface] px-2 py-0.5 text-[10px] font-semibold text-[--app-muted]">
-                        Trust {publisher.trust_score.overall.toFixed(1)}
-                      </span>
-                    ) : null}
-                  </div>
-                  <p className="line-clamp-3 text-[11px] leading-relaxed text-[--app-muted]">
-                    {publisher.summary ?? "No summary provided."}
-                  </p>
-                  <p className="mt-auto text-[10px] text-[--app-muted]">
-                    {publisher.tool_count ?? 0} tool
-                    {(publisher.tool_count ?? 0) === 1 ? "" : "s"} in this registry
-                  </p>
-                </Link>
+                  <Link href={`/registry/publishers/${encodeURIComponent(publisher.publisher_id)}`} legacyBehavior passHref>
+                    <CardActionArea component="a" sx={{ borderRadius: 3, "&:hover": { bgcolor: "transparent" } }}>
+                      <CardContent sx={{ p: 2 }}>
+                        <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 1 }}>
+                          <Typography sx={{ fontSize: 14, fontWeight: 700, color: "var(--app-fg)" }}>
+                            {publisher.display_name ?? publisher.publisher_id}
+                          </Typography>
+                          {publisher.trust_score?.overall != null ? (
+                            <Chip
+                              size="small"
+                              label={`Trust ${publisher.trust_score.overall.toFixed(1)}`}
+                              sx={{ bgcolor: "var(--app-surface)", color: "var(--app-muted)", fontWeight: 700, fontSize: 11 }}
+                            />
+                          ) : null}
+                        </Box>
+                        <Typography sx={{ mt: 1, fontSize: 12, color: "var(--app-muted)" }}>
+                          {publisher.summary ?? "No summary provided."}
+                        </Typography>
+                        <Typography sx={{ mt: 1.5, fontSize: 11, color: "var(--app-muted)" }}>
+                          {publisher.tool_count ?? 0} tool{(publisher.tool_count ?? 0) === 1 ? "" : "s"} in this registry
+                        </Typography>
+                      </CardContent>
+                    </CardActionArea>
+                  </Link>
+                </Card>
               ))}
-            </div>
+            </Box>
           )}
-        </section>
-    </div>
+        </CardContent>
+      </Card>
+    </Box>
   );
 }

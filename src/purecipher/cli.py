@@ -6,8 +6,10 @@ import argparse
 import os
 from collections.abc import Sequence
 
+import uvicorn
 from fastmcp.server.security.certification.attestation import CertificationLevel
 from purecipher.auth import RegistryAuthSettings
+from purecipher.hosted_runtime import build_hosted_registry_app
 from purecipher.registry import PureCipherRegistry
 
 
@@ -86,6 +88,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=os.getenv("PURECIPHER_USERS_JSON", ""),
         help="JSON array of static auth users. Defaults to PURECIPHER_USERS_JSON.",
     )
+    parser.add_argument(
+        "--host-toolsets",
+        action="store_true",
+        default=_env_flag("PURECIPHER_HOST_TOOLSETS"),
+        help="Host OpenAPI toolsets as MCP endpoints under /mcp/toolsets/<toolset_id>.",
+    )
     return parser
 
 
@@ -128,10 +136,25 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     registry = build_registry_from_args(args)
-    registry.run(
-        transport="streamable-http",
+    if not args.host_toolsets:
+        registry.run(
+            transport="streamable-http",
+            host=args.host,
+            port=args.port,
+        )
+        return 0
+
+    # Hosted mode: serve registry + toolset gateways in one ASGI app.
+    app = build_hosted_registry_app(
+        registry=registry,
+        persistence_path=args.database_path,
+    )
+    uvicorn.run(
+        app,
         host=args.host,
-        port=args.port,
+        port=int(args.port),
+        log_level=os.getenv("LOG_LEVEL", "info"),
+        lifespan="on",
     )
     return 0
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { Stack } from "@mui/material";
 import type {
   PolicyAnalyticsResponse,
   PolicyGovernanceResponse,
@@ -234,7 +235,7 @@ function PolicyManagerInner({
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <Stack spacing={3}>
       {banner ? (
         <Banner
           tone={banner.tone}
@@ -253,6 +254,6 @@ function PolicyManagerInner({
       />
 
       {renderTab()}
-    </div>
+    </Stack>
   );
 }

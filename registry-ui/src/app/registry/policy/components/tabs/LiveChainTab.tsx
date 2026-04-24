@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Box, Button, Card, CardContent, TextField, Typography } from "@mui/material";
 import type {
   PolicyConfig,
   PolicyProviderItem,
@@ -49,147 +50,179 @@ export function LiveChainTab({
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
-        <div className="flex flex-col gap-1">
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[--app-muted]">
-            Live policy chain
-          </p>
-          <h2 className="text-xl font-semibold text-[--app-fg]">
-            See what is active right now
-          </h2>
-          <p className="max-w-2xl text-xs text-[--app-muted]">
-            These rules are live today. Draft a change or removal first, then approve
-            and apply it from the Proposals tab.
-          </p>
-        </div>
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+        <CardContent sx={{ p: 3 }}>
+          <Box sx={{ display: "grid", gap: 0.5 }}>
+            <Typography sx={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+              Live policy chain
+            </Typography>
+            <Typography variant="h5" sx={{ fontWeight: 800, color: "var(--app-fg)" }}>
+              See what is active right now
+            </Typography>
+            <Typography sx={{ maxWidth: 900, fontSize: 13, color: "var(--app-muted)" }}>
+              These rules are live today. Draft a change or removal first, then approve and apply it from the Proposals tab.
+            </Typography>
+          </Box>
 
-        <div className="mt-4 flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => void onExportLive()}
-            disabled={busyKey === "export-live"}
-            className="rounded-full border border-[--app-border] px-3 py-1 text-[11px] font-semibold text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg] disabled:opacity-60"
-          >
-            {busyKey === "export-live" ? "Downloading\u2026" : "Export live JSON"}
-          </button>
-          <button
-            type="button"
-            onClick={() => downloadJsonFile("securemcp-policy-schema.json", schema)}
-            className="rounded-full border border-[--app-border] px-3 py-1 text-[11px] font-semibold text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg]"
-          >
-            Download schema
-          </button>
-        </div>
+          <Box sx={{ mt: 2, display: "flex", flexWrap: "wrap", gap: 1 }}>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => void onExportLive()}
+              disabled={busyKey === "export-live"}
+              sx={{
+                borderRadius: 999,
+                borderColor: "var(--app-border)",
+                color: "var(--app-muted)",
+                "&:hover": { bgcolor: "var(--app-hover-bg)", borderColor: "var(--app-border)" },
+              }}
+            >
+              {busyKey === "export-live" ? "Downloading…" : "Export live JSON"}
+            </Button>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => downloadJsonFile("securemcp-policy-schema.json", schema)}
+              sx={{
+                borderRadius: 999,
+                borderColor: "var(--app-border)",
+                color: "var(--app-muted)",
+                "&:hover": { bgcolor: "var(--app-hover-bg)", borderColor: "var(--app-border)" },
+              }}
+            >
+              Download schema
+            </Button>
+          </Box>
 
-        <div className="mt-5 flex flex-col gap-4">
-          {providers.length === 0 ? (
-            <div className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
-              <p className="text-xs text-[--app-muted]">
-                No providers are active right now. Start by drafting the first rule
-                from the Tools tab.
-              </p>
-            </div>
-          ) : (
-            providers.map((provider) => {
-              const isEditing = editingIndex === provider.index;
-              const editableText =
-                editTexts[provider.index] ?? prettyJson(provider.config ?? {});
+          <Box sx={{ mt: 3, display: "flex", flexDirection: "column", gap: 2 }}>
+            {providers.length === 0 ? (
+              <Card variant="outlined" sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}>
+                <CardContent sx={{ p: 2 }}>
+                  <Typography sx={{ fontSize: 13, color: "var(--app-muted)" }}>
+                    No providers are active right now. Start by drafting the first rule from the Tools tab.
+                  </Typography>
+                </CardContent>
+              </Card>
+            ) : (
+              providers.map((provider) => {
+                const isEditing = editingIndex === provider.index;
+                const editableText =
+                  editTexts[provider.index] ?? prettyJson(provider.config ?? {});
 
-              return (
-                <article
-                  key={provider.index}
-                  className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="rounded-full bg-[--app-surface] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
-                          Step {provider.index + 1}
-                        </span>
-                        <span className="text-xs font-semibold text-[--app-fg]">
-                          {provider.type}
-                        </span>
-                      </div>
-                      <p className="text-xs text-[--app-muted]">{provider.summary}</p>
-                      <p className="text-[11px] text-[--app-muted]">
-                        Policy ID: {provider.policy_id ?? "n/a"} · Version:{" "}
-                        {provider.policy_version ?? "n/a"}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingIndex(isEditing ? null : provider.index);
-                          setEditTexts((current) => ({
-                            ...current,
-                            [provider.index]: prettyJson(provider.config ?? {}),
-                          }));
-                        }}
-                        disabled={!provider.editable}
-                        className="rounded-full border border-[--app-border] px-3 py-1 text-[11px] font-semibold text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg] disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {isEditing
-                          ? "Close draft"
-                          : provider.editable
-                            ? "Draft change"
-                            : "Read only"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setRemovalModal({ index: provider.index, reason: "No longer needed." })
-                        }
-                        disabled={busyKey === `remove-${provider.index}`}
-                        className="rounded-full border border-rose-500/80 px-3 py-1 text-[11px] font-semibold text-rose-100 transition hover:bg-rose-500/10 disabled:opacity-60"
-                      >
-                        {busyKey === `remove-${provider.index}` ? "Drafting\u2026" : "Draft removal"}
-                      </button>
-                    </div>
-                  </div>
+                return (
+                  <Card
+                    key={provider.index}
+                    variant="outlined"
+                    sx={{
+                      borderRadius: 3,
+                      borderColor: "var(--app-border)",
+                      bgcolor: "var(--app-control-bg)",
+                      boxShadow: "none",
+                    }}
+                  >
+                    <CardContent sx={{ p: 2.5 }}>
+                      <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "flex-start", justifyContent: "space-between", gap: 2 }}>
+                        <Box sx={{ display: "grid", gap: 0.5 }}>
+                          <Typography sx={{ fontSize: 11, fontWeight: 900, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                            Step {provider.index + 1}
+                          </Typography>
+                          <Typography sx={{ fontSize: 14, fontWeight: 800, color: "var(--app-fg)" }}>
+                            {provider.type}
+                          </Typography>
+                          <Typography sx={{ fontSize: 13, color: "var(--app-muted)" }}>
+                            {provider.summary}
+                          </Typography>
+                          <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                            Policy ID: {provider.policy_id ?? "n/a"} · Version: {provider.policy_version ?? "n/a"}
+                          </Typography>
+                        </Box>
 
-                  {isEditing ? (
-                    <div className="mt-4 flex flex-col gap-3">
-                      <JsonEditor
-                        value={editableText}
-                        onChange={(newText) =>
-                          setEditTexts((current) => ({
-                            ...current,
-                            [provider.index]: newText,
-                          }))
-                        }
-                        minHeight="220px"
-                      />
-                      <input
-                        value={editDescriptions[provider.index] ?? ""}
-                        onChange={(event) =>
-                          setEditDescriptions((current) => ({
-                            ...current,
-                            [provider.index]: event.target.value,
-                          }))
-                        }
-                        placeholder="What should change and why?"
-                        className="rounded-full border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
-                      />
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => void handleDraftEdit(provider.index)}
-                          disabled={busyKey === `draft-${provider.index}`}
-                          className="rounded-full bg-[--app-accent] px-4 py-2 text-[11px] font-semibold text-[--app-accent-contrast] transition hover:opacity-90 disabled:opacity-60"
-                        >
-                          {busyKey === `draft-${provider.index}` ? "Saving draft\u2026" : "Create proposal"}
-                        </button>
-                      </div>
-                    </div>
-                  ) : null}
-                </article>
-              );
-            })
-          )}
-        </div>
-      </div>
+                        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={() => {
+                              setEditingIndex(isEditing ? null : provider.index);
+                              setEditTexts((current) => ({
+                                ...current,
+                                [provider.index]: prettyJson(provider.config ?? {}),
+                              }));
+                            }}
+                            disabled={!provider.editable}
+                            sx={{
+                              borderRadius: 999,
+                              borderColor: "var(--app-border)",
+                              color: "var(--app-muted)",
+                              "&:hover": { bgcolor: "var(--app-hover-bg)", borderColor: "var(--app-border)" },
+                            }}
+                          >
+                            {isEditing ? "Close draft" : provider.editable ? "Draft change" : "Read only"}
+                          </Button>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            color="error"
+                            onClick={() =>
+                              setRemovalModal({ index: provider.index, reason: "No longer needed." })
+                            }
+                            disabled={busyKey === `remove-${provider.index}`}
+                            sx={{ borderRadius: 999 }}
+                          >
+                            {busyKey === `remove-${provider.index}` ? "Drafting…" : "Draft removal"}
+                          </Button>
+                        </Box>
+                      </Box>
+
+                      {isEditing ? (
+                        <Box sx={{ mt: 2, display: "flex", flexDirection: "column", gap: 2 }}>
+                          <JsonEditor
+                            value={editableText}
+                            onChange={(newText) =>
+                              setEditTexts((current) => ({
+                                ...current,
+                                [provider.index]: newText,
+                              }))
+                            }
+                            minHeight="220px"
+                          />
+                          <TextField
+                            size="small"
+                            value={editDescriptions[provider.index] ?? ""}
+                            onChange={(event) =>
+                              setEditDescriptions((current) => ({
+                                ...current,
+                                [provider.index]: event.target.value,
+                              }))
+                            }
+                            placeholder="What should change and why?"
+                          />
+                          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+                            <Button
+                              size="small"
+                              variant="contained"
+                              onClick={() => void handleDraftEdit(provider.index)}
+                              disabled={busyKey === `draft-${provider.index}`}
+                              sx={{
+                                borderRadius: 999,
+                                bgcolor: "var(--app-accent)",
+                                color: "var(--app-accent-contrast)",
+                                "&:hover": { bgcolor: "var(--app-accent)" },
+                              }}
+                            >
+                              {busyKey === `draft-${provider.index}` ? "Saving draft…" : "Create proposal"}
+                            </Button>
+                          </Box>
+                        </Box>
+                      ) : null}
+                    </CardContent>
+                  </Card>
+                );
+              })
+            )}
+          </Box>
+        </CardContent>
+      </Card>
 
       {/* Removal confirmation modal */}
       <ConfirmModal
@@ -210,7 +243,10 @@ export function LiveChainTab({
         }}
         onCancel={() => setRemovalModal(null)}
       >
-        <textarea
+        <TextField
+          fullWidth
+          multiline
+          minRows={3}
           value={removalModal?.reason ?? ""}
           onChange={(event) =>
             setRemovalModal((prev) =>
@@ -218,9 +254,8 @@ export function LiveChainTab({
             )
           }
           placeholder="Why should this rule be removed?"
-          className="min-h-[80px] w-full rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-3 text-xs leading-6 text-[--app-fg] outline-none focus:border-[--app-accent]"
         />
       </ConfirmModal>
-    </div>
+    </Box>
   );
 }

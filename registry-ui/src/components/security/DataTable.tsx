@@ -2,6 +2,21 @@
 
 import { useState, useMemo } from "react";
 
+import {
+  Box,
+  Card,
+  CardContent,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TablePagination,
+  TableRow,
+  TableSortLabel,
+  Typography,
+} from "@mui/material";
+
 export type Column<T> = {
   key: string;
   header: string;
@@ -23,6 +38,7 @@ export function DataTable<T extends Record<string, unknown>>({
   emptyMessage?: string;
 }) {
   const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(pageSize);
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
@@ -39,8 +55,7 @@ export function DataTable<T extends Record<string, unknown>>({
     });
   }, [data, sortKey, sortDir]);
 
-  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
-  const paged = sorted.slice(page * pageSize, (page + 1) * pageSize);
+  const paged = sorted.slice(page * rowsPerPage, (page + 1) * rowsPerPage);
 
   function handleSort(key: string) {
     if (sortKey === key) {
@@ -54,80 +69,100 @@ export function DataTable<T extends Record<string, unknown>>({
 
   if (data.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-3xl border border-[--app-border] bg-[--app-control-bg] py-10 ring-1 ring-[--app-surface-ring]">
-        <p className="text-[11px] text-[--app-muted]">{emptyMessage}</p>
-      </div>
+      <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}>
+        <CardContent sx={{ py: 6 }}>
+          <Typography sx={{ textAlign: "center", fontSize: 12, color: "var(--app-muted)" }}>{emptyMessage}</Typography>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl ring-1 ring-[--app-surface-ring]">
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-[11px]">
-          <thead>
-            <tr className="border-b border-[--app-border] bg-[--app-hover-bg]">
-              {columns.map((col) => (
-                <th
-                  key={col.key}
-                  className={`px-3 py-2.5 font-semibold uppercase tracking-wider text-[--app-muted] ${
-                    col.sortable !== false ? "cursor-pointer select-none hover:text-[--app-fg]" : ""
-                  }`}
-                  onClick={col.sortable !== false ? () => handleSort(col.key) : undefined}
-                >
-                  <span className="flex items-center gap-1">
-                    {col.header}
-                    {sortKey === col.key ? (
-                      <span className="text-[--app-accent]">{sortDir === "asc" ? "↑" : "↓"}</span>
-                    ) : null}
-                  </span>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
+    <Card variant="outlined" sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}>
+      <TableContainer>
+        <Table size="small">
+          <TableHead>
+            <TableRow sx={{ bgcolor: "var(--app-hover-bg)" }}>
+              {columns.map((col) => {
+                const sortable = col.sortable !== false;
+                const active = sortKey === col.key;
+                return (
+                  <TableCell
+                    key={col.key}
+                    onClick={sortable ? () => handleSort(col.key) : undefined}
+                    sx={{
+                      color: "var(--app-muted)",
+                      fontSize: 11,
+                      fontWeight: 800,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.14em",
+                      cursor: sortable ? "pointer" : "default",
+                      userSelect: sortable ? "none" : "auto",
+                      borderBottom: "1px solid var(--app-border)",
+                    }}
+                  >
+                    {sortable ? (
+                      <TableSortLabel
+                        active={active}
+                        direction={active ? sortDir : "asc"}
+                        sx={{
+                          color: "inherit !important",
+                          "& .MuiTableSortLabel-icon": { color: "var(--app-accent) !important" },
+                        }}
+                      >
+                        {col.header}
+                      </TableSortLabel>
+                    ) : (
+                      col.header
+                    )}
+                  </TableCell>
+                );
+              })}
+            </TableRow>
+          </TableHead>
+          <TableBody>
             {paged.map((row, i) => (
-              <tr
+              <TableRow
                 key={i}
-                className={`border-b border-[--app-border] bg-[--app-control-bg] transition ${
-                  onRowClick ? "cursor-pointer hover:bg-[--app-hover-bg]" : ""
-                }`}
+                hover={!!onRowClick}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
+                sx={{
+                  cursor: onRowClick ? "pointer" : "default",
+                  "& td": { borderBottom: "1px solid var(--app-border)", color: "var(--app-muted)", fontSize: 12 },
+                }}
               >
                 {columns.map((col) => (
-                  <td key={col.key} className="px-3 py-2 text-[--app-muted]">
+                  <TableCell key={col.key}>
                     {col.render ? col.render(row) : String(row[col.key] ?? "—")}
-                  </td>
+                  </TableCell>
                 ))}
-              </tr>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
-      </div>
-      {totalPages > 1 ? (
-        <div className="flex items-center justify-between border-t border-[--app-border] bg-[--app-hover-bg] px-3 py-2">
-          <p className="text-[10px] text-[--app-muted]">
-            {sorted.length} row{sorted.length !== 1 ? "s" : ""} · Page {page + 1} of {totalPages}
-          </p>
-          <div className="flex gap-1">
-            <button
-              type="button"
-              onClick={() => setPage(Math.max(0, page - 1))}
-              disabled={page === 0}
-              className="rounded-full px-2 py-0.5 text-[10px] font-medium text-[--app-muted] transition hover:bg-[--app-control-bg] hover:text-[--app-fg] disabled:opacity-40"
-            >
-              ← Prev
-            </button>
-            <button
-              type="button"
-              onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
-              disabled={page >= totalPages - 1}
-              className="rounded-full px-2 py-0.5 text-[10px] font-medium text-[--app-muted] transition hover:bg-[--app-control-bg] hover:text-[--app-fg] disabled:opacity-40"
-            >
-              Next →
-            </button>
-          </div>
-        </div>
-      ) : null}
-    </div>
+          </TableBody>
+        </Table>
+      </TableContainer>
+
+      <Box sx={{ borderTop: "1px solid var(--app-border)", bgcolor: "var(--app-hover-bg)" }}>
+        <TablePagination
+          component="div"
+          count={sorted.length}
+          page={page}
+          onPageChange={(_, nextPage) => setPage(nextPage)}
+          rowsPerPage={rowsPerPage}
+          onRowsPerPageChange={(e) => {
+            const next = Number(e.target.value);
+            setRowsPerPage(next);
+            setPage(0);
+          }}
+          rowsPerPageOptions={[5, 10, 25, 50]}
+          labelRowsPerPage="Rows"
+          sx={{
+            color: "var(--app-muted)",
+            "& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows": { fontSize: 11 },
+            "& .MuiSelect-select": { fontSize: 11 },
+          }}
+        />
+      </Box>
+    </Card>
   );
 }

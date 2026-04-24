@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 
+import { Alert, Box, Button, Card, CardContent, Chip, FormControl, InputLabel, MenuItem, Select, TextField, Typography } from "@mui/material";
+
 import {
   getPublisherProfile,
   listPublishers,
@@ -54,109 +56,109 @@ export default async function AccessStudioPage({
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <header className="space-y-1">
-        <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[--app-muted]">
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+      <Box component="header" sx={{ display: "grid", gap: 0.5 }}>
+        <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
           Access Studio
-        </p>
-        <h1 className="text-2xl font-semibold text-[--app-fg]">Simulate MCP tool eligibility</h1>
-        <p className="max-w-2xl text-[11px] text-[--app-muted]">
+        </Typography>
+        <Typography variant="h4" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+          Simulate MCP tool eligibility
+        </Typography>
+        <Typography sx={{ mt: 0.5, maxWidth: 900, fontSize: 12, color: "var(--app-muted)" }}>
           MCP-only phase: server tool inventory + registry certification/verification preview. Contract/ledger/consent enforcement comes next.
-        </p>
-      </header>
+        </Typography>
+      </Box>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Link
-          href="/registry/clients"
-          className="ml-auto text-[11px] font-semibold text-[--app-accent] hover:text-[--app-fg]"
-        >
-          ← Clients
+      <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+        <Link href="/registry/clients" legacyBehavior passHref>
+          <Button component="a" variant="text" sx={{ color: "var(--app-muted)" }}>
+            ← Clients
+          </Button>
         </Link>
-      </div>
+      </Box>
 
-      <section className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-6 ring-1 ring-[--app-surface-ring]">
-        <h2 className="mb-4 text-sm font-semibold text-[--app-fg]">MCP simulation query</h2>
-        <form method="GET" className="grid gap-4 md:grid-cols-2">
-          <label className="space-y-1">
-            <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-[--app-muted]">
-              Client ID
-            </span>
-            <input
+      <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+        <CardContent sx={{ p: 2.5 }}>
+          <Typography sx={{ fontSize: 14, fontWeight: 700, color: "var(--app-fg)" }}>MCP simulation query</Typography>
+          <Box component="form" method="GET" sx={{ mt: 2, display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" } }}>
+            <TextField
               name="clientId"
               defaultValue={clientId ?? ""}
+              label="Client ID"
               placeholder="e.g., client-123"
-              className="w-full rounded-xl border border-[--app-border] bg-[--app-chrome-bg] px-3 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
+              size="small"
+              fullWidth
             />
-          </label>
 
-          <label className="space-y-1">
-            <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-[--app-muted]">
-              MCP Server
-            </span>
-            <select
-              name="serverId"
-              defaultValue={serverIdParam ?? ""}
-              className="w-full rounded-xl border border-[--app-border] bg-[--app-chrome-bg] px-3 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
-            >
-              <option value="">Select a server (publisher)</option>
-              {publishers.map((p) => (
-                <option key={p.publisher_id} value={p.publisher_id}>
-                  {p.display_name ?? p.publisher_id}
-                </option>
-              ))}
-            </select>
-          </label>
+            <FormControl size="small" fullWidth>
+              <InputLabel id="serverIdLabel">MCP Server</InputLabel>
+              <Select labelId="serverIdLabel" label="MCP Server" name="serverId" defaultValue={serverIdParam ?? ""}>
+                <MenuItem value="">
+                  <em>Select a server (publisher)</em>
+                </MenuItem>
+                {publishers.map((p) => (
+                  <MenuItem key={p.publisher_id} value={p.publisher_id}>
+                    {p.display_name ?? p.publisher_id}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
 
-          <label className="space-y-1 md:col-span-2">
-            <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-[--app-muted]">
-              Tool (optional)
-            </span>
-            <select
-              name="toolName"
-              defaultValue={toolName ?? ""}
-              className="w-full rounded-xl border border-[--app-border] bg-[--app-chrome-bg] px-3 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
-              disabled={!serverId || listings.length === 0}
-            >
-              <option value="">Use server-level resource</option>
-              {listings.map((l) => (
-                <option key={l.tool_name} value={l.tool_name}>
-                  {l.display_name ?? l.tool_name}
-                </option>
-              ))}
-            </select>
-          </label>
+            <FormControl size="small" fullWidth sx={{ gridColumn: { md: "1 / -1" } }}>
+              <InputLabel id="toolNameLabel">Tool (optional)</InputLabel>
+              <Select
+                labelId="toolNameLabel"
+                label="Tool (optional)"
+                name="toolName"
+                defaultValue={toolName ?? ""}
+                disabled={!serverId || listings.length === 0}
+              >
+                <MenuItem value="">
+                  <em>Use server-level resource</em>
+                </MenuItem>
+                {listings.map((l) => (
+                  <MenuItem key={l.tool_name} value={l.tool_name}>
+                    {l.display_name ?? l.tool_name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
 
-          <div className="md:col-span-2 flex flex-wrap items-center justify-between gap-2">
-            <button
-              type="submit"
-              className="rounded-full bg-[--app-accent] px-5 py-2 text-xs font-semibold text-[--app-accent-contrast] shadow-sm transition hover:opacity-90"
-            >
-              Run simulation
-            </button>
+            <Box sx={{ gridColumn: { md: "1 / -1" }, display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 1.5 }}>
+              <Button
+                type="submit"
+                variant="contained"
+                sx={{ borderRadius: 999, bgcolor: "var(--app-accent)", color: "var(--app-accent-contrast)", "&:hover": { bgcolor: "var(--app-accent)" } }}
+              >
+                Run simulation
+              </Button>
 
-            <p className="text-[11px] text-[--app-muted]">
-              Server:{" "}
-              <span className="font-semibold text-[--app-fg]">{serverId ? serverId : "—"}</span>
-              {toolName ? (
-                <>
-                  {" "}
-                  · Tool: <span className="font-semibold text-[--app-fg]">{toolName}</span>
-                </>
-              ) : null}
-            </p>
-          </div>
-        </form>
-      </section>
+              <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                Server:{" "}
+                <Box component="span" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+                  {serverId ? serverId : "—"}
+                </Box>
+                {toolName ? (
+                  <>
+                    {" "}
+                    · Tool:{" "}
+                    <Box component="span" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+                      {toolName}
+                    </Box>
+                  </>
+                ) : null}
+              </Typography>
+            </Box>
+          </Box>
+        </CardContent>
+      </Card>
 
-      {error ? (
-        <div className="rounded-3xl border border-red-500/40 bg-red-500/10 p-4 ring-1 ring-red-700/60">
-          <p className="text-[12px] text-red-200">Simulation failed: {error}</p>
-        </div>
-      ) : null}
+      {error ? <Alert severity="error">Simulation failed: {error}</Alert> : null}
 
       {serverId ? (
-        <section className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-6 ring-1 ring-[--app-surface-ring]">
-          <h2 className="mb-4 text-sm font-semibold text-[--app-fg]">Server tool inventory</h2>
+        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+          <CardContent sx={{ p: 2.5 }}>
+            <Typography sx={{ fontSize: 14, fontWeight: 700, color: "var(--app-fg)" }}>Server tool inventory</Typography>
 
           {profile?.error ? (
             <EmptyState
@@ -164,7 +166,7 @@ export default async function AccessStudioPage({
               message="The registry backend returned an error for this server profile."
             />
           ) : (
-            <div className="space-y-4">
+            <Box sx={{ mt: 2, display: "grid", gap: 2 }}>
               <KeyValuePanel
                 title="Server snapshot (MCP-only)"
                 entries={[
@@ -180,7 +182,7 @@ export default async function AccessStudioPage({
                 ]}
               />
 
-              <div className="grid gap-4 sm:grid-cols-2">
+              <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" } }}>
                 {listings.length === 0 ? (
                   <EmptyState
                     title="No tool listings"
@@ -188,41 +190,47 @@ export default async function AccessStudioPage({
                   />
                 ) : (
                   listings.slice(0, 8).map((tool) => (
-                    <div
+                    <Card
                       key={tool.tool_name}
-                      className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]"
+                      variant="outlined"
+                      sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}
                     >
-                      <div className="flex items-baseline justify-between gap-3">
-                        <h3 className="text-sm font-semibold text-[--app-fg]">
-                          {tool.display_name ?? tool.tool_name}
-                        </h3>
-                        <span className="rounded-full bg-[--app-surface] px-2 py-0.5 text-[10px] font-semibold text-[--app-muted]">
-                          {tool.certification_level ?? "unlisted"}
-                        </span>
-                      </div>
-                      <p className="mt-2 line-clamp-2 text-[11px] text-[--app-muted]">
-                        {tool.description ?? "No description provided."}
-                      </p>
-                    </div>
+                      <CardContent sx={{ p: 2 }}>
+                        <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 1.5 }}>
+                          <Typography sx={{ fontSize: 14, fontWeight: 700, color: "var(--app-fg)" }}>
+                            {tool.display_name ?? tool.tool_name}
+                          </Typography>
+                          <Chip
+                            size="small"
+                            label={tool.certification_level ?? "unlisted"}
+                            sx={{ borderRadius: 999, bgcolor: "var(--app-surface)", color: "var(--app-muted)", fontWeight: 700, fontSize: 11 }}
+                          />
+                        </Box>
+                        <Typography sx={{ mt: 1, fontSize: 12, color: "var(--app-muted)" }}>
+                          {tool.description ?? "No description provided."}
+                        </Typography>
+                      </CardContent>
+                    </Card>
                   ))
                 )}
-              </div>
+              </Box>
 
-              <div className="mt-2">
-                <p className="text-[11px] text-[--app-muted]">
+              <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
                   Showing up to 8 tools for performance. Use the Tool dropdown to inspect certification details.
-                </p>
-              </div>
-            </div>
+              </Typography>
+            </Box>
           )}
-        </section>
+          </CardContent>
+        </Card>
       ) : (
-        <section className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-6 ring-1 ring-[--app-surface-ring]">
+        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+          <CardContent sx={{ p: 2.5 }}>
           <EmptyState
             title="Pick a server to simulate"
             message="Choose a server (publisher) and optionally a tool, then click “Run simulation”."
           />
-        </section>
+          </CardContent>
+        </Card>
       )}
 
       {toolName ? (
@@ -275,7 +283,7 @@ export default async function AccessStudioPage({
           </div>
         </section>
       ) : null}
-    </div>
+    </Box>
   );
 }
 

@@ -123,6 +123,66 @@ class TestPureCipherRegistry:
         assert "/registry/tools" in paths
         assert "/registry/submit" in paths
         assert "/registry/preflight" in paths
+        assert "/registry/notifications" in paths
+        assert "/registry/me/listings" in paths
+        assert "/registry/openapi/ingest" in paths
+        assert "/registry/openapi/toolset" in paths
+
+    def test_http_registry_openapi_ingest_and_toolset(self):
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            persistence_path=":memory:",
+        )
+        app = registry.http_app()
+
+        openapi = {
+            "openapi": "3.0.3",
+            "info": {"title": "Demo", "version": "1.0.0"},
+            "paths": {
+                "/users/{id}": {
+                    "get": {
+                        "operationId": "getUser",
+                        "summary": "Get a user",
+                        "responses": {"200": {"description": "ok"}},
+                    }
+                },
+                "/users": {
+                    "post": {
+                        "operationId": "createUser",
+                        "summary": "Create user",
+                        "responses": {"201": {"description": "created"}},
+                    }
+                },
+            },
+        }
+
+        with TestClient(app) as client:
+            ingest = client.post(
+                "/registry/openapi/ingest",
+                json={"title": "Demo API", "text": json.dumps(openapi)},
+            )
+            assert ingest.status_code == 200
+            ingest_payload = ingest.json()
+            assert ingest_payload["source"]["operation_count"] == 2
+            ops = ingest_payload["operations"]
+            keys = {op["operation_key"] for op in ops}
+            assert {"getUser", "createUser"} <= keys
+
+            source_id = ingest_payload["source"]["source_id"]
+            toolset = client.post(
+                "/registry/openapi/toolset",
+                json={
+                    "source_id": source_id,
+                    "title": "Demo toolset",
+                    "selected_operations": ["getUser"],
+                    "tool_name_prefix": "demo",
+                },
+            )
+            assert toolset.status_code == 200
+            toolset_payload = toolset.json()
+            assert toolset_payload["operation_count"] == 1
+            assert toolset_payload["toolset"]["source_id"] == source_id
+            assert toolset_payload["toolset"]["selected_operations"] == ["getUser"]
 
     def test_submit_tool_accepts_certified_manifest(self):
         registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
@@ -195,6 +255,34 @@ class TestPureCipherRegistry:
         assert detail["attestation"]["tool_name"] == "weather-lookup"
         assert detail["trust_score"] is not None
         assert detail["verification"]["valid"] is True
+
+    def test_registry_notifications_surface_after_submit(self):
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
+        app = registry.http_app()
+
+        with TestClient(app) as client:
+            empty = client.get("/registry/notifications")
+            assert empty.status_code == 200
+            assert empty.json().get("items") == []
+
+            submit = client.post(
+                "/registry/submit",
+                json={
+                    "manifest": _manifest(tool_name="notify-tool").to_dict(),
+                    "display_name": "Notify Tool",
+                    "categories": ["network"],
+                    "requested_level": "basic",
+                },
+            )
+            assert submit.status_code == 201
+
+            feed = client.get("/registry/notifications?limit=5")
+            assert feed.status_code == 200
+            items = feed.json().get("items") or []
+            assert len(items) >= 1
+            kinds = {item.get("event_kind") for item in items}
+            assert "listing_published" in kinds or "listing_pending_review" in kinds
+            assert any("notify-tool" in (item.get("body") or "") for item in items)
 
     def test_http_registry_submit_and_verify(self):
         registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
@@ -944,3 +1032,29 @@ class TestPureCipherRegistry:
             payload = response.json()
             assert payload["count"] == 1
             assert payload["tools"][0]["tool_name"] == "weather-lookup"
+
+    def test_http_registry_tool_versions_endpoint(self):
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
+        registry.submit_tool(
+            _manifest(tool_name="weather-lookup", version="1.0.0"),
+            display_name="Weather Lookup",
+            categories={ToolCategory.NETWORK},
+            requested_level=CertificationLevel.BASIC,
+        )
+        registry.submit_tool(
+            _manifest(tool_name="weather-lookup", version="1.1.0"),
+            display_name="Weather Lookup",
+            categories={ToolCategory.NETWORK},
+            requested_level=CertificationLevel.BASIC,
+        )
+        app = registry.http_app()
+
+        with TestClient(app) as client:
+            resp = client.get("/registry/tools/weather-lookup/versions")
+            assert resp.status_code == 200
+            payload = resp.json()
+            assert payload["tool_name"] == "weather-lookup"
+            assert payload["version_count"] >= 1
+            versions = payload["versions"]
+            assert isinstance(versions, list)
+            assert versions[0]["version"] in {"1.1.0", "1.0.0"}

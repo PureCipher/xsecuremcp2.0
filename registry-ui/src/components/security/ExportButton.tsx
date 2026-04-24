@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
+import { Button } from "@mui/material";
 
 export function ExportButton({
   data,
@@ -52,12 +53,19 @@ export function ExportButton({
   }, [data, filename, format]);
 
   return (
-    <button
+    <Button
       type="button"
       onClick={handleExport}
-      className="rounded-full border border-[--app-border] px-3 py-1 text-[10px] font-medium text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg]"
+      size="small"
+      variant="outlined"
+      sx={{
+        borderRadius: 999,
+        borderColor: "var(--app-border)",
+        color: "var(--app-muted)",
+        "&:hover": { bgcolor: "var(--app-hover-bg)", borderColor: "var(--app-border)" },
+      }}
     >
       {label ?? `Export ${format.toUpperCase()}`}
-    </button>
+    </Button>
   );
 }

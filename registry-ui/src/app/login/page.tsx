@@ -1,6 +1,24 @@
-import { LoginForm } from "./LoginForm";
+import { redirect } from "next/navigation";
 
-export default function LoginPage() {
+import { getRegistrySession } from "@/lib/registryClient";
+import { LoginFormGate } from "./LoginFormGate";
+
+export default async function LoginPage() {
+  const sessionPayload = await getRegistrySession();
+
+  if (sessionPayload?.auth_enabled === false) {
+    redirect("/registry/app");
+  }
+
+  if (sessionPayload?.session != null) {
+    const role = sessionPayload.session.role ?? "";
+    if (role === "publisher") redirect("/registry/publish/mine");
+    if (role === "reviewer") redirect("/registry/review");
+    redirect("/registry/app");
+  }
+
+  const backendUnreachable = sessionPayload == null;
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-[--app-bg] px-4 py-10 text-sm text-[--app-fg]">
       <div className="grid w-full max-w-5xl gap-10 rounded-3xl border border-[--app-border] bg-[--app-surface] p-8 ring-1 ring-[--app-surface-ring] backdrop-blur-lg md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] md:p-10">
@@ -35,8 +53,22 @@ export default function LoginPage() {
           </dl>
         </section>
 
-        <section className="flex items-center justify-center">
-          <LoginForm />
+        <section className="flex flex-col items-center justify-center gap-4">
+          {backendUnreachable ? (
+            <p
+              className="max-w-xs rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-xs text-amber-100"
+              role="status"
+            >
+              Cannot reach the registry API at{" "}
+              <span className="font-mono text-[11px]">
+                {process.env.REGISTRY_BACKEND_URL ?? "http://localhost:8000"}
+              </span>
+              . Start the Python registry (for example{" "}
+              <span className="font-mono text-[11px]">uv run python examples/securemcp/purecipher_registry.py</span>
+              ) then refresh.
+            </p>
+          ) : null}
+          <LoginFormGate />
         </section>
       </div>
     </div>

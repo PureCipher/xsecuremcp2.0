@@ -6,6 +6,7 @@ import type {
   PolicyBundleItem,
   RegistryPayload,
 } from "@/lib/registryClient";
+import { Box, Button, Card, CardContent, Chip, Typography } from "@mui/material";
 import { usePolicyContext } from "../../contexts/PolicyContext";
 
 type OverviewTabProps = {
@@ -14,18 +15,18 @@ type OverviewTabProps = {
   onStageBundle: (bundleId: string, title: string) => Promise<void>;
 };
 
-function riskLevelClass(level: string | undefined): string {
+function riskLevelSx(level: string | undefined): Record<string, unknown> {
   switch (level?.toLowerCase()) {
     case "critical":
-      return "bg-red-500/15 text-red-200 ring-1 ring-red-400/50";
+      return { bgcolor: "rgba(239, 68, 68, 0.12)", color: "rgb(254, 202, 202)", border: "1px solid rgba(248, 113, 113, 0.45)" };
     case "high":
-      return "bg-rose-500/15 text-rose-200 ring-1 ring-rose-400/50";
+      return { bgcolor: "rgba(244, 63, 94, 0.12)", color: "rgb(254, 205, 211)", border: "1px solid rgba(251, 113, 133, 0.45)" };
     case "medium":
-      return "bg-amber-500/15 text-amber-200 ring-1 ring-amber-400/50";
+      return { bgcolor: "rgba(245, 158, 11, 0.12)", color: "rgb(253, 230, 138)", border: "1px solid rgba(251, 191, 36, 0.45)" };
     case "low":
-      return "bg-[--app-control-active-bg] text-[--app-muted] ring-1 ring-[--app-accent]";
+      return { bgcolor: "var(--app-control-active-bg)", color: "var(--app-muted)", border: "1px solid var(--app-accent)" };
     default:
-      return "bg-zinc-500/15 text-zinc-200 ring-1 ring-zinc-400/40";
+      return { bgcolor: "rgba(113, 113, 122, 0.12)", color: "rgb(228, 228, 231)", border: "1px solid rgba(161, 161, 170, 0.35)" };
   }
 }
 
@@ -33,9 +34,14 @@ function TrendIndicator({ value, invertColor }: { value: number | undefined; inv
   const num = Number(value ?? 0);
   if (num === 0) {
     return (
-      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[--app-muted]">
-        <span className="text-sm">&mdash;</span> no change
-      </span>
+      <Box sx={{ display: "inline-flex", alignItems: "center", gap: 1 }}>
+        <Typography component="span" sx={{ fontSize: 14, color: "var(--app-muted)" }}>
+          —
+        </Typography>
+        <Typography component="span" sx={{ fontSize: 11, fontWeight: 600, color: "var(--app-muted)" }}>
+          no change
+        </Typography>
+      </Box>
     );
   }
 
@@ -45,16 +51,27 @@ function TrendIndicator({ value, invertColor }: { value: number | undefined; inv
   const isGood = invertColor ? isUp : !isUp;
 
   return (
-    <span
-      className={`inline-flex items-center gap-1 text-[11px] font-semibold ${
-        isGood ? "text-[--app-muted]" : "text-rose-300"
-      }`}
+    <Box
+      component="span"
+      sx={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 1,
+        fontSize: 11,
+        fontWeight: 700,
+        color: isGood ? "var(--app-muted)" : "rgb(253, 164, 175)",
+      }}
     >
-      <svg viewBox="0 0 12 12" className={`h-3 w-3 ${isUp ? "" : "rotate-180"}`} fill="currentColor">
+      <Box
+        component="svg"
+        viewBox="0 0 12 12"
+        sx={{ width: 12, height: 12, transform: isUp ? "none" : "rotate(180deg)" }}
+        fill="currentColor"
+      >
         <path d="M6 2l4 6H2z" />
-      </svg>
-      {isUp ? "+" : ""}{num}
-    </span>
+      </Box>
+      <Box component="span">{isUp ? "+" : ""}{num}</Box>
+    </Box>
   );
 }
 
@@ -75,24 +92,25 @@ export function OverviewTab({
   }, [analytics.blocked?.audit?.top_denied_resources, analytics.blocked?.monitor]);
 
   return (
-    <div className="flex flex-col gap-6">
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
       {/* ── Analytics ─────────────────────────────────────────────── */}
-      <section className="grid gap-4 xl:grid-cols-[1.1fr,0.9fr]">
-        <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
-          <div className="space-y-1">
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[--app-muted]">
-              Policy analytics
-            </p>
-            <h2 className="text-xl font-semibold text-[--app-fg]">
-              See what is blocked, changed, and risky
-            </h2>
-            <p className="text-xs text-[--app-muted]">
-              Live deny patterns, recent changes, and rollout risk at a glance.
-            </p>
-          </div>
+      <Box component="section" sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", xl: "minmax(0,1.1fr) minmax(0,0.9fr)" } }}>
+        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+          <CardContent sx={{ p: 2.5 }}>
+            <Box sx={{ display: "grid", gap: 0.5 }}>
+              <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                Policy analytics
+              </Typography>
+              <Typography variant="h5" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+                See what is blocked, changed, and risky
+              </Typography>
+              <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                Live deny patterns, recent changes, and rollout risk at a glance.
+              </Typography>
+            </Box>
 
           {/* Key metrics */}
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <Box sx={{ mt: 2, display: "grid", gap: 1.5, gridTemplateColumns: { xs: "1fr", md: "1fr 1fr 1fr" } }}>
             <MetricCard
               label="Blocked now"
               value={String(
@@ -117,244 +135,294 @@ export function OverviewTab({
               value={String(analytics.risks?.length ?? 0)}
               subtitle="Review items worth attention"
             />
-          </div>
+          </Box>
 
           {/* Most blocked + version changes */}
-          <div className="mt-4 grid gap-4 lg:grid-cols-[1fr,1fr]">
-            <div className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
-                Most blocked resources
-              </p>
-              <ul className="mt-3 space-y-2 text-xs text-[--app-muted]">
-                {topDeniedResources.slice(0, 4).map((item, index) => (
-                  <li
-                    key={`top-denied-${index}`}
-                    className="rounded-2xl border border-[--app-border] bg-[--app-surface] px-3 py-2 ring-1 ring-[--app-surface-ring]"
-                  >
-                    {String(item.resource_id ?? "unknown")} ·{" "}
-                    {String(item.count ?? 0)} denials
-                  </li>
-                ))}
-                {topDeniedResources.length === 0 ? (
-                  <li className="text-xs text-[--app-muted]">
-                    No deny hot spots have been recorded yet.
-                  </li>
-                ) : null}
-              </ul>
-            </div>
-
-            <div className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
-                Recent version change
-              </p>
-              {analytics.changes?.latest_version_summary ? (
-                <div className="mt-3 space-y-2 text-xs text-[--app-muted]">
-                  <p>
-                    Compared v{analytics.changes.latest_version_from ?? "?"} to v
-                    {analytics.changes.latest_version_to ?? "?"}.
-                  </p>
-                  <p>
-                    {String((analytics.changes.latest_version_summary?.changed_count as number | undefined) ?? 0)} changed ·{" "}
-                    {String((analytics.changes.latest_version_summary?.added_count as number | undefined) ?? 0)} added ·{" "}
-                    {String((analytics.changes.latest_version_summary?.removed_count as number | undefined) ?? 0)} removed
-                  </p>
-                </div>
-              ) : (
-                <p className="mt-3 text-xs text-[--app-muted]">
-                  No prior version delta is available yet.
-                </p>
-              )}
-              {(analytics.risks ?? []).slice(0, 3).map((risk, index) => (
-                <div
-                  key={`risk-${index}`}
-                  className="mt-3 rounded-2xl border border-[--app-border] bg-[--app-surface] p-3 ring-1 ring-[--app-surface-ring]"
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-xs font-semibold text-[--app-fg]">{risk.title}</p>
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] ${riskLevelClass(risk.level)}`}
+          <Box sx={{ mt: 2, display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" } }}>
+            <Card variant="outlined" sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}>
+              <CardContent sx={{ p: 2 }}>
+                <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                  Most blocked resources
+                </Typography>
+                <Box component="ul" sx={{ listStyle: "none", p: 0, m: 0, mt: 1.5, display: "grid", gap: 1 }}>
+                  {topDeniedResources.slice(0, 4).map((item, index) => (
+                    <Card
+                      key={`top-denied-${index}`}
+                      component="li"
+                      variant="outlined"
+                      sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}
                     >
-                      {risk.level}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-xs text-[--app-muted]">{risk.detail}</p>
-                </div>
-              ))}
-            </div>
-          </div>
+                      <CardContent sx={{ p: 1.5 }}>
+                        <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                          {String(item.resource_id ?? "unknown")} · {String(item.count ?? 0)} denials
+                        </Typography>
+                      </CardContent>
+                    </Card>
+                  ))}
+                  {topDeniedResources.length === 0 ? (
+                    <Typography component="li" sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                      No deny hot spots have been recorded yet.
+                    </Typography>
+                  ) : null}
+                </Box>
+              </CardContent>
+            </Card>
+
+            <Card variant="outlined" sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}>
+              <CardContent sx={{ p: 2 }}>
+                <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                  Recent version change
+                </Typography>
+                {analytics.changes?.latest_version_summary ? (
+                  <Box sx={{ mt: 1.5, display: "grid", gap: 1 }}>
+                    <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                      Compared v{analytics.changes.latest_version_from ?? "?"} to v{analytics.changes.latest_version_to ?? "?"}.
+                    </Typography>
+                    <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                      {String((analytics.changes.latest_version_summary?.changed_count as number | undefined) ?? 0)} changed ·{" "}
+                      {String((analytics.changes.latest_version_summary?.added_count as number | undefined) ?? 0)} added ·{" "}
+                      {String((analytics.changes.latest_version_summary?.removed_count as number | undefined) ?? 0)} removed
+                    </Typography>
+                  </Box>
+                ) : (
+                  <Typography sx={{ mt: 1.5, fontSize: 12, color: "var(--app-muted)" }}>
+                    No prior version delta is available yet.
+                  </Typography>
+                )}
+                {(analytics.risks ?? []).slice(0, 3).map((risk, index) => (
+                  <Card
+                    key={`risk-${index}`}
+                    variant="outlined"
+                    sx={{ mt: 1.5, borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}
+                  >
+                    <CardContent sx={{ p: 1.5 }}>
+                      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, alignItems: "center" }}>
+                        <Typography sx={{ fontSize: 12, fontWeight: 800, color: "var(--app-fg)" }}>
+                          {risk.title}
+                        </Typography>
+                        <Chip
+                          size="small"
+                          label={risk.level}
+                          sx={{
+                            borderRadius: 999,
+                            fontSize: 10,
+                            fontWeight: 800,
+                            textTransform: "uppercase",
+                            letterSpacing: "0.12em",
+                            height: 22,
+                            ...riskLevelSx(risk.level),
+                          }}
+                        />
+                      </Box>
+                      <Typography sx={{ mt: 1, fontSize: 12, color: "var(--app-muted)" }}>
+                        {risk.detail}
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                ))}
+              </CardContent>
+            </Card>
+          </Box>
 
           {/* Trend history */}
-          <div className="mt-4 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
-                  Trend history
-                </p>
-                <p className="mt-1 text-xs text-[--app-muted]">
-                  Recent analytics snapshots show how the policy set has behaved over time.
-                </p>
-              </div>
-              <span className="rounded-full bg-[--app-surface] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
-                {String(analytics.history?.sample_count ?? 0)} samples
-              </span>
-            </div>
+          <Card variant="outlined" sx={{ mt: 2, borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}>
+            <CardContent sx={{ p: 2 }}>
+              <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
+                <Box sx={{ minWidth: 240 }}>
+                  <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                    Trend history
+                  </Typography>
+                  <Typography sx={{ mt: 0.5, fontSize: 12, color: "var(--app-muted)" }}>
+                    Recent analytics snapshots show how the policy set has behaved over time.
+                  </Typography>
+                </Box>
+                <Chip
+                  size="small"
+                  label={`${String(analytics.history?.sample_count ?? 0)} samples`}
+                  sx={{ borderRadius: 999, bgcolor: "var(--app-surface)", color: "var(--app-muted)", fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.12em" }}
+                />
+              </Box>
 
-            <div className="mt-4 grid gap-3 sm:grid-cols-4">
-              {[
-                { label: "Eval trend", value: analytics.history?.deltas?.evaluation_count, invertColor: true },
-                { label: "Deny trend", value: analytics.history?.deltas?.deny_count, invertColor: false },
-                { label: "Queue trend", value: analytics.history?.deltas?.pending_proposals, invertColor: false },
-                { label: "Risk trend", value: analytics.history?.deltas?.risk_count, invertColor: false },
-              ].map((item) => (
-                <div key={item.label} className="rounded-2xl border border-[--app-border] bg-[--app-surface] p-3 ring-1 ring-[--app-surface-ring]">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[--app-muted]">
-                    {item.label}
-                  </p>
-                  <div className="mt-2">
-                    <TrendIndicator
-                      value={item.value as number | undefined}
-                      invertColor={item.invertColor}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
+              <Box sx={{ mt: 2, display: "grid", gap: 1.5, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr 1fr 1fr" } }}>
+                {[
+                  { label: "Eval trend", value: analytics.history?.deltas?.evaluation_count, invertColor: true },
+                  { label: "Deny trend", value: analytics.history?.deltas?.deny_count, invertColor: false },
+                  { label: "Queue trend", value: analytics.history?.deltas?.pending_proposals, invertColor: false },
+                  { label: "Risk trend", value: analytics.history?.deltas?.risk_count, invertColor: false },
+                ].map((item) => (
+                  <Card key={item.label} variant="outlined" sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+                    <CardContent sx={{ p: 1.5 }}>
+                      <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                        {item.label}
+                      </Typography>
+                      <Box sx={{ mt: 1 }}>
+                        <TrendIndicator value={item.value as number | undefined} invertColor={item.invertColor} />
+                      </Box>
+                    </CardContent>
+                  </Card>
+                ))}
+              </Box>
 
-            <div className="mt-4 grid gap-3 lg:grid-cols-[1.2fr,0.8fr]">
-              <div className="rounded-2xl border border-[--app-border] bg-[--app-surface] p-3 ring-1 ring-[--app-surface-ring]">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[--app-muted]">
-                  Recent snapshots
-                </p>
-                <div className="mt-3 space-y-2">
-                  {((analytics.history?.snapshots as RegistryPayload[] | undefined) ?? [])
-                    .slice(-6)
-                    .map((snapshot, index) => (
-                      <div
-                        key={`analytics-snapshot-${index}`}
-                        className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] px-3 py-2 ring-1 ring-[--app-surface-ring]"
-                      >
-                        <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-[--app-muted]">
-                          <span>{String(snapshot.captured_at ?? "Unknown time")}</span>
-                          <span>v{String(snapshot.current_version ?? "live")}</span>
-                        </div>
-                        <p className="mt-2 text-xs text-[--app-muted]">
-                          {String(snapshot.deny_count ?? 0)} denials ·{" "}
-                          {String(snapshot.pending_proposals ?? 0)} open proposals ·{" "}
-                          {String(snapshot.risk_count ?? 0)} active risks
-                        </p>
-                      </div>
-                    ))}
-                  {(((analytics.history?.snapshots as RegistryPayload[] | undefined) ?? []).length === 0) ? (
-                    <p className="text-xs text-[--app-muted]">
-                      Trend history will start filling in as policy changes are reviewed.
-                    </p>
-                  ) : null}
-                </div>
-              </div>
+              <Box sx={{ mt: 2, display: "grid", gap: 1.5, gridTemplateColumns: { xs: "1fr", lg: "minmax(0,1.2fr) minmax(0,0.8fr)" } }}>
+                <Card variant="outlined" sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+                  <CardContent sx={{ p: 1.5 }}>
+                    <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                      Recent snapshots
+                    </Typography>
+                    <Box sx={{ mt: 1.5, display: "grid", gap: 1 }}>
+                      {((analytics.history?.snapshots as RegistryPayload[] | undefined) ?? [])
+                        .slice(-6)
+                        .map((snapshot, index) => (
+                          <Card
+                            key={`analytics-snapshot-${index}`}
+                            variant="outlined"
+                            sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}
+                          >
+                            <CardContent sx={{ p: 1.5 }}>
+                              <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
+                                <Typography sx={{ fontSize: 10, color: "var(--app-muted)" }}>
+                                  {String(snapshot.captured_at ?? "Unknown time")}
+                                </Typography>
+                                <Typography sx={{ fontSize: 10, color: "var(--app-muted)" }}>
+                                  v{String(snapshot.current_version ?? "live")}
+                                </Typography>
+                              </Box>
+                              <Typography sx={{ mt: 1, fontSize: 12, color: "var(--app-muted)" }}>
+                                {String(snapshot.deny_count ?? 0)} denials · {String(snapshot.pending_proposals ?? 0)} open proposals ·{" "}
+                                {String(snapshot.risk_count ?? 0)} active risks
+                              </Typography>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      {(((analytics.history?.snapshots as RegistryPayload[] | undefined) ?? []).length === 0) ? (
+                        <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                          Trend history will start filling in as policy changes are reviewed.
+                        </Typography>
+                      ) : null}
+                    </Box>
+                  </CardContent>
+                </Card>
 
-              <div className="rounded-2xl border border-[--app-border] bg-[--app-surface] p-3 ring-1 ring-[--app-surface-ring]">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[--app-muted]">
-                  Recent promotions
-                </p>
-                <div className="mt-3 space-y-2">
-                  {(analytics.history?.recent_promotions ?? []).slice(0, 4).map((promotion, index) => (
-                    <div
-                      key={`analytics-promotion-${promotion.promotion_id ?? index}`}
-                      className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] px-3 py-2 ring-1 ring-[--app-surface-ring]"
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-xs font-semibold text-[--app-fg]">
-                          {promotion.source_environment ?? "source"} →{" "}
-                          {promotion.target_environment ?? "target"}
-                        </p>
-                        <span className="rounded-full bg-[--app-surface] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
-                          {promotion.status ?? "staged"}
-                        </span>
-                      </div>
-                      <p className="mt-2 text-xs text-[--app-muted]">
-                        {promotion.note || "Promotion tracked through the policy workflow."}
-                      </p>
-                    </div>
-                  ))}
-                  {((analytics.history?.recent_promotions ?? []).length === 0) ? (
-                    <p className="text-xs text-[--app-muted]">
-                      No environment promotions have been staged yet.
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+                <Card variant="outlined" sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+                  <CardContent sx={{ p: 1.5 }}>
+                    <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                      Recent promotions
+                    </Typography>
+                    <Box sx={{ mt: 1.5, display: "grid", gap: 1 }}>
+                      {(analytics.history?.recent_promotions ?? []).slice(0, 4).map((promotion, index) => (
+                        <Card
+                          key={`analytics-promotion-${promotion.promotion_id ?? index}`}
+                          variant="outlined"
+                          sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}
+                        >
+                          <CardContent sx={{ p: 1.5 }}>
+                            <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
+                              <Typography sx={{ fontSize: 12, fontWeight: 800, color: "var(--app-fg)" }}>
+                                {promotion.source_environment ?? "source"} → {promotion.target_environment ?? "target"}
+                              </Typography>
+                              <Chip
+                                size="small"
+                                label={promotion.status ?? "staged"}
+                                sx={{ borderRadius: 999, bgcolor: "var(--app-surface)", color: "var(--app-muted)", fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.12em" }}
+                              />
+                            </Box>
+                            <Typography sx={{ mt: 1, fontSize: 12, color: "var(--app-muted)" }}>
+                              {promotion.note || "Promotion tracked through the policy workflow."}
+                            </Typography>
+                          </CardContent>
+                        </Card>
+                      ))}
+                      {((analytics.history?.recent_promotions ?? []).length === 0) ? (
+                        <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                          No environment promotions have been staged yet.
+                        </Typography>
+                      ) : null}
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Box>
+            </CardContent>
+          </Card>
+        </CardContent>
+      </Card>
 
         {/* ── Bundles ──────────────────────────────────────────────── */}
-        <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
-          <div className="space-y-1">
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[--app-muted]">
-              Reusable bundles
-            </p>
-            <h2 className="text-xl font-semibold text-[--app-fg]">
-              Start from proven policy packs
-            </h2>
-            <p className="text-xs text-[--app-muted]">
-              Bundles stage full-chain proposals for common registry operating modes.
-            </p>
-          </div>
+        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+          <CardContent sx={{ p: 2.5 }}>
+            <Box sx={{ display: "grid", gap: 0.5 }}>
+              <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                Reusable bundles
+              </Typography>
+              <Typography variant="h5" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+                Start from proven policy packs
+              </Typography>
+              <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                Bundles stage full-chain proposals for common registry operating modes.
+              </Typography>
+            </Box>
 
-          <div className="mt-4 flex flex-col gap-3">
-            {bundles.length === 0 ? (
-              <div className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
-                <p className="text-xs text-[--app-muted]">
-                  No reusable bundles are available yet.
-                </p>
-              </div>
-            ) : (
-              bundles.map((bundle) => (
-                <article
-                  key={bundle.bundle_id}
-                  className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-xs font-semibold text-[--app-fg]">
-                          {bundle.title ?? bundle.bundle_id}
-                        </p>
-                        <span className="rounded-full bg-[--app-surface] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
-                          {bundle.risk_posture ?? "bundle"}
-                        </span>
-                      </div>
-                      <p className="text-xs text-[--app-muted]">
-                        {bundle.summary ?? bundle.description}
-                      </p>
-                      <p className="text-[11px] text-[--app-muted]">
-                        {bundle.provider_count ?? 0} steps · Best for{" "}
-                        {(bundle.recommended_environments ?? []).join(", ") || "any environment"}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => void onStageBundle(bundle.bundle_id, bundle.title ?? bundle.bundle_id)}
-                      disabled={busyKey === `bundle-${bundle.bundle_id}`}
-                      className="rounded-full bg-[--app-accent] px-4 py-2 text-[11px] font-semibold text-[--app-accent-contrast] transition hover:opacity-90 disabled:opacity-60"
-                    >
-                      {busyKey === `bundle-${bundle.bundle_id}` ? "Staging\u2026" : "Stage bundle"}
-                    </button>
-                  </div>
-                  <ul className="mt-3 space-y-1 text-[10px] text-[--app-muted]">
-                    {(bundle.provider_summaries ?? []).slice(0, 3).map((summary, index) => (
-                      <li key={`${bundle.bundle_id}-summary-${index}`}>
-                        \u2022 {summary}
-                      </li>
-                    ))}
-                  </ul>
-                </article>
-              ))
-            )}
-          </div>
-        </div>
-      </section>
-    </div>
+            <Box sx={{ mt: 2, display: "grid", gap: 1.5 }}>
+              {bundles.length === 0 ? (
+                <Card variant="outlined" sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}>
+                  <CardContent sx={{ p: 2 }}>
+                    <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                      No reusable bundles are available yet.
+                    </Typography>
+                  </CardContent>
+                </Card>
+              ) : (
+                bundles.map((bundle) => (
+                  <Card
+                    key={bundle.bundle_id}
+                    variant="outlined"
+                    sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}
+                  >
+                    <CardContent sx={{ p: 2 }}>
+                      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 2, justifyContent: "space-between", alignItems: "flex-start" }}>
+                        <Box sx={{ display: "grid", gap: 0.5, minWidth: 240 }}>
+                          <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1 }}>
+                            <Typography sx={{ fontSize: 12, fontWeight: 800, color: "var(--app-fg)" }}>
+                              {bundle.title ?? bundle.bundle_id}
+                            </Typography>
+                            <Chip
+                              size="small"
+                              label={bundle.risk_posture ?? "bundle"}
+                              sx={{ borderRadius: 999, bgcolor: "var(--app-surface)", color: "var(--app-muted)", fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.12em" }}
+                            />
+                          </Box>
+                          <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                            {bundle.summary ?? bundle.description}
+                          </Typography>
+                          <Typography sx={{ fontSize: 11, color: "var(--app-muted)" }}>
+                            {bundle.provider_count ?? 0} steps · Best for {(bundle.recommended_environments ?? []).join(", ") || "any environment"}
+                          </Typography>
+                        </Box>
+                        <Button
+                          type="button"
+                          variant="contained"
+                          onClick={() => void onStageBundle(bundle.bundle_id, bundle.title ?? bundle.bundle_id)}
+                          disabled={busyKey === `bundle-${bundle.bundle_id}`}
+                          sx={{ borderRadius: 999 }}
+                        >
+                          {busyKey === `bundle-${bundle.bundle_id}` ? "Staging…" : "Stage bundle"}
+                        </Button>
+                      </Box>
+                      {(bundle.provider_summaries ?? []).length > 0 ? (
+                        <Box component="ul" sx={{ listStyle: "disc", pl: 2, mt: 1.5, mb: 0, color: "var(--app-muted)", fontSize: 11, display: "grid", gap: 0.5 }}>
+                          {(bundle.provider_summaries ?? []).slice(0, 3).map((summary, index) => (
+                            <li key={`${bundle.bundle_id}-summary-${index}`}>{summary}</li>
+                          ))}
+                        </Box>
+                      ) : null}
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </Box>
+          </CardContent>
+        </Card>
+      </Box>
+    </Box>
   );
 }
 
@@ -368,12 +436,18 @@ function MetricCard({
   subtitle: string;
 }) {
   return (
-    <div className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
-        {label}
-      </p>
-      <p className="mt-2 text-2xl font-semibold text-[--app-fg]">{value}</p>
-      <p className="mt-1 text-[11px] text-[--app-muted]">{subtitle}</p>
-    </div>
+    <Card variant="outlined" sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}>
+      <CardContent sx={{ p: 2 }}>
+        <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+          {label}
+        </Typography>
+        <Typography sx={{ mt: 1, fontSize: 24, fontWeight: 800, color: "var(--app-fg)" }}>
+          {value}
+        </Typography>
+        <Typography sx={{ mt: 0.5, fontSize: 11, color: "var(--app-muted)" }}>
+          {subtitle}
+        </Typography>
+      </CardContent>
+    </Card>
   );
 }

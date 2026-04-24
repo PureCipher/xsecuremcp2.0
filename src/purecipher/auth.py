@@ -14,7 +14,13 @@ import jwt
 
 
 class RegistryRole(Enum):
-    """Supported PureCipher UI roles."""
+    """RBAC personas for the PureCipher registry HTTP API and UI.
+
+    * **viewer** — Authenticated read-only catalog and discovery (no publish, review, or policy).
+    * **publisher** — May submit listings and use publisher flows; no moderation or policy writes.
+    * **reviewer** — May moderate the queue and manage policy; cannot suspend tools (admin-only).
+    * **admin** — Platform superuser for all registry actions including suspend and admin consoles.
+    """
 
     VIEWER = "viewer"
     PUBLISHER = "publisher"
@@ -55,7 +61,7 @@ class RegistrySession:
             "display_name": self.display_name,
             "expires_at": self.expires_at,
             "can_submit": self.role
-            in {RegistryRole.PUBLISHER, RegistryRole.REVIEWER, RegistryRole.ADMIN},
+            in {RegistryRole.PUBLISHER, RegistryRole.REVIEWER},
             "can_review": self.role in {RegistryRole.REVIEWER, RegistryRole.ADMIN},
             "can_admin": self.role == RegistryRole.ADMIN,
         }

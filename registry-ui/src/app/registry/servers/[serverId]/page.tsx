@@ -7,6 +7,8 @@ import {
 } from "@/lib/registryClient";
 import { ServerDetailTabs } from "./ServerDetailTabs";
 
+import { Box, Card, CardContent, Chip, Typography } from "@mui/material";
+
 export default async function ServerDetailPage(props: {
   params: Promise<{ serverId: string }>;
 }) {
@@ -16,20 +18,25 @@ export default async function ServerDetailPage(props: {
   const profile = await getPublisherProfile(decodedId);
   if (!profile || profile.error) {
     return (
-      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-6 ring-1 ring-[--app-surface-ring]">
-        <h1 className="text-base font-semibold text-[--app-fg]">Unable to load server</h1>
-        <p className="mt-2 text-[12px] text-[--app-muted]">
-          No server profile is available for <span className="font-mono">{decodedId}</span>.
-        </p>
-        <p className="mt-3">
-          <Link
-            href="/registry/servers"
-            className="text-[11px] font-medium text-[--app-muted] hover:text-[--app-fg]"
-          >
-            ← Back to MCP servers
-          </Link>
-        </p>
-      </div>
+      <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+        <CardContent sx={{ p: 2.5 }}>
+          <Typography variant="h6" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+            Unable to load server
+          </Typography>
+          <Typography sx={{ mt: 1, fontSize: 12, color: "var(--app-muted)" }}>
+            No server profile is available for{" "}
+            <Box component="span" sx={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}>
+              {decodedId}
+            </Box>
+            .
+          </Typography>
+          <Box sx={{ mt: 2 }}>
+            <Link href="/registry/servers" className="text-[11px] font-medium text-[--app-muted] hover:text-[--app-fg]">
+              ← Back to MCP servers
+            </Link>
+          </Box>
+        </CardContent>
+      </Card>
     );
   }
 
@@ -37,38 +44,36 @@ export default async function ServerDetailPage(props: {
   const listings: RegistryToolListing[] = profile.listings ?? [];
 
   return (
-    <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[--app-muted]">
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+      <Box component="header" sx={{ display: "flex", flexDirection: { xs: "column", sm: "row" }, gap: 2, alignItems: { sm: "flex-end" }, justifyContent: "space-between" }}>
+        <Box>
+          <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
             MCP server profile
-          </p>
-          <h1 className="mt-1 text-2xl font-semibold text-[--app-fg]">
+          </Typography>
+          <Typography variant="h4" sx={{ mt: 0.5, fontWeight: 700, color: "var(--app-fg)" }}>
             {summary.display_name ?? summary.publisher_id}
-          </h1>
-          <p className="mt-1 text-[11px] text-[--app-muted]">
-            {summary.publisher_id} · {summary.tool_count ?? listings.length} tool
-            {(summary.tool_count ?? listings.length) === 1 ? "" : "s"} in this registry
-          </p>
-        </div>
+          </Typography>
+          <Typography sx={{ mt: 0.5, fontSize: 12, color: "var(--app-muted)" }}>
+            {summary.publisher_id} · {summary.tool_count ?? listings.length} tool{(summary.tool_count ?? listings.length) === 1 ? "" : "s"} in this registry
+          </Typography>
+        </Box>
         {summary.trust_score?.overall != null ? (
-          <span className="rounded-full bg-[--app-surface] px-3 py-1 text-[10px] font-semibold text-[--app-muted]">
-            Trust score {summary.trust_score.overall.toFixed(1)}
-          </span>
+          <Chip
+            size="small"
+            label={`Trust score ${summary.trust_score.overall.toFixed(1)}`}
+            sx={{ borderRadius: 999, bgcolor: "var(--app-surface)", color: "var(--app-muted)", fontWeight: 700, fontSize: 11, alignSelf: { xs: "flex-start", sm: "auto" } }}
+          />
         ) : null}
-      </header>
+      </Box>
 
       <ServerDetailTabs serverId={decodedId} summary={summary} listings={listings} />
 
-      <div className="pt-2">
-        <Link
-          href="/registry/servers"
-          className="text-[11px] font-medium text-[--app-muted] hover:text-[--app-fg]"
-        >
+      <Box sx={{ pt: 1 }}>
+        <Link href="/registry/servers" className="text-[11px] font-medium text-[--app-muted] hover:text-[--app-fg]">
           ← Back to MCP servers
         </Link>
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }
 

@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Generic, TypedDict
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 from mcp.server.lowlevel.server import LifespanResultT
 from starlette.requests import Request
@@ -38,6 +38,8 @@ from fastmcp.utilities.ui import create_secure_html_response
 from purecipher.auth import RegistryAuthSettings, RegistryRole, RegistrySession
 from purecipher.install import build_install_recipes
 from purecipher.moderation import build_review_queue, moderation_action_from_name
+from purecipher.notification_feed import RegistryNotificationFeed
+from purecipher.openapi_store import OpenAPIStore, extract_openapi_operations
 from purecipher.policy_routes import mount_registry_policy_routes
 from purecipher.publishers import (
     get_public_publisher_profile,
@@ -298,6 +300,10 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         )
         self._auth_settings.validate()
 
+        self._persistence_path = persistence_path
+        self._notification_feed = RegistryNotificationFeed(persistence_path)
+        self._openapi_store = OpenAPIStore(persistence_path)
+
         resolved_security = security or self._build_default_security(
             signing_secret=signing_secret,
             issuer_id=issuer_id,
@@ -414,6 +420,44 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             raise RuntimeError("Tool marketplace is not attached to this registry.")
         return ctx.tool_marketplace
 
+    def record_registry_notification(
+        self,
+        *,
+        event_kind: str,
+        title: str,
+        body: str,
+        link_path: str | None = None,
+        audiences: tuple[str, ...] | None = None,
+    ) -> None:
+        """Append a UI notification visible to the given RBAC personas."""
+
+        self._notification_feed.append(
+            event_kind=event_kind,
+            title=title,
+            body=body,
+            link_path=link_path,
+            audiences=audiences,
+        )
+
+    def get_registry_notifications(
+        self,
+        *,
+        auth_enabled: bool,
+        role: str | None,
+        limit: int = 40,
+    ) -> dict[str, Any]:
+        """Return recent notifications filtered for the caller's persona."""
+
+        items = self._notification_feed.list_recent(
+            auth_enabled=auth_enabled,
+            role=role,
+            limit=limit,
+        )
+        return {
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "items": items,
+        }
+
     def _trust_registry(self) -> TrustRegistry:
         ctx = self._required_context()
         if ctx.registry is None:
@@ -513,7 +557,18 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         session: RegistrySession | None,
         allowed_roles: set[RegistryRole],
     ) -> bool:
-        return session is not None and session.role in allowed_roles
+        """Return True when the session may act under an RBAC gate.
+
+        ``RegistryRole.ADMIN`` is a platform superuser: admins satisfy any
+        non-empty role gate (reviewer, publisher, etc.). Empty ``allowed_roles``
+        is treated as false so callers do not accidentally grant access.
+        """
+
+        if session is None:
+            return False
+        if not allowed_roles:
+            return False
+        return session.role in allowed_roles
 
     def _moderation_roles_for_action(
         self,
@@ -1191,6 +1246,16 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             },
         }
 
+    def list_author_listings(self, author: str) -> dict[str, Any]:
+        """Return all listings created by a given author (any status)."""
+
+        listings = self._marketplace().get_by_author(author)
+        return {
+            "count": len(listings),
+            "tools": [self._serialize_listing_detail(listing) for listing in listings],
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
     def moderate_listing(
         self,
         listing_id: str,
@@ -1228,6 +1293,25 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 self._serialize_listing_detail(listing) if listing is not None else None
             ),
         }
+        if listing is not None:
+            tool = listing.tool_name
+            display = listing.display_name or tool
+            reason_snip = (reason or "").strip()
+            if len(reason_snip) > 220:
+                reason_snip = reason_snip[:217] + "…"
+            body = (
+                f"{tool} v{listing.version} — decision by {moderator_id or 'moderator'}."
+            )
+            if reason_snip:
+                body = f"{body} {reason_snip}"
+            prefix = self._registry_prefix
+            self.record_registry_notification(
+                event_kind="moderation_decision",
+                title=f"Moderation: {action.value.replace('_', ' ')} — {display}",
+                body=body,
+                link_path=f"{prefix}/listings/{quote(tool, safe='')}",
+                audiences=("viewer", "publisher", "reviewer", "admin"),
+            )
         return payload
 
     def submit_tool(
@@ -1283,6 +1367,38 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             },
             changelog=changelog,
         )
+
+        prefix = self._registry_prefix
+        tool = listing.tool_name
+        display = listing.display_name or tool
+        all_personas = ("viewer", "publisher", "reviewer", "admin")
+        if listing.status == PublishStatus.PENDING_REVIEW:
+            self.record_registry_notification(
+                event_kind="listing_pending_review",
+                title=f"Listing submitted for review: {display}",
+                body=(
+                    f"{tool} v{listing.version} is queued for moderator approval "
+                    f"before it appears in the public catalog."
+                ),
+                link_path=f"{prefix}/listings/{quote(tool, safe='')}",
+                audiences=all_personas,
+            )
+        elif listing.status == PublishStatus.PUBLISHED:
+            self.record_registry_notification(
+                event_kind="listing_published",
+                title=f"Listing published: {display}",
+                body=f"{tool} v{listing.version} is live in the verified catalog.",
+                link_path=f"{prefix}/listings/{quote(tool, safe='')}",
+                audiences=all_personas,
+            )
+        else:
+            self.record_registry_notification(
+                event_kind="listing_status",
+                title=f"Listing recorded: {display}",
+                body=f"{tool} v{listing.version} — status {listing.status.value}.",
+                link_path=f"{prefix}/listings/{quote(tool, safe='')}",
+                audiences=all_personas,
+            )
 
         return RegistrySubmissionResult(
             accepted=True,
@@ -1739,6 +1855,168 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 {
                     "auth_enabled": self.auth_enabled,
                     "session": self._session_payload(session),
+                }
+            )
+
+        @self.custom_route(f"{prefix}/notifications", methods=["GET"])
+        async def registry_notifications(request: Request) -> JSONResponse:
+            session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            role = session.role.value if session is not None else None
+            try:
+                limit = int(request.query_params.get("limit", "40"))
+            except ValueError:
+                limit = 40
+            limit = max(1, min(limit, 100))
+            return JSONResponse(
+                self.get_registry_notifications(
+                    auth_enabled=self.auth_enabled,
+                    role=role,
+                    limit=limit,
+                )
+            )
+
+        @self.custom_route(f"{prefix}/openapi/ingest", methods=["POST"])
+        async def registry_openapi_ingest(request: Request) -> JSONResponse:
+            session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            if self.auth_enabled and not self._has_roles(
+                session,
+                {RegistryRole.PUBLISHER, RegistryRole.REVIEWER, RegistryRole.ADMIN},
+            ):
+                return JSONResponse(
+                    {"error": "Publisher role required.", "status": 403},
+                    status_code=403,
+                )
+            body = await request.json()
+            if not isinstance(body, dict):
+                return JSONResponse(
+                    {"error": "Invalid JSON body", "status": 400},
+                    status_code=400,
+                )
+            raw_text = str(body.get("text", "") or "")
+            if not raw_text.strip():
+                return JSONResponse(
+                    {"error": "Missing OpenAPI document text.", "status": 400},
+                    status_code=400,
+                )
+            title = str(body.get("title", "") or "").strip() or "OpenAPI source"
+            source_url = str(body.get("source_url", "") or "").strip()
+            publisher_id = (
+                publisher_id_from_author(session.username)
+                if session is not None
+                else "publisher"
+            )
+            try:
+                record, ops = self._openapi_store.ingest_source(
+                    publisher_id=publisher_id,
+                    title=title,
+                    source_url=source_url,
+                    raw_text=raw_text,
+                )
+            except ValueError as exc:
+                return JSONResponse(
+                    {"error": str(exc), "status": 400},
+                    status_code=400,
+                )
+            return JSONResponse(
+                {
+                    "source": {k: v for k, v in record.items() if k != "spec_json"},
+                    "operations": ops,
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+
+        @self.custom_route(f"{prefix}/openapi/toolset", methods=["POST"])
+        async def registry_openapi_toolset(request: Request) -> JSONResponse:
+            session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            if self.auth_enabled and not self._has_roles(
+                session,
+                {RegistryRole.PUBLISHER, RegistryRole.REVIEWER, RegistryRole.ADMIN},
+            ):
+                return JSONResponse(
+                    {"error": "Publisher role required.", "status": 403},
+                    status_code=403,
+                )
+            body = await request.json()
+            if not isinstance(body, dict):
+                return JSONResponse(
+                    {"error": "Invalid JSON body", "status": 400},
+                    status_code=400,
+                )
+            source_id = str(body.get("source_id", "") or "").strip()
+            if not source_id:
+                return JSONResponse(
+                    {"error": "`source_id` is required", "status": 400},
+                    status_code=400,
+                )
+            selected = body.get("selected_operations")
+            if not isinstance(selected, list) or not all(
+                isinstance(x, str) and x.strip() for x in selected
+            ):
+                return JSONResponse(
+                    {
+                        "error": "`selected_operations` must be an array of strings",
+                        "status": 400,
+                    },
+                    status_code=400,
+                )
+            title = str(body.get("title", "") or "").strip() or "OpenAPI toolset"
+            prefix_name = str(body.get("tool_name_prefix", "") or "").strip()
+            metadata = body.get("metadata")
+            metadata_dict = dict(metadata) if isinstance(metadata, dict) else {}
+
+            publisher_id = (
+                publisher_id_from_author(session.username)
+                if session is not None
+                else "publisher"
+            )
+
+            spec = self._openapi_store.get_source_spec(source_id)
+            if spec is None:
+                return JSONResponse(
+                    {"error": f"Unknown OpenAPI source {source_id!r}", "status": 404},
+                    status_code=404,
+                )
+            ops = extract_openapi_operations(spec)
+            op_keys = {op.get("operation_key") for op in ops}
+            unknown = [key for key in selected if key not in op_keys]
+            if unknown:
+                return JSONResponse(
+                    {
+                        "error": "Some selected operations were not found in the OpenAPI source.",
+                        "unknown": unknown[:50],
+                        "status": 400,
+                    },
+                    status_code=400,
+                )
+
+            record = self._openapi_store.create_toolset(
+                publisher_id=publisher_id,
+                source_id=source_id,
+                title=title,
+                selected_operations=[s.strip() for s in selected],
+                tool_name_prefix=prefix_name,
+                metadata=metadata_dict,
+            )
+            return JSONResponse(
+                {
+                    "toolset": record,
+                    "operation_count": len(selected),
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
                 }
             )
 
@@ -2270,6 +2548,61 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             tool_name = request.path_params.get("tool_name", "")
             payload = self.get_verified_tool(tool_name)
             return JSONResponse(payload, status_code=_status_code_from_payload(payload))
+
+        @self.custom_route(f"{prefix}/tools/{{tool_name}}/versions", methods=["GET"])
+        async def registry_tool_versions(request: Request) -> JSONResponse:
+            tool_name = request.path_params.get("tool_name", "")
+            session = self._session_from_request(request)
+
+            # Viewers can only see public listings; publishers/reviewers/admins can see their own or any.
+            if not self.auth_enabled:
+                listing = self._get_public_listing(tool_name)
+            else:
+                if session is None:
+                    listing = self._get_public_listing(tool_name)
+                else:
+                    listing = self._marketplace().get_by_name(tool_name)
+                    if listing is None:
+                        listing = self._get_public_listing(tool_name)
+
+            if listing is None:
+                return JSONResponse(
+                    {"error": f"Tool '{tool_name}' not found", "status": 404},
+                    status_code=404,
+                )
+
+            versions = self._marketplace().get_version_history(listing.listing_id)
+            return JSONResponse(
+                {
+                    "tool_name": tool_name,
+                    "listing_id": listing.listing_id,
+                    "current_version": listing.version,
+                    "status": listing.status.value,
+                    "version_count": len(versions),
+                    "versions": [v.to_dict() for v in reversed(versions)],  # newest first
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+
+        @self.custom_route(f"{prefix}/me/listings", methods=["GET"])
+        async def registry_me_listings(request: Request) -> JSONResponse:
+            session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            if self.auth_enabled and not self._has_roles(
+                session,
+                {RegistryRole.PUBLISHER, RegistryRole.REVIEWER, RegistryRole.ADMIN},
+            ):
+                return JSONResponse(
+                    {"error": "Publisher or higher role required.", "status": 403},
+                    status_code=403,
+                )
+            author = session.username if session is not None else ""
+            payload = self.list_author_listings(author)
+            return JSONResponse(payload)
 
         @self.custom_route(f"{prefix}/install/{{tool_name}}", methods=["GET"])
         async def registry_install_recipes(request: Request) -> JSONResponse:

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { Box, Button, Checkbox, FormControlLabel, Typography } from "@mui/material";
 
 export function useAutoRefresh(
   callback: () => Promise<void>,
@@ -43,29 +44,39 @@ export function AutoRefreshToggle({
   onManualRefresh: () => void;
 }) {
   return (
-    <div className="flex items-center gap-3">
-      <button
+    <Box sx={{ display: "flex", alignItems: "center", gap: 2, flexWrap: "wrap" }}>
+      <Button
         type="button"
         onClick={onManualRefresh}
         disabled={isRefreshing}
-        className="rounded-full border border-[--app-border] px-3 py-1 text-[10px] font-medium text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg] disabled:opacity-40"
+        size="small"
+        variant="outlined"
+        sx={{
+          borderRadius: 999,
+          borderColor: "var(--app-border)",
+          color: "var(--app-muted)",
+          "&:hover": { bgcolor: "var(--app-hover-bg)", borderColor: "var(--app-border)" },
+        }}
       >
         {isRefreshing ? "Refreshing…" : "Refresh"}
-      </button>
-      <label className="flex cursor-pointer items-center gap-1.5">
-        <input
-          type="checkbox"
-          checked={enabled}
-          onChange={(e) => onToggle(e.target.checked)}
-          className="h-3 w-3 rounded border-[--app-border] bg-[--app-chrome-bg] text-[--app-accent] focus:ring-[--app-accent]"
-        />
-        <span className="text-[10px] text-[--app-muted]">Auto-refresh</span>
-      </label>
+      </Button>
+
+      <FormControlLabel
+        control={
+          <Checkbox
+            checked={enabled}
+            onChange={(e) => onToggle(e.target.checked)}
+            size="small"
+          />
+        }
+        label={<Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>Auto-refresh</Typography>}
+      />
+
       {lastRefreshed ? (
-        <span className="text-[10px] text-[--app-muted]">
+        <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
           Last: {lastRefreshed.toLocaleTimeString()}
-        </span>
+        </Typography>
       ) : null}
-    </div>
+    </Box>
   );
 }

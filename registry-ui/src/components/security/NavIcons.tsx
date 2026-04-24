@@ -14,7 +14,8 @@ type Props = {
     | "clients"
     | "access"
     | "health"
-    | "settings";
+    | "settings"
+    | "notify";
   className?: string;
 };
 
@@ -146,6 +147,13 @@ export function NavIcon({ name, className = "h-4 w-4" }: Props) {
         <svg {...common}>
           <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
           <path d="M19.4 15a7.7 7.7 0 0 0 .1-2l2-1.2-2-3.4-2.3.6a7.9 7.9 0 0 0-1.7-1L15.2 4h-6.4L8.5 7.9a7.9 7.9 0 0 0-1.7 1l-2.3-.6-2 3.4 2 1.2a7.7 7.7 0 0 0 .1 2l-2 1.2 2 3.4 2.3-.6a7.9 7.9 0 0 0 1.7 1l.3 2.9h6.4l.3-2.9a7.9 7.9 0 0 0 1.7-1l2.3.6 2-3.4-2-1.2Z" />
+        </svg>
+      );
+    case "notify":
+      return (
+        <svg {...common}>
+          <path d="M18 8a6 6 0 1 0-12 0c0 7-3 7-3 14h18c0-7-3-7-3-14" />
+          <path d="M9.5 21a2.5 2.5 0 0 0 5 0" />
         </svg>
       );
     default:

@@ -4,6 +4,7 @@ import { useState } from "react";
 import type {
   PolicyVersionDiffResponse,
 } from "@/lib/registryClient";
+import { Box, Button, Card, CardContent, Chip, FormControl, InputLabel, MenuItem, Select, TextField, Typography } from "@mui/material";
 import { usePolicyContext } from "../../contexts/PolicyContext";
 import { highlightJson } from "../JsonEditor";
 import { ConfirmModal } from "../ConfirmModal";
@@ -72,186 +73,208 @@ export function VersionsTab({
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
       {/* Version history */}
-      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
-        <div className="space-y-1">
-          <p className="text-xs font-medium uppercase tracking-[0.18em] text-[--app-muted]">
-            Version history
-          </p>
-          <h2 className="text-xl font-semibold text-[--app-fg]">
-            Roll back with confidence
-          </h2>
-          <p className="max-w-2xl text-xs text-[--app-muted]">
-            Every live apply creates a saved version of the policy chain. Roll back when
-            a change needs to be reversed quickly.
-          </p>
-        </div>
+      <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+        <CardContent sx={{ p: 2.5 }}>
+          <Box sx={{ display: "grid", gap: 0.5 }}>
+            <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+              Version history
+            </Typography>
+            <Typography variant="h5" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+              Roll back with confidence
+            </Typography>
+            <Typography sx={{ maxWidth: 720, fontSize: 12, color: "var(--app-muted)" }}>
+              Every live apply creates a saved version of the policy chain. Roll back when a change needs to be reversed quickly.
+            </Typography>
+          </Box>
 
-        <div className="mt-4 flex flex-col gap-3">
-          {versions.length === 0 ? (
-            <div className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
-              <p className="text-xs text-[--app-muted]">
-                No saved versions yet. The first live policy change will create one
-                automatically.
-              </p>
-            </div>
-          ) : (
-            sortedVersions.map((version) => {
-              const isCurrent = version.version_number === currentVersion;
-              return (
-                <article
-                  key={version.version_id}
-                  className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-xs font-semibold text-[--app-fg]">
-                          Version {version.version_number}
-                        </span>
-                        {isCurrent ? (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-[--app-control-active-bg] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-fg]">
-                            <span className="relative flex h-2 w-2">
-                              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[--app-accent] opacity-75" />
-                              <span className="relative inline-flex h-2 w-2 rounded-full bg-[--app-accent]" />
-                            </span>
-                            Live now
-                          </span>
-                        ) : null}
-                      </div>
-                      <p className="text-xs text-[--app-muted]">
-                        {version.description || "No description recorded."}
-                      </p>
-                      <p className="text-[11px] text-[--app-muted]">
-                        Saved by {version.author || "unknown"} ·{" "}
-                        {formatTimestamp(version.created_at)}
-                      </p>
-                    </div>
-                    {!isCurrent ? (
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => void onExportVersion(version.version_number)}
-                          disabled={busyKey === `export-${version.version_number}`}
-                          className="rounded-full border border-[--app-border] px-3 py-1 text-[11px] font-semibold text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg] disabled:opacity-60"
-                        >
-                          {busyKey === `export-${version.version_number}`
-                            ? "Downloading\u2026"
-                            : "Export JSON"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setRollbackReason("");
-                            setRollbackModal(version.version_number);
-                          }}
-                          disabled={busyKey === `rollback-${version.version_number}`}
-                          className="rounded-full border border-[--app-border] px-3 py-1 text-[11px] font-semibold text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg] disabled:opacity-60"
-                        >
-                          {busyKey === `rollback-${version.version_number}`
-                            ? "Rolling back\u2026"
-                            : "Roll back"}
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => void onExportVersion(version.version_number)}
-                        disabled={busyKey === `export-${version.version_number}`}
-                        className="rounded-full border border-[--app-border] px-3 py-1 text-[11px] font-semibold text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg] disabled:opacity-60"
-                      >
-                        {busyKey === `export-${version.version_number}`
-                          ? "Downloading\u2026"
-                          : "Export JSON"}
-                      </button>
-                    )}
-                  </div>
-                </article>
-              );
-            })
-          )}
-        </div>
-      </div>
+          <Box sx={{ mt: 2, display: "grid", gap: 1.5 }}>
+            {versions.length === 0 ? (
+              <Card variant="outlined" sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}>
+                <CardContent sx={{ p: 2 }}>
+                  <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                    No saved versions yet. The first live policy change will create one automatically.
+                  </Typography>
+                </CardContent>
+              </Card>
+            ) : (
+              sortedVersions.map((version) => {
+                const isCurrent = version.version_number === currentVersion;
+                return (
+                  <Card
+                    key={version.version_id}
+                    variant="outlined"
+                    sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}
+                  >
+                    <CardContent sx={{ p: 2 }}>
+                      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 2, justifyContent: "space-between", alignItems: "flex-start" }}>
+                        <Box sx={{ display: "grid", gap: 0.5, minWidth: 240 }}>
+                          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, alignItems: "center" }}>
+                            <Typography sx={{ fontSize: 12, fontWeight: 800, color: "var(--app-fg)" }}>
+                              Version {version.version_number}
+                            </Typography>
+                            {isCurrent ? (
+                              <Chip
+                                size="small"
+                                label="Live now"
+                                sx={{
+                                  borderRadius: 999,
+                                  bgcolor: "var(--app-control-active-bg)",
+                                  color: "var(--app-fg)",
+                                  fontSize: 10,
+                                  fontWeight: 800,
+                                  textTransform: "uppercase",
+                                  letterSpacing: "0.12em",
+                                }}
+                              />
+                            ) : null}
+                          </Box>
+                          <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                            {version.description || "No description recorded."}
+                          </Typography>
+                          <Typography sx={{ fontSize: 11, color: "var(--app-muted)" }}>
+                            Saved by {version.author || "unknown"} · {formatTimestamp(version.created_at)}
+                          </Typography>
+                        </Box>
+
+                        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+                          <Button
+                            type="button"
+                            variant="outlined"
+                            size="small"
+                            onClick={() => void onExportVersion(version.version_number)}
+                            disabled={busyKey === `export-${version.version_number}`}
+                            sx={{ borderRadius: 999, borderColor: "var(--app-border)", color: "var(--app-muted)" }}
+                          >
+                            {busyKey === `export-${version.version_number}` ? "Downloading…" : "Export JSON"}
+                          </Button>
+                          {!isCurrent ? (
+                            <Button
+                              type="button"
+                              variant="outlined"
+                              size="small"
+                              onClick={() => {
+                                setRollbackReason("");
+                                setRollbackModal(version.version_number);
+                              }}
+                              disabled={busyKey === `rollback-${version.version_number}`}
+                              sx={{ borderRadius: 999, borderColor: "var(--app-border)", color: "var(--app-muted)" }}
+                            >
+                              {busyKey === `rollback-${version.version_number}` ? "Rolling back…" : "Roll back"}
+                            </Button>
+                          ) : null}
+                        </Box>
+                      </Box>
+                    </CardContent>
+                  </Card>
+                );
+              })
+            )}
+          </Box>
+        </CardContent>
+      </Card>
 
       {/* Version diff */}
-      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
-        <div className="space-y-1">
-          <p className="text-xs font-medium uppercase tracking-[0.18em] text-[--app-muted]">
-            Version diff
-          </p>
-          <h2 className="text-xl font-semibold text-[--app-fg]">See what changed</h2>
-          <p className="max-w-2xl text-xs text-[--app-muted]">
-            Compare two saved versions before you roll back or stage another change.
-          </p>
-        </div>
+      <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+        <CardContent sx={{ p: 2.5 }}>
+          <Box sx={{ display: "grid", gap: 0.5 }}>
+            <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+              Version diff
+            </Typography>
+            <Typography variant="h5" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+              See what changed
+            </Typography>
+            <Typography sx={{ maxWidth: 720, fontSize: 12, color: "var(--app-muted)" }}>
+              Compare two saved versions before you roll back or stage another change.
+            </Typography>
+          </Box>
 
-        {versionNumbers.length < 2 ? (
-          <div className="mt-4 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
-            <p className="text-xs text-[--app-muted]">
-              You need at least two saved versions before comparison is useful.
-            </p>
-          </div>
-        ) : (
-          <>
-            <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
-              <label className="flex flex-col gap-1 text-xs text-[--app-muted]">
-                From version
-                <select
-                  value={diffFrom}
-                  onChange={(event) => setDiffFrom(Number(event.target.value))}
-                  className="rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
+          {versionNumbers.length < 2 ? (
+            <Card variant="outlined" sx={{ mt: 2, borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}>
+              <CardContent sx={{ p: 2 }}>
+                <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                  You need at least two saved versions before comparison is useful.
+                </Typography>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              <Box sx={{ mt: 2, display: "grid", gap: 1.5, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr auto" }, alignItems: "end" }}>
+                <FormControl size="small" fullWidth>
+                  <InputLabel id="policy-diff-from">From version</InputLabel>
+                  <Select
+                    labelId="policy-diff-from"
+                    label="From version"
+                    value={diffFrom}
+                    onChange={(event) => setDiffFrom(Number(event.target.value))}
+                  >
+                    {versionNumbers.map((versionNumber) => (
+                      <MenuItem key={`from-${versionNumber}`} value={versionNumber}>
+                        Version {versionNumber}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+
+                <FormControl size="small" fullWidth>
+                  <InputLabel id="policy-diff-to">To version</InputLabel>
+                  <Select
+                    labelId="policy-diff-to"
+                    label="To version"
+                    value={diffTo}
+                    onChange={(event) => setDiffTo(Number(event.target.value))}
+                  >
+                    {versionNumbers.map((versionNumber) => (
+                      <MenuItem key={`to-${versionNumber}`} value={versionNumber}>
+                        Version {versionNumber}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+
+                <Button
+                  type="button"
+                  variant="contained"
+                  onClick={() => void handleLoadDiff()}
+                  disabled={diffLoading}
+                  sx={{ borderRadius: 999 }}
                 >
-                  {versionNumbers.map((versionNumber) => (
-                    <option key={`from-${versionNumber}`} value={versionNumber}>
-                      Version {versionNumber}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  {diffLoading ? "Comparing…" : "Compare"}
+                </Button>
+              </Box>
 
-              <label className="flex flex-col gap-1 text-xs text-[--app-muted]">
-                To version
-                <select
-                  value={diffTo}
-                  onChange={(event) => setDiffTo(Number(event.target.value))}
-                  className="rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
-                >
-                  {versionNumbers.map((versionNumber) => (
-                    <option key={`to-${versionNumber}`} value={versionNumber}>
-                      Version {versionNumber}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <button
-                type="button"
-                onClick={() => void handleLoadDiff()}
-                disabled={diffLoading}
-                className="self-end rounded-full bg-[--app-accent] px-4 py-2 text-xs font-semibold text-[--app-accent-contrast] transition hover:opacity-90 disabled:opacity-60"
-              >
-                {diffLoading ? "Comparing\u2026" : "Compare versions"}
-              </button>
-            </div>
-
-            <div className="mt-4 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
-              {versionDiff?.diff ? (
-                <pre
-                  className="max-h-[320px] overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-6 text-[--app-fg]"
-                  dangerouslySetInnerHTML={{
-                    __html: highlightJson(prettyJson(versionDiff.diff)),
-                  }}
-                />
-              ) : (
-                <p className="text-xs text-[--app-muted]">
-                  Choose two versions to inspect the saved diff before you act on it.
-                </p>
-              )}
-            </div>
-          </>
-        )}
-      </div>
+              <Card variant="outlined" sx={{ mt: 2, borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}>
+                <CardContent sx={{ p: 2 }}>
+                  {versionDiff?.diff ? (
+                    <Box
+                      component="pre"
+                      sx={{
+                        maxHeight: 360,
+                        overflow: "auto",
+                        whiteSpace: "pre-wrap",
+                        overflowWrap: "anywhere",
+                        fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                        fontSize: 12,
+                        lineHeight: 1.8,
+                        color: "var(--app-fg)",
+                        m: 0,
+                      }}
+                      dangerouslySetInnerHTML={{
+                        __html: highlightJson(prettyJson(versionDiff.diff)),
+                      }}
+                    />
+                  ) : (
+                    <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                      Choose two versions to inspect the saved diff before you act on it.
+                    </Typography>
+                  )}
+                </CardContent>
+              </Card>
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Rollback confirmation modal */}
       <ConfirmModal
@@ -268,13 +291,14 @@ export function VersionsTab({
         }}
         onCancel={() => setRollbackModal(null)}
       >
-        <input
+        <TextField
           value={rollbackReason}
           onChange={(event) => setRollbackReason(event.target.value)}
           placeholder="Why are you rolling back?"
-          className="w-full rounded-full border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
+          size="small"
+          fullWidth
         />
       </ConfirmModal>
-    </div>
+    </Box>
   );
 }

@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { getRegistryHealth } from "@/lib/registryClient";
 
+import { Box, Card, CardContent, Typography } from "@mui/material";
+
 import { AppThemePreferencesPanel } from "./AppThemePreferencesPanel";
 import { CliTerminalPreferencesPanel } from "./CliTerminalPreferencesPanel";
 
@@ -8,80 +10,90 @@ export default async function RegistrySettingsPage() {
   const health = await getRegistryHealth();
 
   return (
-    <div className="flex flex-col gap-6">
-        <header className="space-y-1">
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[--app-muted]">
-            Registry settings
-          </p>
-          <h1 className="text-2xl font-semibold text-[--app-fg]">Policy overview</h1>
-          <p className="max-w-xl text-[11px] text-[--app-muted]">
-            Read-only view of how this SecureMCP registry is configured. Use the dedicated Policy
-            page to manage live access rules and rollbacks.
-          </p>
-        </header>
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+      <Box component="header" sx={{ display: "grid", gap: 0.5 }}>
+        <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+          Registry settings
+        </Typography>
+        <Typography variant="h4" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+          Policy overview
+        </Typography>
+        <Typography sx={{ mt: 0.5, maxWidth: 720, fontSize: 12, color: "var(--app-muted)" }}>
+          Read-only view of how this SecureMCP registry is configured. Use the dedicated Policy page to manage live
+          access rules and rollbacks.
+        </Typography>
+      </Box>
 
-        {health ? (
-          <section className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
-              <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
+      {health ? (
+        <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" } }}>
+          <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+            <CardContent sx={{ p: 2.5 }}>
+              <Typography sx={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
                 Certification & moderation
-              </h2>
-              <ul className="mt-2 space-y-1 text-[11px] text-[--app-muted]">
+              </Typography>
+              <Box component="ul" sx={{ mt: 1.5, pl: 2, color: "var(--app-muted)", fontSize: 12 }}>
                 <li>
                   Minimum certification level:{" "}
-                  <span className="font-semibold text-[--app-fg]">
+                  <Box component="span" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
                     {health.minimum_certification}
-                  </span>
+                  </Box>
                 </li>
                 <li>
                   Moderation required:{" "}
-                  <span className="font-semibold text-[--app-fg]">
+                  <Box component="span" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
                     {health.require_moderation ? "Yes" : "No"}
-                  </span>
+                  </Box>
                 </li>
-              </ul>
-            </div>
+              </Box>
+            </CardContent>
+          </Card>
 
-            <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
-              <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
+          <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+            <CardContent sx={{ p: 2.5 }}>
+              <Typography sx={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
                 Authentication
-              </h2>
-              <ul className="mt-2 space-y-1 text-[11px] text-[--app-muted]">
+              </Typography>
+              <Box component="ul" sx={{ mt: 1.5, pl: 2, color: "var(--app-muted)", fontSize: 12 }}>
                 <li>
                   Auth enabled:{" "}
-                  <span className="font-semibold text-[--app-fg]">
+                  <Box component="span" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
                     {health.auth_enabled ? "Yes" : "No"}
-                  </span>
+                  </Box>
                 </li>
                 <li>
                   Issuer ID:{" "}
-                  <span className="font-mono text-[--app-muted]">{health.issuer_id}</span>
+                  <Box component="span" sx={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}>
+                    {health.issuer_id}
+                  </Box>
                 </li>
-              </ul>
-            </div>
-          </section>
-        ) : (
-          <section className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
-            <p className="text-[12px] text-[--app-muted]">
+              </Box>
+            </CardContent>
+          </Card>
+        </Box>
+      ) : (
+        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+          <CardContent sx={{ p: 2.5 }}>
+            <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
               Unable to load settings from the registry. Check that the registry is running and reachable.
-            </p>
-          </section>
-        )}
+            </Typography>
+          </CardContent>
+        </Card>
+      )}
 
-        <AppThemePreferencesPanel />
-        <CliTerminalPreferencesPanel />
+      <AppThemePreferencesPanel />
+      <CliTerminalPreferencesPanel />
 
-        <p className="text-[10px] text-[--app-muted]">
-          Policy changes now live in{" "}
-          <Link href="/registry/policy" className="underline">
-            Policy
-          </Link>
-          . For a live snapshot of counts and status, see{" "}
-          <Link href="/registry/health" className="underline">
-            Health
-          </Link>
-          .
-        </p>
-    </div>
+      <Typography sx={{ fontSize: 11, color: "var(--app-muted)" }}>
+        Policy changes now live in{" "}
+        <Link href="/registry/policy" className="underline">
+          Policy
+        </Link>
+        . For a live snapshot of counts and status, see{" "}
+        <Link href="/registry/health" className="underline">
+          Health
+        </Link>
+        .
+      </Typography>
+    </Box>
   );
 }

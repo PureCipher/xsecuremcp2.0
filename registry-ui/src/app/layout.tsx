@@ -7,7 +7,12 @@ import {
   IBM_Plex_Mono,
   Source_Code_Pro,
 } from "next/font/google";
+import { AppRouterCacheProvider } from "@mui/material-nextjs/v16-appRouter";
 import "./globals.css";
+
+import { AppThemeRoot } from "@/components/AppThemeRoot";
+import { MuiThemeRoot } from "@/components/MuiThemeRoot";
+import { DEFAULT_APP_THEME_ID } from "@/lib/appThemes";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -55,11 +60,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning data-app-theme={DEFAULT_APP_THEME_ID}>
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${jetbrainsMono.variable} ${firaCode.variable} ${ibmPlexMono.variable} ${sourceCodePro.variable} antialiased`}
       >
-        {children}
+        <AppRouterCacheProvider>
+          <AppThemeRoot>
+            <MuiThemeRoot>{children}</MuiThemeRoot>
+          </AppThemeRoot>
+        </AppRouterCacheProvider>
       </body>
     </html>
   );

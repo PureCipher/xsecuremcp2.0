@@ -1,5 +1,7 @@
 "use client";
 
+import { Box, Card, CardContent, Typography } from "@mui/material";
+
 export function KeyValuePanel({
   title,
   entries,
@@ -8,20 +10,52 @@ export function KeyValuePanel({
   entries: { label: string; value: React.ReactNode }[];
 }) {
   return (
-    <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
-      {title ? (
-        <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
-          {title}
-        </p>
-      ) : null}
-      <dl className="space-y-2">
-        {entries.map((e) => (
-          <div key={e.label} className="flex items-baseline justify-between gap-3">
-            <dt className="text-[11px] text-[--app-muted]">{e.label}</dt>
-            <dd className="text-right text-[12px] font-medium text-[--app-fg]">{e.value}</dd>
-          </div>
-        ))}
-      </dl>
-    </div>
+    <Card
+      variant="outlined"
+      sx={{
+        borderRadius: 4,
+        borderColor: "var(--app-border)",
+        bgcolor: "var(--app-surface)",
+        boxShadow: "none",
+      }}
+    >
+      <CardContent sx={{ p: 2.5 }}>
+        {title ? (
+          <Typography
+            sx={{
+              mb: 2,
+              fontSize: 12,
+              fontWeight: 800,
+              letterSpacing: "0.18em",
+              textTransform: "uppercase",
+              color: "var(--app-muted)",
+            }}
+          >
+            {title}
+          </Typography>
+        ) : null}
+
+        <Box component="dl" sx={{ display: "grid", gap: 1 }}>
+          {entries.map((e) => (
+            <Box
+              key={e.label}
+              sx={{
+                display: "flex",
+                alignItems: "baseline",
+                justifyContent: "space-between",
+                gap: 2,
+              }}
+            >
+              <Typography component="dt" sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                {e.label}
+              </Typography>
+              <Typography component="dd" sx={{ m: 0, textAlign: "right", fontSize: 12, fontWeight: 700, color: "var(--app-fg)" }}>
+                {e.value}
+              </Typography>
+            </Box>
+          ))}
+        </Box>
+      </CardContent>
+    </Card>
   );
 }

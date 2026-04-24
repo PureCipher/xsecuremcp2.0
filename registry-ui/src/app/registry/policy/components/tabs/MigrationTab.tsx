@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import type {
   PolicyMigrationPreviewResponse,
 } from "@/lib/registryClient";
+import { Box, Button, Card, CardContent, Chip, FormControl, InputLabel, MenuItem, Select, TextField, Typography } from "@mui/material";
 import { usePolicyContext } from "../../contexts/PolicyContext";
 
 type EnvironmentItem = {
@@ -39,18 +40,18 @@ type MigrationTabProps = {
   ) => Promise<PolicyMigrationPreviewResponse | null>;
 };
 
-function migrationRiskClass(level: string | undefined): string {
+function migrationRiskSx(level: string | undefined): Record<string, unknown> {
   switch (level?.toLowerCase()) {
     case "critical":
-      return "bg-red-500/15 text-red-200 ring-1 ring-red-400/50";
+      return { bgcolor: "rgba(239, 68, 68, 0.12)", color: "rgb(254, 202, 202)", border: "1px solid rgba(248, 113, 113, 0.45)" };
     case "high":
-      return "bg-rose-500/15 text-rose-200 ring-1 ring-rose-400/50";
+      return { bgcolor: "rgba(244, 63, 94, 0.12)", color: "rgb(254, 205, 211)", border: "1px solid rgba(251, 113, 133, 0.45)" };
     case "medium":
-      return "bg-amber-500/15 text-amber-200 ring-1 ring-amber-400/50";
+      return { bgcolor: "rgba(245, 158, 11, 0.12)", color: "rgb(253, 230, 138)", border: "1px solid rgba(251, 191, 36, 0.45)" };
     case "low":
-      return "bg-[--app-control-active-bg] text-[--app-muted] ring-1 ring-[--app-accent]";
+      return { bgcolor: "var(--app-control-active-bg)", color: "var(--app-muted)", border: "1px solid var(--app-accent)" };
     default:
-      return "bg-zinc-500/15 text-zinc-200 ring-1 ring-zinc-400/40";
+      return { bgcolor: "rgba(113, 113, 122, 0.12)", color: "rgb(228, 228, 231)", border: "1px solid rgba(161, 161, 170, 0.35)" };
   }
 }
 
@@ -108,375 +109,405 @@ export function MigrationTab({
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
       {/* Environment promotion */}
-      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
-        <div className="space-y-1">
-          <p className="text-xs font-medium uppercase tracking-[0.18em] text-[--app-muted]">
-            Environment promotion
-          </p>
-          <h2 className="text-xl font-semibold text-[--app-fg]">
-            Move policy safely across development, staging, and production
-          </h2>
-          <p className="text-xs text-[--app-muted]">
-            Capture a baseline for each environment, preview the change, then
-            stage a promotion proposal through the same approval workflow.
-          </p>
-        </div>
+      <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+        <CardContent sx={{ p: 2.5 }}>
+          <Box sx={{ display: "grid", gap: 0.5 }}>
+            <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+              Environment promotion
+            </Typography>
+            <Typography variant="h5" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+              Move policy safely across development, staging, and production
+            </Typography>
+            <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+              Capture a baseline for each environment, preview the change, then stage a promotion proposal through the same approval workflow.
+            </Typography>
+          </Box>
 
-        <div className="mt-4 flex flex-wrap gap-2">
-          <label className="flex items-center gap-2 text-xs text-[--app-muted]">
-            <span>Capture source</span>
-            <select
-              value={captureSource}
-              onChange={(event) => setCaptureSource(event.target.value)}
-              className="rounded-full border border-[--app-border] bg-[--app-chrome-bg] px-3 py-1 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
-            >
-              <option value="live">Live policy chain</option>
-              {versionNumbers.map((vn) => (
-                <option key={`capture-source-${vn}`} value={`version:${vn}`}>
-                  Version {vn}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          {environments.map((environment) => (
-            <article
-              key={environment.environment_id}
-              className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs font-semibold text-[--app-fg]">
-                  {environment.title ?? environment.environment_id}
-                </p>
-                <span className="rounded-full bg-[--app-surface] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
-                  v{String(environment.current_version_number ?? "\u2014")}
-                </span>
-              </div>
-              <p className="mt-2 text-xs text-[--app-muted]">
-                {environment.description}
-              </p>
-              <p className="mt-3 text-[11px] text-[--app-muted]">
-                {environment.current_source_label ?? "No captured baseline yet"}
-              </p>
-              <p className="mt-1 text-[11px] text-[--app-muted]">
-                Captures: {String(environment.capture_count ?? 0)}
-              </p>
-              <button
-                type="button"
-                onClick={() =>
-                  void onCaptureEnvironment(
-                    environment.environment_id,
-                    parseCaptureVersionNumber(captureSource),
-                    captureSource === "live"
-                      ? "Captured live policy chain."
-                      : `Captured ${captureSource}.`,
-                  )
-                }
-                disabled={busyKey === `capture-${environment.environment_id}`}
-                className="mt-4 rounded-full border border-[--app-border] px-3 py-1 text-[11px] font-semibold text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg] disabled:opacity-60"
+          <Box sx={{ mt: 2, display: "flex", flexWrap: "wrap", gap: 1.5, alignItems: "center" }}>
+            <FormControl size="small" sx={{ minWidth: 220 }}>
+              <InputLabel id="capture-source">Capture source</InputLabel>
+              <Select
+                labelId="capture-source"
+                label="Capture source"
+                value={captureSource}
+                onChange={(event) => setCaptureSource(String(event.target.value))}
               >
-                {busyKey === `capture-${environment.environment_id}`
-                  ? "Capturing\u2026"
-                  : "Capture baseline"}
-              </button>
-            </article>
-          ))}
-        </div>
-
-        {/* Promotion form */}
-        <div className="mt-5 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
-          <div className="grid gap-3 sm:grid-cols-3">
-            <label className="flex flex-col gap-1 text-xs text-[--app-muted]">
-              Source environment
-              <select
-                value={promotionSourceEnvironment}
-                onChange={(event) => setPromotionSourceEnvironment(event.target.value)}
-                className="rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
-              >
-                {environments.map((env) => (
-                  <option key={`promotion-source-${env.environment_id}`} value={env.environment_id}>
-                    {env.title ?? env.environment_id}
-                  </option>
+                <MenuItem value="live">Live policy chain</MenuItem>
+                {versionNumbers.map((vn) => (
+                  <MenuItem key={`capture-source-${vn}`} value={`version:${vn}`}>
+                    Version {vn}
+                  </MenuItem>
                 ))}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 text-xs text-[--app-muted]">
-              Target environment
-              <select
-                value={promotionTargetEnvironment}
-                onChange={(event) => setPromotionTargetEnvironment(event.target.value)}
-                className="rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
-              >
-                {environments.map((env) => (
-                  <option key={`promotion-target-${env.environment_id}`} value={env.environment_id}>
-                    {env.title ?? env.environment_id}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 text-xs text-[--app-muted]">
-              Promotion note
-              <input
-                value={promotionDescription}
-                onChange={(event) => setPromotionDescription(event.target.value)}
-                placeholder="Why is this moving forward?"
-                className="rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
-              />
-            </label>
-          </div>
+              </Select>
+            </FormControl>
+          </Box>
 
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                const sourceVersion =
-                  environmentMap[promotionSourceEnvironment]?.current_version_number;
-                const targetVersion =
-                  environmentMap[promotionTargetEnvironment]?.current_version_number;
-                if (!sourceVersion) {
-                  setBanner({
-                    tone: "error",
-                    message:
-                      "Capture a baseline for the source environment before previewing a promotion.",
-                  });
-                  return;
-                }
-                setMigrationSource(`version:${sourceVersion}`);
-                setMigrationTarget(
-                  targetVersion ? `version:${targetVersion}` : "live",
-                );
-                setMigrationEnvironment(promotionTargetEnvironment);
-                void handlePreviewMigration();
-              }}
-              disabled={busyKey === "migration-preview"}
-              className="rounded-full border border-[--app-border] px-4 py-2 text-xs font-semibold text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg] disabled:opacity-60"
-            >
-              {busyKey === "migration-preview"
-                ? "Previewing\u2026"
-                : "Preview environment promotion"}
-            </button>
-            <button
-              type="button"
-              onClick={() => void onStagePromotion(promotionSourceEnvironment, promotionTargetEnvironment, promotionDescription)}
-              disabled={busyKey === "stage-promotion"}
-              className="rounded-full bg-[--app-accent] px-4 py-2 text-xs font-semibold text-[--app-accent-contrast] transition hover:opacity-90 disabled:opacity-60"
-            >
-              {busyKey === "stage-promotion" ? "Staging\u2026" : "Stage promotion"}
-            </button>
-          </div>
-        </div>
-
-        {/* Recent promotions */}
-        <div className="mt-5 space-y-3">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
-            Recent promotion activity
-          </p>
-          {promotions.length === 0 ? (
-            <div className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
-              <p className="text-xs text-[--app-muted]">
-                No promotions have been staged yet.
-              </p>
-            </div>
-          ) : (
-            promotions.slice(0, 5).map((promotion) => (
-              <article
-                key={promotion.promotion_id}
-                className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]"
+          <Box sx={{ mt: 2, display: "grid", gap: 1.5, gridTemplateColumns: { xs: "1fr", md: "1fr 1fr 1fr" } }}>
+            {environments.map((environment) => (
+              <Card
+                key={environment.environment_id}
+                variant="outlined"
+                sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}
               >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-xs font-semibold text-[--app-fg]">
-                    {promotion.source_environment ?? "source"} \u2192{" "}
-                    {promotion.target_environment ?? "target"}
-                  </p>
-                  <span className="rounded-full bg-[--app-surface] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
-                    {promotion.status ?? "staged"}
-                  </span>
-                </div>
-                <p className="mt-2 text-xs text-[--app-muted]">
-                  {promotion.note || "Promotion tracked through proposal governance."}
-                </p>
-                <p className="mt-2 text-[11px] text-[--app-muted]">
-                  Source v{String(promotion.source_version_number ?? "\u2014")}
-                  {promotion.deployed_version_number
-                    ? ` \u00b7 deployed as v${String(promotion.deployed_version_number)}`
-                    : ""}
-                </p>
-              </article>
-            ))
-          )}
-        </div>
-      </div>
+                <CardContent sx={{ p: 2 }}>
+                  <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
+                    <Typography sx={{ fontSize: 12, fontWeight: 800, color: "var(--app-fg)" }}>
+                      {environment.title ?? environment.environment_id}
+                    </Typography>
+                    <Chip
+                      size="small"
+                      label={`v${String(environment.current_version_number ?? "—")}`}
+                      sx={{ borderRadius: 999, bgcolor: "var(--app-surface)", color: "var(--app-muted)", fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.12em" }}
+                    />
+                  </Box>
+                  <Typography sx={{ mt: 1, fontSize: 12, color: "var(--app-muted)" }}>
+                    {environment.description}
+                  </Typography>
+                  <Typography sx={{ mt: 1.5, fontSize: 11, color: "var(--app-muted)" }}>
+                    {environment.current_source_label ?? "No captured baseline yet"}
+                  </Typography>
+                  <Typography sx={{ mt: 0.5, fontSize: 11, color: "var(--app-muted)" }}>
+                    Captures: {String(environment.capture_count ?? 0)}
+                  </Typography>
+                  <Box sx={{ mt: 1.5 }}>
+                    <Button
+                      type="button"
+                      variant="outlined"
+                      size="small"
+                      onClick={() =>
+                        void onCaptureEnvironment(
+                          environment.environment_id,
+                          parseCaptureVersionNumber(captureSource),
+                          captureSource === "live"
+                            ? "Captured live policy chain."
+                            : `Captured ${captureSource}.`,
+                        )
+                      }
+                      disabled={busyKey === `capture-${environment.environment_id}`}
+                      sx={{ borderRadius: 999, borderColor: "var(--app-border)", color: "var(--app-muted)" }}
+                    >
+                      {busyKey === `capture-${environment.environment_id}` ? "Capturing…" : "Capture baseline"}
+                    </Button>
+                  </Box>
+                </CardContent>
+              </Card>
+            ))}
+          </Box>
+
+          <Card variant="outlined" sx={{ mt: 2.5, borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}>
+            <CardContent sx={{ p: 2 }}>
+              <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr 1fr" } }}>
+                <FormControl size="small" fullWidth>
+                  <InputLabel id="promotion-source-env">Source environment</InputLabel>
+                  <Select
+                    labelId="promotion-source-env"
+                    label="Source environment"
+                    value={promotionSourceEnvironment}
+                    onChange={(event) => setPromotionSourceEnvironment(String(event.target.value))}
+                  >
+                    {environments.map((env) => (
+                      <MenuItem key={`promotion-source-${env.environment_id}`} value={env.environment_id}>
+                        {env.title ?? env.environment_id}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+
+                <FormControl size="small" fullWidth>
+                  <InputLabel id="promotion-target-env">Target environment</InputLabel>
+                  <Select
+                    labelId="promotion-target-env"
+                    label="Target environment"
+                    value={promotionTargetEnvironment}
+                    onChange={(event) => setPromotionTargetEnvironment(String(event.target.value))}
+                  >
+                    {environments.map((env) => (
+                      <MenuItem key={`promotion-target-${env.environment_id}`} value={env.environment_id}>
+                        {env.title ?? env.environment_id}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+
+                <TextField
+                  label="Promotion note"
+                  value={promotionDescription}
+                  onChange={(event) => setPromotionDescription(event.target.value)}
+                  placeholder="Why is this moving forward?"
+                  size="small"
+                  fullWidth
+                />
+              </Box>
+
+              <Box sx={{ mt: 2, display: "flex", flexWrap: "wrap", gap: 1 }}>
+                <Button
+                  type="button"
+                  variant="outlined"
+                  onClick={() => {
+                    const sourceVersion =
+                      environmentMap[promotionSourceEnvironment]?.current_version_number;
+                    const targetVersion =
+                      environmentMap[promotionTargetEnvironment]?.current_version_number;
+                    if (!sourceVersion) {
+                      setBanner({
+                        tone: "error",
+                        message:
+                          "Capture a baseline for the source environment before previewing a promotion.",
+                      });
+                      return;
+                    }
+                    setMigrationSource(`version:${sourceVersion}`);
+                    setMigrationTarget(targetVersion ? `version:${targetVersion}` : "live");
+                    setMigrationEnvironment(promotionTargetEnvironment);
+                    void handlePreviewMigration();
+                  }}
+                  disabled={busyKey === "migration-preview"}
+                  sx={{ borderRadius: 999, borderColor: "var(--app-border)", color: "var(--app-muted)" }}
+                >
+                  {busyKey === "migration-preview" ? "Previewing…" : "Preview environment promotion"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="contained"
+                  onClick={() => void onStagePromotion(promotionSourceEnvironment, promotionTargetEnvironment, promotionDescription)}
+                  disabled={busyKey === "stage-promotion"}
+                  sx={{ borderRadius: 999 }}
+                >
+                  {busyKey === "stage-promotion" ? "Staging…" : "Stage promotion"}
+                </Button>
+              </Box>
+            </CardContent>
+          </Card>
+
+          <Box sx={{ mt: 2.5, display: "grid", gap: 1.5 }}>
+            <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+              Recent promotion activity
+            </Typography>
+            {promotions.length === 0 ? (
+              <Card variant="outlined" sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}>
+                <CardContent sx={{ p: 2 }}>
+                  <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                    No promotions have been staged yet.
+                  </Typography>
+                </CardContent>
+              </Card>
+            ) : (
+              promotions.slice(0, 5).map((promotion) => (
+                <Card
+                  key={promotion.promotion_id}
+                  variant="outlined"
+                  sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}
+                >
+                  <CardContent sx={{ p: 2 }}>
+                    <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
+                      <Typography sx={{ fontSize: 12, fontWeight: 800, color: "var(--app-fg)" }}>
+                        {promotion.source_environment ?? "source"} → {promotion.target_environment ?? "target"}
+                      </Typography>
+                      <Chip
+                        size="small"
+                        label={promotion.status ?? "staged"}
+                        sx={{ borderRadius: 999, bgcolor: "var(--app-surface)", color: "var(--app-muted)", fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.12em" }}
+                      />
+                    </Box>
+                    <Typography sx={{ mt: 1, fontSize: 12, color: "var(--app-muted)" }}>
+                      {promotion.note || "Promotion tracked through proposal governance."}
+                    </Typography>
+                    <Typography sx={{ mt: 1, fontSize: 11, color: "var(--app-muted)" }}>
+                      Source v{String(promotion.source_version_number ?? "—")}
+                      {promotion.deployed_version_number ? ` · deployed as v${String(promotion.deployed_version_number)}` : ""}
+                    </Typography>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </Box>
+        </CardContent>
+      </Card>
 
       {/* Migration preview */}
-      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
-        <div className="space-y-1">
-          <p className="text-xs font-medium uppercase tracking-[0.18em] text-[--app-muted]">
-            Migration preview
-          </p>
-          <h2 className="text-xl font-semibold text-[--app-fg]">
-            Plan promotion between versions and environments
-          </h2>
-          <p className="max-w-2xl text-xs text-[--app-muted]">
-            Compare a live chain or saved version against the current target and see
-            what will change, what is risky, and what the chosen environment expects.
-          </p>
-        </div>
+      <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+        <CardContent sx={{ p: 2.5 }}>
+          <Box sx={{ display: "grid", gap: 0.5 }}>
+            <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+              Migration preview
+            </Typography>
+            <Typography variant="h5" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+              Plan promotion between versions and environments
+            </Typography>
+            <Typography sx={{ maxWidth: 900, fontSize: 12, color: "var(--app-muted)" }}>
+              Compare a live chain or saved version against the current target and see what will change, what is risky, and what the chosen environment expects.
+            </Typography>
+          </Box>
 
-        <div className="mt-4 grid gap-3 lg:grid-cols-[1fr,1fr,1fr,auto]">
-          <label className="flex flex-col gap-1 text-xs text-[--app-muted]">
-            Source
-            <select
-              value={migrationSource}
-              onChange={(event) => setMigrationSource(event.target.value)}
-              className="rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
+          <Box sx={{ mt: 2, display: "grid", gap: 1.5, gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr 1fr auto" }, alignItems: "end" }}>
+            <FormControl size="small" fullWidth>
+              <InputLabel id="migration-source">Source</InputLabel>
+              <Select
+                labelId="migration-source"
+                label="Source"
+                value={migrationSource}
+                onChange={(event) => setMigrationSource(String(event.target.value))}
+              >
+                <MenuItem value="live">Live policy</MenuItem>
+                {versionNumbers.map((vn) => (
+                  <MenuItem key={`migration-source-${vn}`} value={`version:${vn}`}>
+                    Version {vn}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <FormControl size="small" fullWidth>
+              <InputLabel id="migration-target">Compare against</InputLabel>
+              <Select
+                labelId="migration-target"
+                label="Compare against"
+                value={migrationTarget}
+                onChange={(event) => setMigrationTarget(String(event.target.value))}
+              >
+                <MenuItem value="live">Current live chain</MenuItem>
+                {versionNumbers.map((vn) => (
+                  <MenuItem key={`migration-target-${vn}`} value={`version:${vn}`}>
+                    Version {vn}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <FormControl size="small" fullWidth>
+              <InputLabel id="migration-env">Target environment</InputLabel>
+              <Select
+                labelId="migration-env"
+                label="Target environment"
+                value={migrationEnvironment}
+                onChange={(event) => setMigrationEnvironment(String(event.target.value))}
+              >
+                {environments.map((env) => (
+                  <MenuItem key={env.environment_id} value={env.environment_id}>
+                    {env.title ?? env.environment_id}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <Button
+              type="button"
+              variant="contained"
+              onClick={() => void handlePreviewMigration()}
+              disabled={busyKey === "migration-preview"}
+              sx={{ borderRadius: 999 }}
             >
-              <option value="live">Live policy</option>
-              {versionNumbers.map((vn) => (
-                <option key={`migration-source-${vn}`} value={`version:${vn}`}>
-                  Version {vn}
-                </option>
-              ))}
-            </select>
-          </label>
+              {busyKey === "migration-preview" ? "Previewing…" : "Preview migration"}
+            </Button>
+          </Box>
 
-          <label className="flex flex-col gap-1 text-xs text-[--app-muted]">
-            Compare against
-            <select
-              value={migrationTarget}
-              onChange={(event) => setMigrationTarget(event.target.value)}
-              className="rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
-            >
-              <option value="live">Current live chain</option>
-              {versionNumbers.map((vn) => (
-                <option key={`migration-target-${vn}`} value={`version:${vn}`}>
-                  Version {vn}
-                </option>
-              ))}
-            </select>
-          </label>
+          <Card variant="outlined" sx={{ mt: 2, borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}>
+            <CardContent sx={{ p: 2 }}>
+              {migrationPreview?.summary ? (
+                <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", lg: "minmax(0,0.9fr) minmax(0,1.1fr)" } }}>
+                  <Box sx={{ display: "grid", gap: 2 }}>
+                    <Box>
+                      <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                        Migration summary
+                      </Typography>
+                      <Typography sx={{ mt: 1, fontSize: 12, color: "var(--app-muted)" }}>
+                        {migrationPreview.source?.label} → {migrationPreview.target?.label}
+                      </Typography>
+                      <Typography sx={{ mt: 0.5, fontSize: 11, color: "var(--app-muted)" }}>
+                        {String((migrationPreview.summary.changed_count as number | undefined) ?? 0)} changed ·{" "}
+                        {String((migrationPreview.summary.added_count as number | undefined) ?? 0)} added ·{" "}
+                        {String((migrationPreview.summary.removed_count as number | undefined) ?? 0)} removed
+                      </Typography>
+                    </Box>
 
-          <label className="flex flex-col gap-1 text-xs text-[--app-muted]">
-            Target environment
-            <select
-              value={migrationEnvironment}
-              onChange={(event) => setMigrationEnvironment(event.target.value)}
-              className="rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
-            >
-              {environments.map((env) => (
-                <option key={env.environment_id} value={env.environment_id}>
-                  {env.title ?? env.environment_id}
-                </option>
-              ))}
-            </select>
-          </label>
+                    <Box>
+                      <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                        Environment fit
+                      </Typography>
+                      <Typography sx={{ mt: 1, fontSize: 12, color: "var(--app-muted)" }}>
+                        {migrationPreview.environment?.description}
+                      </Typography>
+                      {(migrationPreview.environment?.required_controls ?? []).length > 0 ? (
+                        <Box component="ul" sx={{ listStyle: "disc", pl: 2, mt: 1, mb: 0, color: "var(--app-muted)", fontSize: 11, display: "grid", gap: 0.5 }}>
+                          {(migrationPreview.environment?.required_controls ?? []).map((item) => (
+                            <li key={`required-control-${item}`}>{item}</li>
+                          ))}
+                        </Box>
+                      ) : null}
+                    </Box>
+                  </Box>
 
-          <button
-            type="button"
-            onClick={() => void handlePreviewMigration()}
-            disabled={busyKey === "migration-preview"}
-            className="self-end rounded-full bg-[--app-accent] px-4 py-2 text-xs font-semibold text-[--app-accent-contrast] transition hover:opacity-90 disabled:opacity-60"
-          >
-            {busyKey === "migration-preview" ? "Previewing\u2026" : "Preview migration"}
-          </button>
-        </div>
+                  <Box sx={{ display: "grid", gap: 2 }}>
+                    <Box>
+                      <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                        Recommendations
+                      </Typography>
+                      {(migrationPreview.recommendations ?? []).length > 0 ? (
+                        <Box component="ul" sx={{ listStyle: "disc", pl: 2, mt: 1, mb: 0, color: "var(--app-muted)", fontSize: 12, display: "grid", gap: 0.5 }}>
+                          {(migrationPreview.recommendations ?? []).map((item) => (
+                            <li key={`migration-recommendation-${item}`}>{item}</li>
+                          ))}
+                        </Box>
+                      ) : (
+                        <Typography sx={{ mt: 1, fontSize: 12, color: "var(--app-muted)" }}>
+                          No recommendations.
+                        </Typography>
+                      )}
+                    </Box>
 
-        <div className="mt-4 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
-          {migrationPreview?.summary ? (
-            <div className="grid gap-4 lg:grid-cols-[0.9fr,1.1fr]">
-              <div className="space-y-3">
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
-                    Migration summary
-                  </p>
-                  <p className="mt-2 text-xs text-[--app-muted]">
-                    {migrationPreview.source?.label} \u2192 {migrationPreview.target?.label}
-                  </p>
-                  <p className="mt-1 text-[11px] text-[--app-muted]">
-                    {String(
-                      (migrationPreview.summary.changed_count as number | undefined) ?? 0,
-                    )}{" "}
-                    changed \u00b7{" "}
-                    {String(
-                      (migrationPreview.summary.added_count as number | undefined) ?? 0,
-                    )}{" "}
-                    added \u00b7{" "}
-                    {String(
-                      (migrationPreview.summary.removed_count as number | undefined) ?? 0,
-                    )}{" "}
-                    removed
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
-                    Environment fit
-                  </p>
-                  <p className="mt-2 text-xs text-[--app-muted]">
-                    {migrationPreview.environment?.description}
-                  </p>
-                  <ul className="mt-2 space-y-1 text-[11px] text-[--app-muted]">
-                    {(migrationPreview.environment?.required_controls ?? []).map((item) => (
-                      <li key={`required-control-${item}`}>\u2022 {item}</li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
-                    Recommendations
-                  </p>
-                  <ul className="mt-2 space-y-1 text-xs text-[--app-muted]">
-                    {(migrationPreview.recommendations ?? []).map((item) => (
-                      <li key={`migration-recommendation-${item}`}>\u2022 {item}</li>
-                    ))}
-                  </ul>
-                </div>
-
-                {(migrationPreview.risks ?? []).length > 0 ? (
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
-                      Risks
-                    </p>
-                    <ul className="mt-2 space-y-2 text-xs text-[--app-muted]">
-                      {(migrationPreview.risks ?? []).slice(0, 4).map((risk, index) => (
-                        <li
-                          key={`migration-risk-${index}`}
-                          className="rounded-2xl border border-[--app-border] bg-[--app-hover-bg] px-3 py-2 ring-1 ring-[--app-surface-ring]"
-                        >
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-semibold text-[--app-fg]">
-                              {risk.title}
-                            </span>
-                            <span
-                              className={`rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] ${migrationRiskClass(risk.level)}`}
+                    {(migrationPreview.risks ?? []).length > 0 ? (
+                      <Box>
+                        <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                          Risks
+                        </Typography>
+                        <Box sx={{ mt: 1, display: "grid", gap: 1 }}>
+                          {(migrationPreview.risks ?? []).slice(0, 4).map((risk, index) => (
+                            <Card
+                              key={`migration-risk-${index}`}
+                              variant="outlined"
+                              sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}
                             >
-                              {risk.level}
-                            </span>
-                          </div>
-                          <p className="mt-1 text-xs text-[--app-muted]">
-                            {risk.detail}
-                          </p>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          ) : (
-            <p className="text-xs text-[--app-muted]">
-              Choose a source, comparison target, and environment profile to preview
-              promotion risk.
-            </p>
-          )}
-        </div>
-      </div>
-    </div>
+                              <CardContent sx={{ p: 1.5 }}>
+                                <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1 }}>
+                                  <Typography sx={{ fontSize: 12, fontWeight: 800, color: "var(--app-fg)" }}>
+                                    {risk.title}
+                                  </Typography>
+                                  <Chip
+                                    size="small"
+                                    label={risk.level}
+                                    sx={{
+                                      borderRadius: 999,
+                                      fontSize: 10,
+                                      fontWeight: 800,
+                                      textTransform: "uppercase",
+                                      letterSpacing: "0.12em",
+                                      height: 22,
+                                      ...migrationRiskSx(risk.level),
+                                    }}
+                                  />
+                                </Box>
+                                <Typography sx={{ mt: 1, fontSize: 12, color: "var(--app-muted)" }}>
+                                  {risk.detail}
+                                </Typography>
+                              </CardContent>
+                            </Card>
+                          ))}
+                        </Box>
+                      </Box>
+                    ) : null}
+                  </Box>
+                </Box>
+              ) : (
+                <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                  Choose a source, comparison target, and environment profile to preview promotion risk.
+                </Typography>
+              )}
+            </CardContent>
+          </Card>
+        </CardContent>
+      </Card>
+    </Box>
   );
 }

@@ -1,6 +1,17 @@
 "use client";
 
 import { useState } from "react";
+import {
+  Alert,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Checkbox,
+  FormControlLabel,
+  TextField,
+  Typography,
+} from "@mui/material";
 import type {
   JurisdictionListResponse,
   InstitutionListResponse,
@@ -140,14 +151,10 @@ export function ConsentManager({
   ];
 
   return (
-    <div className="flex flex-col gap-6">
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
       <TabBar tabs={tabs} activeTab={activeTab} onTabChange={(key) => setActiveTab(key as TabKey)} />
 
-      {error && (
-        <div className="rounded-3xl bg-red-500/10 p-4 ring-1 ring-red-700/60">
-          <p className="text-[12px] text-red-200">{error}</p>
-        </div>
-      )}
+      {error ? <Alert severity="error">{error}</Alert> : null}
 
       {/* Evaluate Tab */}
       {activeTab === "evaluate" && (
@@ -199,7 +206,7 @@ export function ConsentManager({
       {activeTab === "graph" && (
         <GraphExplorerTab jurisdictionCount={jurisdictionsList.length} institutionCount={institutionsList.length} />
       )}
-    </div>
+    </Box>
   );
 }
 
@@ -245,106 +252,80 @@ function EvaluateTab({
   result: ConsentEvaluationResponse | null;
 }) {
   return (
-    <div className="flex flex-col gap-6">
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
       {/* Form */}
-      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-6 ring-1 ring-[--app-surface-ring]">
-        <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
-          Query parameters
-        </p>
+      <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+        <CardContent sx={{ p: 3 }}>
+          <Typography sx={{ mb: 2, fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+            Query parameters
+          </Typography>
 
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <div>
-            <label className="text-[10px] font-medium text-[--app-muted]">Source ID</label>
-            <input
-              type="text"
+          <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "1fr 1fr", lg: "1fr 1fr 1fr" } }}>
+            <TextField
+              label="Source ID"
+              size="small"
               value={sourceId}
               onChange={(e) => setSourceId(e.target.value)}
               placeholder="Agent or subject ID"
-              className="mt-1 w-full rounded-xl bg-[--app-chrome-bg] px-3 py-2 text-[12px] text-[--app-fg] ring-1 ring-[--app-border] focus:outline-none focus:ring-2 focus:ring-[--app-accent]"
             />
-          </div>
-
-          <div>
-            <label className="text-[10px] font-medium text-[--app-muted]">Target ID</label>
-            <input
-              type="text"
+            <TextField
+              label="Target ID"
+              size="small"
               value={targetId}
               onChange={(e) => setTargetId(e.target.value)}
               placeholder="Resource ID"
-              className="mt-1 w-full rounded-xl bg-[--app-chrome-bg] px-3 py-2 text-[12px] text-[--app-fg] ring-1 ring-[--app-border] focus:outline-none focus:ring-2 focus:ring-[--app-accent]"
             />
-          </div>
-
-          <div>
-            <label className="text-[10px] font-medium text-[--app-muted]">Scope</label>
-            <input
-              type="text"
+            <TextField
+              label="Scope"
+              size="small"
               value={scope}
               onChange={(e) => setScope(e.target.value)}
               placeholder="read, write, delete"
-              className="mt-1 w-full rounded-xl bg-[--app-chrome-bg] px-3 py-2 text-[12px] text-[--app-fg] ring-1 ring-[--app-border] focus:outline-none focus:ring-2 focus:ring-[--app-accent]"
             />
-          </div>
-
-          <div>
-            <label className="text-[10px] font-medium text-[--app-muted]">Source Jurisdiction</label>
-            <input
-              type="text"
+            <TextField
+              label="Source Jurisdiction"
+              size="small"
               value={sourceJurisdiction}
               onChange={(e) => setSourceJurisdiction(e.target.value)}
               placeholder="e.g., US"
-              className="mt-1 w-full rounded-xl bg-[--app-chrome-bg] px-3 py-2 text-[12px] text-[--app-fg] ring-1 ring-[--app-border] focus:outline-none focus:ring-2 focus:ring-[--app-accent]"
             />
-          </div>
-
-          <div>
-            <label className="text-[10px] font-medium text-[--app-muted]">Target Jurisdiction</label>
-            <input
-              type="text"
+            <TextField
+              label="Target Jurisdiction"
+              size="small"
               value={targetJurisdiction}
               onChange={(e) => setTargetJurisdiction(e.target.value)}
               placeholder="e.g., EU"
-              className="mt-1 w-full rounded-xl bg-[--app-chrome-bg] px-3 py-2 text-[12px] text-[--app-fg] ring-1 ring-[--app-border] focus:outline-none focus:ring-2 focus:ring-[--app-accent]"
             />
-          </div>
-
-          <div>
-            <label className="text-[10px] font-medium text-[--app-muted]">Jurisdictions (CSV)</label>
-            <input
-              type="text"
+            <TextField
+              label="Jurisdictions (CSV)"
+              size="small"
               value={jurisdictions}
               onChange={(e) => setJurisdictions(e.target.value)}
               placeholder="US, EU, CA"
-              className="mt-1 w-full rounded-xl bg-[--app-chrome-bg] px-3 py-2 text-[12px] text-[--app-fg] ring-1 ring-[--app-border] focus:outline-none focus:ring-2 focus:ring-[--app-accent]"
             />
-          </div>
-        </div>
+          </Box>
 
-        <div className="mt-4 flex items-center gap-2">
-          <input
-            type="checkbox"
-            id="require-all"
-            checked={requireAll}
-            onChange={(e) => setRequireAll(e.target.checked)}
-            className="h-4 w-4 rounded"
-          />
-          <label htmlFor="require-all" className="text-[11px] text-[--app-muted]">
-            Require all jurisdictions
-          </label>
-        </div>
+          <Box sx={{ mt: 2 }}>
+            <FormControlLabel
+              control={<Checkbox checked={requireAll} onChange={(e) => setRequireAll(e.target.checked)} />}
+              label={<Typography sx={{ fontSize: 13, color: "var(--app-muted)" }}>Require all jurisdictions</Typography>}
+            />
+          </Box>
 
-        <button
-          onClick={onSubmit}
-          disabled={loading}
-          className="mt-6 rounded-full bg-[--app-accent] px-6 py-2 text-[11px] font-semibold text-[--app-accent-contrast] transition hover:opacity-90 disabled:opacity-50"
-        >
-          {loading ? "Evaluating..." : "Evaluate Consent"}
-        </button>
-      </div>
+          <Button
+            onClick={onSubmit}
+            disabled={loading}
+            variant="contained"
+            sx={{ mt: 3, borderRadius: 999, bgcolor: "var(--app-accent)", color: "var(--app-accent-contrast)", "&:hover": { bgcolor: "var(--app-accent)" } }}
+          >
+            {loading ? "Evaluating..." : "Evaluate Consent"}
+          </Button>
+        </CardContent>
+      </Card>
 
       {/* Results */}
       {result && <EvaluationResultDisplay result={result} />}
-    </div>
+    </Box>
   );
 }
 
@@ -353,17 +334,21 @@ function EvaluationResultDisplay({ result }: { result: ConsentEvaluationResponse
   const peerDecisions = result.peer_decisions ?? {};
 
   return (
-    <div className="flex flex-col gap-4">
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
       {/* Decision Badge */}
-      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-6 ring-1 ring-[--app-surface-ring]">
-        <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
-          Decision
-        </p>
-        <div className="flex items-center gap-3">
-          <StatusBadge status={result.granted ? "granted" : "denied"} className="text-base" />
-          <p className="text-[12px] text-[--app-muted]">{result.reason}</p>
-        </div>
-      </div>
+      <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+        <CardContent sx={{ p: 3 }}>
+          <Typography sx={{ mb: 2, fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+            Decision
+          </Typography>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
+            <StatusBadge status={result.granted ? "granted" : "denied"} />
+            <Typography sx={{ fontSize: 13, color: "var(--app-muted)" }}>
+              {result.reason}
+            </Typography>
+          </Box>
+        </CardContent>
+      </Card>
 
       {/* Local Decision */}
       <KeyValuePanel
@@ -379,63 +364,116 @@ function EvaluationResultDisplay({ result }: { result: ConsentEvaluationResponse
 
       {/* Jurisdiction Results */}
       {Object.keys(jurisdictionResults).length > 0 && (
-        <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
-          <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
-            Jurisdiction Results
-          </p>
-          <div className="space-y-3">
+        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+          <CardContent sx={{ p: 2.5 }}>
+            <Typography sx={{ mb: 2, fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+              Jurisdiction Results
+            </Typography>
+            <Box sx={{ display: "grid", gap: 1.5 }}>
             {Object.entries(jurisdictionResults).map(([code, jr]) => (
-              <div key={code} className="rounded-lg border border-[--app-border] bg-[--app-control-bg] p-3 ring-1 ring-[--app-surface-ring]">
-                <div className="mb-2 flex items-center justify-between">
-                  <p className="text-[11px] font-medium text-[--app-fg]">{code}</p>
-                  <StatusBadge status={jr.satisfied ? "satisfied" : "unsatisfied"} />
-                </div>
-                <dl className="space-y-1 text-[10px] text-[--app-muted]">
-                  <div className="flex justify-between">
-                    <dt>Required Scopes:</dt>
-                    <dd>{jr.required_scopes?.join(", ") || "—"}</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt>Satisfied Scopes:</dt>
-                    <dd>{jr.satisfied_scopes?.join(", ") || "—"}</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt>Missing Scopes:</dt>
-                    <dd>{jr.missing_scopes?.join(", ") || "—"}</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt>Regulations:</dt>
-                    <dd>{jr.applicable_regulations?.join(", ") || "—"}</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt>Reason:</dt>
-                    <dd>{jr.reason}</dd>
-                  </div>
-                </dl>
-              </div>
+              <Card
+                key={code}
+                variant="outlined"
+                sx={{
+                  borderRadius: 2,
+                  borderColor: "var(--app-border)",
+                  bgcolor: "var(--app-control-bg)",
+                  boxShadow: "none",
+                }}
+              >
+                <CardContent sx={{ p: 2 }}>
+                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2 }}>
+                    <Typography sx={{ fontSize: 13, fontWeight: 700, color: "var(--app-fg)" }}>
+                      {code}
+                    </Typography>
+                    <StatusBadge status={jr.satisfied ? "satisfied" : "unsatisfied"} />
+                  </Box>
+
+                  <Box component="dl" sx={{ mt: 1.5, display: "grid", gap: 0.75 }}>
+                    <Box sx={{ display: "flex", justifyContent: "space-between", gap: 2 }}>
+                      <Typography component="dt" sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                        Required Scopes
+                      </Typography>
+                      <Typography component="dd" sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                        {jr.required_scopes?.join(", ") || "—"}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ display: "flex", justifyContent: "space-between", gap: 2 }}>
+                      <Typography component="dt" sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                        Satisfied Scopes
+                      </Typography>
+                      <Typography component="dd" sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                        {jr.satisfied_scopes?.join(", ") || "—"}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ display: "flex", justifyContent: "space-between", gap: 2 }}>
+                      <Typography component="dt" sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                        Missing Scopes
+                      </Typography>
+                      <Typography component="dd" sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                        {jr.missing_scopes?.join(", ") || "—"}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ display: "flex", justifyContent: "space-between", gap: 2 }}>
+                      <Typography component="dt" sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                        Regulations
+                      </Typography>
+                      <Typography component="dd" sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                        {jr.applicable_regulations?.join(", ") || "—"}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ display: "flex", justifyContent: "space-between", gap: 2 }}>
+                      <Typography component="dt" sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                        Reason
+                      </Typography>
+                      <Typography component="dd" sx={{ fontSize: 12, color: "var(--app-muted)", textAlign: "right" }}>
+                        {jr.reason}
+                      </Typography>
+                    </Box>
+                  </Box>
+                </CardContent>
+              </Card>
             ))}
-          </div>
-        </div>
+            </Box>
+          </CardContent>
+        </Card>
       )}
 
       {/* Peer Decisions */}
       {Object.keys(peerDecisions).length > 0 && (
-        <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
-          <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
-            Peer Decisions
-          </p>
-          <div className="space-y-2">
+        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+          <CardContent sx={{ p: 2.5 }}>
+            <Typography sx={{ mb: 2, fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+              Peer Decisions
+            </Typography>
+            <Box sx={{ display: "grid", gap: 1 }}>
             {Object.entries(peerDecisions).map(([peer, decision]) => (
-              <div key={peer} className="flex items-center justify-between rounded-lg border border-[--app-border] bg-[--app-control-bg] p-2 ring-1 ring-[--app-surface-ring]">
-                <p className="text-[11px] font-medium text-[--app-fg]">{peer}</p>
-                <div className="flex items-center gap-2">
-                  <StatusBadge status={decision.granted ? "granted" : "denied"} />
-                  <p className="text-[10px] text-[--app-muted]">{decision.reason}</p>
-                </div>
-              </div>
+              <Card
+                key={peer}
+                variant="outlined"
+                sx={{
+                  borderRadius: 2,
+                  borderColor: "var(--app-border)",
+                  bgcolor: "var(--app-control-bg)",
+                  boxShadow: "none",
+                }}
+              >
+                <CardContent sx={{ p: 1.75, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2 }}>
+                  <Typography sx={{ fontSize: 13, fontWeight: 700, color: "var(--app-fg)" }}>
+                    {peer}
+                  </Typography>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <StatusBadge status={decision.granted ? "granted" : "denied"} />
+                    <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                      {decision.reason}
+                    </Typography>
+                  </Box>
+                </CardContent>
+              </Card>
             ))}
-          </div>
-        </div>
+            </Box>
+          </CardContent>
+        </Card>
       )}
 
       {/* Evaluated At */}
@@ -447,7 +485,7 @@ function EvaluationResultDisplay({ result }: { result: ConsentEvaluationResponse
           },
         ]}
       />
-    </div>
+    </Box>
   );
 }
 
@@ -473,47 +511,43 @@ function AccessRightsTab({
   result: ConsentAccessRights | null;
 }) {
   return (
-    <div className="flex flex-col gap-6">
-      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-6 ring-1 ring-[--app-surface-ring]">
-        <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
-          Lookup
-        </p>
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+      <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+        <CardContent sx={{ p: 3 }}>
+          <Typography sx={{ mb: 2, fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+            Lookup
+          </Typography>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <div>
-            <label className="text-[10px] font-medium text-[--app-muted]">Agent ID</label>
-            <input
-              type="text"
+          <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" } }}>
+            <TextField
+              label="Agent ID"
+              size="small"
               value={agentId}
               onChange={(e) => setAgentId(e.target.value)}
               placeholder="e.g., agent-123"
-              className="mt-1 w-full rounded-xl bg-[--app-chrome-bg] px-3 py-2 text-[12px] text-[--app-fg] ring-1 ring-[--app-border] focus:outline-none focus:ring-2 focus:ring-[--app-accent]"
             />
-          </div>
-
-          <div>
-            <label className="text-[10px] font-medium text-[--app-muted]">Resource ID</label>
-            <input
-              type="text"
+            <TextField
+              label="Resource ID"
+              size="small"
               value={resourceId}
               onChange={(e) => setResourceId(e.target.value)}
               placeholder="e.g., resource-456"
-              className="mt-1 w-full rounded-xl bg-[--app-chrome-bg] px-3 py-2 text-[12px] text-[--app-fg] ring-1 ring-[--app-border] focus:outline-none focus:ring-2 focus:ring-[--app-accent]"
             />
-          </div>
-        </div>
+          </Box>
 
-        <button
-          onClick={onSubmit}
-          disabled={loading}
-          className="mt-6 rounded-full bg-[--app-accent] px-6 py-2 text-[11px] font-semibold text-[--app-accent-contrast] transition hover:opacity-90 disabled:opacity-50"
-        >
-          {loading ? "Loading..." : "Lookup Access Rights"}
-        </button>
-      </div>
+          <Button
+            onClick={onSubmit}
+            disabled={loading}
+            variant="contained"
+            sx={{ mt: 3, borderRadius: 999, bgcolor: "var(--app-accent)", color: "var(--app-accent-contrast)", "&:hover": { bgcolor: "var(--app-accent)" } }}
+          >
+            {loading ? "Loading..." : "Lookup Access Rights"}
+          </Button>
+        </CardContent>
+      </Card>
 
       {result && <AccessRightsDisplay rights={result} />}
-    </div>
+    </Box>
   );
 }
 
@@ -521,7 +555,7 @@ function AccessRightsDisplay({ rights }: { rights: ConsentAccessRights }) {
   const jurisdictionConstraints = rights.jurisdiction_constraints ?? {};
 
   return (
-    <div className="flex flex-col gap-4">
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
       <KeyValuePanel
         title="Resource Access"
         entries={[
@@ -536,65 +570,88 @@ function AccessRightsDisplay({ rights }: { rights: ConsentAccessRights }) {
 
       {/* Allowed Scopes */}
       {rights.allowed_scopes && rights.allowed_scopes.length > 0 && (
-        <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
-          <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
-            Allowed Scopes
-          </p>
-          <div className="flex flex-wrap gap-2">
+        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+          <CardContent sx={{ p: 2.5 }}>
+            <Typography sx={{ mb: 1.5, fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+              Allowed Scopes
+            </Typography>
+            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
             {rights.allowed_scopes.map((scope) => (
               <StatusBadge key={scope} status={scope} />
             ))}
-          </div>
-        </div>
+            </Box>
+          </CardContent>
+        </Card>
       )}
 
       {/* Jurisdiction Constraints */}
       {Object.keys(jurisdictionConstraints).length > 0 && (
-        <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
-          <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
-            Jurisdiction Constraints
-          </p>
-          <div className="space-y-2">
+        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+          <CardContent sx={{ p: 2.5 }}>
+            <Typography sx={{ mb: 1.5, fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+              Jurisdiction Constraints
+            </Typography>
+            <Box sx={{ display: "grid", gap: 1 }}>
             {Object.entries(jurisdictionConstraints).map(([jurisdiction, constraints]) => (
-              <div key={jurisdiction} className="rounded-lg border border-[--app-border] bg-[--app-control-bg] p-2 ring-1 ring-[--app-surface-ring]">
-                <p className="text-[10px] font-medium text-[--app-fg]">{jurisdiction}</p>
-                <p className="text-[10px] text-[--app-muted]">{constraints.join(", ")}</p>
-              </div>
+              <Card
+                key={jurisdiction}
+                variant="outlined"
+                sx={{
+                  borderRadius: 2,
+                  borderColor: "var(--app-border)",
+                  bgcolor: "var(--app-control-bg)",
+                  boxShadow: "none",
+                }}
+              >
+                <CardContent sx={{ py: 1.25, px: 1.5 }}>
+                  <Typography sx={{ fontSize: 12, fontWeight: 700, color: "var(--app-fg)" }}>
+                    {jurisdiction}
+                  </Typography>
+                  <Typography sx={{ mt: 0.25, fontSize: 12, color: "var(--app-muted)" }}>
+                    {constraints.join(", ")}
+                  </Typography>
+                </CardContent>
+              </Card>
             ))}
-          </div>
-        </div>
+            </Box>
+          </CardContent>
+        </Card>
       )}
 
       {/* Conditions */}
       {rights.conditions && rights.conditions.length > 0 && (
-        <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
-          <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
-            Conditions
-          </p>
-          <ul className="space-y-1">
+        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+          <CardContent sx={{ p: 2.5 }}>
+            <Typography sx={{ mb: 1.5, fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+              Conditions
+            </Typography>
+            <Box component="ul" sx={{ m: 0, pl: 2, display: "grid", gap: 0.5 }}>
             {rights.conditions.map((condition, i) => (
-              <li key={i} className="text-[11px] text-[--app-muted]">
-                • {condition}
-              </li>
+              <Typography key={i} component="li" sx={{ fontSize: 13, color: "var(--app-muted)" }}>
+                {condition}
+              </Typography>
             ))}
-          </ul>
-        </div>
+            </Box>
+          </CardContent>
+        </Card>
       )}
 
       {/* Grant Sources */}
       {rights.grant_sources && rights.grant_sources.length > 0 && (
-        <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
-          <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
-            Grant Sources
-          </p>
-          <div className="flex flex-wrap gap-2">
+        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+          <CardContent sx={{ p: 2.5 }}>
+            <Typography sx={{ mb: 1.5, fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+              Grant Sources
+            </Typography>
+            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
             {rights.grant_sources.map((source) => (
               <StatusBadge key={source} status={source} />
             ))}
-          </div>
-        </div>
+            </Box>
+          </CardContent>
+        </Card>
       )}
-    </div>
+    </Box>
   );
 }
 
@@ -617,7 +674,11 @@ function JurisdictionsTab({
     {
       key: "jurisdiction_code",
       header: "Code",
-      render: (row) => <span className="font-medium">{row.jurisdiction_code}</span>,
+      render: (row) => (
+        <Typography component="span" sx={{ fontWeight: 800 }}>
+          {row.jurisdiction_code}
+        </Typography>
+      ),
     },
     {
       key: "applicable_regulations",
@@ -645,7 +706,11 @@ function JurisdictionsTab({
     {
       key: "id",
       header: "Institution ID",
-      render: (row) => <span className="font-medium">{row.id}</span>,
+      render: (row) => (
+        <Typography component="span" sx={{ fontWeight: 800 }}>
+          {row.id}
+        </Typography>
+      ),
     },
     {
       key: "jurisdiction_code",
@@ -655,19 +720,19 @@ function JurisdictionsTab({
   ];
 
   return (
-    <div className="flex flex-col gap-6">
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
       {/* Jurisdictions Table */}
-      <div>
-        <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
+      <Box>
+        <Typography sx={{ mb: 1.5, fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
           Jurisdictions
-        </p>
+        </Typography>
         <DataTable
           data={jurisdictions}
           columns={jurisdictionColumns}
           onRowClick={(row) => setExpandedJurisdiction(expandedJurisdiction === row.id ? null : row.id)}
           emptyMessage="No jurisdictions found"
         />
-      </div>
+      </Box>
 
       {/* Expanded Jurisdiction Details */}
       {expandedJurisdiction && (
@@ -675,53 +740,59 @@ function JurisdictionsTab({
           const jurisdiction = jurisdictions.find((j) => j.id === expandedJurisdiction);
           if (!jurisdiction) return null;
           return (
-            <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
-              <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
-                {jurisdiction.jurisdiction_code} Details
-              </p>
-              <dl className="space-y-2">
-                <div className="flex justify-between">
-                  <dt className="text-[11px] text-[--app-muted]">ID</dt>
-                  <dd className="text-[11px] text-[--app-fg]">{jurisdiction.id}</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-[11px] text-[--app-muted]">Code</dt>
-                  <dd className="text-[11px] text-[--app-fg]">{jurisdiction.jurisdiction_code}</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-[11px] text-[--app-muted]">Regulations</dt>
-                  <dd className="text-[11px] text-[--app-fg]">{jurisdiction.applicable_regulations?.join(", ") || "—"}</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-[11px] text-[--app-muted]">Consent Scopes</dt>
-                  <dd className="text-[11px] text-[--app-fg]">{jurisdiction.required_consent_scopes?.join(", ") || "—"}</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-[11px] text-[--app-muted]">Explicit Consent Required</dt>
-                  <dd className="text-[11px] text-[--app-fg]">{jurisdiction.requires_explicit_consent ? "Yes" : "No"}</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-[11px] text-[--app-muted]">Data Residency Required</dt>
-                  <dd className="text-[11px] text-[--app-fg]">{jurisdiction.data_residency_required ? "Yes" : "No"}</dd>
-                </div>
-              </dl>
-            </div>
+            <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+              <CardContent sx={{ p: 2.5 }}>
+                <Typography sx={{ mb: 1.5, fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                  {jurisdiction.jurisdiction_code} Details
+                </Typography>
+                <Box component="dl" sx={{ display: "grid", gap: 1 }}>
+                  <Box sx={{ display: "flex", justifyContent: "space-between", gap: 2 }}>
+                    <Typography component="dt" sx={{ fontSize: 13, color: "var(--app-muted)" }}>ID</Typography>
+                    <Typography component="dd" sx={{ fontSize: 13, color: "var(--app-fg)" }}>{jurisdiction.id}</Typography>
+                  </Box>
+                  <Box sx={{ display: "flex", justifyContent: "space-between", gap: 2 }}>
+                    <Typography component="dt" sx={{ fontSize: 13, color: "var(--app-muted)" }}>Code</Typography>
+                    <Typography component="dd" sx={{ fontSize: 13, color: "var(--app-fg)" }}>{jurisdiction.jurisdiction_code}</Typography>
+                  </Box>
+                  <Box sx={{ display: "flex", justifyContent: "space-between", gap: 2 }}>
+                    <Typography component="dt" sx={{ fontSize: 13, color: "var(--app-muted)" }}>Regulations</Typography>
+                    <Typography component="dd" sx={{ fontSize: 13, color: "var(--app-fg)", textAlign: "right" }}>
+                      {jurisdiction.applicable_regulations?.join(", ") || "—"}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: "flex", justifyContent: "space-between", gap: 2 }}>
+                    <Typography component="dt" sx={{ fontSize: 13, color: "var(--app-muted)" }}>Consent Scopes</Typography>
+                    <Typography component="dd" sx={{ fontSize: 13, color: "var(--app-fg)", textAlign: "right" }}>
+                      {jurisdiction.required_consent_scopes?.join(", ") || "—"}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: "flex", justifyContent: "space-between", gap: 2 }}>
+                    <Typography component="dt" sx={{ fontSize: 13, color: "var(--app-muted)" }}>Explicit Consent Required</Typography>
+                    <Typography component="dd" sx={{ fontSize: 13, color: "var(--app-fg)" }}>{jurisdiction.requires_explicit_consent ? "Yes" : "No"}</Typography>
+                  </Box>
+                  <Box sx={{ display: "flex", justifyContent: "space-between", gap: 2 }}>
+                    <Typography component="dt" sx={{ fontSize: 13, color: "var(--app-muted)" }}>Data Residency Required</Typography>
+                    <Typography component="dd" sx={{ fontSize: 13, color: "var(--app-fg)" }}>{jurisdiction.data_residency_required ? "Yes" : "No"}</Typography>
+                  </Box>
+                </Box>
+              </CardContent>
+            </Card>
           );
         })()
       )}
 
       {/* Institutions Table */}
-      <div>
-        <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
+      <Box>
+        <Typography sx={{ mb: 1.5, fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
           Institutions
-        </p>
+        </Typography>
         <DataTable
           data={institutions}
           columns={institutionColumns}
           emptyMessage="No institutions found"
         />
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }
 
@@ -737,29 +808,38 @@ function GraphExplorerTab({
   institutionCount: number;
 }) {
   return (
-    <div className="flex flex-col gap-4">
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
       {/* Stats */}
-      <div className="grid gap-3 md:grid-cols-2">
+      <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" } }}>
         <MetricCard label="Jurisdictions" value={jurisdictionCount} accent />
         <MetricCard label="Institutions" value={institutionCount} accent />
-      </div>
+      </Box>
 
       {/* Placeholder */}
-      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-8 ring-1 ring-[--app-surface-ring]">
-        <p className="text-center text-[12px] font-medium text-[--app-muted]">
-          Consent graph visualization
-        </p>
-        <p className="mt-2 text-center text-[11px] text-[--app-muted]">
-          Connect subjects, resources, and institutions to visualize consent relationships
-        </p>
+      <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+        <CardContent sx={{ p: 4 }}>
+          <Typography sx={{ textAlign: "center", fontSize: 14, fontWeight: 700, color: "var(--app-muted)" }}>
+            Consent graph visualization
+          </Typography>
+          <Typography sx={{ mt: 1, textAlign: "center", fontSize: 13, color: "var(--app-muted)" }}>
+            Connect subjects, resources, and institutions to visualize consent relationships
+          </Typography>
 
-        {/* Grid placeholder */}
-        <div className="mt-6 grid gap-3 md:grid-cols-2">
+          <Box sx={{ mt: 3, display: "grid", gap: 1.5, gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" } }}>
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-20 rounded-lg border border-[--app-border] bg-[--app-control-bg] ring-1 ring-[--app-surface-ring]" />
+            <Box
+              key={i}
+              sx={{
+                height: 80,
+                borderRadius: 2,
+                border: "1px solid var(--app-border)",
+                bgcolor: "var(--app-control-bg)",
+              }}
+            />
           ))}
-        </div>
-      </div>
-    </div>
+          </Box>
+        </CardContent>
+      </Card>
+    </Box>
   );
 }

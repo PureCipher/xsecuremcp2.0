@@ -26,11 +26,8 @@ dependencies = [
     "jsonref>=1.1.0",
     "uncalled-for>=0.2.0",
     "watchfiles>=1.0.0",
-<<<<<<< HEAD
     "PyJWT>=2.10.1",
-=======
     "griffelib>=2.0.0",
->>>>>>> upstream/main
 ]
 
 requires-python = ">=3.10"
@@ -255,7 +252,4 @@ known-first-party = ["fastmcp", "purecipher", "securemcp"]
 
 [tool.codespell]
 ignore-words-list = "asend,shttp,te"
-<<<<<<< HEAD
 skip = "registry-ui/package-lock.json"
-=======
->>>>>>> upstream/main

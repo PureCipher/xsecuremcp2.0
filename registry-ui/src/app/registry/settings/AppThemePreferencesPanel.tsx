@@ -14,7 +14,20 @@ export function AppThemePreferencesPanel() {
         </p>
         <p className="max-w-xl text-[11px] text-[--app-muted]">
           Sets the registry chrome theme (top bar, sidebar, and footer). Terminal color profiles are
-          configured separately below.
+          configured separately below. Use{" "}
+          <kbd className="rounded border border-[--app-border] bg-[--app-control-bg] px-1 font-mono text-[10px]">
+            Ctrl
+          </kbd>{" "}
+          +{" "}
+          <kbd className="rounded border border-[--app-border] bg-[--app-control-bg] px-1 font-mono text-[10px]">
+            Shift
+          </kbd>{" "}
+          +{" "}
+          <kbd className="rounded border border-[--app-border] bg-[--app-control-bg] px-1 font-mono text-[10px]">
+            C
+          </kbd>{" "}
+          to toggle <strong className="text-[--app-fg]">Navy Command</strong> and{" "}
+          <strong className="text-[--app-fg]">Paper Contrast</strong>.
         </p>
       </header>
 

@@ -99,6 +99,30 @@ class TestPureCipherRegistryAuth:
             assert cleared.status_code == 200
             assert cleared.json()["session"] is None
 
+    def test_notifications_require_login_when_auth_enabled(self):
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            auth_settings=_auth_settings(),
+        )
+        app = registry.http_app()
+
+        with TestClient(app) as client:
+            res = client.get("/registry/notifications")
+            assert res.status_code == 401
+            assert res.json().get("error") == "Authentication required."
+
+    def test_me_listings_require_login_when_auth_enabled(self):
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            auth_settings=_auth_settings(),
+        )
+        app = registry.http_app()
+
+        with TestClient(app) as client:
+            res = client.get("/registry/me/listings")
+            assert res.status_code == 401
+            assert res.json().get("error") == "Authentication required."
+
     def test_review_routes_require_auth_when_enabled(self):
         registry = PureCipherRegistry(
             signing_secret=TEST_SIGNING_SECRET,
@@ -303,6 +327,41 @@ class TestPureCipherRegistryAuth:
             )
             assert forbidden_capture.status_code == 403
 
+    def test_publisher_cannot_access_policy_routes(self):
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            auth_settings=_auth_settings(),
+        )
+        app = registry.http_app()
+
+        with TestClient(app) as client:
+            login = client.post(
+                "/registry/login",
+                json={"username": "publisher", "password": "publisher123"},
+            )
+            assert login.status_code == 200
+
+            denied = client.get("/registry/policy")
+            assert denied.status_code == 403
+
+    def test_admin_can_access_policy_routes(self):
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            auth_settings=_auth_settings(),
+        )
+        app = registry.http_app()
+
+        with TestClient(app) as client:
+            login = client.post(
+                "/registry/login",
+                json={"username": "admin", "password": "admin123"},
+            )
+            assert login.status_code == 200
+
+            policy = client.get("/registry/policy")
+            assert policy.status_code == 200
+            assert "policy" in policy.json()
+
     def test_reviewer_can_manage_policy_chain(self):
         registry = PureCipherRegistry(
             signing_secret=TEST_SIGNING_SECRET,
@@ -330,7 +389,10 @@ class TestPureCipherRegistryAuth:
 
             bundles = client.get("/registry/policy/bundles")
             assert bundles.status_code == 200
-            bundle = bundles.json()["bundles"][0]
+            bundle_list = bundles.json()["bundles"]
+            bundle = next(
+                b for b in bundle_list if b.get("bundle_id") == "registry-balanced"
+            )
 
             stage_bundle = client.post(
                 f"/registry/policy/bundles/{bundle['bundle_id']}/stage",

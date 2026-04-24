@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { Dialog, DialogActions, DialogContent, DialogTitle, Button, Typography } from "@mui/material";
 
 export function ConfirmationModal({
   open,
@@ -21,44 +21,53 @@ export function ConfirmationModal({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
-
-  useEffect(() => {
-    if (open) {
-      dialogRef.current?.showModal();
-    } else {
-      dialogRef.current?.close();
-    }
-  }, [open]);
-
-  if (!open) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-3xl border border-[--app-border] bg-[--app-chrome-bg] p-6 ring-1 ring-[--app-surface-ring]">
-        <h3 className="text-sm font-semibold text-[--app-fg]">{title}</h3>
-        <p className="mt-2 text-[12px] text-[--app-muted]">{message}</p>
-        <div className="mt-5 flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="rounded-full border border-[--app-border] px-4 py-1.5 text-[11px] font-medium text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg]"
-          >
-            {cancelLabel}
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            className={`rounded-full px-4 py-1.5 text-[11px] font-semibold transition ${
-              danger
-                ? "bg-red-600/80 text-red-50 hover:bg-red-600"
-                : "bg-[--app-accent] text-[--app-accent-contrast] hover:opacity-90"
-            }`}
-          >
-            {confirmLabel}
-          </button>
-        </div>
-      </div>
-    </div>
+    <Dialog
+      open={open}
+      onClose={onCancel}
+      fullWidth
+      maxWidth="sm"
+      slotProps={{
+        paper: {
+          sx: {
+            borderRadius: 4,
+            bgcolor: "var(--app-chrome-bg)",
+            border: "1px solid var(--app-border)",
+            backgroundImage: "none",
+          },
+        },
+      }}
+    >
+      <DialogTitle sx={{ color: "var(--app-fg)", fontWeight: 700 }}>{title}</DialogTitle>
+      <DialogContent>
+        <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>{message}</Typography>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2.5 }}>
+        <Button
+          onClick={onCancel}
+          variant="outlined"
+          sx={{
+            borderRadius: 999,
+            borderColor: "var(--app-border)",
+            color: "var(--app-muted)",
+            "&:hover": { bgcolor: "var(--app-hover-bg)", borderColor: "var(--app-border)" },
+          }}
+        >
+          {cancelLabel}
+        </Button>
+        <Button
+          onClick={onConfirm}
+          variant="contained"
+          sx={{
+            borderRadius: 999,
+            bgcolor: danger ? "rgba(239, 68, 68, 0.85)" : "var(--app-accent)",
+            color: danger ? "#fff" : "var(--app-accent-contrast)",
+            "&:hover": { bgcolor: danger ? "rgb(220, 38, 38)" : "var(--app-accent)" },
+          }}
+        >
+          {confirmLabel}
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }

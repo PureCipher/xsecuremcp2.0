@@ -1,6 +1,9 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
+
+import { Alert, Box, Button, Card, CardContent, Collapse, TextField } from "@mui/material";
 
 type Props = {
   listingId: string;
@@ -8,6 +11,7 @@ type Props = {
 };
 
 export function ReviewActions({ listingId, availableActions }: Props) {
+  const router = useRouter();
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expandedAction, setExpandedAction] = useState<string | null>(null);
@@ -31,9 +35,7 @@ export function ReviewActions({ listingId, availableActions }: Props) {
       if (!response.ok || payload?.error) {
         setError(payload?.error ?? "Moderation failed.");
       } else {
-        if (typeof window !== "undefined") {
-          window.location.reload();
-        }
+        router.refresh();
       }
     } catch (err) {
       console.error("Moderation error", err);
@@ -48,12 +50,14 @@ export function ReviewActions({ listingId, availableActions }: Props) {
   }
 
   return (
-    <div className="mt-2 space-y-1 text-[10px]">
-      <div className="flex flex-wrap gap-2">
+    <Box sx={{ mt: 1.5, display: "grid", gap: 1 }}>
+      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
         {availableActions.map((action) => (
-          <button
+          <Button
             key={action}
             type="button"
+            size="small"
+            variant="outlined"
             disabled={busyAction === action}
             onClick={() => {
               const needsReason = ["reject", "request-changes", "suspend"].includes(action);
@@ -64,47 +68,82 @@ export function ReviewActions({ listingId, availableActions }: Props) {
                 void runAction(action);
               }
             }}
-            className="rounded-full border border-[--app-accent] px-2.5 py-1 text-[10px] font-semibold text-[--app-muted] transition hover:bg-[--app-control-active-bg] disabled:opacity-60"
+            sx={{
+              borderRadius: 999,
+              borderColor: "var(--app-accent)",
+              color: "var(--app-muted)",
+              "&:hover": { bgcolor: "var(--app-control-active-bg)", borderColor: "var(--app-accent)" },
+              textTransform: "uppercase",
+              letterSpacing: "0.12em",
+              fontWeight: 800,
+              fontSize: 10,
+            }}
           >
             {busyAction === action ? "Working…" : action.replace("-", " ").toUpperCase()}
-          </button>
+          </Button>
         ))}
-      </div>
-      {expandedAction ? (
-        <div className="space-y-1 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-2 ring-1 ring-[--app-surface-ring]">
-          <textarea
-            value={reasonText}
-            onChange={(e) => setReasonText(e.target.value)}
-            placeholder="Add a short reason for this decision."
-            className="h-16 w-full rounded-md border border-[--app-border] bg-transparent px-2 py-1 text-[10px] text-[--app-fg] outline-none ring-0 transition focus:border-[--app-accent] focus:ring-1 focus:ring-[--app-accent]"
-          />
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              className="rounded-full px-2 py-1 text-[10px] text-[--app-muted] hover:text-[--app-fg]"
-              onClick={() => {
-                setExpandedAction(null);
-                setReasonText("");
-              }}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              disabled={busyAction === expandedAction || !reasonText.trim()}
-              onClick={() => {
-                void runAction(expandedAction, reasonText.trim());
-                setExpandedAction(null);
-                setReasonText("");
-              }}
-              className="rounded-full bg-[--app-accent] px-3 py-1 text-[10px] font-semibold text-[--app-accent-contrast] shadow-sm transition hover:opacity-90 disabled:opacity-60"
-            >
-              Confirm
-            </button>
-          </div>
-        </div>
-      ) : null}
-      {error ? <p className="text-[10px] text-rose-300">{error}</p> : null}
-    </div>
+      </Box>
+
+      <Collapse in={!!expandedAction} unmountOnExit>
+        <Card
+          variant="outlined"
+          sx={{
+            mt: 1,
+            borderRadius: 3,
+            borderColor: "var(--app-border)",
+            bgcolor: "var(--app-control-bg)",
+            boxShadow: "none",
+          }}
+        >
+          <CardContent sx={{ p: 1.5, display: "grid", gap: 1 }}>
+            <TextField
+              value={reasonText}
+              onChange={(e) => setReasonText(e.target.value)}
+              placeholder="Add a short reason for this decision."
+              multiline
+              minRows={3}
+              size="small"
+              fullWidth
+            />
+            <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1 }}>
+              <Button
+                type="button"
+                size="small"
+                variant="text"
+                onClick={() => {
+                  setExpandedAction(null);
+                  setReasonText("");
+                }}
+                sx={{ color: "var(--app-muted)" }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="small"
+                variant="contained"
+                disabled={!expandedAction || busyAction === expandedAction || !reasonText.trim()}
+                onClick={() => {
+                  if (!expandedAction) return;
+                  void runAction(expandedAction, reasonText.trim());
+                  setExpandedAction(null);
+                  setReasonText("");
+                }}
+                sx={{
+                  borderRadius: 999,
+                  bgcolor: "var(--app-accent)",
+                  color: "var(--app-accent-contrast)",
+                  "&:hover": { bgcolor: "var(--app-accent)" },
+                }}
+              >
+                Confirm
+              </Button>
+            </Box>
+          </CardContent>
+        </Card>
+      </Collapse>
+
+      {error ? <Alert severity="error">{error}</Alert> : null}
+    </Box>
   );
 }

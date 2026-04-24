@@ -1,6 +1,20 @@
 "use client";
 
 import { useState, useCallback, useMemo } from "react";
+import {
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Divider,
+  TextField,
+  Typography,
+} from "@mui/material";
 import type {
   ContractData,
   ContractListResponse,
@@ -281,15 +295,27 @@ export function ContractsManager({
         key: "contract_id",
         header: "Contract ID",
         render: (row) => (
-          <span className="font-mono text-[10px] text-[--app-muted]">
+          <Box
+            component="span"
+            sx={{
+              fontFamily:
+                "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+              fontSize: 11,
+              color: "var(--app-muted)",
+            }}
+          >
             {row.contract_id.substring(0, 12)}...
-          </span>
+          </Box>
         ),
       },
       {
         key: "agent_id",
         header: "Agent ID",
-        render: (row) => <span className="text-[11px]">{row.agent_id}</span>,
+        render: (row) => (
+          <Typography component="span" sx={{ fontSize: 12 }}>
+            {row.agent_id}
+          </Typography>
+        ),
       },
       {
         key: "status",
@@ -300,18 +326,18 @@ export function ContractsManager({
         key: "terms",
         header: "Terms",
         render: (row) => (
-          <span className="text-[11px] text-[--app-muted]">
+          <Typography component="span" sx={{ fontSize: 12, color: "var(--app-muted)" }}>
             {row.terms?.length ?? 0} term{(row.terms?.length ?? 0) !== 1 ? "s" : ""}
-          </span>
+          </Typography>
         ),
       },
       {
         key: "created_at",
         header: "Created",
         render: (row) => (
-          <span className="text-[10px] text-[--app-muted]">
+          <Typography component="span" sx={{ fontSize: 11, color: "var(--app-muted)" }}>
             {new Date(row.created_at).toLocaleDateString()}
-          </span>
+          </Typography>
         ),
       },
     ],
@@ -329,7 +355,7 @@ export function ContractsManager({
     switch (activeTab) {
       case "contracts":
         return (
-          <div className="flex flex-col gap-4">
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {contracts.length === 0 ? (
               <EmptyState title="No Contracts" message="Start by negotiating a new contract." />
             ) : (
@@ -347,263 +373,349 @@ export function ContractsManager({
                   pageSize={5}
                 />
                 {expandedContractId && (
-                  <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
+                  <Card
+                    variant="outlined"
+                    sx={{
+                      borderRadius: 4,
+                      borderColor: "var(--app-border)",
+                      bgcolor: "var(--app-surface)",
+                      boxShadow: "none",
+                    }}
+                  >
                     {contracts.map((contract) => {
                       if (contract.contract_id !== expandedContractId)
                         return null;
                       return (
-                        <div key={contract.contract_id} className="space-y-4">
-                          <div className="flex items-center justify-between">
-                            <h3 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
+                        <CardContent key={contract.contract_id} sx={{ p: 2.5, display: "grid", gap: 2 }}>
+                          <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2 }}>
+                            <Typography sx={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
                               Contract Details
-                            </h3>
-                            <button
-                              onClick={() => setExpandedContractId(null)}
-                              className="text-[11px] text-[--app-muted] hover:text-[--app-fg]"
-                            >
-                              ✕
-                            </button>
-                          </div>
+                            </Typography>
+                            <Button size="small" variant="text" onClick={() => setExpandedContractId(null)} sx={{ color: "var(--app-muted)" }}>
+                              Close
+                            </Button>
+                          </Box>
 
-                          <div className="space-y-2">
-                            <div className="text-[10px]">
-                              <span className="text-[--app-muted]">ID:</span>
-                              <span className="ml-2 font-mono text-[--app-fg]">
+                          <Box sx={{ display: "grid", gap: 1 }}>
+                            <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                              ID:{" "}
+                              <Box component="span" sx={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", color: "var(--app-fg)" }}>
                                 {contract.contract_id}
-                              </span>
-                            </div>
-                            <div className="text-[10px]">
-                              <span className="text-[--app-muted]">Server:</span>
-                              <span className="ml-2 text-[--app-fg]">
-                                {contract.server_id}
-                              </span>
-                            </div>
-                            <div className="text-[10px]">
-                              <span className="text-[--app-muted]">Agent:</span>
-                              <span className="ml-2 text-[--app-fg]">
-                                {contract.agent_id}
-                              </span>
-                            </div>
-                            {contract.expires_at && (
-                              <div className="text-[10px]">
-                                <span className="text-[--app-muted]">
-                                  Expires:
-                                </span>
-                                <span className="ml-2 text-[--app-fg]">
-                                  {new Date(
-                                    contract.expires_at
-                                  ).toLocaleDateString()}
-                                </span>
-                              </div>
-                            )}
-                          </div>
+                              </Box>
+                            </Typography>
+                            <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                              Server: <Box component="span" sx={{ color: "var(--app-fg)" }}>{contract.server_id}</Box>
+                            </Typography>
+                            <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                              Agent: <Box component="span" sx={{ color: "var(--app-fg)" }}>{contract.agent_id}</Box>
+                            </Typography>
+                            {contract.expires_at ? (
+                              <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                                Expires:{" "}
+                                <Box component="span" sx={{ color: "var(--app-fg)" }}>
+                                  {new Date(contract.expires_at).toLocaleDateString()}
+                                </Box>
+                              </Typography>
+                            ) : null}
+                          </Box>
 
-                          <div className="space-y-2 border-t border-[--app-border] pt-2">
-                            <p className="text-[10px] font-semibold uppercase tracking-wider text-[--app-muted]">
+                          <Divider sx={{ borderColor: "var(--app-border)" }} />
+
+                          <Box>
+                            <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--app-muted)" }}>
                               Terms ({contract.terms?.length ?? 0})
-                            </p>
+                            </Typography>
                             {contract.terms && contract.terms.length > 0 ? (
-                              <div className="space-y-1">
+                              <Box sx={{ mt: 1, display: "grid", gap: 1 }}>
                                 {contract.terms.map((term, idx) => (
-                                  <div
+                                  <Card
                                     key={idx}
-                                    className="rounded bg-[--app-control-bg] p-2 text-[10px]"
+                                    variant="outlined"
+                                    sx={{ borderRadius: 2, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}
                                   >
-                                    <div className="font-mono text-[--app-muted]">
-                                      {term.term_type}
-                                    </div>
-                                    <div className="mt-0.5 text-[--app-muted]">
-                                      {term.description}
-                                    </div>
-                                    {term.required && (
-                                      <div className="mt-0.5 text-amber-300">
-                                        Required
-                                      </div>
-                                    )}
-                                  </div>
+                                    <CardContent sx={{ p: 1.5 }}>
+                                      <Typography sx={{ fontSize: 12, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", color: "var(--app-muted)" }}>
+                                        {term.term_type}
+                                      </Typography>
+                                      <Typography sx={{ mt: 0.5, fontSize: 12, color: "var(--app-muted)" }}>
+                                        {term.description}
+                                      </Typography>
+                                      {term.required ? (
+                                        <Chip size="small" label="Required" sx={{ mt: 1, borderRadius: 999, bgcolor: "rgba(245, 158, 11, 0.18)", color: "rgb(253, 230, 138)", fontWeight: 800, fontSize: 10 }} />
+                                      ) : null}
+                                    </CardContent>
+                                  </Card>
                                 ))}
-                              </div>
+                              </Box>
                             ) : (
-                              <p className="text-[10px] text-[--app-muted]">
-                                No terms
-                              </p>
+                              <Typography sx={{ mt: 1, fontSize: 12, color: "var(--app-muted)" }}>No terms</Typography>
                             )}
-                          </div>
+                          </Box>
 
-                          {contract.signatures &&
-                            Object.keys(contract.signatures).length > 0 && (
-                              <div className="space-y-2 border-t border-[--app-border] pt-2">
-                                <p className="text-[10px] font-semibold uppercase tracking-wider text-[--app-muted]">
+                          {contract.signatures && Object.keys(contract.signatures).length > 0 ? (
+                            <>
+                              <Divider sx={{ borderColor: "var(--app-border)" }} />
+                              <Box>
+                                <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--app-muted)" }}>
                                   Signatures
-                                </p>
-                                <JsonViewer
-                                  data={contract.signatures}
-                                />
-                              </div>
-                            )}
+                                </Typography>
+                                <Box sx={{ mt: 1 }}>
+                                  <JsonViewer data={contract.signatures} />
+                                </Box>
+                              </Box>
+                            </>
+                          ) : null}
 
-                          <div className="flex gap-2 border-t border-[--app-border] pt-3">
-                            {contract.status !== "signed" && (
-                              <button
+                          <Divider sx={{ borderColor: "var(--app-border)" }} />
+
+                          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+                            {contract.status !== "signed" ? (
+                              <Button
+                                size="small"
+                                variant="contained"
                                 onClick={() => {
                                   setSelectedContract(contract);
                                   setShowSignModal(true);
                                 }}
                                 disabled={loading}
-                                className="rounded-full bg-[--app-accent] px-3 py-1.5 text-[11px] font-semibold text-[--app-accent-contrast] transition hover:opacity-90 disabled:opacity-50"
+                                sx={{ borderRadius: 999, bgcolor: "var(--app-accent)", color: "var(--app-accent-contrast)", "&:hover": { bgcolor: "var(--app-accent)" } }}
                               >
                                 Sign
-                              </button>
-                            )}
-                            {contract.status !== "revoked" && (
-                              <button
+                              </Button>
+                            ) : null}
+                            {contract.status !== "revoked" ? (
+                              <Button
+                                size="small"
+                                variant="outlined"
                                 onClick={() => {
                                   setSelectedContract(contract);
                                   setShowRevokeModal(true);
                                 }}
                                 disabled={loading}
-                                className="rounded-full border border-red-700/60 px-3 py-1 text-[11px] font-medium text-red-200 hover:bg-red-900/50 transition disabled:opacity-50"
+                                sx={{ borderRadius: 999, borderColor: "rgba(239, 68, 68, 0.6)", color: "rgb(254, 202, 202)", "&:hover": { bgcolor: "rgba(127, 29, 29, 0.35)", borderColor: "rgba(239, 68, 68, 0.8)" } }}
                               >
                                 Revoke
-                              </button>
-                            )}
-                          </div>
-                        </div>
+                              </Button>
+                            ) : null}
+                          </Box>
+                        </CardContent>
                       );
                     })}
-                  </div>
+                  </Card>
                 )}
               </>
             )}
-          </div>
+          </Box>
         );
 
       case "negotiate":
         return (
-          <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-6 ring-1 ring-[--app-surface-ring]">
-            <div className="space-y-4">
-              <div>
-                <label className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
+          <Card
+            variant="outlined"
+            sx={{
+              borderRadius: 4,
+              borderColor: "var(--app-border)",
+              bgcolor: "var(--app-surface)",
+              boxShadow: "none",
+            }}
+          >
+            <CardContent sx={{ p: 3, display: "grid", gap: 2.5 }}>
+              <Box>
+                <Typography sx={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
                   Agent ID
-                </label>
-                <input
-                  type="text"
-                  value={negotiationAgentId}
-                  onChange={(e) => setNegotiationAgentId(e.target.value)}
-                  placeholder="e.g., agent-xyz-123"
-                  disabled={loading}
-                  className="mt-1.5 w-full rounded-xl bg-[--app-chrome-bg] px-3 py-2 text-[12px] text-[--app-fg] ring-1 ring-[--app-border] focus:ring-2 focus:ring-[--app-accent] focus:outline-none disabled:opacity-50"
-                />
-              </div>
-
-              <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <label className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
-                    Terms
-                  </label>
-                  <button
-                    onClick={addTermRow}
+                </Typography>
+                <Box sx={{ mt: 1.25 }}>
+                  {/* Keep MUI feel; avoid Stack typing issues */}
+                  <Box
+                    component="input"
+                    value={negotiationAgentId}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNegotiationAgentId(e.target.value)}
+                    placeholder="e.g., agent-xyz-123"
                     disabled={loading}
-                    className="text-[11px] font-medium text-[--app-muted] hover:text-[--app-fg] disabled:opacity-50"
-                  >
-                    + Add Term
-                  </button>
-                </div>
+                    sx={{
+                      width: "100%",
+                      borderRadius: 2,
+                      bgcolor: "var(--app-chrome-bg)",
+                      px: 1.5,
+                      py: 1.25,
+                      fontSize: 14,
+                      color: "var(--app-fg)",
+                      border: "1px solid var(--app-border)",
+                      outline: "none",
+                      "&:focus": { borderColor: "var(--app-accent)", boxShadow: "0 0 0 2px rgba(99, 102, 241, 0.35)" },
+                      "&:disabled": { opacity: 0.6 },
+                    }}
+                  />
+                </Box>
+              </Box>
 
-                <div className="space-y-2">
+              <Box>
+                <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2 }}>
+                  <Typography sx={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                    Terms
+                  </Typography>
+                  <Button size="small" variant="text" onClick={addTermRow} disabled={loading} sx={{ color: "var(--app-muted)" }}>
+                    Add term
+                  </Button>
+                </Box>
+
+                <Box sx={{ mt: 1.5, display: "grid", gap: 1.5 }}>
                   {negotiationTerms.map((term, idx) => (
-                    <div
+                    <Card
                       key={idx}
-                      className="space-y-2 rounded-xl border border-[--app-border] bg-[--app-control-bg] p-3 ring-1 ring-[--app-surface-ring]"
+                      variant="outlined"
+                      sx={{
+                        borderRadius: 3,
+                        borderColor: "var(--app-border)",
+                        bgcolor: "var(--app-control-bg)",
+                        boxShadow: "none",
+                      }}
                     >
-                      <div className="flex gap-2 items-end">
-                        <div className="flex-1">
-                          <label className="text-[10px] text-[--app-muted]">
-                            Type
-                          </label>
-                          <input
-                            type="text"
-                            value={term.term_type}
-                            onChange={(e) =>
-                              updateTerm(idx, "term_type", e.target.value)
+                      <CardContent sx={{ p: 2, display: "grid", gap: 1.5 }}>
+                        <Box sx={{ display: "flex", gap: 1.5, alignItems: "flex-end" }}>
+                          <Box sx={{ flex: 1 }}>
+                            <Typography sx={{ fontSize: 11, color: "var(--app-muted)" }}>Type</Typography>
+                            <Box
+                              component="input"
+                              value={term.term_type}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                                updateTerm(idx, "term_type", e.target.value)
+                              }
+                              placeholder="e.g., rate_limit"
+                              disabled={loading}
+                              sx={{
+                                mt: 1,
+                                width: "100%",
+                                borderRadius: 2,
+                                bgcolor: "var(--app-chrome-bg)",
+                                px: 1.25,
+                                py: 1,
+                                fontSize: 13,
+                                color: "var(--app-fg)",
+                                border: "1px solid var(--app-border)",
+                                outline: "none",
+                                "&:focus": { borderColor: "var(--app-accent)", boxShadow: "0 0 0 2px rgba(99, 102, 241, 0.35)" },
+                                "&:disabled": { opacity: 0.6 },
+                              }}
+                            />
+                          </Box>
+
+                          {negotiationTerms.length > 1 ? (
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              onClick={() => removeTermRow(idx)}
+                              disabled={loading}
+                              sx={{
+                                borderRadius: 2,
+                                borderColor: "rgba(239, 68, 68, 0.4)",
+                                color: "rgba(252, 165, 165, 0.9)",
+                                "&:hover": { bgcolor: "rgba(127, 29, 29, 0.20)", borderColor: "rgba(239, 68, 68, 0.6)" },
+                              }}
+                            >
+                              Remove
+                            </Button>
+                          ) : null}
+                        </Box>
+
+                        <Box>
+                          <Typography sx={{ fontSize: 11, color: "var(--app-muted)" }}>Description</Typography>
+                          <Box
+                            component="input"
+                            value={term.description}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                              updateTerm(idx, "description", e.target.value)
                             }
-                            placeholder="e.g., rate_limit"
+                            placeholder="What does this term require?"
                             disabled={loading}
-                            className="mt-1 w-full rounded-lg bg-[--app-chrome-bg] px-2 py-1.5 text-[11px] text-[--app-fg] ring-1 ring-[--app-border] focus:ring-2 focus:ring-[--app-accent] focus:outline-none disabled:opacity-50"
+                            sx={{
+                              mt: 1,
+                              width: "100%",
+                              borderRadius: 2,
+                              bgcolor: "var(--app-chrome-bg)",
+                              px: 1.25,
+                              py: 1,
+                              fontSize: 13,
+                              color: "var(--app-fg)",
+                              border: "1px solid var(--app-border)",
+                              outline: "none",
+                              "&:focus": { borderColor: "var(--app-accent)", boxShadow: "0 0 0 2px rgba(99, 102, 241, 0.35)" },
+                              "&:disabled": { opacity: 0.6 },
+                            }}
                           />
-                        </div>
-                        {negotiationTerms.length > 1 && (
-                          <button
-                            onClick={() => removeTermRow(idx)}
+                        </Box>
+
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                          <Box
+                            component="input"
+                            type="checkbox"
+                            checked={term.required}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                              updateTerm(idx, "required", e.target.checked)
+                            }
                             disabled={loading}
-                            className="rounded-lg border border-red-700/40 px-2 py-1.5 text-[11px] text-red-300/70 hover:bg-red-900/20 disabled:opacity-50"
-                          >
-                            Remove
-                          </button>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="text-[10px] text-[--app-muted]">
-                          Description
-                        </label>
-                        <input
-                          type="text"
-                          value={term.description}
-                          onChange={(e) =>
-                            updateTerm(idx, "description", e.target.value)
-                          }
-                          placeholder="What does this term require?"
-                          disabled={loading}
-                          className="mt-1 w-full rounded-lg bg-[--app-chrome-bg] px-2 py-1.5 text-[11px] text-[--app-fg] ring-1 ring-[--app-border] focus:ring-2 focus:ring-[--app-accent] focus:outline-none disabled:opacity-50"
-                        />
-                      </div>
-
-                      <label className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={term.required}
-                          onChange={(e) =>
-                            updateTerm(idx, "required", e.target.checked)
-                          }
-                          disabled={loading}
-                          className="h-3 w-3 rounded border-[--app-border] bg-[--app-chrome-bg] text-[--app-accent] disabled:opacity-50"
-                        />
-                        <span className="text-[10px] text-[--app-muted]">
-                          Required
-                        </span>
-                      </label>
-                    </div>
+                            sx={{
+                              width: 16,
+                              height: 16,
+                              accentColor: "var(--app-accent)",
+                              "&:disabled": { opacity: 0.6 },
+                            }}
+                          />
+                          <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                            Required
+                          </Typography>
+                        </Box>
+                      </CardContent>
+                    </Card>
                   ))}
-                </div>
-              </div>
+                </Box>
+              </Box>
 
-              {error && (
-                <div className="rounded-lg bg-red-500/10 px-3 py-2 text-[11px] text-red-300 border border-red-700/30">
-                  {error}
-                </div>
-              )}
+              {error ? (
+                <Card
+                  variant="outlined"
+                  sx={{
+                    borderRadius: 2,
+                    borderColor: "rgba(239, 68, 68, 0.35)",
+                    bgcolor: "rgba(239, 68, 68, 0.10)",
+                  }}
+                >
+                  <CardContent sx={{ py: 1.25, px: 1.5 }}>
+                    <Typography sx={{ fontSize: 13, color: "rgb(252, 165, 165)" }}>
+                      {error}
+                    </Typography>
+                  </CardContent>
+                </Card>
+              ) : null}
 
-              <button
+              <Button
                 onClick={handleNegotiate}
                 disabled={loading || !negotiationAgentId.trim()}
-                className="mt-2 w-full rounded-full bg-[--app-accent] px-4 py-2 text-[11px] font-semibold text-[--app-accent-contrast] transition hover:opacity-90 disabled:opacity-50"
+                variant="contained"
+                sx={{
+                  borderRadius: 999,
+                  bgcolor: "var(--app-accent)",
+                  color: "var(--app-accent-contrast)",
+                  py: 1.25,
+                  fontWeight: 800,
+                  "&:hover": { bgcolor: "var(--app-accent)" },
+                }}
               >
                 {loading ? "Negotiating..." : "Negotiate Contract"}
-              </button>
-            </div>
-          </div>
+              </Button>
+            </CardContent>
+          </Card>
         );
 
       case "exchange-log":
         return (
-          <div className="space-y-4">
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {exchangeLog.length === 0 ? (
               <EmptyState title="No Exchange Log" message="No exchange log entries found." />
             ) : (
-              <div className="space-y-2">
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
                 {exchangeLog.map((entry, idx) => (
-                  <div key={idx}>
+                  <Box key={idx}>
                     <TimelineItem
                       title={entry.message_type}
                       timestamp={new Date(entry.timestamp).toLocaleString()}
@@ -611,40 +723,65 @@ export function ContractsManager({
                       status={entry.direction === "inbound" ? "received" : "sent"}
                     />
                     {entry.payload && (
-                      <div className="ml-8 mt-2">
+                      <Box sx={{ ml: 4, mt: 1.5 }}>
                         <JsonViewer data={entry.payload} />
-                      </div>
+                      </Box>
                     )}
                     {entry.session_id && (
-                      <button
+                      <Button
+                        size="small"
+                        variant="text"
                         onClick={() => handleVerifyChain(entry.session_id)}
                         disabled={
                           loading || verifyingChainId === entry.session_id
                         }
-                        className="ml-8 mt-2 text-[10px] font-medium text-[--app-muted] hover:text-[--app-fg] disabled:opacity-50"
+                        sx={{
+                          mt: 1.25,
+                          ml: 4,
+                          alignSelf: "flex-start",
+                          color: "var(--app-muted)",
+                          fontWeight: 700,
+                          "&:hover": { color: "var(--app-fg)" },
+                        }}
                       >
                         {verifyingChainId === entry.session_id
                           ? "Verifying..."
                           : "Verify Chain"}
-                      </button>
+                      </Button>
                     )}
-                  </div>
+                  </Box>
                 ))}
 
                 {verifyResult && (
-                  <div
-                    className={`rounded-lg px-3 py-2 text-[11px] border ${
-                      verifyResult.valid
-                        ? "bg-[--app-control-active-bg] text-[--app-fg] border-[--app-border]"
-                        : "bg-red-500/10 text-red-300 border-red-700/30"
-                    }`}
+                  <Card
+                    variant="outlined"
+                    sx={{
+                      borderRadius: 2,
+                      borderColor: verifyResult.valid
+                        ? "var(--app-border)"
+                        : "rgba(239, 68, 68, 0.35)",
+                      bgcolor: verifyResult.valid
+                        ? "var(--app-control-active-bg)"
+                        : "rgba(239, 68, 68, 0.10)",
+                    }}
                   >
-                    {verifyResult.message}
-                  </div>
+                    <CardContent sx={{ py: 1.25, px: 1.5 }}>
+                      <Typography
+                        sx={{
+                          fontSize: 13,
+                          color: verifyResult.valid
+                            ? "var(--app-fg)"
+                            : "rgb(252, 165, 165)",
+                        }}
+                      >
+                        {verifyResult.message}
+                      </Typography>
+                    </CardContent>
+                  </Card>
                 )}
-              </div>
+              </Box>
             )}
-          </div>
+          </Box>
         );
 
       default:
@@ -653,18 +790,26 @@ export function ContractsManager({
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      {error && activeTab !== "negotiate" && (
-        <div className="rounded-lg bg-red-500/10 px-4 py-3 text-[11px] text-red-300 border border-red-700/30">
-          {error}
-          <button
-            onClick={() => setError(null)}
-            className="ml-2 text-red-200/70 hover:text-red-200"
-          >
-            ✕
-          </button>
-        </div>
-      )}
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+      {error && activeTab !== "negotiate" ? (
+        <Card
+          variant="outlined"
+          sx={{
+            borderRadius: 2,
+            borderColor: "rgba(239, 68, 68, 0.35)",
+            bgcolor: "rgba(239, 68, 68, 0.10)",
+          }}
+        >
+          <CardContent sx={{ py: 1.25, px: 1.5, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2 }}>
+            <Typography sx={{ fontSize: 13, color: "rgb(252, 165, 165)" }}>
+              {error}
+            </Typography>
+            <Button size="small" variant="text" onClick={() => setError(null)} sx={{ color: "rgba(254, 202, 202, 0.8)" }}>
+              Dismiss
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <TabBar tabs={tabs} activeTab={activeTab} onTabChange={(key) => setActiveTab(key as ActiveTab)} />
 
@@ -686,46 +831,80 @@ export function ContractsManager({
       )}
 
       {showRevokeModal && selectedContract && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="max-w-sm space-y-4 rounded-3xl border border-[--app-border] bg-[--app-chrome-bg] p-6 ring-1 ring-[--app-surface-ring]">
-            <h2 className="text-[12px] font-semibold uppercase tracking-[0.18em] text-[--app-fg]">
-              Revoke Contract
-            </h2>
-            <p className="text-[11px] text-[--app-muted]">
-              Are you sure you want to revoke this contract? This action cannot
-              be undone.
-            </p>
-            <input
-              type="text"
-              value={revokeReason}
-              onChange={(e) => setRevokeReason(e.target.value)}
-              placeholder="Reason for revocation (optional)"
+        <Dialog
+          open={showRevokeModal}
+          onClose={() => {
+            if (loading) return;
+            setShowRevokeModal(false);
+            setSelectedContract(null);
+            setRevokeReason("");
+          }}
+          fullWidth
+          maxWidth="sm"
+          slotProps={{
+            paper: {
+              sx: {
+                borderRadius: 4,
+                bgcolor: "var(--app-chrome-bg)",
+                border: "1px solid var(--app-border)",
+                backgroundImage: "none",
+              },
+            },
+          }}
+        >
+          <DialogTitle sx={{ color: "var(--app-fg)", fontWeight: 800 }}>
+            Revoke Contract
+          </DialogTitle>
+          <DialogContent sx={{ pt: 1 }}>
+            <Typography sx={{ fontSize: 13, color: "var(--app-muted)" }}>
+              Are you sure you want to revoke this contract? This action cannot be undone.
+            </Typography>
+            <Box sx={{ mt: 2 }}>
+              <TextField
+                fullWidth
+                size="small"
+                value={revokeReason}
+                onChange={(e) => setRevokeReason(e.target.value)}
+                placeholder="Reason for revocation (optional)"
+                disabled={loading}
+              />
+            </Box>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 2.5 }}>
+            <Button
+              onClick={() => {
+                if (loading) return;
+                setShowRevokeModal(false);
+                setSelectedContract(null);
+                setRevokeReason("");
+              }}
+              variant="outlined"
               disabled={loading}
-              className="w-full rounded-xl bg-[--app-chrome-bg] px-3 py-2 text-[12px] text-[--app-fg] ring-1 ring-[--app-border] focus:ring-2 focus:ring-[--app-accent] focus:outline-none disabled:opacity-50"
-            />
-            <div className="flex gap-2 pt-2">
-              <button
-                onClick={handleRevoke}
-                disabled={loading}
-                className="flex-1 rounded-full bg-red-600/80 px-3 py-1.5 text-[11px] font-semibold text-red-50 hover:bg-red-600 transition disabled:opacity-50"
-              >
-                {loading ? "Revoking..." : "Revoke"}
-              </button>
-              <button
-                onClick={() => {
-                  setShowRevokeModal(false);
-                  setSelectedContract(null);
-                  setRevokeReason("");
-                }}
-                disabled={loading}
-                className="flex-1 rounded-full border border-[--app-border] px-3 py-1 text-[11px] font-medium text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg] disabled:opacity-50"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
+              sx={{
+                borderRadius: 999,
+                borderColor: "var(--app-border)",
+                color: "var(--app-muted)",
+                "&:hover": { bgcolor: "var(--app-hover-bg)", borderColor: "var(--app-border)" },
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleRevoke}
+              variant="contained"
+              disabled={loading}
+              sx={{
+                borderRadius: 999,
+                bgcolor: "rgba(239, 68, 68, 0.85)",
+                color: "#fff",
+                "&:hover": { bgcolor: "rgb(220, 38, 38)" },
+              }}
+            >
+              {loading ? "Revoking..." : "Revoke"}
+            </Button>
+          </DialogActions>
+        </Dialog>
       )}
-    </div>
+    </Box>
   );
 }

@@ -1,17 +1,33 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useState } from "react";
+
+import {
+  Box,
+  Drawer,
+  List,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  ListSubheader,
+  Toolbar,
+} from "@mui/material";
 
 import { NavIcon } from "@/components/security";
+import type { RegistryPersonaId } from "@/lib/registryPersona";
 import { RegistryTopBar } from "./topbar";
-import { useAppTheme } from "@/hooks/useAppTheme";
 
 type Props = {
+  authEnabled: boolean;
+  hasSession: boolean;
+  persona: RegistryPersonaId;
   canSubmit: boolean;
   canReview: boolean;
   canAdmin: boolean;
+  /** Sidebar + publish page: publisher and admin only when auth is on. */
+  canPublishConsole: boolean;
+  publisherHasListings: boolean;
   children: React.ReactNode;
 };
 
@@ -23,63 +39,97 @@ type NavItem = {
   active: boolean;
 };
 
-export function RegistryShell({ canSubmit, canReview, canAdmin, children }: Props) {
+export function RegistryShell({
+  authEnabled,
+  hasSession,
+  persona,
+  canSubmit,
+  canReview,
+  canAdmin,
+  canPublishConsole,
+  publisherHasListings,
+  children,
+}: Props) {
   const pathname = usePathname();
+  const publisherOnly = canPublishConsole && !canReview && !canAdmin;
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const { themeId } = useAppTheme();
   const year = new Date().getFullYear();
 
-  useEffect(() => {
-    // Apply theme to document root so `body { background: var(--app-bg) }` updates.
+  useLayoutEffect(() => {
     if (typeof document === "undefined") return;
-    document.documentElement.dataset.appTheme = themeId;
-  }, [themeId]);
+    document.documentElement.dataset.registryPersona = persona;
+    return () => {
+      document.documentElement.removeAttribute("data-registry-persona");
+    };
+  }, [persona]);
 
-  const toolkitItems: NavItem[] = useMemo(
+  const catalogItems: NavItem[] = useMemo(
     () => [
+      {
+        href: "/registry/app",
+        label: "Tools",
+        icon: "tools",
+        enabled: !publisherOnly,
+        active: pathname.startsWith("/registry/app"),
+      },
+      {
+        href: "/registry/publishers",
+        label: "Publishers",
+        icon: "publishers",
+        enabled: !publisherOnly,
+        active: pathname.startsWith("/registry/publishers"),
+      },
       {
         href: "/registry/servers",
         label: "MCP Servers",
         icon: "servers",
-        enabled: true,
+        enabled: canAdmin || (!canPublishConsole && !canReview),
         active: pathname.startsWith("/registry/servers"),
       },
       {
         href: "/registry/clients",
         label: "Clients",
         icon: "clients",
-        enabled: true,
+        enabled: canAdmin || (!canPublishConsole && !canReview),
         active: pathname.startsWith("/registry/clients"),
       },
+    ],
+    [pathname, canPublishConsole, canReview, canAdmin, publisherOnly],
+  );
+
+  const publisherItems: NavItem[] = useMemo(
+    () => [
       {
-        href: "/registry/app",
-        label: "Tools",
+        href: "/registry/publish/mine",
+        label: "My listings",
         icon: "tools",
-        enabled: true,
-        active: pathname.startsWith("/registry/app"),
+        enabled: canPublishConsole,
+        active: pathname.startsWith("/registry/publish/mine"),
       },
       {
-        href: "/registry/access",
-        label: "Access Studio",
-        icon: "access",
-        enabled: true,
-        active: pathname.startsWith("/registry/access"),
+        href: "/registry/publish/get-started",
+        label: "Get started",
+        icon: "publish",
+        enabled: canPublishConsole && !publisherHasListings,
+        active: pathname.startsWith("/registry/publish/get-started"),
       },
       {
         href: "/registry/publish",
         label: "Publish",
         icon: "publish",
-        enabled: canSubmit,
-        active: pathname.startsWith("/registry/publish"),
+        enabled: canPublishConsole,
+        active:
+          pathname.startsWith("/registry/publish") &&
+          !pathname.startsWith("/registry/publish/get-started") &&
+          !pathname.startsWith("/registry/publish/mine"),
       },
-      {
-        href: "/registry/publishers",
-        label: "Publishers",
-        icon: "publishers",
-        enabled: true,
-        active: pathname.startsWith("/registry/publishers"),
-      },
+    ],
+    [pathname, canPublishConsole, canAdmin, canReview, publisherHasListings],
+  );
+
+  const reviewerItems: NavItem[] = useMemo(
+    () => [
       {
         href: "/registry/review",
         label: "Review",
@@ -87,12 +137,6 @@ export function RegistryShell({ canSubmit, canReview, canAdmin, children }: Prop
         enabled: canReview,
         active: pathname.startsWith("/registry/review"),
       },
-    ],
-    [pathname, canSubmit, canReview],
-  );
-
-  const governanceItems: NavItem[] = useMemo(
-    () => [
       {
         href: "/registry/policy",
         label: "Policy Kernel",
@@ -101,18 +145,31 @@ export function RegistryShell({ canSubmit, canReview, canAdmin, children }: Prop
         active: pathname.startsWith("/registry/policy"),
       },
       {
-        href: "/registry/contracts",
-        label: "Contract Broker",
-        icon: "contracts",
-        enabled: canAdmin,
-        active: pathname.startsWith("/registry/contracts"),
-      },
-      {
         href: "/registry/provenance",
         label: "Provenance Ledger",
         icon: "provenance",
         enabled: canReview,
         active: pathname.startsWith("/registry/provenance"),
+      },
+    ],
+    [pathname, canReview],
+  );
+
+  const adminItems: NavItem[] = useMemo(
+    () => [
+      {
+        href: "/registry/access",
+        label: "Access Studio",
+        icon: "access",
+        enabled: canAdmin,
+        active: pathname.startsWith("/registry/access"),
+      },
+      {
+        href: "/registry/contracts",
+        label: "Contract Broker",
+        icon: "contracts",
+        enabled: canAdmin,
+        active: pathname.startsWith("/registry/contracts"),
       },
       {
         href: "/registry/reflexive",
@@ -129,18 +186,79 @@ export function RegistryShell({ canSubmit, canReview, canAdmin, children }: Prop
         active: pathname.startsWith("/registry/consent"),
       },
     ],
-    [pathname, canReview, canAdmin],
+    [pathname, canAdmin],
   );
 
   function closeMobileSidebar() {
     setMobileSidebarOpen(false);
   }
 
-  const sidebarWidthClass = sidebarCollapsed ? "w-16" : "w-56";
+  const drawerExpanded = 240;
+  const drawerCollapsed = 72;
+  const drawerWidth = sidebarCollapsed ? drawerCollapsed : drawerExpanded;
+
+  function renderNavSection(
+    title: string,
+    items: NavItem[],
+    opts?: { onNavigate?: () => void; collapsed?: boolean },
+  ) {
+    const collapsed = opts?.collapsed ?? false;
+    const visible = items.filter((i) => i.enabled);
+    if (visible.length === 0) return null;
+
+    return (
+      <List
+        dense
+        subheader={
+          <ListSubheader
+            component="div"
+            sx={{
+              bgcolor: "transparent",
+              color: "var(--app-muted)",
+              fontSize: 10,
+              fontWeight: 800,
+              letterSpacing: "0.18em",
+              textTransform: "uppercase",
+              lineHeight: 1,
+              pb: 1,
+            }}
+          >
+            {collapsed ? " " : title}
+          </ListSubheader>
+        }
+        sx={{ px: 1 }}
+      >
+        {visible.map((item) => (
+          <ListItemButton
+            key={item.href}
+            component="a"
+            href={item.href}
+            onClick={opts?.onNavigate}
+            selected={item.active}
+            sx={{
+              borderRadius: 2,
+              mb: 0.5,
+              "&.Mui-selected": { bgcolor: "var(--app-control-active-bg)" },
+              "&.Mui-selected:hover": { bgcolor: "var(--app-control-active-bg)" },
+              "&:hover": { bgcolor: "var(--app-hover-bg)" },
+              color: item.active ? "var(--app-fg)" : "var(--app-muted)",
+            }}
+          >
+            <ListItemIcon sx={{ minWidth: 40, color: "inherit" }}>
+              <NavIcon name={item.icon} />
+            </ListItemIcon>
+            {collapsed ? null : <ListItemText primary={item.label} />}
+          </ListItemButton>
+        ))}
+      </List>
+    );
+  }
 
   return (
-    <div data-app-theme={themeId} className="h-screen bg-[--app-bg] text-sm text-[--app-fg]">
+    <Box sx={{ height: "100vh", bgcolor: "var(--app-bg)", color: "var(--app-fg)" }}>
       <RegistryTopBar
+        authEnabled={authEnabled}
+        hasSession={hasSession}
         canSubmit={canSubmit}
         canReview={canReview}
         canAdmin={canAdmin}
@@ -158,152 +276,94 @@ export function RegistryShell({ canSubmit, canReview, canAdmin, children }: Prop
         }}
       />
 
-      <footer className="fixed inset-x-0 bottom-0 z-40 h-12 border-t border-[--app-chrome-border] bg-[--app-chrome-bg] px-4 text-[11px] text-[--app-muted]">
-        <div className="flex h-full w-full items-center justify-between">
-          <span>© {year} PureCipher. All rights reserved.</span>
-          <span className="hidden sm:inline">Secured MCP Registry</span>
-        </div>
-      </footer>
-
-      <div className="fixed inset-x-0 bottom-12 top-14 flex w-full overflow-hidden">
-        <aside
-          className={`relative hidden shrink-0 border-r border-[--app-chrome-border] bg-[--app-chrome-bg] ${sidebarWidthClass} sm:block`}
+      <Box
+        sx={{
+          position: "fixed",
+          top: 56,
+          bottom: 48,
+          left: 0,
+          right: 0,
+          display: "flex",
+          overflow: "hidden",
+        }}
+      >
+        <Drawer
+          variant="permanent"
+          sx={{
+            display: { xs: "none", sm: "block" },
+            width: drawerWidth,
+            flexShrink: 0,
+            "& .MuiDrawer-paper": {
+              width: drawerWidth,
+              boxSizing: "border-box",
+              bgcolor: "var(--app-chrome-bg)",
+              borderRight: "1px solid var(--app-chrome-border)",
+              color: "var(--app-fg)",
+            },
+          }}
         >
-          <div className="flex h-full flex-col p-3">
-            <nav className="mt-2 grid gap-4">
-              <SidebarSection
-                title="Secured MCP Tool Kit"
-                items={toolkitItems}
-                collapsed={sidebarCollapsed}
-              />
-              <SidebarSection
-                title="Governance"
-                items={governanceItems}
-                collapsed={sidebarCollapsed}
-              />
-            </nav>
-          </div>
-        </aside>
+          <Toolbar sx={{ minHeight: 8 }} />
+          <Box sx={{ px: 1, pt: 1, display: "grid", gap: 1.5 }}>
+            {renderNavSection("Catalog", catalogItems, { collapsed: sidebarCollapsed })}
+            {renderNavSection("Publisher", publisherItems, { collapsed: sidebarCollapsed })}
+            {renderNavSection("Reviewer", reviewerItems, { collapsed: sidebarCollapsed })}
+            {renderNavSection("Admin", adminItems, { collapsed: sidebarCollapsed })}
+          </Box>
+        </Drawer>
 
-        {mobileSidebarOpen ? (
-          <div
-            className="fixed inset-x-0 bottom-12 top-14 z-40 sm:hidden"
-            role="dialog"
-            aria-modal="true"
-          >
-            <button
-              type="button"
-              aria-label="Close menu"
-              className="absolute inset-0 bg-[--app-scrim]"
-              onClick={closeMobileSidebar}
-            />
-            <aside className="absolute left-0 top-0 h-full w-72 border-r border-[--app-chrome-border] bg-[--app-chrome-bg] p-3">
-              <div className="flex items-center justify-end">
-                <button
-                  type="button"
-                  aria-label="Close menu"
-                  onClick={closeMobileSidebar}
-                  className="inline-flex items-center justify-center rounded-full border border-[--app-control-border] bg-[--app-control-bg] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted] transition hover:bg-[--app-hover-bg]"
-                >
-                  Close
-                </button>
-              </div>
+        <Drawer
+          variant="temporary"
+          open={mobileSidebarOpen}
+          onClose={closeMobileSidebar}
+          ModalProps={{ keepMounted: true }}
+          sx={{
+            display: { xs: "block", sm: "none" },
+            "& .MuiDrawer-paper": {
+              width: 280,
+              bgcolor: "var(--app-chrome-bg)",
+              color: "var(--app-fg)",
+              borderRight: "1px solid var(--app-chrome-border)",
+            },
+          }}
+        >
+          <Toolbar sx={{ minHeight: 8 }} />
+          <Box sx={{ px: 1, pt: 1, display: "grid", gap: 1.5 }}>
+            {renderNavSection("Catalog", catalogItems, { onNavigate: closeMobileSidebar })}
+            {renderNavSection("Publisher", publisherItems, { onNavigate: closeMobileSidebar })}
+            {renderNavSection("Reviewer", reviewerItems, { onNavigate: closeMobileSidebar })}
+            {renderNavSection("Admin", adminItems, { onNavigate: closeMobileSidebar })}
+          </Box>
+        </Drawer>
 
-              <nav className="mt-3 grid gap-4">
-                <SidebarSection
-                  title="Secured MCP Tool Kit"
-                  items={toolkitItems}
-                  onNavigate={closeMobileSidebar}
-                />
-                <SidebarSection
-                  title="Governance"
-                  items={governanceItems}
-                  onNavigate={closeMobileSidebar}
-                />
-              </nav>
-            </aside>
-          </div>
-        ) : null}
-
-        <main className="min-w-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6 sm:py-8">
+        <Box component="main" sx={{ flex: 1, overflowY: "auto", px: { xs: 2, sm: 3 }, py: 3, pb: 10 }}>
           {children}
-        </main>
-      </div>
-    </div>
+        </Box>
+      </Box>
+
+      <Box
+        component="footer"
+        sx={{
+          position: "fixed",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: 48,
+          borderTop: "1px solid var(--app-chrome-border)",
+          bgcolor: "var(--app-chrome-bg)",
+          px: 2,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          color: "var(--app-muted)",
+          fontSize: 11,
+          zIndex: 1200,
+        }}
+      >
+        <span>© {year} PureCipher. All rights reserved.</span>
+        <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>
+          Secured MCP Registry
+        </Box>
+      </Box>
+    </Box>
   );
 }
-
-function SidebarLink({
-  href,
-  label,
-  icon,
-  active,
-  collapsed,
-  onNavigate,
-}: {
-  href: string;
-  label: string;
-  icon: Parameters<typeof NavIcon>[0]["name"];
-  active: boolean;
-  collapsed?: boolean;
-  onNavigate?: () => void;
-}) {
-  return (
-    <Link
-      href={href}
-      onClick={onNavigate}
-      className={`flex items-center gap-3 rounded-2xl px-3 py-2 text-[11px] font-medium transition ${
-        active
-          ? "bg-[--app-active-bg] text-[--app-fg] ring-1 ring-[--app-active-ring]"
-          : "text-[--app-muted] hover:bg-[--app-hover-bg] hover:text-[--app-fg]"
-      }`}
-      aria-label={label}
-    >
-      <span className={`${collapsed ? "mx-auto" : ""} shrink-0 text-[--app-muted]`}>
-        <NavIcon name={icon} />
-      </span>
-      {!collapsed ? <span className="min-w-0 truncate">{label}</span> : null}
-    </Link>
-  );
-}
-
-function SidebarSection({
-  title,
-  items,
-  collapsed,
-  onNavigate,
-}: {
-  title: string;
-  items: NavItem[];
-  collapsed?: boolean;
-  onNavigate?: () => void;
-}) {
-  const visible = items.filter((item) => item.enabled);
-  if (visible.length === 0) return null;
-
-  return (
-    <div className="grid gap-1">
-      {!collapsed ? (
-        <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
-          {title}
-        </p>
-      ) : (
-        <div className="my-2 h-px w-full bg-[--app-chrome-border]" aria-hidden />
-      )}
-      <div className="grid gap-1">
-        {visible.map((item) => (
-          <SidebarLink
-            key={item.href}
-            href={item.href}
-            label={item.label}
-            icon={item.icon}
-            active={item.active}
-            collapsed={collapsed}
-            onNavigate={onNavigate}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-

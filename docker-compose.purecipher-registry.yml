@@ -1,3 +1,8 @@
+# PureCipher registry API + Next.js registry-ui.
+# Quick start: `docker compose -f docker-compose.purecipher-registry.yml up --build`
+# Then open http://localhost:${REGISTRY_UI_PORT:-3000}
+# Dev passwords: viewer123, publisher123, reviewer123, admin123 (see purecipher.auth).
+
 services:
   purecipher-registry:
     image: purecipher-secured-mcp-registry:local
@@ -5,10 +10,12 @@ services:
       context: .
       dockerfile: Dockerfile.purecipher-registry
     ports:
-      - "8000:8000"
+      - "${PURECIPHER_REGISTRY_PORT:-8000}:8000"
+    command: ["uv", "run", "--no-sync", "purecipher-registry", "--host-toolsets", "--host", "0.0.0.0", "--port", "8000"]
     environment:
       PURECIPHER_SIGNING_SECRET: ${PURECIPHER_SIGNING_SECRET:-purecipher-registry-dev-signing-secret}
       PURECIPHER_REGISTRY_DB: /data/purecipher-registry.db
+      PURECIPHER_HOST_TOOLSETS: "true"
       PURECIPHER_REQUIRE_MODERATION: ${PURECIPHER_REQUIRE_MODERATION:-true}
       PURECIPHER_ENABLE_AUTH: ${PURECIPHER_ENABLE_AUTH:-true}
       PURECIPHER_JWT_SECRET: ${PURECIPHER_JWT_SECRET:-purecipher-registry-dev-jwt-secret-change-me}
@@ -26,3 +33,59 @@ services:
       timeout: 3s
       retries: 5
       start_period: 5s
+
+  # Alternate service: registry only (no hosted toolset gateways).
+  purecipher-registry-control-plane:
+    profiles: ["control-plane-only"]
+    image: purecipher-secured-mcp-registry:local
+    build:
+      context: .
+      dockerfile: Dockerfile.purecipher-registry
+    ports:
+      - "${PURECIPHER_REGISTRY_PORT_CONTROL_PLANE:-8002}:8000"
+    environment:
+      PURECIPHER_SIGNING_SECRET: ${PURECIPHER_SIGNING_SECRET:-purecipher-registry-dev-signing-secret}
+      PURECIPHER_REGISTRY_DB: /data/purecipher-registry.db
+      PURECIPHER_REQUIRE_MODERATION: ${PURECIPHER_REQUIRE_MODERATION:-true}
+      PURECIPHER_ENABLE_AUTH: ${PURECIPHER_ENABLE_AUTH:-true}
+      PURECIPHER_JWT_SECRET: ${PURECIPHER_JWT_SECRET:-purecipher-registry-dev-jwt-secret-change-me}
+      PURECIPHER_USERS_JSON: ${PURECIPHER_USERS_JSON:-}
+      PURECIPHER_AUTH_COOKIE_NAME: ${PURECIPHER_AUTH_COOKIE_NAME:-purecipher_registry_token}
+    volumes:
+      - ./.data/purecipher-registry:/data
+
+  # Next.js registry console (proxies API to purecipher-registry).
+  registry-ui:
+    image: purecipher-registry-ui:local
+    build:
+      context: ./registry-ui
+      dockerfile: Dockerfile
+      args:
+        REGISTRY_BACKEND_URL: http://purecipher-registry:8000
+    ports:
+      - "${REGISTRY_UI_PORT:-3000}:3000"
+    environment:
+      REGISTRY_BACKEND_URL: http://purecipher-registry:8000
+    depends_on:
+      purecipher-registry:
+        condition: service_healthy
+
+  # Public registry UI (no console routes, no login required).
+  registry-public-ui:
+    image: purecipher-registry-ui:local
+    build:
+      context: ./registry-ui
+      dockerfile: Dockerfile
+      args:
+        REGISTRY_BACKEND_URL: http://purecipher-registry:8000
+    ports:
+      - "${PUBLIC_REGISTRY_UI_PORT:-3001}:3000"
+    environment:
+      REGISTRY_BACKEND_URL: http://purecipher-registry:8000
+      PUBLIC_REGISTRY_ONLY: "true"
+      # Optional: link back to your console (can be a different host/port).
+      NEXT_PUBLIC_CONSOLE_URL: ${NEXT_PUBLIC_CONSOLE_URL:-http://localhost:${REGISTRY_UI_PORT:-3000}/registry/app}
+      NEXT_PUBLIC_CONSOLE_SIGNIN_URL: ${NEXT_PUBLIC_CONSOLE_SIGNIN_URL:-http://localhost:${REGISTRY_UI_PORT:-3000}/login}
+    depends_on:
+      purecipher-registry:
+        condition: service_healthy

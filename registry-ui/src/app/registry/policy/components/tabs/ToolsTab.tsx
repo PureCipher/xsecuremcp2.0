@@ -1,11 +1,21 @@
 "use client";
 
 import { useState, useMemo, useEffect, type ChangeEvent } from "react";
-import type {
-  PolicyConfig,
-  PolicyPlugin,
-  PolicySchemaResponse,
-} from "@/lib/registryClient";
+import type { PolicyConfig, PolicyPlugin, PolicySchemaResponse } from "@/lib/registryClient";
+import {
+  Alert,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Chip,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
+  TextField,
+  Typography,
+} from "@mui/material";
 import { parseImportedPolicyJson } from "../../policyTransfer";
 import { usePolicyContext } from "../../contexts/PolicyContext";
 import { GuidedPolicyBuilder } from "../GuidedPolicyBuilder";
@@ -74,7 +84,6 @@ export function ToolsTab({
 }: ToolsTabProps) {
   const { busyKey, setBanner } = usePolicyContext();
 
-  // Plugin-driven templates
   const [plugins, setPlugins] = useState<PolicyPlugin[]>([]);
   const [pluginFilter, setPluginFilter] = useState<string>("all");
 
@@ -93,22 +102,19 @@ export function ToolsTab({
         // Fall back to schema-derived templates
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // Proposal editor state
   const [createTemplate, setCreateTemplate] = useState<string>("allowlist");
   const [createConfigText, setCreateConfigText] = useState("{}");
   const [createDescription, setCreateDescription] = useState("");
   const [creating, setCreating] = useState(false);
 
-  // Import/export state
   const [importText, setImportText] = useState("");
-  const [importDescriptionPrefix, setImportDescriptionPrefix] = useState(
-    "Imported policy snapshot",
-  );
+  const [importDescriptionPrefix, setImportDescriptionPrefix] = useState("Imported policy snapshot");
 
-  // Pack state
   const [packSource, setPackSource] = useState<string>("editor");
   const [packTitle, setPackTitle] = useState("");
   const [packSummary, setPackSummary] = useState("");
@@ -116,10 +122,8 @@ export function ToolsTab({
   const [packTags, setPackTags] = useState("");
   const [packEnvironments, setPackEnvironments] = useState("");
 
-  // Delete pack modal
   const [deletePackModal, setDeletePackModal] = useState<{ id: string; title: string } | null>(null);
 
-  // Build template choices from plugins (preferred) or schema (fallback)
   const templateChoices = useMemo(() => {
     const choices: TemplateChoice[] = [];
 
@@ -152,7 +156,6 @@ export function ToolsTab({
     return choices;
   }, [plugins, schema]);
 
-  // Unique jurisdictions for the filter dropdown
   const jurisdictions = useMemo(() => {
     const set = new Set<string>();
     for (const choice of templateChoices) {
@@ -161,14 +164,12 @@ export function ToolsTab({
     return Array.from(set).sort();
   }, [templateChoices]);
 
-  // Filtered template choices
   const filteredTemplates = useMemo(() => {
     if (pluginFilter === "all") return templateChoices;
     if (pluginFilter === "universal") return templateChoices.filter((c) => !c.jurisdiction);
     return templateChoices.filter((c) => c.jurisdiction === pluginFilter);
   }, [templateChoices, pluginFilter]);
 
-  // Initialize the config text from the first template once loaded
   useEffect(() => {
     if (templateChoices.length > 0 && createConfigText === "{}") {
       const first = templateChoices[0];
@@ -207,10 +208,7 @@ export function ToolsTab({
     } catch (error) {
       setBanner({
         tone: "error",
-        message:
-          error instanceof Error
-            ? error.message
-            : "Unable to create policy proposal.",
+        message: error instanceof Error ? error.message : "Unable to create policy proposal.",
       });
     } finally {
       setCreating(false);
@@ -339,9 +337,8 @@ export function ToolsTab({
   }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[1.2fr,0.8fr]">
-      {/* Left column: Guided builder + Proposal editor + Import/Export */}
-      <div className="flex flex-col gap-4">
+    <Box sx={{ display: "grid", gap: 3, gridTemplateColumns: { xs: "1fr", xl: "minmax(0,1.2fr) minmax(0,0.8fr)" } }}>
+      <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
         <GuidedPolicyBuilder
           schema={schema}
           onLoadDraft={(configText) => {
@@ -349,391 +346,385 @@ export function ToolsTab({
           }}
         />
 
-        {/* Proposal editor */}
-        <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
-          <div className="space-y-1">
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-[--app-muted]">
-              Proposal editor
-            </p>
-            <h2 className="text-xl font-semibold text-[--app-fg]">
-              Refine or hand-edit the JSON
-            </h2>
-            <p className="text-xs text-[--app-muted]">
-              Use the guided builder above or start from a quick template, then
-              create a proposal that reviewers can approve before it goes live.
-            </p>
-          </div>
+        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+          <CardContent sx={{ p: 2.5 }}>
+            <Box sx={{ display: "grid", gap: 0.5 }}>
+              <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                Proposal editor
+              </Typography>
+              <Typography variant="h5" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+                Refine or hand-edit the JSON
+              </Typography>
+              <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                Use the guided builder above or start from a quick template, then create a proposal that reviewers can approve before it goes live.
+              </Typography>
+            </Box>
 
-          {jurisdictions.length > 0 ? (
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              <span className="text-[11px] font-medium text-[--app-muted]">Filter:</span>
-              <button
-                type="button"
-                onClick={() => setPluginFilter("all")}
-                className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
-                  pluginFilter === "all"
-                    ? "bg-[--app-accent] text-[--app-accent-contrast]"
-                    : "border border-[--app-border] text-[--app-muted] hover:bg-[--app-hover-bg] hover:text-[--app-fg]"
-                }`}
-              >
-                All
-              </button>
-              <button
-                type="button"
-                onClick={() => setPluginFilter("universal")}
-                className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
-                  pluginFilter === "universal"
-                    ? "bg-[--app-accent] text-[--app-accent-contrast]"
-                    : "border border-[--app-border] text-[--app-muted] hover:bg-[--app-hover-bg] hover:text-[--app-fg]"
-                }`}
-              >
-                Universal
-              </button>
-              {jurisdictions.map((j) => (
-                <button
-                  key={j}
+            {jurisdictions.length > 0 ? (
+              <Box sx={{ mt: 2, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1 }}>
+                <Typography sx={{ fontSize: 11, fontWeight: 700, color: "var(--app-muted)" }}>Filter:</Typography>
+                <Button
                   type="button"
-                  onClick={() => setPluginFilter(j)}
-                  className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
-                    pluginFilter === j
-                      ? "bg-[--app-accent] text-[--app-accent-contrast]"
-                      : "border border-[--app-border] text-[--app-muted] hover:bg-[--app-hover-bg] hover:text-[--app-fg]"
-                  }`}
+                  size="small"
+                  variant={pluginFilter === "all" ? "contained" : "outlined"}
+                  onClick={() => setPluginFilter("all")}
+                  sx={{
+                    borderRadius: 999,
+                    textTransform: "none",
+                    fontSize: 11,
+                    fontWeight: 800,
+                    ...(pluginFilter === "all"
+                      ? {}
+                      : { borderColor: "var(--app-border)", color: "var(--app-muted)", "&:hover": { bgcolor: "var(--app-hover-bg)" } }),
+                  }}
                 >
-                  {j}
-                </button>
-              ))}
-            </div>
-          ) : null}
-
-          <div className="mt-4 grid gap-2 sm:grid-cols-2">
-            {filteredTemplates.map((template) => (
-              <button
-                key={template.key}
-                type="button"
-                onClick={() => chooseTemplate(template.key)}
-                className={`rounded-2xl border border-[--app-border] px-3 py-3 text-left text-xs ring-1 transition ${
-                  createTemplate === template.key
-                    ? "bg-[--app-control-active-bg] text-[--app-fg] ring-[--app-accent]"
-                    : "bg-[--app-control-bg] text-[--app-muted] ring-[--app-surface-ring] hover:bg-[--app-hover-bg] hover:text-[--app-fg]"
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="block font-semibold capitalize">
-                    {template.title}
-                  </span>
-                  {template.jurisdiction ? (
-                    <span className="rounded-full bg-[--app-surface] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-[--app-muted]">
-                      {template.jurisdiction}
-                    </span>
-                  ) : null}
-                  {template.version ? (
-                    <span className="rounded-full bg-[--app-surface] px-1.5 py-0.5 text-[9px] font-medium tracking-wide text-[--app-muted]">
-                      v{template.version}
-                    </span>
-                  ) : null}
-                </div>
-                <span className="mt-1 block text-[11px] leading-snug text-[--app-muted]">
-                  {template.summary.length > 80
-                    ? `${template.summary.slice(0, 80)}…`
-                    : template.summary}
-                </span>
-              </button>
-            ))}
-          </div>
-
-          <div className="mt-4">
-            <JsonEditor
-              value={createConfigText}
-              onChange={setCreateConfigText}
-              minHeight="280px"
-            />
-          </div>
-
-          <input
-            value={createDescription}
-            onChange={(event) => setCreateDescription(event.target.value)}
-            placeholder="What change should this proposal make?"
-            className="mt-3 w-full rounded-full border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
-          />
-
-          <button
-            type="button"
-            onClick={() => void handleCreateProposal()}
-            disabled={creating || busyKey === "create-proposal"}
-            className="mt-4 rounded-full bg-[--app-accent] px-4 py-2 text-xs font-semibold text-[--app-accent-contrast] transition hover:opacity-90 disabled:opacity-60"
-          >
-            {creating || busyKey === "create-proposal"
-              ? "Creating proposal\u2026"
-              : "Create proposal"}
-          </button>
-        </div>
-
-        {/* Import and export */}
-        <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
-          <div className="space-y-1">
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-[--app-muted]">
-              Import and export
-            </p>
-            <h2 className="text-xl font-semibold text-[--app-fg]">
-              Move policy JSON in and out safely
-            </h2>
-            <p className="text-xs text-[--app-muted]">
-              Export the live chain or a saved version, then import a snapshot,
-              provider list, or single rule. Imports become batch proposals that
-              still go through validation, simulation, approval, and deploy.
-            </p>
-          </div>
-
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => void handleImportPolicy()}
-              disabled={busyKey === "import-policy"}
-              className="rounded-full bg-[--app-accent] px-4 py-2 text-xs font-semibold text-[--app-accent-contrast] transition hover:opacity-90 disabled:opacity-60"
-            >
-              {busyKey === "import-policy"
-                ? "Importing\u2026"
-                : "Stage import as proposals"}
-            </button>
-            <label className="cursor-pointer rounded-full border border-[--app-border] px-3 py-1 text-[11px] font-semibold text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg]">
-              Load JSON file
-              <input
-                type="file"
-                accept="application/json,.json"
-                onChange={(event) => void handleImportFile(event)}
-                className="sr-only"
-              />
-            </label>
-          </div>
-
-          <div className="mt-4">
-            <JsonEditor
-              value={importText}
-              onChange={setImportText}
-              minHeight="220px"
-              placeholder="Paste a policy snapshot, provider list, or single policy rule JSON."
-            />
-          </div>
-
-          <input
-            value={importDescriptionPrefix}
-            onChange={(event) => setImportDescriptionPrefix(event.target.value)}
-            placeholder="Imported policy snapshot"
-            className="mt-3 w-full rounded-full border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
-          />
-
-          <div className="mt-3 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
-            {importPreview instanceof Error ? (
-              <p className="text-xs text-rose-100">{importPreview.message}</p>
-            ) : importPreview ? (
-              <div className="space-y-2">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
-                  Import preview
-                </p>
-                <p className="text-xs text-[--app-muted]">
-                  {importPreview.label} · {importPreview.providerCount}{" "}
-                  {importPreview.providerCount === 1 ? "provider" : "providers"}
-                </p>
-                <p className="text-[11px] text-[--app-muted]">
-                  The import will stage a batch proposal against the current live
-                  chain instead of changing it directly.
-                </p>
-              </div>
-            ) : (
-              <p className="text-xs text-[--app-muted]">
-                Paste JSON to see what kind of policy import it is before staging
-                it.
-              </p>
-            )}
-          </div>
-
-          {importPreview && !(importPreview instanceof Error) ? (
-            <button
-              type="button"
-              onClick={() => handleLoadIntoDraft()}
-              disabled={importPreview.kind !== "single_provider"}
-              className="mt-4 rounded-full border border-[--app-border] px-4 py-2 text-xs font-semibold text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg] disabled:opacity-60"
-            >
-              Load single rule into draft
-            </button>
-          ) : null}
-        </div>
-      </div>
-
-      {/* Right column: Private packs */}
-      <div className="flex flex-col gap-4">
-        <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
-          <div className="space-y-1">
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-[--app-muted]">
-              Private packs
-            </p>
-            <h2 className="text-xl font-semibold text-[--app-fg]">
-              Save reusable policy starting points for your team
-            </h2>
-            <p className="text-xs text-[--app-muted]">
-              Turn a draft, the live chain, or a saved version into a private
-              pack that reviewers can stage again later.
-            </p>
-          </div>
-
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <label className="flex flex-col gap-1 text-xs text-[--app-muted]">
-              Pack title
-              <input
-                value={packTitle}
-                onChange={(event) => setPackTitle(event.target.value)}
-                placeholder="Production baseline"
-                className="rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-xs text-[--app-muted]">
-              Source
-              <select
-                value={packSource}
-                onChange={(event) => setPackSource(event.target.value)}
-                className="rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
-              >
-                <option value="editor">Current draft editor</option>
-                <option value="live">Live policy chain</option>
-                {versionNumbers.map((vn) => (
-                  <option key={`pack-source-${vn}`} value={`version:${vn}`}>
-                    Version {vn}
-                  </option>
+                  All
+                </Button>
+                <Button
+                  type="button"
+                  size="small"
+                  variant={pluginFilter === "universal" ? "contained" : "outlined"}
+                  onClick={() => setPluginFilter("universal")}
+                  sx={{
+                    borderRadius: 999,
+                    textTransform: "none",
+                    fontSize: 11,
+                    fontWeight: 800,
+                    ...(pluginFilter === "universal"
+                      ? {}
+                      : { borderColor: "var(--app-border)", color: "var(--app-muted)", "&:hover": { bgcolor: "var(--app-hover-bg)" } }),
+                  }}
+                >
+                  Universal
+                </Button>
+                {jurisdictions.map((j) => (
+                  <Button
+                    key={j}
+                    type="button"
+                    size="small"
+                    variant={pluginFilter === j ? "contained" : "outlined"}
+                    onClick={() => setPluginFilter(j)}
+                    sx={{
+                      borderRadius: 999,
+                      textTransform: "none",
+                      fontSize: 11,
+                      fontWeight: 800,
+                      ...(pluginFilter === j
+                        ? {}
+                        : { borderColor: "var(--app-border)", color: "var(--app-muted)", "&:hover": { bgcolor: "var(--app-hover-bg)" } }),
+                    }}
+                  >
+                    {j}
+                  </Button>
                 ))}
-              </select>
-            </label>
-          </div>
+              </Box>
+            ) : null}
 
-          <div className="mt-3 grid gap-3">
-            <input
-              value={packSummary}
-              onChange={(event) => setPackSummary(event.target.value)}
-              placeholder="Short summary for reviewers"
-              className="w-full rounded-full border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
-            />
-            <textarea
-              value={packDescription}
-              onChange={(event) => setPackDescription(event.target.value)}
-              placeholder="What this pack is for and when to use it"
-              className="min-h-[100px] rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] px-4 py-3 text-xs leading-6 text-[--app-fg] outline-none focus:border-[--app-accent]"
-            />
-            <div className="grid gap-3 sm:grid-cols-2">
-              <input
-                value={packTags}
-                onChange={(event) => setPackTags(event.target.value)}
-                placeholder="Tags: registry, strict, rollout"
-                className="rounded-full border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
-              />
-              <input
-                value={packEnvironments}
-                onChange={(event) => setPackEnvironments(event.target.value)}
-                placeholder="Best for: development, staging"
-                className="rounded-full border border-[--app-border] bg-[--app-chrome-bg] px-4 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
-              />
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => void handleSavePack()}
-            disabled={busyKey === "save-pack"}
-            className="mt-4 rounded-full bg-[--app-accent] px-4 py-2 text-xs font-semibold text-[--app-accent-contrast] transition hover:opacity-90 disabled:opacity-60"
-          >
-            {busyKey === "save-pack" ? "Saving\u2026" : "Save private pack"}
-          </button>
-
-          <div className="mt-5 space-y-3">
-            {packs.length === 0 ? (
-              <div className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
-                <p className="text-xs text-[--app-muted]">
-                  No private packs saved yet. Save a draft or the live chain to
-                  build a reusable library for the team.
-                </p>
-              </div>
-            ) : (
-              packs.map((pack) => (
-                <article
-                  key={pack.pack_id}
-                  className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]"
+            <Box sx={{ mt: 2, display: "grid", gap: 1, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" } }}>
+              {filteredTemplates.map((template) => (
+                <Button
+                  key={template.key}
+                  type="button"
+                  onClick={() => chooseTemplate(template.key)}
+                  variant="outlined"
+                  sx={{
+                    borderRadius: 3,
+                    p: 1.5,
+                    textAlign: "left",
+                    textTransform: "none",
+                    justifyContent: "flex-start",
+                    borderColor: "var(--app-border)",
+                    bgcolor: createTemplate === template.key ? "var(--app-control-active-bg)" : "var(--app-control-bg)",
+                    color: createTemplate === template.key ? "var(--app-fg)" : "var(--app-muted)",
+                    "&:hover": { bgcolor: "var(--app-hover-bg)", color: "var(--app-fg)" },
+                  }}
                 >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-xs font-semibold text-[--app-fg]">
-                          {pack.title ?? pack.pack_id}
-                        </p>
-                        <span className="rounded-full bg-[--app-surface] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
-                          private
-                        </span>
-                      </div>
-                      <p className="text-xs text-[--app-muted]">
-                        {pack.summary || pack.description || "Saved policy pack"}
-                      </p>
-                      <p className="text-[11px] text-[--app-muted]">
-                        {pack.provider_count ?? 0} rules · revision{" "}
-                        {pack.current_revision_number ?? pack.revision_count ?? 1} ·
-                        owner {pack.owner ?? "unknown"}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleLoadPackIntoDraft(pack)}
-                        className="rounded-full border border-[--app-border] px-3 py-1 text-[11px] font-semibold text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg]"
-                      >
-                        Load
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          void onStagePack(pack.pack_id, pack.title ?? pack.pack_id)
-                        }
-                        disabled={busyKey === `pack-${pack.pack_id}`}
-                        className="rounded-full bg-[--app-accent] px-3 py-1 text-[11px] font-semibold text-[--app-accent-contrast] transition hover:opacity-90 disabled:opacity-60"
-                      >
-                        {busyKey === `pack-${pack.pack_id}` ? "Staging\u2026" : "Stage"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setDeletePackModal({
-                            id: pack.pack_id,
-                            title: pack.title ?? pack.pack_id,
-                          })
-                        }
-                        disabled={busyKey === `pack-delete-${pack.pack_id}`}
-                        className="rounded-full border border-rose-500/70 px-3 py-1 text-[11px] font-semibold text-rose-100 transition hover:bg-rose-500/10 disabled:opacity-60"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                  {(pack.provider_summaries ?? []).length > 0 ? (
-                    <ul className="mt-3 space-y-1 text-[11px] text-[--app-muted]">
-                      {(pack.provider_summaries ?? []).slice(0, 3).map((summary, index) => (
-                        <li key={`${pack.pack_id}-summary-${index}`}>\u2022 {summary}</li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </article>
-              ))
-            )}
-          </div>
-        </div>
-      </div>
+                  <Box sx={{ display: "grid", gap: 0.75, width: "100%" }}>
+                    <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1 }}>
+                      <Typography sx={{ fontSize: 12, fontWeight: 800, textTransform: "capitalize", color: "inherit" }}>
+                        {template.title}
+                      </Typography>
+                      {template.jurisdiction ? (
+                        <Chip
+                          size="small"
+                          label={template.jurisdiction}
+                          sx={{ borderRadius: 999, bgcolor: "var(--app-surface)", color: "var(--app-muted)", fontSize: 9, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.12em" }}
+                        />
+                      ) : null}
+                      {template.version ? (
+                        <Chip
+                          size="small"
+                          label={`v${template.version}`}
+                          sx={{ borderRadius: 999, bgcolor: "var(--app-surface)", color: "var(--app-muted)", fontSize: 9, fontWeight: 700 }}
+                        />
+                      ) : null}
+                    </Box>
+                    <Typography sx={{ fontSize: 11, lineHeight: 1.35, color: "inherit" }}>
+                      {template.summary.length > 80 ? `${template.summary.slice(0, 80)}…` : template.summary}
+                    </Typography>
+                  </Box>
+                </Button>
+              ))}
+            </Box>
 
-      {/* Delete pack confirmation modal */}
+            <Box sx={{ mt: 2 }}>
+              <JsonEditor value={createConfigText} onChange={setCreateConfigText} minHeight="280px" />
+            </Box>
+
+            <TextField
+              value={createDescription}
+              onChange={(event) => setCreateDescription(event.target.value)}
+              placeholder="What change should this proposal make?"
+              size="small"
+              fullWidth
+              sx={{ mt: 1.5 }}
+            />
+
+            <Button
+              type="button"
+              variant="contained"
+              onClick={() => void handleCreateProposal()}
+              disabled={creating || busyKey === "create-proposal"}
+              sx={{ mt: 2, borderRadius: 999 }}
+            >
+              {creating || busyKey === "create-proposal" ? "Creating proposal…" : "Create proposal"}
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+          <CardContent sx={{ p: 2.5 }}>
+            <Box sx={{ display: "grid", gap: 0.5 }}>
+              <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                Import and export
+              </Typography>
+              <Typography variant="h5" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+                Move policy JSON in and out safely
+              </Typography>
+              <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                Export the live chain or a saved version, then import a snapshot, provider list, or single rule. Imports become batch proposals that still go through validation, simulation, approval, and deploy.
+              </Typography>
+            </Box>
+
+            <Box sx={{ mt: 2, display: "flex", flexWrap: "wrap", gap: 1 }}>
+              <Button
+                type="button"
+                variant="contained"
+                onClick={() => void handleImportPolicy()}
+                disabled={busyKey === "import-policy"}
+                sx={{ borderRadius: 999 }}
+              >
+                {busyKey === "import-policy" ? "Importing…" : "Stage import as proposals"}
+              </Button>
+
+              <Button component="label" variant="outlined" sx={{ borderRadius: 999, borderColor: "var(--app-border)", color: "var(--app-muted)" }}>
+                Load JSON file
+                <Box component="input" type="file" accept="application/json,.json" hidden onChange={(event) => void handleImportFile(event)} />
+              </Button>
+            </Box>
+
+            <Box sx={{ mt: 2 }}>
+              <JsonEditor
+                value={importText}
+                onChange={setImportText}
+                minHeight="220px"
+                placeholder="Paste a policy snapshot, provider list, or single policy rule JSON."
+              />
+            </Box>
+
+            <TextField
+              value={importDescriptionPrefix}
+              onChange={(event) => setImportDescriptionPrefix(event.target.value)}
+              placeholder="Imported policy snapshot"
+              size="small"
+              fullWidth
+              sx={{ mt: 1.5 }}
+            />
+
+            <Card variant="outlined" sx={{ mt: 1.5, borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}>
+              <CardContent sx={{ p: 2 }}>
+                {importPreview instanceof Error ? (
+                  <Typography sx={{ fontSize: 12, color: "rgb(254, 205, 211)" }}>{importPreview.message}</Typography>
+                ) : importPreview ? (
+                  <Box sx={{ display: "grid", gap: 1 }}>
+                    <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                      Import preview
+                    </Typography>
+                    <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                      {importPreview.label} · {importPreview.providerCount}{" "}
+                      {importPreview.providerCount === 1 ? "provider" : "providers"}
+                    </Typography>
+                    <Typography sx={{ fontSize: 11, color: "var(--app-muted)" }}>
+                      The import will stage a batch proposal against the current live chain instead of changing it directly.
+                    </Typography>
+                  </Box>
+                ) : (
+                  <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                    Paste JSON to see what kind of policy import it is before staging it.
+                  </Typography>
+                )}
+              </CardContent>
+            </Card>
+
+            {importPreview && !(importPreview instanceof Error) ? (
+              <Button
+                type="button"
+                variant="outlined"
+                onClick={() => handleLoadIntoDraft()}
+                disabled={importPreview.kind !== "single_provider"}
+                sx={{ mt: 2, borderRadius: 999, borderColor: "var(--app-border)", color: "var(--app-muted)" }}
+              >
+                Load single rule into draft
+              </Button>
+            ) : null}
+          </CardContent>
+        </Card>
+      </Box>
+
+      <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+          <CardContent sx={{ p: 2.5 }}>
+            <Box sx={{ display: "grid", gap: 0.5 }}>
+              <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                Private packs
+              </Typography>
+              <Typography variant="h5" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+                Save reusable policy starting points for your team
+              </Typography>
+              <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                Turn a draft, the live chain, or a saved version into a private pack that reviewers can stage again later.
+              </Typography>
+            </Box>
+
+            <Box sx={{ mt: 2, display: "grid", gap: 1.5, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" } }}>
+              <TextField label="Pack title" value={packTitle} onChange={(event) => setPackTitle(event.target.value)} placeholder="Production baseline" size="small" fullWidth />
+              <FormControl size="small" fullWidth>
+                <InputLabel id="pack-source-label">Source</InputLabel>
+                <Select labelId="pack-source-label" label="Source" value={packSource} onChange={(event) => setPackSource(String(event.target.value))}>
+                  <MenuItem value="editor">Current draft editor</MenuItem>
+                  <MenuItem value="live">Live policy chain</MenuItem>
+                  {versionNumbers.map((vn) => (
+                    <MenuItem key={`pack-source-${vn}`} value={`version:${vn}`}>
+                      Version {vn}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Box>
+
+            <Box sx={{ mt: 1.5, display: "grid", gap: 1.5 }}>
+              <TextField value={packSummary} onChange={(event) => setPackSummary(event.target.value)} placeholder="Short summary for reviewers" size="small" fullWidth />
+              <TextField
+                value={packDescription}
+                onChange={(event) => setPackDescription(event.target.value)}
+                placeholder="What this pack is for and when to use it"
+                size="small"
+                fullWidth
+                multiline
+                minRows={4}
+              />
+              <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" } }}>
+                <TextField value={packTags} onChange={(event) => setPackTags(event.target.value)} placeholder="Tags: registry, strict, rollout" size="small" fullWidth />
+                <TextField
+                  value={packEnvironments}
+                  onChange={(event) => setPackEnvironments(event.target.value)}
+                  placeholder="Best for: development, staging"
+                  size="small"
+                  fullWidth
+                />
+              </Box>
+            </Box>
+
+            <Button type="button" variant="contained" onClick={() => void handleSavePack()} disabled={busyKey === "save-pack"} sx={{ mt: 2, borderRadius: 999 }}>
+              {busyKey === "save-pack" ? "Saving…" : "Save private pack"}
+            </Button>
+
+            <Box sx={{ mt: 2.5, display: "grid", gap: 1.5 }}>
+              {packs.length === 0 ? (
+                <Card variant="outlined" sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}>
+                  <CardContent sx={{ p: 2 }}>
+                    <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                      No private packs saved yet. Save a draft or the live chain to build a reusable library for the team.
+                    </Typography>
+                  </CardContent>
+                </Card>
+              ) : (
+                packs.map((pack) => (
+                  <Card key={pack.pack_id} variant="outlined" sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}>
+                    <CardContent sx={{ p: 2 }}>
+                      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 2, justifyContent: "space-between", alignItems: "flex-start" }}>
+                        <Box sx={{ display: "grid", gap: 0.5, minWidth: 240 }}>
+                          <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1 }}>
+                            <Typography sx={{ fontSize: 12, fontWeight: 800, color: "var(--app-fg)" }}>
+                              {pack.title ?? pack.pack_id}
+                            </Typography>
+                            <Chip
+                              size="small"
+                              label="private"
+                              sx={{ borderRadius: 999, bgcolor: "var(--app-surface)", color: "var(--app-muted)", fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.12em" }}
+                            />
+                          </Box>
+                          <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                            {pack.summary || pack.description || "Saved policy pack"}
+                          </Typography>
+                          <Typography sx={{ fontSize: 11, color: "var(--app-muted)" }}>
+                            {pack.provider_count ?? 0} rules · revision {pack.current_revision_number ?? pack.revision_count ?? 1} · owner {pack.owner ?? "unknown"}
+                          </Typography>
+                        </Box>
+                        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+                          <Button type="button" variant="outlined" size="small" onClick={() => handleLoadPackIntoDraft(pack)} sx={{ borderRadius: 999, borderColor: "var(--app-border)", color: "var(--app-muted)" }}>
+                            Load
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="contained"
+                            size="small"
+                            onClick={() => void onStagePack(pack.pack_id, pack.title ?? pack.pack_id)}
+                            disabled={busyKey === `pack-${pack.pack_id}`}
+                            sx={{ borderRadius: 999 }}
+                          >
+                            {busyKey === `pack-${pack.pack_id}` ? "Staging…" : "Stage"}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outlined"
+                            size="small"
+                            onClick={() => setDeletePackModal({ id: pack.pack_id, title: pack.title ?? pack.pack_id })}
+                            disabled={busyKey === `pack-delete-${pack.pack_id}`}
+                            sx={{
+                              borderRadius: 999,
+                              borderColor: "rgba(251, 113, 133, 0.55)",
+                              color: "rgb(254, 205, 211)",
+                              "&:hover": { bgcolor: "rgba(244, 63, 94, 0.12)", borderColor: "rgba(251, 113, 133, 0.55)" },
+                            }}
+                          >
+                            Delete
+                          </Button>
+                        </Box>
+                      </Box>
+                      {(pack.provider_summaries ?? []).length > 0 ? (
+                        <Box component="ul" sx={{ listStyle: "disc", pl: 2, mt: 1.5, mb: 0, color: "var(--app-muted)", fontSize: 11, display: "grid", gap: 0.5 }}>
+                          {(pack.provider_summaries ?? []).slice(0, 3).map((summary, index) => (
+                            <li key={`${pack.pack_id}-summary-${index}`}>{summary}</li>
+                          ))}
+                        </Box>
+                      ) : null}
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </Box>
+          </CardContent>
+        </Card>
+      </Box>
+
       <ConfirmModal
         isOpen={deletePackModal !== null}
         title={`Delete "${deletePackModal?.title}"?`}
         description="This will permanently remove the saved pack. This action cannot be undone."
         confirmLabel="Delete pack"
         isDangerous
-        isLoading={
-          deletePackModal !== null &&
-          busyKey === `pack-delete-${deletePackModal.id}`
-        }
+        isLoading={deletePackModal !== null && busyKey === `pack-delete-${deletePackModal.id}`}
         onConfirm={async () => {
           if (!deletePackModal) return;
           await onDeletePack(deletePackModal.id);
@@ -741,6 +732,6 @@ export function ToolsTab({
         }}
         onCancel={() => setDeletePackModal(null)}
       />
-    </div>
+    </Box>
   );
 }

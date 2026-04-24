@@ -5,6 +5,8 @@
 // with the current step highlighted and terminal states (rejected/withdrawn)
 // shown as a badge overlay.
 
+import { Box, Chip, Step, StepLabel, Stepper } from "@mui/material";
+
 type StepDef = {
   key: string;
   label: string;
@@ -55,7 +57,6 @@ export function ProposalStepper({
   status,
   requireSimulation,
 }: ProposalStepperProps) {
-  const currentIndex = stepIndex(status);
   const terminal = isTerminal(status);
   const failed = isFailed(status);
 
@@ -64,98 +65,50 @@ export function ProposalStepper({
     ? STEPS
     : STEPS.filter((step) => step.key !== "simulated");
 
-  // Re-map currentIndex for the visible steps
-  const visibleCurrentIndex = (() => {
+  const activeStep = (() => {
     if (terminal) return -1;
-    const mapped = visibleSteps.findIndex(
-      (step) => step.key === STEPS[currentIndex]?.key,
-    );
-    return mapped;
+    const idx = stepIndex(status);
+    const key = STEPS[idx]?.key;
+    return visibleSteps.findIndex((s) => s.key === key);
   })();
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center gap-1">
-        {visibleSteps.map((step, index) => {
-          const isComplete = !terminal && visibleCurrentIndex > index;
-          const isCurrent = !terminal && visibleCurrentIndex === index;
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+      <Stepper
+        activeStep={activeStep < 0 ? 0 : activeStep}
+        alternativeLabel
+        sx={{
+          "& .MuiStepConnector-line": { borderColor: "var(--app-border)" },
+          "& .MuiStepIcon-root.Mui-active": { color: failed ? "rgb(239, 68, 68)" : "var(--app-accent)" },
+          "& .MuiStepIcon-root.Mui-completed": { color: "var(--app-accent)" },
+        }}
+      >
+        {visibleSteps.map((step) => (
+          <Step key={step.key} completed={!terminal && activeStep > visibleSteps.findIndex((s) => s.key === step.key)}>
+            <StepLabel>{step.label}</StepLabel>
+          </Step>
+        ))}
+      </Stepper>
 
-          return (
-            <div key={step.key} className="flex items-center gap-1">
-              {/* Step dot + label */}
-              <div className="flex items-center gap-1.5">
-                <span
-                  className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-bold ${
-                    isComplete
-                      ? "bg-[--app-accent] text-[--app-accent-contrast]"
-                      : isCurrent
-                        ? failed
-                          ? "bg-rose-500 text-rose-950 ring-2 ring-rose-400/50"
-                          : "bg-[--app-accent] text-[--app-accent-contrast] ring-2 ring-[--app-accent]"
-                        : "bg-[--app-surface] text-[--app-muted]"
-                  }`}
-                >
-                  {isComplete ? (
-                    <svg
-                      viewBox="0 0 12 12"
-                      className="h-2.5 w-2.5"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth={2}
-                    >
-                      <path d="M2 6l3 3 5-5" />
-                    </svg>
-                  ) : (
-                    index + 1
-                  )}
-                </span>
-                <span
-                  className={`text-[10px] font-semibold ${
-                    isComplete
-                      ? "text-[--app-muted]"
-                      : isCurrent
-                        ? failed
-                          ? "text-rose-200"
-                          : "text-[--app-fg]"
-                        : "text-[--app-muted]"
-                  }`}
-                >
-                  {isCurrent && failed ? "Failed" : step.label}
-                </span>
-              </div>
-
-              {/* Connector line */}
-              {index < visibleSteps.length - 1 ? (
-                <div
-                  className={`h-px w-4 sm:w-6 ${
-                    isComplete
-                      ? "bg-[--app-accent]"
-                      : "bg-[--app-border]"
-                  }`}
-                />
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Terminal state badge */}
       {terminal ? (
-        <span
-          className={`inline-flex w-fit items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${
-            status === "rejected"
-              ? "bg-rose-500/15 text-rose-200 ring-1 ring-rose-400/50"
-              : "bg-zinc-500/15 text-zinc-200 ring-1 ring-zinc-400/40"
-          }`}
-        >
-          <span
-            className={`inline-block h-1.5 w-1.5 rounded-full ${
-              status === "rejected" ? "bg-rose-400" : "bg-zinc-400"
-            }`}
-          />
-          {status === "rejected" ? "Rejected" : "Withdrawn"}
-        </span>
+        <Chip
+          size="small"
+          label={status === "rejected" ? "Rejected" : "Withdrawn"}
+          sx={{
+            width: "fit-content",
+            borderRadius: 999,
+            bgcolor:
+              status === "rejected" ? "rgba(244, 63, 94, 0.18)" : "rgba(161, 161, 170, 0.18)",
+            color:
+              status === "rejected" ? "rgb(254, 205, 211)" : "rgb(228, 228, 231)",
+            border: "1px solid var(--app-border)",
+            fontWeight: 900,
+            letterSpacing: "0.12em",
+            textTransform: "uppercase",
+            fontSize: 10,
+          }}
+        />
       ) : null}
-    </div>
+    </Box>
   );
 }

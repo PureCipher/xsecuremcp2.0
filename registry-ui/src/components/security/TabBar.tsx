@@ -1,5 +1,7 @@
 "use client";
 
+import { Tab, Tabs } from "@mui/material";
+
 export function TabBar({
   tabs,
   activeTab,
@@ -10,21 +12,28 @@ export function TabBar({
   onTabChange: (key: string) => void;
 }) {
   return (
-    <div className="flex gap-1 border-b border-[--app-border] pb-px">
+    <Tabs
+      value={activeTab}
+      onChange={(_, v: string) => onTabChange(v)}
+      variant="scrollable"
+      scrollButtons="auto"
+      sx={{
+        minHeight: 44,
+        borderBottom: "1px solid var(--app-border)",
+        "& .MuiTabs-indicator": { bgcolor: "var(--app-accent)" },
+        "& .MuiTab-root": {
+          minHeight: 44,
+          textTransform: "none",
+          fontSize: 12,
+          fontWeight: 700,
+          color: "var(--app-muted)",
+        },
+        "& .MuiTab-root.Mui-selected": { color: "var(--app-fg)" },
+      }}
+    >
       {tabs.map((tab) => (
-        <button
-          key={tab.key}
-          type="button"
-          onClick={() => onTabChange(tab.key)}
-          className={`rounded-t-lg px-3 py-2 text-[11px] font-medium transition ${
-            activeTab === tab.key
-              ? "border-b-2 border-[--app-accent] text-[--app-fg]"
-              : "text-[--app-muted] hover:text-[--app-fg]"
-          }`}
-        >
-          {tab.label}
-        </button>
+        <Tab key={tab.key} value={tab.key} label={tab.label} />
       ))}
-    </div>
+    </Tabs>
   );
 }

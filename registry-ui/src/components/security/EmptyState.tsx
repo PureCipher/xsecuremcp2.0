@@ -1,3 +1,5 @@
+import { Box, Typography } from "@mui/material";
+
 export function EmptyState({
   title,
   message,
@@ -6,12 +8,27 @@ export function EmptyState({
   message?: string;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-3xl border border-[--app-border] bg-[--app-control-bg] py-12 ring-1 ring-[--app-surface-ring]">
-      <div className="mb-2 text-2xl text-[--app-accent]/60">∅</div>
-      <p className="text-[12px] font-semibold text-[--app-fg]">{title}</p>
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        borderRadius: 4,
+        border: "1px solid var(--app-border)",
+        bgcolor: "var(--app-control-bg)",
+        py: 6,
+      }}
+    >
+      <Typography sx={{ mb: 1, fontSize: 24, color: "var(--app-accent)", opacity: 0.6 }}>
+        ∅
+      </Typography>
+      <Typography sx={{ fontSize: 13, fontWeight: 700, color: "var(--app-fg)" }}>{title}</Typography>
       {message ? (
-        <p className="mt-1 text-[11px] text-[--app-muted]">{message}</p>
+        <Typography sx={{ mt: 0.5, fontSize: 12, color: "var(--app-muted)", textAlign: "center", px: 2 }}>
+          {message}
+        </Typography>
       ) : null}
-    </div>
+    </Box>
   );
 }

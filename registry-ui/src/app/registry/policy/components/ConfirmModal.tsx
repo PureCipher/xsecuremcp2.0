@@ -1,6 +1,14 @@
 "use client";
 
 import { useEffect, useRef, type ReactNode } from "react";
+import {
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Typography,
+} from "@mui/material";
 
 type ConfirmModalProps = {
   isOpen: boolean;
@@ -31,64 +39,69 @@ export function ConfirmModal({
 
   useEffect(() => {
     if (!isOpen) return;
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape" && !isLoading) {
-        onCancel();
-      }
-    }
-
-    document.addEventListener("keydown", handleKeyDown);
     confirmRef.current?.focus();
-
-    return () => document.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, isLoading, onCancel]);
 
   if (!isOpen) return null;
 
-  const confirmClasses = isDangerous
-    ? "bg-rose-500 text-white hover:bg-rose-400 disabled:opacity-60"
-    : "bg-[--app-accent] text-[--app-accent-contrast] hover:opacity-90 disabled:opacity-60";
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-      onClick={(event) => {
-        if (event.target === event.currentTarget && !isLoading) onCancel();
+    <Dialog
+      open={isOpen}
+      onClose={() => {
+        if (isLoading) return;
+        onCancel();
       }}
-      role="dialog"
-      aria-modal="true"
-      aria-label={title}
+      fullWidth
+      maxWidth="sm"
+      slotProps={{
+        paper: {
+          sx: {
+            borderRadius: 4,
+            bgcolor: "var(--app-chrome-bg)",
+            border: "1px solid var(--app-border)",
+            backgroundImage: "none",
+          },
+        },
+      }}
     >
-      <div className="mx-4 w-full max-w-md rounded-3xl border border-[--app-border] bg-[--app-chrome-bg] p-6 ring-1 ring-[--app-surface-ring] shadow-2xl">
-        <h3 className="text-lg font-semibold text-[--app-fg]">{title}</h3>
-
+      <DialogTitle sx={{ color: "var(--app-fg)", fontWeight: 800 }}>{title}</DialogTitle>
+      <DialogContent>
         {description ? (
-          <p className="mt-2 text-xs text-[--app-muted]">{description}</p>
+          <Typography sx={{ fontSize: 13, color: "var(--app-muted)" }}>
+            {description}
+          </Typography>
         ) : null}
-
-        {children ? <div className="mt-4">{children}</div> : null}
-
-        <div className="mt-6 flex justify-end gap-3">
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={isLoading}
-            className="rounded-full border border-[--app-border] px-4 py-2 text-[11px] font-semibold text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg] disabled:opacity-60"
-          >
-            {cancelLabel}
-          </button>
-          <button
-            ref={confirmRef}
-            type="button"
-            onClick={() => void onConfirm()}
-            disabled={isLoading}
-            className={`rounded-full px-4 py-2 text-[11px] font-semibold transition ${confirmClasses}`}
-          >
-            {isLoading ? "Working\u2026" : confirmLabel}
-          </button>
-        </div>
-      </div>
-    </div>
+        {children ? <div style={{ marginTop: 16 }}>{children}</div> : null}
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2.5 }}>
+        <Button
+          onClick={onCancel}
+          variant="outlined"
+          disabled={isLoading}
+          sx={{
+            borderRadius: 999,
+            borderColor: "var(--app-border)",
+            color: "var(--app-muted)",
+            "&:hover": { bgcolor: "var(--app-hover-bg)", borderColor: "var(--app-border)" },
+          }}
+        >
+          {cancelLabel}
+        </Button>
+        <Button
+          ref={confirmRef}
+          onClick={() => void onConfirm()}
+          variant="contained"
+          disabled={isLoading}
+          sx={{
+            borderRadius: 999,
+            bgcolor: isDangerous ? "rgba(239, 68, 68, 0.85)" : "var(--app-accent)",
+            color: isDangerous ? "#fff" : "var(--app-accent-contrast)",
+            "&:hover": { bgcolor: isDangerous ? "rgb(220, 38, 38)" : "var(--app-accent)" },
+          }}
+        >
+          {isLoading ? "Working…" : confirmLabel}
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }

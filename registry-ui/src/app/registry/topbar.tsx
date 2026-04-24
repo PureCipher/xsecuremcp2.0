@@ -4,9 +4,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { AppBar, Box, ButtonBase, IconButton, Toolbar, Typography } from "@mui/material";
+
 import { NavIcon } from "@/components/security";
 
+import { RegistryNotifications } from "./RegistryNotifications";
+
 export function RegistryTopBar({
+  authEnabled,
+  hasSession,
   canSubmit,
   canReview,
   canAdmin,
@@ -17,6 +23,8 @@ export function RegistryTopBar({
   menuOpen,
   onBrandClick,
 }: {
+  authEnabled: boolean;
+  hasSession: boolean;
   canSubmit: boolean;
   canReview: boolean;
   canAdmin: boolean;
@@ -29,7 +37,19 @@ export function RegistryTopBar({
 }) {
   const router = useRouter();
   const [signingOut, setSigningOut] = useState(false);
-  const roleLabel = canAdmin ? "ADMIN" : canReview ? "REVIEWER" : canSubmit ? "PUBLISHER" : "USER";
+  const actionFx =
+    "transition active:translate-y-[1px] active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[--app-accent] focus-visible:ring-offset-2 focus-visible:ring-offset-[--app-chrome-bg]";
+  const roleLabel = !authEnabled
+    ? "OPEN"
+    : !hasSession
+      ? "GUEST"
+    : canAdmin
+      ? "ADMIN"
+      : canReview
+        ? "REVIEWER"
+        : canSubmit
+          ? "PUBLISHER"
+          : "VIEWER";
 
   async function handleLogout() {
     setSigningOut(true);
@@ -42,85 +62,206 @@ export function RegistryTopBar({
   }
 
   return (
-    <header className="fixed inset-x-0 top-0 z-50 h-14 border-b border-[--app-chrome-border] bg-[--app-chrome-bg] px-4 text-xs text-[--app-muted]">
-      <div className="flex h-full w-full items-center gap-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <button
-            type="button"
-            aria-label={menuOpen ? "Close menu" : "Open menu"}
-            aria-expanded={menuOpen}
-            onClick={onMenuToggle}
-            className="inline-flex items-center justify-center rounded-full border border-[--app-control-border] bg-[--app-control-bg] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted] transition hover:bg-[--app-hover-bg] sm:hidden"
-          >
+    <AppBar
+      position="fixed"
+      elevation={0}
+      sx={{
+        height: 56,
+        bgcolor: "var(--app-chrome-bg)",
+        color: "var(--app-fg)",
+        borderBottom: "1px solid var(--app-chrome-border)",
+      }}
+    >
+      <Toolbar sx={{ minHeight: 56, px: 2, gap: 1.5 }}>
+        <IconButton
+          onClick={onMenuToggle}
+          aria-label={menuOpen ? "Close menu" : "Open menu"}
+          aria-expanded={menuOpen}
+          sx={{
+            display: { xs: "inline-flex", sm: "none" },
+            border: "1px solid var(--app-control-border)",
+            bgcolor: "var(--app-control-bg)",
+          }}
+        >
+          <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.12em" }}>
             {menuOpen ? "Close" : "Menu"}
-          </button>
-          <button
-            type="button"
-            onClick={onBrandClick}
-            className="flex items-center gap-3 rounded-2xl px-1 py-0.5 text-left transition hover:bg-[--app-hover-bg]"
-            aria-label="Toggle sidebar"
+          </Typography>
+        </IconButton>
+
+        <ButtonBase
+          onClick={onBrandClick}
+          sx={{
+            borderRadius: 3,
+            px: 0.5,
+            py: 0.5,
+            display: "flex",
+            alignItems: "center",
+            gap: 1.5,
+            "&:hover": { bgcolor: "var(--app-hover-bg)" },
+          }}
+          aria-label="Toggle sidebar"
+        >
+          <Box
+            sx={{
+              width: 36,
+              height: 36,
+              borderRadius: 2,
+              bgcolor: "var(--app-accent)",
+              color: "var(--app-accent-contrast)",
+              display: "grid",
+              placeItems: "center",
+              fontSize: 11,
+              fontWeight: 900,
+              letterSpacing: "0.16em",
+            }}
           >
-            <div className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[--app-accent] text-[11px] font-extrabold tracking-[0.16em] text-[--app-accent-contrast]">
-              PC
-            </div>
-            <div className="min-w-0 leading-tight">
-              <div className="truncate text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
-                PureCipher
-              </div>
-              <div className="truncate text-[11px] text-[--app-fg]">Secured MCP Registry</div>
-            </div>
-          </button>
-        </div>
-        <div className="ml-auto flex items-center gap-3">
-          <Link
-            href="/registry/cli"
-            className={`hidden items-center justify-center rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] transition sm:inline-flex ${
-              cliActive
-                ? "border-[--app-accent] bg-[--app-control-active-bg] text-[--app-fg]"
-                : "border-[--app-control-border] bg-[--app-control-bg] text-[--app-muted] hover:bg-[--app-hover-bg]"
-            }`}
-            aria-label="CLI"
-            title="CLI"
-          >
-            <NavIcon name="cli" className="h-4 w-4" />
-          </Link>
-          <Link
-            href="/registry/health"
-            className={`inline-flex items-center justify-center rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] transition ${
-              healthActive
-                ? "border-[--app-accent] bg-[--app-control-active-bg] text-[--app-fg]"
-                : "border-[--app-control-border] bg-[--app-control-bg] text-[--app-muted] hover:bg-[--app-hover-bg]"
-            }`}
-            aria-label="Health"
-            title="Health"
-          >
+            PC
+          </Box>
+          <Box sx={{ lineHeight: 1.1, minWidth: 0, display: { xs: "none", sm: "block" } }}>
+            <Typography
+              noWrap
+              sx={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}
+            >
+              PureCipher
+            </Typography>
+            <Typography noWrap sx={{ fontSize: 11, color: "var(--app-fg)" }}>
+              Secured MCP Registry
+            </Typography>
+          </Box>
+        </ButtonBase>
+
+        <Box sx={{ flex: 1 }} />
+
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+          <TopAction href="/public/tools" label="Public">
+            <NavIcon name="tools" className="h-4 w-4" />
+          </TopAction>
+
+          {!authEnabled || hasSession ? (
+            <Box sx={{ display: { xs: "none", sm: "block" } }}>
+              <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 0.5 }}>
+                <RegistryNotifications />
+                <Typography sx={{ fontSize: 9, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--app-muted)" }}>
+                  Notify
+                </Typography>
+              </Box>
+            </Box>
+          ) : (
+            <TopAction href="/login" label="Notify">
+              <NavIcon name="notify" className="h-4 w-4" />
+            </TopAction>
+          )}
+
+          <Box sx={{ display: { xs: "none", sm: "block" } }}>
+            <TopAction href="/registry/cli" label="CLI" active={!!cliActive}>
+              <NavIcon name="cli" className="h-4 w-4" />
+            </TopAction>
+          </Box>
+          <TopAction href="/registry/health" label="Health" active={!!healthActive}>
             <NavIcon name="health" className="h-4 w-4" />
-          </Link>
-          <Link
-            href="/registry/settings"
-            className={`inline-flex items-center justify-center rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] transition ${
-              settingsActive
-                ? "border-[--app-accent] bg-[--app-control-active-bg] text-[--app-fg]"
-                : "border-[--app-control-border] bg-[--app-control-bg] text-[--app-muted] hover:bg-[--app-hover-bg]"
-            }`}
-            aria-label="Settings"
-            title="Settings"
-          >
+          </TopAction>
+          <TopAction href="/registry/settings" label="Settings" active={!!settingsActive}>
             <NavIcon name="settings" className="h-4 w-4" />
-          </Link>
-          <span className="rounded-full bg-[--app-control-active-bg] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
-            {roleLabel}
-          </span>
-          <button
-            type="button"
-            onClick={handleLogout}
-            disabled={signingOut}
-            className="rounded-full border border-[--app-accent] px-3 py-1 text-[10px] font-semibold text-[--app-muted] transition hover:bg-[--app-control-active-bg] disabled:opacity-60"
-          >
-            {signingOut ? "Signing out…" : "Sign out"}
-          </button>
-        </div>
-      </div>
-    </header>
+          </TopAction>
+
+          <Box sx={{ display: { xs: "none", sm: "block" } }}>
+            <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 0.5 }}>
+              <Box
+                sx={{
+                  px: 1.2,
+                  py: 0.4,
+                  borderRadius: 999,
+                  bgcolor: "var(--app-control-active-bg)",
+                  border: "1px solid var(--app-control-border)",
+                  fontSize: 10,
+                  fontWeight: 800,
+                  letterSpacing: "0.14em",
+                  textTransform: "uppercase",
+                  color: "var(--app-muted)",
+                }}
+              >
+                {roleLabel}
+              </Box>
+              <Typography sx={{ fontSize: 9, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--app-muted)" }}>
+                Role
+              </Typography>
+            </Box>
+          </Box>
+
+          {authEnabled && hasSession ? (
+            <Box sx={{ display: { xs: "none", sm: "flex" }, flexDirection: "column", alignItems: "center", gap: 0.5 }}>
+              <IconButton
+                onClick={handleLogout}
+                disabled={signingOut}
+                aria-label="Sign out"
+                sx={{
+                  border: "1px solid var(--app-accent)",
+                  color: "var(--app-muted)",
+                  "&:hover": { bgcolor: "var(--app-control-active-bg)" },
+                }}
+              >
+                <NavIcon name="access" className="h-4 w-4" />
+              </IconButton>
+              <Typography sx={{ fontSize: 9, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--app-muted)" }}>
+                {signingOut ? "…" : "Sign out"}
+              </Typography>
+            </Box>
+          ) : authEnabled ? (
+            <Box sx={{ display: { xs: "none", sm: "flex" }, flexDirection: "column", alignItems: "center", gap: 0.5 }}>
+              <Link href="/login" legacyBehavior passHref>
+                <IconButton
+                  component="a"
+                  aria-label="Sign in"
+                  sx={{
+                    border: "1px solid var(--app-accent)",
+                    color: "var(--app-muted)",
+                    "&:hover": { bgcolor: "var(--app-control-active-bg)" },
+                  }}
+                >
+                  <NavIcon name="access" className="h-4 w-4" />
+                </IconButton>
+              </Link>
+              <Typography sx={{ fontSize: 9, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--app-muted)" }}>
+                Sign in
+              </Typography>
+            </Box>
+          ) : null}
+        </Box>
+      </Toolbar>
+    </AppBar>
+  );
+}
+
+function TopAction({
+  href,
+  label,
+  active,
+  children,
+}: {
+  href: string;
+  label: string;
+  active?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <Box sx={{ display: { xs: "none", sm: "flex" }, flexDirection: "column", alignItems: "center", gap: 0.5 }}>
+      <Link href={href} legacyBehavior passHref>
+        <IconButton
+          component="a"
+          sx={{
+            border: "1px solid",
+            borderColor: active ? "var(--app-accent)" : "var(--app-control-border)",
+            bgcolor: active ? "var(--app-control-active-bg)" : "var(--app-control-bg)",
+            color: active ? "var(--app-fg)" : "var(--app-muted)",
+            "&:hover": { bgcolor: "var(--app-hover-bg)" },
+          }}
+        >
+          {children}
+        </IconButton>
+      </Link>
+      <Typography sx={{ fontSize: 9, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--app-muted)" }}>
+        {label}
+      </Typography>
+    </Box>
   );
 }

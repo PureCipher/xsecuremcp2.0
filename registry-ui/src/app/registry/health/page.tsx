@@ -6,6 +6,8 @@ import {
   getRevocations,
 } from "@/lib/registryClient";
 
+import { Box, Card, CardContent, Chip, Typography } from "@mui/material";
+
 const PILLAR_COMPONENTS: Record<string, { label: string; href: string }> = {
   policy_engine: { label: "Policy Engine", href: "/registry/policy" },
   policy_audit_log: { label: "Policy Audit", href: "/registry/policy" },
@@ -36,12 +38,16 @@ export default async function RegistryHealthPage() {
 
   if (!health) {
     return (
-      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-6 ring-1 ring-[--app-surface-ring]">
-          <h1 className="text-xl font-semibold text-[--app-fg]">Registry health</h1>
-          <p className="mt-2 text-[12px] text-[--app-muted]">
+      <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+        <CardContent sx={{ p: 2.5 }}>
+          <Typography variant="h5" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+            Registry health
+          </Typography>
+          <Typography sx={{ mt: 1, fontSize: 12, color: "var(--app-muted)" }}>
             Unable to load health information from the registry.
-          </p>
-      </div>
+          </Typography>
+        </CardContent>
+      </Card>
     );
   }
 
@@ -49,72 +55,88 @@ export default async function RegistryHealthPage() {
   const componentCount = securityHealth?.component_count ?? 0;
 
   return (
-    <div className="flex flex-col gap-6">
-        <header className="space-y-1">
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[--app-muted]">
-            Registry health
-          </p>
-          <h1 className="text-2xl font-semibold text-[--app-fg]">SecureMCP registry status</h1>
-          <p className="max-w-xl text-[11px] text-[--app-muted]">
-            Comprehensive health view of the SecureMCP guardrail pipeline, all five security
-            pillars, authentication, moderation, and registry counts.
-          </p>
-        </header>
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+      <Box component="header" sx={{ display: "grid", gap: 0.5 }}>
+        <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+          Registry health
+        </Typography>
+        <Typography variant="h4" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+          SecureMCP registry status
+        </Typography>
+        <Typography sx={{ mt: 0.5, maxWidth: 720, fontSize: 12, color: "var(--app-muted)" }}>
+          Comprehensive health view of the SecureMCP guardrail pipeline, all five security pillars, authentication, moderation, and registry counts.
+        </Typography>
+      </Box>
 
         {/* Registry Overview */}
-        <section className="grid gap-4 md:grid-cols-3">
-          <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
+      <Box component="section" sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "repeat(3, minmax(0, 1fr))" } }}>
+        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+          <CardContent sx={{ p: 2.5 }}>
+            <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
               Status
-            </p>
-            <p className="mt-2 text-sm font-semibold text-[--app-fg]">
+            </Typography>
+            <Typography sx={{ mt: 1.5, fontSize: 14, fontWeight: 700, color: "var(--app-fg)" }}>
               {health.status === "ok" ? "Healthy" : String(health.status)}
-            </p>
-            <p className="mt-1 text-[11px] text-[--app-muted]">
-              Minimum level: <span className="font-semibold">{health.minimum_certification}</span>
-            </p>
-          </div>
+            </Typography>
+            <Typography sx={{ mt: 0.5, fontSize: 12, color: "var(--app-muted)" }}>
+              Minimum level:{" "}
+              <Box component="span" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+                {health.minimum_certification}
+              </Box>
+            </Typography>
+          </CardContent>
+        </Card>
 
-          <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
+        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+          <CardContent sx={{ p: 2.5 }}>
+            <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
               Policy
-            </p>
-            <ul className="mt-2 space-y-1 text-[11px] text-[--app-muted]">
+            </Typography>
+            <Box component="ul" sx={{ mt: 1.5, pl: 2, color: "var(--app-muted)", fontSize: 12 }}>
               <li>
                 Auth enabled:{" "}
-                <span className="font-semibold text-[--app-fg]">
+                <Box component="span" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
                   {health.auth_enabled ? "Yes" : "No"}
-                </span>
+                </Box>
               </li>
               <li>
                 Moderation required:{" "}
-                <span className="font-semibold text-[--app-fg]">
+                <Box component="span" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
                   {health.require_moderation ? "Yes" : "No"}
-                </span>
+                </Box>
               </li>
-            </ul>
-          </div>
+            </Box>
+          </CardContent>
+        </Card>
 
-          <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
+        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+          <CardContent sx={{ p: 2.5 }}>
+            <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
               Counts
-            </p>
-            <ul className="mt-2 space-y-1 text-[11px] text-[--app-muted]">
+            </Typography>
+            <Box component="ul" sx={{ mt: 1.5, pl: 2, color: "var(--app-muted)", fontSize: 12 }}>
               <li>
                 Registered tools:{" "}
-                <span className="font-semibold text-[--app-fg]">{health.registered_tools}</span>
+                <Box component="span" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+                  {health.registered_tools}
+                </Box>
               </li>
               <li>
                 Verified tools:{" "}
-                <span className="font-semibold text-[--app-fg]">{health.verified_tools}</span>
+                <Box component="span" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+                  {health.verified_tools}
+                </Box>
               </li>
               <li>
                 Pending review:{" "}
-                <span className="font-semibold text-[--app-fg]">{health.pending_review}</span>
+                <Box component="span" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+                  {health.pending_review}
+                </Box>
               </li>
-            </ul>
-          </div>
-        </section>
+            </Box>
+          </CardContent>
+        </Card>
+      </Box>
 
         {/* Security Components Grid */}
         {componentCount > 0 ? (
@@ -123,9 +145,11 @@ export default async function RegistryHealthPage() {
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
                 Security Components
               </p>
-              <span className="rounded-full bg-[--app-control-active-bg] px-2 py-0.5 text-[10px] font-semibold text-[--app-muted]">
-                {componentCount} active
-              </span>
+              <Chip
+                size="small"
+                label={`${componentCount} active`}
+                sx={{ borderRadius: 999, bgcolor: "var(--app-control-active-bg)", color: "var(--app-muted)", fontWeight: 700, fontSize: 11 }}
+              />
             </div>
             <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
               {Object.entries(components).map(([key, status]) => {
@@ -314,6 +338,6 @@ export default async function RegistryHealthPage() {
           Last updated: {health.timestamp} · Server: {health.server}
           {securityHealth?.timestamp ? ` · Security: ${securityHealth.timestamp}` : ""}
         </p>
-    </div>
+    </Box>
   );
 }

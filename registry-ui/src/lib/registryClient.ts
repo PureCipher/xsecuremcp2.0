@@ -37,6 +37,8 @@ export type RegistryManifestSummary = {
 };
 
 export type RegistryToolListing = {
+  listing_id?: string;
+  status?: string;
   tool_name: string;
   display_name?: string;
   description?: string;
@@ -45,7 +47,8 @@ export type RegistryToolListing = {
   publisher_id?: string;
   version?: string;
   author?: string;
-  manifest?: RegistryManifestSummary | null;
+  manifest?: RegistryManifestSummary | RegistryPayload | null;
+  metadata?: RegistryPayload;
 };
 
 export type RegistryToolCatalogResponse = RegistryErrorResponse & {
@@ -119,7 +122,14 @@ export type ReviewQueueItem = {
 };
 
 export type ReviewQueueResponse = RegistryErrorResponse & {
+  counts?: Record<string, number>;
   sections?: Record<string, ReviewQueueItem[]>;
+};
+
+export type MyListingsResponse = RegistryErrorResponse & {
+  count?: number;
+  tools?: RegistryToolListing[];
+  generated_at?: string;
 };
 
 export type RegistryHealthResponse = RegistryErrorResponse & {
@@ -583,6 +593,33 @@ export async function getToolDetail(toolName: string): Promise<RegistryToolListi
   return parseJson<RegistryToolListing | RegistryErrorResponse>(response);
 }
 
+export type ToolVersionItem = {
+  version: string;
+  published_at?: string;
+  changelog?: string;
+  yanked?: boolean;
+  yank_reason?: string;
+  manifest_digest?: string;
+  attestation_id?: string;
+};
+
+export type ToolVersionsResponse = RegistryErrorResponse & {
+  tool_name?: string;
+  listing_id?: string;
+  current_version?: string;
+  status?: string;
+  version_count?: number;
+  versions?: ToolVersionItem[];
+  generated_at?: string;
+};
+
+export async function getToolVersions(toolName: string): Promise<ToolVersionsResponse | null> {
+  const response = await backendFetch(
+    `/registry/tools/${encodeURIComponent(toolName)}/versions`,
+  );
+  return parseJson<ToolVersionsResponse>(response);
+}
+
 export async function getInstallRecipes(toolName: string): Promise<InstallRecipesResponse | null> {
   const response = await backendFetch(`/registry/install/${encodeURIComponent(toolName)}`);
   return parseJson<InstallRecipesResponse>(response);
@@ -605,17 +642,73 @@ export async function getReviewQueue(): Promise<ReviewQueueResponse | null> {
   return parseJson<ReviewQueueResponse>(response);
 }
 
+export async function getMyListings(): Promise<MyListingsResponse | null> {
+  const response = await backendFetch("/registry/me/listings");
+  return parseJson<MyListingsResponse>(response);
+}
+
+/** Publish console: publishers and admins only (reviewers use moderation, not this flow). */
+export function sessionMayUsePublishConsole(
+  authEnabled: boolean,
+  role: string | null | undefined,
+): boolean {
+  if (!authEnabled) {
+    return true;
+  }
+  return role === "publisher";
+}
+
 export async function requirePublisherRole(): Promise<{ allowed: boolean; role: string | null }> {
-  const session = await getRegistrySession();
-  const role = session?.session?.role ?? null;
-  const allowed = role === "publisher" || role === "reviewer" || role === "admin";
+  const payload = await getRegistrySession();
+  if (!payload) {
+    return { allowed: false, role: null };
+  }
+  if (payload.auth_enabled === false) {
+    return { allowed: true, role: null };
+  }
+  const role = payload.session?.role ?? null;
+  const allowed = sessionMayUsePublishConsole(true, role);
   return { allowed, role };
 }
 
 export async function requirePolicyRole(): Promise<{ allowed: boolean; role: string | null }> {
-  const session = await getRegistrySession();
-  const role = session?.session?.role ?? null;
+  const payload = await getRegistrySession();
+  if (!payload) {
+    return { allowed: false, role: null };
+  }
+  if (payload.auth_enabled === false) {
+    return { allowed: true, role: null };
+  }
+  const role = payload.session?.role ?? null;
   const allowed = role === "reviewer" || role === "admin";
+  return { allowed, role };
+}
+
+/** Moderation queue, provenance ledger, and similar governance surfaces. */
+export async function requireReviewerRole(): Promise<{ allowed: boolean; role: string | null }> {
+  const payload = await getRegistrySession();
+  if (!payload) {
+    return { allowed: false, role: null };
+  }
+  if (payload.auth_enabled === false) {
+    return { allowed: true, role: null };
+  }
+  const role = payload.session?.role ?? null;
+  const allowed = role === "reviewer" || role === "admin";
+  return { allowed, role };
+}
+
+/** Contracts broker, federated consent, reflexive core (platform operations). */
+export async function requireAdminRole(): Promise<{ allowed: boolean; role: string | null }> {
+  const payload = await getRegistrySession();
+  if (!payload) {
+    return { allowed: false, role: null };
+  }
+  if (payload.auth_enabled === false) {
+    return { allowed: true, role: null };
+  }
+  const role = payload.session?.role ?? null;
+  const allowed = role === "admin";
   return { allowed, role };
 }
 

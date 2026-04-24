@@ -1,6 +1,7 @@
 "use client";
 
 import { StatusBadge } from "./StatusBadge";
+import { Box, Typography } from "@mui/material";
 
 export function TimelineItem({
   timestamp,
@@ -22,16 +23,32 @@ export function TimelineItem({
   })();
 
   return (
-    <div className="relative border-l-2 border-[--app-border] py-2 pl-4">
-      <div className="absolute -left-[5px] top-3 h-2 w-2 rounded-full bg-[--app-accent]" />
-      <div className="flex items-center gap-2">
-        <p className="text-[12px] font-medium text-[--app-fg]">{title}</p>
+    <Box sx={{ position: "relative", borderLeft: "2px solid var(--app-border)", py: 1, pl: 2 }}>
+      <Box
+        sx={{
+          position: "absolute",
+          left: -5,
+          top: 12,
+          width: 8,
+          height: 8,
+          borderRadius: 999,
+          bgcolor: "var(--app-accent)",
+        }}
+      />
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+        <Typography sx={{ fontSize: 13, fontWeight: 700, color: "var(--app-fg)" }}>
+          {title}
+        </Typography>
         {status ? <StatusBadge status={status} /> : null}
-      </div>
+      </Box>
       {detail ? (
-        <p className="mt-0.5 text-[11px] text-[--app-muted]">{detail}</p>
+        <Typography sx={{ mt: 0.5, fontSize: 12, color: "var(--app-muted)" }}>
+          {detail}
+        </Typography>
       ) : null}
-      <p className="mt-0.5 text-[10px] text-[--app-muted]">{timeStr}</p>
-    </div>
+      <Typography sx={{ mt: 0.5, fontSize: 11, color: "var(--app-muted)" }}>
+        {timeStr}
+      </Typography>
+    </Box>
   );
 }

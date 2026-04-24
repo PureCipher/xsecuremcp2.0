@@ -8,6 +8,13 @@ export function LoginForm() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  function homeForRole(role: string | undefined): string {
+    if (role === "publisher") return "/registry/publish/mine";
+    if (role === "reviewer") return "/registry/review";
+    if (role === "admin") return "/registry/app";
+    return "/registry/app";
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -38,7 +45,10 @@ export function LoginForm() {
         return;
       }
 
-      router.push("/registry/app");
+      const payload = (await response.json().catch(() => null)) as
+        | { session?: { role?: string } }
+        | null;
+      router.push(homeForRole(payload?.session?.role));
     } catch (err) {
       console.error("Login error", err);
       setError("Unable to reach the registry. Try again.");

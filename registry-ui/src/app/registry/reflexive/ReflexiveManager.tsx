@@ -2,6 +2,20 @@
 
 import { useState } from "react";
 import {
+  Alert,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Chip,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
+  TextField,
+  Typography,
+} from "@mui/material";
+import {
   StatusBadge,
   MetricCard,
   KeyValuePanel,
@@ -71,19 +85,19 @@ interface ReflexiveManagerProps {
 }
 
 const SEVERITY_COLORS = {
-  info: "bg-[--app-accent] text-[--app-accent-contrast]",
-  low: "bg-sky-600/60 text-sky-50",
-  medium: "bg-amber-600/60 text-amber-50",
-  high: "bg-orange-600/60 text-orange-50",
-  critical: "bg-red-600/60 text-red-50",
+  info: { bgcolor: "var(--app-accent)", color: "var(--app-accent-contrast)" },
+  low: { bgcolor: "rgba(2, 132, 199, 0.55)", color: "#E0F2FE" },
+  medium: { bgcolor: "rgba(217, 119, 6, 0.60)", color: "#FFFBEB" },
+  high: { bgcolor: "rgba(234, 88, 12, 0.65)", color: "#FFF7ED" },
+  critical: { bgcolor: "rgba(220, 38, 38, 0.70)", color: "#FEF2F2" },
 };
 
 const SEVERITY_BAR_COLORS = {
-  info: "bg-[--app-accent]",
-  low: "bg-sky-500",
-  medium: "bg-amber-500",
-  high: "bg-orange-500",
-  critical: "bg-red-500",
+  info: "var(--app-accent)",
+  low: "rgb(14, 165, 233)",
+  medium: "rgb(245, 158, 11)",
+  high: "rgb(249, 115, 22)",
+  critical: "rgb(239, 68, 68)",
 };
 
 export function ReflexiveManager({
@@ -205,44 +219,85 @@ export function ReflexiveManager({
     driftData?: IntrospectionResult["drift_summary"]
   ) => {
     if (!driftData || Object.keys(driftData).length === 0) {
-      return <p className="text-[12px] text-[--app-muted]">No drift detected</p>;
+      return (
+        <Typography sx={{ fontSize: 13, color: "var(--app-muted)" }}>
+          No drift detected
+        </Typography>
+      );
     }
 
     const total = Object.values(driftData).reduce((a, b) => a + (b || 0), 0);
 
     if (total === 0) {
-      return <p className="text-[12px] text-[--app-muted]">No drift detected</p>;
+      return (
+        <Typography sx={{ fontSize: 13, color: "var(--app-muted)" }}>
+          No drift detected
+        </Typography>
+      );
     }
 
     const severities = ["critical", "high", "medium", "low", "info"] as const;
     const maxCount = Math.max(...Object.values(driftData));
 
     return (
-      <div className="space-y-2">
+      <Box sx={{ display: "grid", gap: 1 }}>
         {severities.map((severity) => {
           const count = driftData[severity] || 0;
           const percentage = (count / maxCount) * 100;
 
           return (
-            <div key={severity} className="flex items-center gap-3">
-              <span className="w-16 text-[11px] font-medium capitalize text-[--app-muted]">
+            <Box
+              key={severity}
+              sx={{ display: "flex", alignItems: "center", gap: 1.5 }}
+            >
+              <Typography
+                sx={{
+                  width: 84,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  textTransform: "capitalize",
+                  color: "var(--app-muted)",
+                }}
+              >
                 {severity}
-              </span>
-              <div className="flex-1 rounded-full bg-[--app-control-bg] h-6 overflow-hidden ring-1 ring-[--app-surface-ring]">
-                {percentage > 0 && (
-                  <div
-                    className={`h-full transition-all ${SEVERITY_BAR_COLORS[severity]}`}
-                    style={{ width: `${percentage}%` }}
+              </Typography>
+
+              <Box
+                sx={{
+                  flex: 1,
+                  height: 12,
+                  borderRadius: 999,
+                  bgcolor: "var(--app-control-bg)",
+                  border: "1px solid var(--app-border)",
+                  overflow: "hidden",
+                }}
+              >
+                {percentage > 0 ? (
+                  <Box
+                    sx={{
+                      height: "100%",
+                      width: `${percentage}%`,
+                      bgcolor: SEVERITY_BAR_COLORS[severity],
+                      transition: "width 160ms ease",
+                    }}
                   />
-                )}
-              </div>
-              <span className="w-8 text-right text-[11px] text-[--app-muted]">
+                ) : null}
+              </Box>
+
+              <Typography
+                sx={{
+                  width: 28,
+                  textAlign: "right",
+                  fontSize: 12,
+                  color: "var(--app-muted)",
+                }}
+              >
                 {count}
-              </span>
-            </div>
+              </Typography>
+            </Box>
           );
         })}
-      </div>
+      </Box>
     );
   };
 
@@ -257,60 +312,73 @@ export function ReflexiveManager({
     };
 
     return (
-      <span
+      <Chip
         key={constraint}
-        className="inline-flex items-center gap-1.5 rounded-full bg-[--app-control-bg] px-2.5 py-1 text-[11px] font-medium text-[--app-muted] ring-1 ring-[--app-surface-ring]"
-      >
-        {labels[constraint] || constraint}
-      </span>
+        label={labels[constraint] || constraint}
+        size="small"
+        sx={{
+          borderRadius: 999,
+          bgcolor: "var(--app-control-bg)",
+          border: "1px solid var(--app-border)",
+          color: "var(--app-muted)",
+          fontWeight: 700,
+        }}
+      />
     );
   };
 
   // Introspection tab content
   const renderIntrospectionTab = () => (
-    <div className="space-y-4">
-      <div className="flex gap-2">
-        <input
-          type="text"
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap" }}>
+        <TextField
+          fullWidth
+          size="small"
+          label="Actor ID"
           placeholder="actor_id (e.g., agent-123, user-456)"
           value={introspectActorId}
           onChange={(e) => setIntrospectActorId(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleIntrospect()}
-          className="flex-1 rounded-xl bg-[--app-chrome-bg] px-3 py-2 text-[12px] text-[--app-fg] ring-1 ring-[--app-border] focus:ring-2 focus:ring-[--app-accent] focus:outline-none"
+          sx={{ flex: 1, minWidth: 260 }}
         />
-        <button
+        <Button
           onClick={handleIntrospect}
           disabled={introspectionLoading}
-          className="rounded-full bg-[--app-accent] px-4 py-1.5 text-[11px] font-semibold text-[--app-accent-contrast] transition hover:opacity-90 disabled:opacity-50"
+          variant="contained"
+          sx={{
+            borderRadius: 999,
+            bgcolor: "var(--app-accent)",
+            color: "var(--app-accent-contrast)",
+            px: 3,
+            "&:hover": { bgcolor: "var(--app-accent)" },
+          }}
         >
           {introspectionLoading ? "Loading..." : "Inspect"}
-        </button>
-      </div>
+        </Button>
+      </Box>
 
-      {introspectionError && (
-        <div className="rounded-3xl bg-red-950/40 p-4 ring-1 ring-red-700/60">
-          <p className="text-[12px] text-red-100">{introspectionError}</p>
-        </div>
-      )}
+      {introspectionError ? <Alert severity="error">{introspectionError}</Alert> : null}
 
       {introspectionLoading && <LoadingState message="Introspecting actor..." />}
 
       {introspectionResult && (
-        <div className="space-y-4">
-          <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
-            <div className="flex items-center gap-4">
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+            <CardContent sx={{ p: 2.5 }}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
               <ThreatGauge
                 level={introspectionResult.threat_level}
                 score={introspectionResult.threat_score}
               />
-              <div className="space-y-2">
+              <Box sx={{ display: "grid", gap: 1 }}>
                 <StatusBadge
                   status={introspectionResult.compliance_status}
                 />
                 <StatusBadge status={introspectionResult.verdict} />
-              </div>
-            </div>
-          </div>
+              </Box>
+              </Box>
+            </CardContent>
+          </Card>
 
           <KeyValuePanel
             title="Introspection Details"
@@ -325,148 +393,155 @@ export function ReflexiveManager({
           />
 
           {introspectionResult.drift_summary && (
-            <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
-              <h3 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted] mb-3">
+            <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+              <CardContent sx={{ p: 2.5 }}>
+              <Typography sx={{ mb: 1.5, fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
                 Drift Summary
-              </h3>
+              </Typography>
               {renderDriftSummary(introspectionResult.drift_summary)}
-            </div>
+              </CardContent>
+            </Card>
           )}
 
           {introspectionResult.active_escalations &&
             introspectionResult.active_escalations.length > 0 && (
-              <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
-                <h3 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted] mb-3">
+              <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+                <CardContent sx={{ p: 2.5 }}>
+                <Typography sx={{ mb: 1.5, fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
                   Active Escalations
-                </h3>
-                <div className="space-y-2">
+                </Typography>
+                <Box sx={{ display: "grid", gap: 1 }}>
                   {introspectionResult.active_escalations.map((esc, i) => (
                     <StatusBadge key={i} status={esc} />
                   ))}
-                </div>
-              </div>
+                </Box>
+                </CardContent>
+              </Card>
             )}
 
           {introspectionResult.active_constraints &&
             introspectionResult.active_constraints.length > 0 && (
-              <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
-                <h3 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted] mb-3">
+              <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+                <CardContent sx={{ p: 2.5 }}>
+                <Typography sx={{ mb: 1.5, fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
                   Active Constraints
-                </h3>
-                <div className="flex flex-wrap gap-2">
+                </Typography>
+                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
                   {introspectionResult.active_constraints.map((constraint) =>
                     renderConstraintBadge(constraint)
                   )}
-                </div>
-              </div>
+                </Box>
+                </CardContent>
+              </Card>
             )}
 
           <JsonViewer
             title="Raw Introspection Data"
             data={introspectionResult}
           />
-        </div>
+        </Box>
       )}
 
       {!introspectionLoading && !introspectionResult && !introspectionError && (
         <EmptyState title="No Actor Introspected" message="Enter an actor ID and click Inspect to view detailed behavior analysis." />
       )}
-    </div>
+    </Box>
   );
 
   // Verdicts tab content
   const renderVerdictsTab = () => (
-    <div className="space-y-4">
-      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
-        <h3 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted] mb-3">
-          Check Execution Verdict
-        </h3>
-        <div className="space-y-3">
-          <div>
-            <label className="block text-[11px] font-medium text-[--app-muted] mb-1">
-              Actor ID
-            </label>
-            <input
-              type="text"
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+        <CardContent sx={{ p: 2.5 }}>
+          <Typography sx={{ mb: 1.5, fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+            Check Execution Verdict
+          </Typography>
+
+          <Box sx={{ display: "grid", gap: 2 }}>
+            <TextField
+              label="Actor ID"
+              size="small"
               placeholder="e.g., agent-123"
               value={verdictActorId}
               onChange={(e) => setVerdictActorId(e.target.value)}
-              className="w-full rounded-xl bg-[--app-chrome-bg] px-3 py-2 text-[12px] text-[--app-fg] ring-1 ring-[--app-border] focus:ring-2 focus:ring-[--app-accent] focus:outline-none"
             />
-          </div>
 
-          <div>
-            <label className="block text-[11px] font-medium text-[--app-muted] mb-1">
-              Operation
-            </label>
-            <select
-              value={verdictOperation}
-              onChange={(e) => setVerdictOperation(e.target.value)}
-              className="w-full rounded-xl bg-[--app-chrome-bg] px-3 py-2 text-[12px] text-[--app-fg] ring-1 ring-[--app-border] focus:ring-2 focus:ring-[--app-accent] focus:outline-none"
-            >
-              <option value="call_tool">Call Tool</option>
-              <option value="read_resource">Read Resource</option>
-              <option value="get_prompt">Get Prompt</option>
-            </select>
-          </div>
+            <FormControl size="small">
+              <InputLabel id="verdict-operation-label">Operation</InputLabel>
+              <Select
+                labelId="verdict-operation-label"
+                label="Operation"
+                value={verdictOperation}
+                onChange={(e) => setVerdictOperation(String(e.target.value))}
+              >
+                <MenuItem value="call_tool">Call Tool</MenuItem>
+                <MenuItem value="read_resource">Read Resource</MenuItem>
+                <MenuItem value="get_prompt">Get Prompt</MenuItem>
+              </Select>
+            </FormControl>
 
-          <div>
-            <label className="block text-[11px] font-medium text-[--app-muted] mb-1">
-              Resource ID (optional)
-            </label>
-            <input
-              type="text"
+            <TextField
+              label="Resource ID (optional)"
+              size="small"
               placeholder="e.g., resource-456"
               value={verdictResourceId}
               onChange={(e) => setVerdictResourceId(e.target.value)}
-              className="w-full rounded-xl bg-[--app-chrome-bg] px-3 py-2 text-[12px] text-[--app-fg] ring-1 ring-[--app-border] focus:ring-2 focus:ring-[--app-accent] focus:outline-none"
             />
-          </div>
 
-          <button
-            onClick={handleCheckVerdict}
-            disabled={verdictLoading}
-            className="w-full rounded-full bg-[--app-accent] px-4 py-2 text-[11px] font-semibold text-[--app-accent-contrast] transition hover:opacity-90 disabled:opacity-50"
-          >
-            {verdictLoading ? "Checking..." : "Check Verdict"}
-          </button>
-        </div>
-      </div>
+            <Button
+              onClick={handleCheckVerdict}
+              disabled={verdictLoading}
+              variant="contained"
+              sx={{
+                borderRadius: 999,
+                bgcolor: "var(--app-accent)",
+                color: "var(--app-accent-contrast)",
+                "&:hover": { bgcolor: "var(--app-accent)" },
+              }}
+            >
+              {verdictLoading ? "Checking..." : "Check Verdict"}
+            </Button>
+          </Box>
+        </CardContent>
+      </Card>
 
-      {verdictError && (
-        <div className="rounded-3xl bg-red-950/40 p-4 ring-1 ring-red-700/60">
-          <p className="text-[12px] text-red-100">{verdictError}</p>
-        </div>
-      )}
+      {verdictError ? <Alert severity="error">{verdictError}</Alert> : null}
 
       {verdictLoading && <LoadingState message="Checking verdict..." />}
 
       {verdictResult && (
-        <div className="space-y-4">
-          <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-6 ring-1 ring-[--app-surface-ring] text-center">
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[--app-muted] mb-3">
-              Verdict
-            </p>
-            <div
-              className={`inline-block rounded-full px-6 py-3 text-sm font-bold ${
-                verdictResult.verdict === "PROCEED"
-                  ? "bg-[--app-accent] text-[--app-accent-contrast]"
-                  : verdictResult.verdict === "THROTTLE"
-                    ? "bg-amber-600/80 text-amber-50"
-                    : verdictResult.verdict === "REQUIRE_CONFIRMATION"
-                      ? "bg-orange-600/80 text-orange-50"
-                      : "bg-red-600/80 text-red-50"
-              }`}
-            >
-              {verdictResult.verdict}
-            </div>
-            <p className="mt-4 text-[12px] text-[--app-muted]">
-              {verdictResult.explanation}
-            </p>
-            <p className="mt-2 text-[11px] text-[--app-muted]">
-              Confidence: {(verdictResult.confidence * 100).toFixed(1)}%
-            </p>
-          </div>
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+            <CardContent sx={{ p: 3, textAlign: "center" }}>
+              <Typography sx={{ mb: 2, fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                Verdict
+              </Typography>
+              <Chip
+                label={verdictResult.verdict}
+                sx={{
+                  borderRadius: 999,
+                  px: 1,
+                  py: 2,
+                  fontWeight: 900,
+                  ...(SEVERITY_COLORS[
+                    verdictResult.verdict === "PROCEED"
+                      ? "info"
+                      : verdictResult.verdict === "THROTTLE"
+                        ? "medium"
+                        : verdictResult.verdict === "REQUIRE_CONFIRMATION"
+                          ? "high"
+                          : "critical"
+                  ] as { bgcolor: string; color: string }),
+                }}
+              />
+              <Typography sx={{ mt: 2, fontSize: 13, color: "var(--app-muted)" }}>
+                {verdictResult.explanation}
+              </Typography>
+              <Typography sx={{ mt: 1, fontSize: 12, color: "var(--app-muted)" }}>
+                Confidence: {(verdictResult.confidence * 100).toFixed(1)}%
+              </Typography>
+            </CardContent>
+          </Card>
 
           <KeyValuePanel
             title="Verdict Details"
@@ -479,13 +554,13 @@ export function ReflexiveManager({
           />
 
           <JsonViewer title="Raw Verdict Data" data={verdictResult} />
-        </div>
+        </Box>
       )}
 
       {!verdictLoading && !verdictResult && !verdictError && (
         <EmptyState title="No Verdict Checked" message="Fill in the form and click Check Verdict to evaluate execution permissions." />
       )}
-    </div>
+    </Box>
   );
 
   // Accountability tab content
@@ -507,88 +582,58 @@ export function ReflexiveManager({
   ];
 
   const renderAccountabilityTab = () => (
-    <div className="space-y-4">
-      <input
-        type="text"
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      <TextField
+        size="small"
+        label="Filter by actor ID"
         placeholder="Filter by actor ID..."
         value={accountabilityFilter}
         onChange={(e) => setAccountabilityFilter(e.target.value)}
-        className="w-full rounded-xl bg-[--app-chrome-bg] px-3 py-2 text-[12px] text-[--app-fg] ring-1 ring-[--app-border] focus:ring-2 focus:ring-[--app-accent] focus:outline-none"
       />
 
       {filteredAccountability.length === 0 ? (
         <EmptyState title="No Log Entries" message="No accountability log entries to display." />
       ) : (
-        <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] ring-1 ring-[--app-surface-ring] overflow-hidden">
-          <table className="w-full text-[11px]">
-            <thead>
-              <tr className="border-b border-[--app-border] bg-[--app-hover-bg]">
-                {accountabilityColumns.map((col) => (
-                  <th
-                    key={col.key}
-                    className="px-4 py-2 text-left font-semibold text-[--app-muted]"
-                  >
-                    {col.header}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filteredAccountability.map((entry, idx) => (
-                <tr key={idx}>
-                  <td
-                    colSpan={accountabilityColumns.length}
-                    className="border-b border-[--app-border]"
-                  >
-                    <button
-                      onClick={() =>
-                        setExpandedAccountabilityRow(
-                          expandedAccountabilityRow === idx ? null : idx
-                        )
-                      }
-                      className="w-full text-left px-4 py-2 hover:bg-[--app-hover-bg] transition"
-                    >
-                      <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(6, 1fr)" }}>
-                        {accountabilityColumns.map((col) => {
-                          let cellContent: React.ReactNode = String(entry[col.key]);
-
-                          if (
-                            col.key === "threat_level" ||
-                            col.key === "compliance_status" ||
-                            col.key === "verdict"
-                          ) {
-                            cellContent = (
-                              <StatusBadge
-                                status={String(entry[col.key])}
-                              />
-                            );
-                          }
-
-                          return (
-                            <span
-                              key={col.key}
-                              className="text-[--app-muted] truncate"
-                            >
-                              {cellContent}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    </button>
-
-                    {expandedAccountabilityRow === idx && (
-                      <div className="border-t border-[--app-border] bg-[--app-control-bg] px-4 py-3">
-                        <JsonViewer title="Full Entry" data={entry} />
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          data={filteredAccountability}
+          columns={[
+            ...accountabilityColumns,
+            {
+              key: "details",
+              header: "Details",
+              render: (row) => (
+                <Button
+                  size="small"
+                  variant="text"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const idx = filteredAccountability.indexOf(row);
+                    setExpandedAccountabilityRow(expandedAccountabilityRow === idx ? null : idx);
+                  }}
+                  sx={{ color: "var(--app-muted)" }}
+                >
+                  {expandedAccountabilityRow === filteredAccountability.indexOf(row) ? "Hide" : "View"}
+                </Button>
+              ),
+            } as Column<AccountabilityEntry>,
+          ]}
+          onRowClick={(row) => {
+            const idx = filteredAccountability.indexOf(row);
+            setExpandedAccountabilityRow(expandedAccountabilityRow === idx ? null : idx);
+          }}
+          emptyMessage="No accountability log entries to display."
+          pageSize={8}
+        />
       )}
-    </div>
+
+      {expandedAccountabilityRow !== null && filteredAccountability[expandedAccountabilityRow] ? (
+        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}>
+          <CardContent sx={{ p: 2.5 }}>
+            <JsonViewer title="Full Entry" data={filteredAccountability[expandedAccountabilityRow]} />
+          </CardContent>
+        </Card>
+      ) : null}
+    </Box>
   );
 
   // Health tab content
@@ -601,54 +646,63 @@ export function ReflexiveManager({
     const overallStatus = initialHealth.overall_status;
 
     return (
-      <div className="space-y-4">
-        <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
-          <div className="space-y-3">
-            <div>
-              <p className="text-[11px] font-medium text-[--app-muted] mb-1">
+      <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <Card
+          variant="outlined"
+          sx={{
+            borderRadius: 4,
+            borderColor: "var(--app-border)",
+            bgcolor: "var(--app-surface)",
+            boxShadow: "none",
+          }}
+        >
+          <CardContent sx={{ p: 2.5, display: "grid", gap: 2 }}>
+            <Box>
+              <Typography sx={{ fontSize: 12, fontWeight: 700, color: "var(--app-muted)" }}>
                 Overall Status
-              </p>
-              <StatusBadge status={overallStatus} />
-            </div>
-            <div>
-              <p className="text-[11px] font-medium text-[--app-muted] mb-1">
+              </Typography>
+              <Box sx={{ mt: 0.75 }}>
+                <StatusBadge status={overallStatus} />
+              </Box>
+            </Box>
+
+            <Box>
+              <Typography sx={{ fontSize: 12, fontWeight: 700, color: "var(--app-muted)" }}>
                 Components Configured
-              </p>
-              <p className="text-[12px] text-[--app-muted]">
+              </Typography>
+              <Typography sx={{ mt: 0.75, fontSize: 13, color: "var(--app-muted)" }}>
                 {initialHealth.component_count}
-              </p>
-            </div>
-            {initialHealth.timestamp && (
-              <div>
-                <p className="text-[11px] font-medium text-[--app-muted] mb-1">
+              </Typography>
+            </Box>
+
+            {initialHealth.timestamp ? (
+              <Box>
+                <Typography sx={{ fontSize: 12, fontWeight: 700, color: "var(--app-muted)" }}>
                   Last Updated
-                </p>
-                <p className="text-[12px] text-[--app-muted]">
+                </Typography>
+                <Typography sx={{ mt: 0.75, fontSize: 13, color: "var(--app-muted)" }}>
                   {new Date(initialHealth.timestamp).toLocaleString()}
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
+                </Typography>
+              </Box>
+            ) : null}
+          </CardContent>
+        </Card>
 
         {components.length === 0 ? (
           <EmptyState title="No Components" message="No health components available." />
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" } }}>
             {components.map((component, idx) => (
               <MetricCard
                 key={idx}
                 label={component.name}
-                value={
-                  component.status === "ok"
-                    ? "✓ Operational"
-                    : "⚠ Not Configured"
-                }
+                value={component.status === "ok" ? "✓ Operational" : "⚠ Not Configured"}
+                accent={component.status === "ok"}
               />
             ))}
-          </div>
+          </Box>
         )}
-      </div>
+      </Box>
     );
   };
 
@@ -660,19 +714,21 @@ export function ReflexiveManager({
   ];
 
   return (
-    <div className="space-y-4">
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
       <TabBar
         tabs={tabs}
         activeTab={activeTab}
         onTabChange={setActiveTab}
       />
 
-      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-6 ring-1 ring-[--app-surface-ring]">
+      <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+        <CardContent sx={{ p: 3 }}>
         {activeTab === "introspection" && renderIntrospectionTab()}
         {activeTab === "verdicts" && renderVerdictsTab()}
         {activeTab === "accountability" && renderAccountabilityTab()}
         {activeTab === "health" && renderHealthTab()}
-      </div>
-    </div>
+        </CardContent>
+      </Card>
+    </Box>
   );
 }

@@ -9,51 +9,24 @@ import {
   type KeyboardEvent,
   type UIEvent,
 } from "react";
+import { Box, Chip } from "@mui/material";
 
 // ── Lightweight JSON syntax highlighter ──────────────────────────────
-// Tokenizes JSON text and wraps each token in a <span> with a color class.
+// Tokenizes JSON text and wraps each token in a <span> with inline styles.
 // No external dependencies — just regex-based token matching.
 
 export function highlightJson(text: string): string {
-  // Escape HTML entities first
-  const escaped = text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  const escaped = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-  // Tokenize and colorize
   return escaped
-    // Strings (keys and values)
-    .replace(
-      /("(?:[^"\\]|\\.)*")\s*:/g,
-      '<span class="text-[--app-muted]">$1</span>:',
-    )
-    .replace(
-      /:\s*("(?:[^"\\]|\\.)*")/g,
-      ': <span class="text-amber-300">$1</span>',
-    )
-    // Standalone strings (in arrays, etc.)
-    .replace(
-      /(?<=[[,\s])("(?:[^"\\]|\\.)*")(?=[,\]\s])/g,
-      '<span class="text-amber-300">$1</span>',
-    )
-    // Numbers
-    .replace(
-      /\b(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\b/g,
-      '<span class="text-sky-300">$1</span>',
-    )
-    // Booleans and null
-    .replace(
-      /\b(true|false|null)\b/g,
-      '<span class="text-violet-300">$1</span>',
-    );
+    .replace(/("(?:[^"\\]|\\.)*")\s*:/g, '<span style="color: var(--app-muted);">$1</span>:')
+    .replace(/:\s*("(?:[^"\\]|\\.)*")/g, ': <span style="color: rgb(253, 230, 138);">$1</span>')
+    .replace(/(?<=[[,\s])("(?:[^"\\]|\\.)*")(?=[,\]\s])/g, '<span style="color: rgb(253, 230, 138);">$1</span>')
+    .replace(/\b(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\b/g, '<span style="color: rgb(125, 211, 252);">$1</span>')
+    .replace(/\b(true|false|null)\b/g, '<span style="color: rgb(196, 181, 253);">$1</span>');
 }
 
-// ── Validation ───────────────────────────────────────────────────────
-
-type ValidationResult =
-  | { valid: true }
-  | { valid: false; message: string; position?: number };
+type ValidationResult = { valid: true } | { valid: false; message: string; position?: number };
 
 function validateJson(text: string): ValidationResult {
   if (!text.trim()) return { valid: true };
@@ -62,7 +35,6 @@ function validateJson(text: string): ValidationResult {
     return { valid: true };
   } catch (error) {
     if (error instanceof SyntaxError) {
-      // Try to extract position from the error message
       const posMatch = error.message.match(/position\s+(\d+)/i);
       return {
         valid: false,
@@ -74,14 +46,11 @@ function validateJson(text: string): ValidationResult {
   }
 }
 
-// ── Component ────────────────────────────────────────────────────────
-
 type JsonEditorProps = {
   value: string;
   onChange: (value: string) => void;
   minHeight?: string;
   placeholder?: string;
-  /** Hide the validation bar (e.g. for non-JSON textareas) */
   hideValidation?: boolean;
 };
 
@@ -96,7 +65,6 @@ export function JsonEditor({
   const preRef = useRef<HTMLPreElement>(null);
   const [isFocused, setIsFocused] = useState(false);
 
-  // Sync scroll between textarea and highlighted pre
   const handleScroll = useCallback((event: UIEvent<HTMLTextAreaElement>) => {
     if (preRef.current) {
       preRef.current.scrollTop = event.currentTarget.scrollTop;
@@ -104,7 +72,6 @@ export function JsonEditor({
     }
   }, []);
 
-  // Auto-indent on Enter and handle Tab
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
       const target = event.currentTarget;
@@ -113,10 +80,8 @@ export function JsonEditor({
         event.preventDefault();
         const start = target.selectionStart;
         const end = target.selectionEnd;
-        const newValue =
-          value.slice(0, start) + "  " + value.slice(end);
+        const newValue = value.slice(0, start) + "  " + value.slice(end);
         onChange(newValue);
-        // Restore cursor position after React re-render
         requestAnimationFrame(() => {
           target.selectionStart = start + 2;
           target.selectionEnd = start + 2;
@@ -129,13 +94,10 @@ export function JsonEditor({
         const line = value.slice(lineStart, start);
         const indent = line.match(/^(\s*)/)?.[1] ?? "";
         const charBefore = value[start - 1];
-
-        // Add extra indent after { or [
         const extra = charBefore === "{" || charBefore === "[" ? "  " : "";
 
         event.preventDefault();
-        const newValue =
-          value.slice(0, start) + "\n" + indent + extra + value.slice(start);
+        const newValue = value.slice(0, start) + "\n" + indent + extra + value.slice(start);
         onChange(newValue);
         requestAnimationFrame(() => {
           const pos = start + 1 + indent.length + extra.length;
@@ -147,13 +109,9 @@ export function JsonEditor({
     [value, onChange],
   );
 
-  // Highlighted HTML
   const highlighted = useMemo(() => highlightJson(value), [value]);
-
-  // Validation result
   const validation = useMemo(() => validateJson(value), [value]);
 
-  // Keep scroll in sync on value changes
   useEffect(() => {
     if (textareaRef.current && preRef.current) {
       preRef.current.scrollTop = textareaRef.current.scrollTop;
@@ -164,31 +122,53 @@ export function JsonEditor({
   const hasContent = value.trim().length > 0;
   const showValidation = !hideValidation && hasContent;
 
+  const borderColor =
+    isFocused
+      ? validation.valid || !hasContent
+        ? "var(--app-accent)"
+        : "rgba(251, 113, 133, 0.85)"
+      : validation.valid || !hasContent
+        ? "var(--app-border)"
+        : "rgba(244, 63, 94, 0.75)";
+
   return (
-    <div className="flex flex-col gap-1.5">
-      {/* Editor container */}
-      <div
-        className={`relative overflow-hidden rounded-2xl border transition ${
-          isFocused
-            ? validation.valid || !hasContent
-              ? "border-[--app-accent]"
-              : "border-rose-400"
-            : validation.valid || !hasContent
-              ? "border-[--app-border]"
-              : "border-rose-500/70"
-        } bg-[--app-chrome-bg]`}
-        style={{ minHeight }}
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+      <Box
+        sx={{
+          position: "relative",
+          overflow: "hidden",
+          borderRadius: 3,
+          border: "1px solid",
+          borderColor,
+          bgcolor: "var(--app-chrome-bg)",
+          minHeight,
+          transition: "border-color 120ms ease",
+        }}
       >
-        {/* Syntax-highlighted layer (behind) */}
-        <pre
+        <Box
+          component="pre"
           ref={preRef}
-          className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words px-4 py-3 font-mono text-xs leading-6 text-[--app-fg]"
           aria-hidden="true"
+          sx={{
+            pointerEvents: "none",
+            position: "absolute",
+            inset: 0,
+            overflow: "hidden",
+            whiteSpace: "pre-wrap",
+            overflowWrap: "anywhere",
+            px: 2,
+            py: 1.5,
+            fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+            fontSize: 12,
+            lineHeight: 1.8,
+            color: "var(--app-fg)",
+            m: 0,
+          }}
           dangerouslySetInnerHTML={{ __html: highlighted || "&nbsp;" }}
         />
 
-        {/* Textarea layer (on top, transparent text) */}
-        <textarea
+        <Box
+          component="textarea"
           ref={textareaRef}
           value={value}
           onChange={(event) => onChange(event.target.value)}
@@ -198,30 +178,43 @@ export function JsonEditor({
           onBlur={() => setIsFocused(false)}
           placeholder={placeholder}
           spellCheck={false}
-          className="relative w-full resize-y bg-transparent px-4 py-3 font-mono text-xs leading-6 text-transparent caret-[--app-fg] outline-none selection:bg-[--app-control-active-bg] selection:text-transparent placeholder:text-[--app-muted]"
-          style={{ minHeight }}
+          sx={{
+            position: "relative",
+            width: "100%",
+            resize: "vertical",
+            backgroundColor: "transparent",
+            px: 2,
+            py: 1.5,
+            fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+            fontSize: 12,
+            lineHeight: 1.8,
+            color: "transparent",
+            caretColor: "var(--app-fg)",
+            outline: "none",
+            border: "none",
+            minHeight,
+            "&::placeholder": { color: "var(--app-muted)", opacity: 1 },
+            "&::selection": { backgroundColor: "var(--app-control-active-bg)", color: "transparent" },
+          }}
         />
-      </div>
+      </Box>
 
-      {/* Validation bar */}
       {showValidation ? (
-        <div
-          className={`flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-medium ${
-            validation.valid
-              ? "bg-[--app-control-active-bg] text-[--app-muted]"
-              : "bg-rose-500/10 text-rose-200"
-          }`}
-        >
-          <span
-            className={`inline-block h-1.5 w-1.5 rounded-full ${
-              validation.valid ? "bg-[--app-accent]" : "bg-rose-400"
-            }`}
-          />
-          {validation.valid
-            ? "Valid JSON"
-            : validation.message}
-        </div>
+        <Chip
+          size="small"
+          label={validation.valid ? "Valid JSON" : validation.message}
+          sx={{
+            alignSelf: "flex-start",
+            borderRadius: 999,
+            fontSize: 11,
+            fontWeight: 700,
+            bgcolor: validation.valid ? "var(--app-control-active-bg)" : "rgba(244, 63, 94, 0.12)",
+            color: validation.valid ? "var(--app-muted)" : "rgb(254, 205, 211)",
+            border: "1px solid",
+            borderColor: validation.valid ? "var(--app-border)" : "rgba(251, 113, 133, 0.45)",
+          }}
+        />
       ) : null}
-    </div>
+    </Box>
   );
 }

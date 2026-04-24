@@ -23,6 +23,40 @@ async def _load_json_body(
         return default
 
 
+_GOVERNANCE_NOTIFICATION_AUDIENCES: tuple[str, ...] = ("reviewer", "admin")
+
+
+def _registry_notification_payload_ok(payload: dict[str, Any]) -> bool:
+    if payload.get("error"):
+        return False
+    status = payload.get("status")
+    return not (isinstance(status, int) and status >= 400)
+
+
+def _maybe_record_policy_notification(
+    registry: Any,
+    payload: dict[str, Any],
+    *,
+    event_kind: str,
+    title: str,
+    body: str,
+    link_path: str,
+    audiences: tuple[str, ...],
+) -> None:
+    if not _registry_notification_payload_ok(payload):
+        return
+    record = getattr(registry, "record_registry_notification", None)
+    if record is None:
+        return
+    record(
+        event_kind=event_kind,
+        title=title,
+        body=body,
+        link_path=link_path,
+        audiences=audiences,
+    )
+
+
 def _require_policy_access(
     registry: Any,
     request: Request,
@@ -117,6 +151,16 @@ def mount_registry_policy_routes(
             ),
             note=str(body.get("note", "")),
         )
+        actor = session.username if session is not None else "registry-admin"
+        _maybe_record_policy_notification(
+            registry,
+            payload,
+            event_kind="policy_pack_saved",
+            title="Policy pack saved",
+            body=f"{actor} saved or updated a policy pack in the library.",
+            link_path=f"{prefix}/policy",
+            audiences=_GOVERNANCE_NOTIFICATION_AUDIENCES,
+        )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
     @registry.custom_route(
@@ -129,6 +173,15 @@ def mount_registry_policy_routes(
             return error_response
         pack_id = str(request.path_params.get("pack_id", ""))
         payload = registry.delete_policy_pack(pack_id)
+        _maybe_record_policy_notification(
+            registry,
+            payload,
+            event_kind="policy_pack_deleted",
+            title="Policy pack removed",
+            body=f"Policy pack {pack_id!r} was deleted from the library.",
+            link_path=f"{prefix}/policy",
+            audiences=_GOVERNANCE_NOTIFICATION_AUDIENCES,
+        )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
     @registry.custom_route(
@@ -150,6 +203,16 @@ def mount_registry_policy_routes(
             if isinstance(body, dict)
             else "",
         )
+        actor = session.username if session is not None else "registry-admin"
+        _maybe_record_policy_notification(
+            registry,
+            payload,
+            event_kind="policy_bundle_staged",
+            title="Policy bundle staged",
+            body=f"{actor} staged bundle {bundle_id!r} toward deployment.",
+            link_path=f"{prefix}/policy",
+            audiences=_GOVERNANCE_NOTIFICATION_AUDIENCES,
+        )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
     @registry.custom_route(
@@ -170,6 +233,16 @@ def mount_registry_policy_routes(
             description=str(body.get("description", ""))
             if isinstance(body, dict)
             else "",
+        )
+        actor = session.username if session is not None else "registry-admin"
+        _maybe_record_policy_notification(
+            registry,
+            payload,
+            event_kind="policy_pack_staged",
+            title="Policy pack staged",
+            body=f"{actor} staged policy pack {str(pack_id)!r} toward deployment.",
+            link_path=f"{prefix}/policy",
+            audiences=_GOVERNANCE_NOTIFICATION_AUDIENCES,
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
@@ -207,6 +280,16 @@ def mount_registry_policy_routes(
                 else None
             ),
         )
+        actor = session.username if session is not None else "registry-admin"
+        _maybe_record_policy_notification(
+            registry,
+            payload,
+            event_kind="policy_environment_captured",
+            title="Policy environment captured",
+            body=f"{actor} captured a snapshot from environment {environment_id!r}.",
+            link_path=f"{prefix}/policy",
+            audiences=_GOVERNANCE_NOTIFICATION_AUDIENCES,
+        )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
     @registry.custom_route(f"{prefix}/policy/promotions", methods=["GET"])
@@ -234,6 +317,16 @@ def mount_registry_policy_routes(
             target_environment=str(body.get("target_environment", "")),
             author=session.username if session is not None else "registry-admin",
             description=str(body.get("description", "")),
+        )
+        actor = session.username if session is not None else "registry-admin"
+        _maybe_record_policy_notification(
+            registry,
+            payload,
+            event_kind="policy_promotion_staged",
+            title="Policy promotion staged",
+            body=f"{actor} staged a promotion between policy environments.",
+            link_path=f"{prefix}/policy",
+            audiences=_GOVERNANCE_NOTIFICATION_AUDIENCES,
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
@@ -283,6 +376,16 @@ def mount_registry_policy_routes(
             snapshot,
             description_prefix=description_prefix,
             author=session.username if session is not None else "registry-admin",
+        )
+        actor = session.username if session is not None else "registry-admin"
+        _maybe_record_policy_notification(
+            registry,
+            payload,
+            event_kind="policy_imported",
+            title="Policy snapshot imported",
+            body=f"{actor} imported a policy snapshot ({description_prefix}).",
+            link_path=f"{prefix}/policy",
+            audiences=_GOVERNANCE_NOTIFICATION_AUDIENCES,
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
@@ -366,6 +469,26 @@ def mount_registry_policy_routes(
             author=session.username if session is not None else "registry-admin",
             metadata=body.get("metadata") if isinstance(body.get("metadata"), dict) else None,
         )
+        actor = session.username if session is not None else "registry-admin"
+        proposal_obj = payload.get("proposal")
+        pid = ""
+        if isinstance(proposal_obj, dict):
+            pid = str(proposal_obj.get("proposal_id") or proposal_obj.get("id") or "")
+        summary = str(body.get("description", "")).strip()
+        if len(summary) > 160:
+            summary = summary[:157] + "…"
+        body_txt = f"{actor} opened governance proposal {pid or '(new)'}"
+        if summary:
+            body_txt = f"{body_txt}: {summary}"
+        _maybe_record_policy_notification(
+            registry,
+            payload,
+            event_kind="policy_proposal_created",
+            title="Policy proposal created",
+            body=body_txt,
+            link_path=f"{prefix}/policy",
+            audiences=_GOVERNANCE_NOTIFICATION_AUDIENCES,
+        )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
     @registry.custom_route(
@@ -397,6 +520,16 @@ def mount_registry_policy_routes(
             approver=session.username if session is not None else "registry-admin",
             note=str(body.get("note", body.get("reason", ""))),
         )
+        actor = session.username if session is not None else "registry-admin"
+        _maybe_record_policy_notification(
+            registry,
+            payload,
+            event_kind="policy_proposal_approved",
+            title=f"Policy proposal approved ({proposal_id})",
+            body=f"{actor} approved governance proposal {proposal_id!r}.",
+            link_path=f"{prefix}/policy",
+            audiences=_GOVERNANCE_NOTIFICATION_AUDIENCES,
+        )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
     @registry.custom_route(
@@ -417,6 +550,16 @@ def mount_registry_policy_routes(
             reviewer=reviewer,
             actor=session.username if session is not None else "registry-admin",
             note=str(body.get("note", "")),
+        )
+        actor = session.username if session is not None else "registry-admin"
+        _maybe_record_policy_notification(
+            registry,
+            payload,
+            event_kind="policy_proposal_assigned",
+            title=f"Policy proposal assigned ({proposal_id})",
+            body=f"{actor} assigned proposal {proposal_id!r} to reviewer {reviewer!r}.",
+            link_path=f"{prefix}/policy",
+            audiences=_GOVERNANCE_NOTIFICATION_AUDIENCES,
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
@@ -454,6 +597,16 @@ def mount_registry_policy_routes(
             actor=session.username if session is not None else "registry-admin",
             note=str(body.get("note", body.get("reason", ""))),
         )
+        actor = session.username if session is not None else "registry-admin"
+        _maybe_record_policy_notification(
+            registry,
+            payload,
+            event_kind="policy_proposal_deployed",
+            title=f"Policy proposal deployed ({proposal_id})",
+            body=f"{actor} deployed governance proposal {proposal_id!r} to active policy.",
+            link_path=f"{prefix}/policy",
+            audiences=_GOVERNANCE_NOTIFICATION_AUDIENCES,
+        )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
     @registry.custom_route(
@@ -473,6 +626,16 @@ def mount_registry_policy_routes(
             reason=str(body.get("reason", "")),
             actor=session.username if session is not None else "registry-admin",
         )
+        actor = session.username if session is not None else "registry-admin"
+        _maybe_record_policy_notification(
+            registry,
+            payload,
+            event_kind="policy_proposal_rejected",
+            title=f"Policy proposal rejected ({proposal_id})",
+            body=f"{actor} rejected governance proposal {proposal_id!r}.",
+            link_path=f"{prefix}/policy",
+            audiences=_GOVERNANCE_NOTIFICATION_AUDIENCES,
+        )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
     @registry.custom_route(
@@ -491,6 +654,16 @@ def mount_registry_policy_routes(
             proposal_id,
             actor=session.username if session is not None else "registry-admin",
             note=str(body.get("note", body.get("reason", ""))),
+        )
+        actor = session.username if session is not None else "registry-admin"
+        _maybe_record_policy_notification(
+            registry,
+            payload,
+            event_kind="policy_proposal_withdrawn",
+            title=f"Policy proposal withdrawn ({proposal_id})",
+            body=f"{actor} withdrew governance proposal {proposal_id!r}.",
+            link_path=f"{prefix}/policy",
+            audiences=_GOVERNANCE_NOTIFICATION_AUDIENCES,
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
@@ -517,6 +690,16 @@ def mount_registry_policy_routes(
             config,
             reason=str(body.get("reason", "")),
             author=session.username if session is not None else "registry-admin",
+        )
+        actor = session.username if session is not None else "registry-admin"
+        _maybe_record_policy_notification(
+            registry,
+            payload,
+            event_kind="policy_provider_added",
+            title="Policy provider added",
+            body=f"{actor} registered a new policy provider.",
+            link_path=f"{prefix}/policy",
+            audiences=_GOVERNANCE_NOTIFICATION_AUDIENCES,
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
@@ -546,6 +729,16 @@ def mount_registry_policy_routes(
             reason=str(body.get("reason", "")),
             author=session.username if session is not None else "registry-admin",
         )
+        actor = session.username if session is not None else "registry-admin"
+        _maybe_record_policy_notification(
+            registry,
+            payload,
+            event_kind="policy_provider_updated",
+            title=f"Policy provider updated (#{index})",
+            body=f"{actor} updated policy provider index {index}.",
+            link_path=f"{prefix}/policy",
+            audiences=_GOVERNANCE_NOTIFICATION_AUDIENCES,
+        )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
     @registry.custom_route(f"{prefix}/policy/providers/{{index}}", methods=["DELETE"])
@@ -561,6 +754,16 @@ def mount_registry_policy_routes(
             index,
             reason=str(body.get("reason", "")),
             author=session.username if session is not None else "registry-admin",
+        )
+        actor = session.username if session is not None else "registry-admin"
+        _maybe_record_policy_notification(
+            registry,
+            payload,
+            event_kind="policy_provider_deleted",
+            title=f"Policy provider removed (#{index})",
+            body=f"{actor} removed policy provider index {index}.",
+            link_path=f"{prefix}/policy",
+            audiences=_GOVERNANCE_NOTIFICATION_AUDIENCES,
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
@@ -579,5 +782,14 @@ def mount_registry_policy_routes(
         payload = await registry.rollback_policy_version(
             version_number,
             reason=str(body.get("reason", "")),
+        )
+        _maybe_record_policy_notification(
+            registry,
+            payload,
+            event_kind="policy_version_rollback",
+            title=f"Policy rolled back to v{version_number}",
+            body="Active policy was rolled back to a previous version.",
+            link_path=f"{prefix}/policy",
+            audiences=_GOVERNANCE_NOTIFICATION_AUDIENCES,
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))

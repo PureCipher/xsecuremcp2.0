@@ -172,6 +172,8 @@ The repo now includes a dedicated registry image and compose file:
 docker compose -f docker-compose.purecipher-registry.yml up --build
 ```
 
+The same file also builds and runs **registry-ui** (Next.js on port **3000** by default), with `REGISTRY_BACKEND_URL` pointed at the registry container. Open `http://localhost:3000` for the console and `http://localhost:8000/registry/health` for the API health check. Override host ports with `PURECIPHER_REGISTRY_PORT` and `REGISTRY_UI_PORT` if needed.
+
 The compose setup now defaults to the local secure mode:
 
 - moderation enabled

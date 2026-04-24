@@ -1,4 +1,6 @@
 export type AppThemeId =
+  | "navy-command"
+  | "paper-contrast"
   | "emerald-forest"
   | "slate-night"
   | "amethyst-velvet"
@@ -6,19 +8,32 @@ export type AppThemeId =
   | "ember-noir"
   | "sandstone-day";
 
+export const NAVY_COMMAND_THEME_ID = "navy-command" as const;
+export const PAPER_CONTRAST_THEME_ID = "paper-contrast" as const;
+
 export type AppTheme = {
   id: AppThemeId;
   label: string;
   description: string;
 };
 
-export const DEFAULT_APP_THEME_ID: AppThemeId = "emerald-forest";
+export const DEFAULT_APP_THEME_ID: AppThemeId = NAVY_COMMAND_THEME_ID;
 
 export const APP_THEMES: readonly AppTheme[] = [
   {
+    id: NAVY_COMMAND_THEME_ID,
+    label: "Navy Command",
+    description: "Deep navy chrome — default. Press Ctrl+Shift+C for paper contrast.",
+  },
+  {
+    id: PAPER_CONTRAST_THEME_ID,
+    label: "Paper Contrast",
+    description: "White surfaces and black type. Toggle with Ctrl+Shift+C.",
+  },
+  {
     id: "emerald-forest",
     label: "Emerald Forest",
-    description: "PureCipher registry default — dark emerald chrome.",
+    description: "Dark emerald chrome with mint highlights.",
   },
   {
     id: "slate-night",
@@ -47,3 +62,8 @@ export const APP_THEMES: readonly AppTheme[] = [
   },
 ] as const;
 
+const THEME_ID_SET = new Set<string>(APP_THEMES.map((t) => t.id));
+
+export function isAppThemeId(value: string): value is AppThemeId {
+  return THEME_ID_SET.has(value);
+}

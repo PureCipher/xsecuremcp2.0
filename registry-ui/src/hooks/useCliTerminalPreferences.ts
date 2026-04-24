@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 
 import { DEFAULT_CLI_THEME_ID } from "@/lib/cliTerminalThemes";
 
@@ -76,9 +76,12 @@ export function useCliTerminalPreferences(): {
   setFontWeight: (fontWeight: "normal" | "bold") => void;
   setFontWeightBold: (fontWeightBold: "normal" | "bold") => void;
 } {
-  const [prefs, setPrefsState] = useState<CliTerminalPreferences>(() =>
-    typeof window !== "undefined" ? readPrefsFromStorage() : DEFAULT_PREFERENCES,
-  );
+  // Match SSR first paint; sync from localStorage after mount (avoids React hydration #418).
+  const [prefs, setPrefsState] = useState<CliTerminalPreferences>(DEFAULT_PREFERENCES);
+
+  useLayoutEffect(() => {
+    setPrefsState(readPrefsFromStorage());
+  }, []);
 
   useEffect(() => {
     const sync = () => setPrefsState(readPrefsFromStorage());

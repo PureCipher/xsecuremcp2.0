@@ -3,19 +3,22 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
+import { Box, Button, Card, CardActionArea, CardContent, Chip, FormControl, InputLabel, MenuItem, Select, TextField, Typography } from "@mui/material";
+
 import type { RegistryToolListing } from "@/lib/registryClient";
 
 type SortMode = "certification_desc" | "name_asc";
 
 type Props = {
   tools: RegistryToolListing[];
+  basePath?: string;
 };
 
 type CertificationInfo = {
   raw: string | null;
   label: string;
   tier: number;
-  className: string;
+  sx: Record<string, unknown>;
 };
 
 function normalizeText(value: string): string {
@@ -35,7 +38,7 @@ function certificationInfo(level?: string): CertificationInfo {
       raw,
       label: "Unrated",
       tier: 0,
-      className: "bg-zinc-500/10 text-zinc-200 ring-1 ring-zinc-400/20",
+      sx: { bgcolor: "rgba(113, 113, 122, 0.12)", color: "rgb(228, 228, 231)" },
     };
   }
 
@@ -46,7 +49,7 @@ function certificationInfo(level?: string): CertificationInfo {
       raw,
       label: raw,
       tier: 3,
-      className: "bg-[--app-control-active-bg] text-[--app-fg] ring-1 ring-[--app-accent]",
+      sx: { bgcolor: "var(--app-control-active-bg)", color: "var(--app-fg)" },
     };
   }
 
@@ -55,7 +58,7 @@ function certificationInfo(level?: string): CertificationInfo {
       raw,
       label: raw,
       tier: 2,
-      className: "bg-sky-500/10 text-sky-100 ring-1 ring-sky-400/20",
+      sx: { bgcolor: "rgba(14, 165, 233, 0.12)", color: "rgb(224, 242, 254)" },
     };
   }
 
@@ -63,7 +66,7 @@ function certificationInfo(level?: string): CertificationInfo {
     raw,
     label: raw,
     tier: 1,
-    className: "bg-[--app-surface] text-[--app-fg] ring-1 ring-[--app-surface-ring]",
+    sx: { bgcolor: "var(--app-surface)", color: "var(--app-fg)" },
   };
 }
 
@@ -79,7 +82,7 @@ function toolSearchHaystack(tool: RegistryToolListing): string {
   return normalizeText(parts.join(" "));
 }
 
-export function ToolsCatalog({ tools }: Props) {
+export function ToolsCatalog({ tools, basePath = "/registry/listings" }: Props) {
   const [query, setQuery] = useState("");
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [sortMode, setSortMode] = useState<SortMode>("certification_desc");
@@ -139,147 +142,190 @@ export function ToolsCatalog({ tools }: Props) {
   const hasActiveFilters = normalizedQuery.length > 0 || selectedCategories.length > 0;
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 rounded-3xl bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center">
-          <div className="flex-1">
-            <label className="sr-only" htmlFor="tool-search">
-              Search tools
-            </label>
-            <input
-              id="tool-search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search tools by name, description, category, publisher…"
-              className="w-full rounded-2xl border border-[--app-border] bg-[--app-control-bg] px-4 py-2 text-[12px] text-[--app-fg] outline-none transition focus:border-[--app-accent] focus:ring-1 focus:ring-[--app-accent]"
-            />
-          </div>
+    <Box sx={{ display: "grid", gap: 2 }}>
+      <Card
+        variant="outlined"
+        sx={{
+          borderRadius: 4,
+          borderColor: "var(--app-border)",
+          bgcolor: "var(--app-control-bg)",
+          boxShadow: "none",
+        }}
+      >
+        <CardContent sx={{ p: 2, display: "grid", gap: 2 }}>
+          <Box sx={{ display: "flex", flexDirection: { xs: "column", md: "row" }, gap: 1.5, alignItems: { md: "center" } }}>
+            <Box sx={{ flex: 1 }}>
+              <TextField
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search tools by name, description, category, publisher…"
+                size="small"
+                fullWidth
+              />
+            </Box>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              value={sortMode}
-              onChange={(e) => setSortMode(e.target.value as SortMode)}
-              className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] px-3 py-2 text-[11px] text-[--app-fg] outline-none transition focus:border-[--app-accent] focus:ring-1 focus:ring-[--app-accent]"
-            >
-              <option value="certification_desc">Sort: Certification</option>
-              <option value="name_asc">Sort: Name A→Z</option>
-            </select>
+            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, alignItems: "center" }}>
+              <FormControl size="small" sx={{ minWidth: 200 }}>
+                <InputLabel id="tool-sort">Sort</InputLabel>
+                <Select
+                  labelId="tool-sort"
+                  label="Sort"
+                  value={sortMode}
+                  onChange={(e) => setSortMode(e.target.value as SortMode)}
+                >
+                  <MenuItem value="certification_desc">Certification</MenuItem>
+                  <MenuItem value="name_asc">Name A→Z</MenuItem>
+                </Select>
+              </FormControl>
 
-            {hasActiveFilters ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setQuery("");
-                  setSelectedCategories([]);
-                }}
-                className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] px-3 py-2 text-[11px] font-medium text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg]"
-              >
-                Clear
-              </button>
-            ) : null}
+              {hasActiveFilters ? (
+                <Button
+                  type="button"
+                  variant="outlined"
+                  onClick={() => {
+                    setQuery("");
+                    setSelectedCategories([]);
+                  }}
+                  sx={{
+                    borderRadius: 999,
+                    borderColor: "var(--app-border)",
+                    color: "var(--app-muted)",
+                    bgcolor: "var(--app-control-bg)",
+                    "&:hover": { bgcolor: "var(--app-hover-bg)", borderColor: "var(--app-border)" },
+                  }}
+                >
+                  Clear
+                </Button>
+              ) : null}
 
-            <span className="text-[11px] text-[--app-muted]">
-              {filtered.length} result{filtered.length === 1 ? "" : "s"}
-            </span>
-          </div>
-        </div>
+              <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                {filtered.length} result{filtered.length === 1 ? "" : "s"}
+              </Typography>
+            </Box>
+          </Box>
 
-        {allCategories.length > 0 ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
-              Categories
-            </span>
-            <div className="flex flex-wrap gap-2">
-              {allCategories.map((cat) => {
-                const selected = selectedCategories.includes(cat);
-                return (
-                  <button
-                    key={cat}
-                    type="button"
-                    onClick={() => {
-                      setSelectedCategories((current) => {
-                        if (current.includes(cat)) return current.filter((c) => c !== cat);
-                        return [...current, cat];
-                      });
-                    }}
-                    className={`rounded-full px-3 py-1 text-[11px] font-medium ring-1 transition ${
-                      selected
-                        ? "bg-[--app-control-active-bg] text-[--app-fg] ring-[--app-accent]"
-                        : "bg-[--app-control-bg] text-[--app-muted] ring-[--app-surface-ring] hover:bg-[--app-hover-bg] hover:text-[--app-fg]"
-                    }`}
-                  >
-                    {cat}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ) : null}
-      </div>
+          {allCategories.length > 0 ? (
+            <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1 }}>
+              <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                Categories
+              </Typography>
+              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+                {allCategories.map((cat) => {
+                  const selected = selectedCategories.includes(cat);
+                  return (
+                    <Chip
+                      key={cat}
+                      label={cat}
+                      clickable
+                      onClick={() => {
+                        setSelectedCategories((current) => {
+                          if (current.includes(cat)) return current.filter((c) => c !== cat);
+                          return [...current, cat];
+                        });
+                      }}
+                      sx={{
+                        borderRadius: 999,
+                        bgcolor: selected ? "var(--app-control-active-bg)" : "var(--app-control-bg)",
+                        color: selected ? "var(--app-fg)" : "var(--app-muted)",
+                        border: "1px solid",
+                        borderColor: selected ? "var(--app-accent)" : "var(--app-border)",
+                      }}
+                    />
+                  );
+                })}
+              </Box>
+            </Box>
+          ) : null}
+        </CardContent>
+      </Card>
 
       {filtered.length === 0 ? (
-        <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-6 ring-1 ring-[--app-surface-ring]">
-          <p className="text-[12px] text-[--app-muted]">No tools match your filters.</p>
-          {hasActiveFilters ? (
-            <p className="mt-2 text-[11px] text-[--app-muted]">
-              Try clearing filters or searching by a shorter term.
-            </p>
-          ) : null}
-        </div>
+        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+          <CardContent sx={{ p: 2.5 }}>
+            <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>No tools match your filters.</Typography>
+            {hasActiveFilters ? (
+              <Typography sx={{ mt: 1, fontSize: 12, color: "var(--app-muted)" }}>
+                Try clearing filters or searching by a shorter term.
+              </Typography>
+            ) : null}
+          </CardContent>
+        </Card>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", lg: "1fr 1fr 1fr" } }}>
           {filtered.map((tool) => {
             const cert = certificationInfo(tool.certification_level);
             return (
-              <Link
+              <Card
                 key={tool.tool_name}
-                href={`/registry/listings/${encodeURIComponent(tool.tool_name)}`}
-                className="flex flex-col gap-2 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring] transition hover:border-[--app-accent] hover:ring-[--app-accent]"
+                variant="outlined"
+                sx={{
+                  borderRadius: 3,
+                  borderColor: "var(--app-border)",
+                  bgcolor: "var(--app-control-bg)",
+                  boxShadow: "none",
+                  "&:hover": { borderColor: "var(--app-accent)" },
+                  display: "flex",
+                  flexDirection: "column",
+                }}
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <h2 className="truncate text-sm font-semibold text-[--app-fg]">
-                      {tool.display_name ?? tool.tool_name}
-                    </h2>
-                    <p className="truncate text-[10px] text-[--app-muted]">{tool.tool_name}</p>
-                  </div>
-                  <span
-                    className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] ${cert.className}`}
-                    title={cert.raw ?? "Unrated"}
-                  >
-                    {cert.label}
-                  </span>
-                </div>
+                <Link href={`${basePath}/${encodeURIComponent(tool.tool_name)}`} legacyBehavior passHref>
+                  <CardActionArea component="a" sx={{ borderRadius: 3, height: "100%" }}>
+                    <CardContent sx={{ p: 2, display: "flex", flexDirection: "column", gap: 1.25, flex: 1 }}>
+                      <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 1 }}>
+                        <Box sx={{ minWidth: 0 }}>
+                          <Typography noWrap sx={{ fontSize: 14, fontWeight: 700, color: "var(--app-fg)" }}>
+                            {tool.display_name ?? tool.tool_name}
+                          </Typography>
+                          <Typography noWrap sx={{ fontSize: 11, color: "var(--app-muted)" }}>
+                            {tool.tool_name}
+                          </Typography>
+                        </Box>
+                        <Chip
+                          size="small"
+                          label={cert.label}
+                          title={cert.raw ?? "Unrated"}
+                          sx={{
+                            ...cert.sx,
+                            borderRadius: 999,
+                            fontSize: 10,
+                            fontWeight: 800,
+                            textTransform: "uppercase",
+                            letterSpacing: "0.12em",
+                            height: 22,
+                          }}
+                        />
+                      </Box>
 
-                <p className="line-clamp-3 text-[11px] leading-relaxed text-[--app-muted]">
-                  {tool.description ?? "No description provided."}
-                </p>
+                      <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                        {tool.description ?? "No description provided."}
+                      </Typography>
 
-                {Array.isArray(tool.categories) && tool.categories.length > 0 ? (
-                  <div className="mt-auto flex flex-wrap items-center gap-2 pt-2 text-[10px] text-[--app-muted]">
-                    {tool.categories.slice(0, 4).map((cat: string) => (
-                      <span
-                        key={cat}
-                        className="rounded-full bg-[--app-surface] px-2 py-0.5 text-[10px] font-medium text-[--app-fg]"
-                      >
-                        {cat}
-                      </span>
-                    ))}
-                    {tool.categories.length > 4 ? (
-                      <span className="text-[10px] text-[--app-muted]">
-                        +{tool.categories.length - 4}
-                      </span>
-                    ) : null}
-                  </div>
-                ) : (
-                  <div className="mt-auto pt-2 text-[10px] text-[--app-muted]">No categories</div>
-                )}
-              </Link>
+                      {Array.isArray(tool.categories) && tool.categories.length > 0 ? (
+                        <Box sx={{ mt: "auto", pt: 1, display: "flex", flexWrap: "wrap", gap: 1, alignItems: "center" }}>
+                          {tool.categories.slice(0, 4).map((cat: string) => (
+                            <Chip
+                              key={cat}
+                              size="small"
+                              label={cat}
+                              sx={{ borderRadius: 999, bgcolor: "var(--app-surface)", color: "var(--app-fg)", fontSize: 11 }}
+                            />
+                          ))}
+                          {tool.categories.length > 4 ? (
+                            <Typography sx={{ fontSize: 11, color: "var(--app-muted)" }}>+{tool.categories.length - 4}</Typography>
+                          ) : null}
+                        </Box>
+                      ) : (
+                        <Typography sx={{ mt: "auto", pt: 1, fontSize: 11, color: "var(--app-muted)" }}>No categories</Typography>
+                      )}
+                    </CardContent>
+                  </CardActionArea>
+                </Link>
+              </Card>
             );
           })}
-        </div>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }
 

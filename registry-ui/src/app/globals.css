@@ -4,37 +4,83 @@
   --background: #ffffff;
   --foreground: #171717;
 
-  /* Default app theme tokens (fallback for pages outside RegistryShell, e.g. /login). */
-  --app-bg: rgba(2, 44, 34, 0.95);
-  --app-fg: #ecfdf5;
-  --app-muted: rgba(167, 243, 208, 0.9);
-  --app-border: rgba(236, 253, 245, 0.18);
+  /* Default app tokens — match Navy Command until JS applies a stored theme on <html>. */
+  --app-bg: rgba(8, 20, 46, 0.97);
+  --app-fg: #e8eefc;
+  --app-muted: rgba(148, 163, 184, 0.92);
+  --app-border: rgba(226, 232, 240, 0.16);
 
-  --app-chrome-bg: rgba(2, 44, 34, 0.95);
-  --app-chrome-border: rgba(236, 253, 245, 0.16);
-  --app-scrim: rgba(2, 44, 34, 0.7);
+  --app-chrome-bg: #061028;
+  --app-chrome-border: rgba(226, 232, 240, 0.14);
+  --app-scrim: rgba(4, 12, 32, 0.75);
 
-  --app-surface: rgba(6, 78, 59, 0.4);
-  --app-surface-ring: rgba(16, 185, 129, 0.66);
+  --app-surface: rgba(15, 35, 72, 0.55);
+  --app-surface-ring: rgba(96, 165, 250, 0.45);
 
-  --app-accent: #10b981;
-  --app-accent-contrast: #022c22;
-  --app-active-bg: rgba(6, 95, 70, 0.6);
-  --app-active-ring: rgba(16, 185, 129, 0.7);
-  --app-hover-bg: rgba(6, 78, 59, 0.6);
-  --app-control-bg: rgba(2, 44, 34, 0.4);
-  --app-control-border: rgba(236, 253, 245, 0.22);
-  --app-control-active-bg: rgba(16, 185, 129, 0.12);
+  --app-accent: #60a5fa;
+  --app-accent-contrast: #0b1220;
+  --app-active-bg: rgba(30, 58, 95, 0.65);
+  --app-active-ring: rgba(96, 165, 250, 0.55);
+  --app-hover-bg: rgba(20, 45, 85, 0.55);
+  --app-control-bg: rgba(8, 22, 52, 0.5);
+  --app-control-border: rgba(226, 232, 240, 0.2);
+  --app-control-active-bg: rgba(96, 165, 250, 0.14);
 }
 
-/* Registry app chrome theme tokens (Iteration 1: define tokens only, no usage yet). */
+[data-app-theme="navy-command"] {
+  --app-bg: rgba(8, 20, 46, 0.97);
+  --app-fg: #e8eefc;
+  --app-muted: rgba(148, 163, 184, 0.92);
+  --app-border: rgba(226, 232, 240, 0.16);
+
+  --app-chrome-bg: #061028;
+  --app-chrome-border: rgba(226, 232, 240, 0.14);
+  --app-scrim: rgba(4, 12, 32, 0.75);
+
+  --app-surface: rgba(15, 35, 72, 0.55);
+  --app-surface-ring: rgba(96, 165, 250, 0.45);
+
+  --app-accent: #60a5fa;
+  --app-accent-contrast: #0b1220;
+  --app-active-bg: rgba(30, 58, 95, 0.65);
+  --app-active-ring: rgba(96, 165, 250, 0.55);
+  --app-hover-bg: rgba(20, 45, 85, 0.55);
+  --app-control-bg: rgba(8, 22, 52, 0.5);
+  --app-control-border: rgba(226, 232, 240, 0.2);
+  --app-control-active-bg: rgba(96, 165, 250, 0.14);
+}
+
+[data-app-theme="paper-contrast"] {
+  --app-bg: #ffffff;
+  --app-fg: #0a0a0a;
+  --app-muted: rgba(10, 10, 10, 0.62);
+  --app-border: rgba(10, 10, 10, 0.12);
+
+  --app-chrome-bg: #f8fafc;
+  --app-chrome-border: rgba(10, 10, 10, 0.1);
+  --app-scrim: rgba(15, 23, 42, 0.35);
+
+  --app-surface: #ffffff;
+  --app-surface-ring: rgba(30, 58, 138, 0.22);
+
+  --app-accent: #1e40af;
+  --app-accent-contrast: #ffffff;
+  --app-active-bg: rgba(30, 64, 175, 0.1);
+  --app-active-ring: rgba(30, 58, 138, 0.35);
+  --app-hover-bg: rgba(241, 245, 249, 0.95);
+  --app-control-bg: #f1f5f9;
+  --app-control-border: rgba(10, 10, 10, 0.14);
+  --app-control-active-bg: rgba(30, 64, 175, 0.12);
+}
+
+/* Registry app chrome theme tokens. */
 [data-app-theme="emerald-forest"] {
   --app-bg: rgba(2, 44, 34, 0.95);
   --app-fg: #ecfdf5;
   --app-muted: rgba(167, 243, 208, 0.9);
   --app-border: rgba(236, 253, 245, 0.18);
 
-  --app-chrome-bg: rgba(2, 44, 34, 0.95);
+  --app-chrome-bg: #022c22;
   --app-chrome-border: rgba(236, 253, 245, 0.16);
   --app-scrim: rgba(2, 44, 34, 0.7);
 
@@ -57,7 +103,7 @@
   --app-muted: rgba(226, 232, 240, 0.86); /* slate-200 */
   --app-border: rgba(248, 250, 252, 0.16); /* slate-50-ish */
 
-  --app-chrome-bg: rgba(2, 6, 23, 0.95);
+  --app-chrome-bg: #020617;
   --app-chrome-border: rgba(248, 250, 252, 0.14);
   --app-scrim: rgba(2, 6, 23, 0.72);
 
@@ -80,7 +126,7 @@
   --app-muted: rgba(233, 213, 255, 0.86);
   --app-border: rgba(250, 245, 255, 0.17);
 
-  --app-chrome-bg: rgba(24, 9, 43, 0.95);
+  --app-chrome-bg: #18092b;
   --app-chrome-border: rgba(250, 245, 255, 0.14);
   --app-scrim: rgba(24, 9, 43, 0.72);
 
@@ -103,7 +149,7 @@
   --app-muted: rgba(165, 243, 252, 0.82);
   --app-border: rgba(236, 254, 255, 0.16);
 
-  --app-chrome-bg: rgba(2, 10, 20, 0.96);
+  --app-chrome-bg: #020a14;
   --app-chrome-border: rgba(236, 254, 255, 0.13);
   --app-scrim: rgba(2, 10, 20, 0.74);
 
@@ -126,7 +172,7 @@
   --app-muted: rgba(254, 215, 170, 0.78);
   --app-border: rgba(255, 247, 237, 0.16);
 
-  --app-chrome-bg: rgba(6, 6, 6, 0.96);
+  --app-chrome-bg: #060606;
   --app-chrome-border: rgba(255, 247, 237, 0.13);
   --app-scrim: rgba(6, 6, 6, 0.74);
 
@@ -149,7 +195,7 @@
   --app-muted: rgba(31, 41, 55, 0.72);
   --app-border: rgba(31, 41, 55, 0.16);
 
-  --app-chrome-bg: rgba(247, 242, 233, 0.94);
+  --app-chrome-bg: #f7f2e9;
   --app-chrome-border: rgba(31, 41, 55, 0.14);
   --app-scrim: rgba(31, 41, 55, 0.28);
 
@@ -192,4 +238,103 @@ body {
   --cli-font-fira-code: var(--font-cli-fira-code);
   --cli-font-ibm-plex-mono: var(--font-cli-ibm-plex-mono);
   --cli-font-source-code-pro: var(--font-cli-source-code-pro);
+}
+
+/* ── RBAC persona: distinct chrome on top of the active app theme ───────────
+   Set from `RegistryShell` via `data-registry-persona` on `<html>`.
+   Dark = all themes except light paper/sandstone; light = paper + sandstone. */
+
+html[data-registry-persona="viewer"]:not(
+    :is([data-app-theme="paper-contrast"], [data-app-theme="sandstone-day"])
+  ) {
+  --app-bg: rgba(22, 32, 52, 0.97);
+  --app-chrome-bg: rgba(18, 28, 46, 0.96);
+  --app-scrim: rgba(12, 20, 38, 0.8);
+  --app-surface: rgba(38, 52, 78, 0.52);
+  --app-control-bg: rgba(20, 30, 48, 0.55);
+  --app-hover-bg: rgba(48, 60, 88, 0.48);
+}
+
+html[data-registry-persona="publisher"]:not(
+    :is([data-app-theme="paper-contrast"], [data-app-theme="sandstone-day"])
+  ) {
+  --app-bg: rgba(6, 42, 40, 0.96);
+  --app-chrome-bg: rgba(4, 34, 32, 0.95);
+  --app-scrim: rgba(2, 26, 24, 0.78);
+  --app-surface: rgba(8, 72, 64, 0.42);
+  --app-control-bg: rgba(4, 38, 36, 0.52);
+  --app-hover-bg: rgba(12, 88, 78, 0.38);
+}
+
+html[data-registry-persona="reviewer"]:not(
+    :is([data-app-theme="paper-contrast"], [data-app-theme="sandstone-day"])
+  ) {
+  --app-bg: rgba(44, 30, 12, 0.96);
+  --app-chrome-bg: rgba(38, 26, 10, 0.95);
+  --app-scrim: rgba(28, 18, 6, 0.78);
+  --app-surface: rgba(88, 58, 22, 0.35);
+  --app-control-bg: rgba(52, 36, 14, 0.5);
+  --app-hover-bg: rgba(98, 68, 28, 0.38);
+}
+
+html[data-registry-persona="admin"]:not(
+    :is([data-app-theme="paper-contrast"], [data-app-theme="sandstone-day"])
+  ) {
+  --app-bg: rgba(36, 12, 48, 0.96);
+  --app-chrome-bg: rgba(30, 10, 42, 0.95);
+  --app-scrim: rgba(20, 6, 32, 0.8);
+  --app-surface: rgba(72, 28, 96, 0.4);
+  --app-control-bg: rgba(42, 14, 58, 0.52);
+  --app-hover-bg: rgba(88, 36, 112, 0.38);
+}
+
+html[data-registry-persona="open"]:not(
+    :is([data-app-theme="paper-contrast"], [data-app-theme="sandstone-day"])
+  ) {
+  --app-bg: rgba(10, 24, 52, 0.97);
+  --app-chrome-bg: rgba(8, 20, 44, 0.96);
+  --app-scrim: rgba(4, 14, 36, 0.76);
+  --app-surface: rgba(18, 40, 78, 0.5);
+  --app-control-bg: rgba(8, 22, 48, 0.52);
+  --app-hover-bg: rgba(22, 48, 92, 0.48);
+}
+
+html:is([data-app-theme="paper-contrast"], [data-app-theme="sandstone-day"])[data-registry-persona="viewer"] {
+  --app-bg: #eef2f7;
+  --app-chrome-bg: #e4eaf4;
+  --app-surface: #ffffff;
+  --app-control-bg: #e8edf5;
+  --app-hover-bg: #f4f7fb;
+}
+
+html:is([data-app-theme="paper-contrast"], [data-app-theme="sandstone-day"])[data-registry-persona="publisher"] {
+  --app-bg: #ecfdf7;
+  --app-chrome-bg: #e2f5ec;
+  --app-surface: #ffffff;
+  --app-control-bg: #e6f7f0;
+  --app-hover-bg: #f0fdf7;
+}
+
+html:is([data-app-theme="paper-contrast"], [data-app-theme="sandstone-day"])[data-registry-persona="reviewer"] {
+  --app-bg: #fffbeb;
+  --app-chrome-bg: #fff3d6;
+  --app-surface: #ffffff;
+  --app-control-bg: #fff7e6;
+  --app-hover-bg: #fffaf0;
+}
+
+html:is([data-app-theme="paper-contrast"], [data-app-theme="sandstone-day"])[data-registry-persona="admin"] {
+  --app-bg: #f7f2ff;
+  --app-chrome-bg: #efe8ff;
+  --app-surface: #ffffff;
+  --app-control-bg: #f3edff;
+  --app-hover-bg: #faf7ff;
+}
+
+html:is([data-app-theme="paper-contrast"], [data-app-theme="sandstone-day"])[data-registry-persona="open"] {
+  --app-bg: #f8fafc;
+  --app-chrome-bg: #f1f5f9;
+  --app-surface: #ffffff;
+  --app-control-bg: #f1f5f9;
+  --app-hover-bg: #ffffff;
 }
