@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Box, Typography } from "@mui/material";
 
 type Props = {
   defaultMcpUrl: string;
@@ -8,63 +9,135 @@ type Props = {
 
 export function CliCheatsheet({ defaultMcpUrl, allowedOrigin, className = "" }: Props) {
   return (
-    <aside
-      className={`flex max-h-[min(720px,calc(100vh-10rem))] flex-col overflow-y-auto border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring] ${className}`}
+    <Box
+      component="aside"
+      className={className}
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        maxHeight: "min(720px, calc(100vh - 10rem))",
+        overflowY: "auto",
+        border: "1px solid var(--app-border)",
+        bgcolor: "var(--app-surface)",
+        p: 2,
+        boxShadow: "none",
+      }}
     >
-      <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-[--app-muted]">Cheatsheet</h2>
-      <p className="mt-2 text-[11px] leading-relaxed text-[--app-muted]">
+      <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
+        Cheatsheet
+      </Typography>
+      <Typography variant="caption" sx={{ mt: 1, display: "block", color: "var(--app-muted)", lineHeight: 1.6 }}>
         Shortcuts use your{" "}
-        <span className="font-mono text-[--app-fg]">REGISTRY_BACKEND_URL</span> MCP endpoint automatically. Only{" "}
-        <span className="font-mono text-[--app-fg]">{allowedOrigin}</span> is allowed.
-      </p>
+        <Box component="span" sx={{ fontFamily: "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", color: "var(--app-fg)" }}>
+          REGISTRY_BACKEND_URL
+        </Box>{" "}
+        MCP endpoint automatically. Only{" "}
+        <Box component="span" sx={{ fontFamily: "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", color: "var(--app-fg)" }}>
+          {allowedOrigin}
+        </Box>{" "}
+        is allowed.
+      </Typography>
 
-      <h3 className="mt-4 text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">First commands</h3>
-      <ul className="mt-2 grid gap-2 font-mono text-[11px] text-[--app-fg]">
+      <Typography variant="overline" sx={{ mt: 2, color: "var(--app-muted)", letterSpacing: "0.16em" }}>
+        First commands
+      </Typography>
+      <Box
+        component="ul"
+        sx={{
+          mt: 1,
+          display: "grid",
+          gap: 1,
+          listStyle: "none",
+          p: 0,
+          m: 0,
+          fontFamily: "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+          color: "var(--app-fg)",
+          fontSize: 11,
+        }}
+      >
         <CheatsheetRow comment="Tools only" cmd="list" />
         <CheatsheetRow comment="Tools + prompts" cmd="list --prompts" />
         <CheatsheetRow comment="Machine-readable" cmd="list --prompts --json" />
         <CheatsheetRow comment="Invoke tool" cmd="call registry_status" />
         <CheatsheetRow comment="Prompt" cmd='call my_prompt --prompt topic=SecureMCP' />
-      </ul>
+      </Box>
 
-      <h3 className="mt-4 text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">Explicit URL</h3>
-      <p className="mt-1 break-all font-mono text-[10px] leading-relaxed text-[--app-muted]">
+      <Typography variant="overline" sx={{ mt: 2, color: "var(--app-muted)", letterSpacing: "0.16em" }}>
+        Explicit URL
+      </Typography>
+      <Typography
+        variant="caption"
+        sx={{
+          mt: 0.5,
+          display: "block",
+          color: "var(--app-muted)",
+          wordBreak: "break-word",
+          fontFamily: "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+          fontSize: 10,
+          lineHeight: 1.6,
+        }}
+      >
         securemcp list {defaultMcpUrl} --prompts
-      </p>
+      </Typography>
 
-      <h3 className="mt-4 text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">Help</h3>
-      <p className="mt-1 text-[11px] text-[--app-muted]">
-        <span className="font-mono text-[--app-fg]">help</span> or{" "}
-        <span className="font-mono text-[--app-fg]">commands</span> — full reference
-      </p>
+      <Typography variant="overline" sx={{ mt: 2, color: "var(--app-muted)", letterSpacing: "0.16em" }}>
+        Help
+      </Typography>
+      <Typography variant="caption" sx={{ mt: 0.5, display: "block", color: "var(--app-muted)" }}>
+        <Box component="span" sx={{ fontFamily: "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", color: "var(--app-fg)" }}>
+          help
+        </Box>{" "}
+        or{" "}
+        <Box component="span" sx={{ fontFamily: "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", color: "var(--app-fg)" }}>
+          commands
+        </Box>{" "}
+        — full reference
+      </Typography>
 
-      <h3 className="mt-4 text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">Keys</h3>
-      <ul className="mt-1 list-inside list-disc text-[11px] text-[--app-muted]">
+      <Typography variant="overline" sx={{ mt: 2, color: "var(--app-muted)", letterSpacing: "0.16em" }}>
+        Keys
+      </Typography>
+      <Box component="ul" sx={{ mt: 0.5, pl: 2, color: "var(--app-muted)", fontSize: 12 }}>
         <li>↑ / ↓ — command history</li>
         <li>Ctrl+C — cancel current line</li>
         <li>
-          <span className="font-mono">clear</span> — wipe screen & banner
+          <Box component="span" sx={{ fontFamily: "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}>
+            clear
+          </Box>{" "}
+          — wipe screen & banner
         </li>
-      </ul>
+      </Box>
 
-      <div className="mt-auto border-t border-[--app-border] pt-4">
-        <p className="text-[10px] text-[--app-muted]">
+      <Box sx={{ mt: "auto", borderTop: "1px solid var(--app-border)", pt: 2 }}>
+        <Typography variant="caption" sx={{ color: "var(--app-muted)" }}>
           Theme & font size persist in{" "}
           <Link href="/registry/settings#browser-cli-terminal" className="underline decoration-[--app-accent]">
             Settings
           </Link>
           .
-        </p>
-      </div>
-    </aside>
+        </Typography>
+      </Box>
+    </Box>
   );
 }
 
 function CheatsheetRow({ comment, cmd }: { comment: string; cmd: string }) {
   return (
-    <li className="border border-[--app-border] bg-[--app-control-bg] px-2.5 py-2 ring-1 ring-[--app-surface-ring]">
-      <span className="text-[--app-muted]"># {comment}</span>
-      <div className="mt-0.5 text-[--app-fg]">{cmd}</div>
-    </li>
+    <Box
+      component="li"
+      sx={{
+        border: "1px solid var(--app-border)",
+        bgcolor: "var(--app-control-bg)",
+        px: 1.5,
+        py: 1.25,
+      }}
+    >
+      <Box component="span" sx={{ color: "var(--app-muted)" }}>
+        # {comment}
+      </Box>
+      <Box component="div" sx={{ mt: 0.5, color: "var(--app-fg)" }}>
+        {cmd}
+      </Box>
+    </Box>
   );
 }

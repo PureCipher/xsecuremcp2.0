@@ -83,7 +83,7 @@ export function RegistryTopBar({
             bgcolor: "var(--app-control-bg)",
           }}
         >
-          <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.12em" }}>
+          <Typography variant="overline" sx={{ letterSpacing: "0.12em" }}>
             {menuOpen ? "Close" : "Menu"}
           </Typography>
         </IconButton>
@@ -120,11 +120,12 @@ export function RegistryTopBar({
           <Box sx={{ lineHeight: 1.1, minWidth: 0, display: { xs: "none", sm: "block" } }}>
             <Typography
               noWrap
-              sx={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}
+              variant="overline"
+              sx={{ letterSpacing: "0.18em", color: "var(--app-muted)" }}
             >
               PureCipher
             </Typography>
-            <Typography noWrap sx={{ fontSize: 11, color: "var(--app-fg)" }}>
+            <Typography noWrap variant="body2" sx={{ color: "var(--app-fg)" }}>
               Secured MCP Registry
             </Typography>
           </Box>
@@ -141,7 +142,7 @@ export function RegistryTopBar({
             <Box sx={{ display: { xs: "none", sm: "block" } }}>
               <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 0.5 }}>
                 <RegistryNotifications />
-                <Typography sx={{ fontSize: 9, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--app-muted)" }}>
+                <Typography variant="caption" sx={{ textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--app-muted)" }}>
                   Notify
                 </Typography>
               </Box>
@@ -182,7 +183,7 @@ export function RegistryTopBar({
               >
                 {roleLabel}
               </Box>
-              <Typography sx={{ fontSize: 9, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--app-muted)" }}>
+              <Typography variant="caption" sx={{ textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--app-muted)" }}>
                 Role
               </Typography>
             </Box>
@@ -202,7 +203,7 @@ export function RegistryTopBar({
               >
                 <NavIcon name="access" className="h-4 w-4" />
               </IconButton>
-              <Typography sx={{ fontSize: 9, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--app-muted)" }}>
+              <Typography variant="caption" sx={{ textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--app-muted)" }}>
                 {signingOut ? "…" : "Sign out"}
               </Typography>
             </Box>
@@ -221,7 +222,7 @@ export function RegistryTopBar({
                   <NavIcon name="access" className="h-4 w-4" />
                 </IconButton>
               </Link>
-              <Typography sx={{ fontSize: 9, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--app-muted)" }}>
+              <Typography variant="caption" sx={{ textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--app-muted)" }}>
                 Sign in
               </Typography>
             </Box>
@@ -259,7 +260,7 @@ function TopAction({
           {children}
         </IconButton>
       </Link>
-      <Typography sx={{ fontSize: 9, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--app-muted)" }}>
+      <Typography variant="caption" sx={{ textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--app-muted)" }}>
         {label}
       </Typography>
     </Box>

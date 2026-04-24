@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import { CertificationBadge, EmptyState, KeyValuePanel } from "@/components/security";
 import type { PublisherSummary, RegistryToolListing } from "@/lib/registryClient";
+import { Typography } from "@mui/material";
 
 type TabKey = "overview" | "tools" | "governance" | "observability";
 
@@ -84,10 +85,12 @@ export function ServerDetailTabs({
 
       {activeTab === "tools" ? (
         <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-6 ring-1 ring-[--app-surface-ring]">
-          <h2 className="text-sm font-semibold text-[--app-fg]">Tools exposed by this server</h2>
-          <p className="mt-1 text-[11px] text-[--app-muted]">
+          <Typography variant="body1" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+            Tools exposed by this server
+          </Typography>
+          <Typography variant="caption" sx={{ mt: 0.5, display: "block", color: "var(--app-muted)" }}>
             Tool inventory is sourced from the server&apos;s publisher profile in the registry backend.
-          </p>
+          </Typography>
 
           <div className="mt-6">
             {listings.length === 0 ? (
@@ -105,16 +108,18 @@ export function ServerDetailTabs({
                   >
                     <div className="flex items-baseline justify-between gap-2">
                       <div>
-                        <h3 className="text-sm font-semibold text-[--app-fg]">
+                        <Typography variant="body2" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
                           {tool.display_name ?? tool.tool_name}
-                        </h3>
-                        <p className="text-[10px] text-[--app-muted]">{tool.tool_name}</p>
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: "var(--app-muted)" }}>
+                          {tool.tool_name}
+                        </Typography>
                       </div>
                       <CertificationBadge level={tool.certification_level} />
                     </div>
-                    <p className="line-clamp-3 text-[11px] leading-relaxed text-[--app-muted]">
+                    <Typography variant="caption" sx={{ color: "var(--app-muted)", lineHeight: 1.6 }}>
                       {tool.description ?? "No description provided."}
-                    </p>
+                    </Typography>
                   </Link>
                 ))}
               </div>
@@ -125,10 +130,12 @@ export function ServerDetailTabs({
 
       {activeTab === "governance" ? (
         <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-6 ring-1 ring-[--app-surface-ring]">
-          <h2 className="text-sm font-semibold text-[--app-fg]">Governance association</h2>
-          <p className="mt-1 text-[11px] text-[--app-muted]">
+          <Typography variant="body1" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+            Governance association
+          </Typography>
+          <Typography variant="caption" sx={{ mt: 0.5, display: "block", color: "var(--app-muted)" }}>
             Stub UI: visualize effective bindings (Policy, Contract, Ledger, Consent) for this server and its tools.
-          </p>
+          </Typography>
           <div className="mt-6 grid gap-4 md:grid-cols-2">
             <KeyValuePanel
               title="Effective controls"
@@ -154,10 +161,12 @@ export function ServerDetailTabs({
 
       {activeTab === "observability" ? (
         <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-6 ring-1 ring-[--app-surface-ring]">
-          <h2 className="text-sm font-semibold text-[--app-fg]">Observability stream</h2>
-          <p className="mt-1 text-[11px] text-[--app-muted]">
+          <Typography variant="body1" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+            Observability stream
+          </Typography>
+          <Typography variant="caption" sx={{ mt: 0.5, display: "block", color: "var(--app-muted)" }}>
             Stub UI: show access decision events and ledger integrity checks feeding Reflexive Core recommendations.
-          </p>
+          </Typography>
           <div className="mt-6">
             <KeyValuePanel
               title="Reflexive Core (stub)"

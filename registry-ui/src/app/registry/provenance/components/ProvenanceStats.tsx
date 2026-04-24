@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import type { ProvenanceRecord, ProvenanceChainStatus } from "@/lib/registryClient";
+import { Box, Card, CardContent, Typography } from "@mui/material";
 
 type Props = {
   records: ProvenanceRecord[];
@@ -36,65 +37,126 @@ export function ProvenanceStats({ records, chainStatus }: Props) {
   const totalRecords = chainStatus?.record_count ?? records.length;
 
   return (
-    <div className="grid grid-cols-4 gap-3">
-      {/* Total Records */}
-      <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-3">
-        <div className="text-2xl font-semibold text-zinc-100 font-mono">
-          {totalRecords.toLocaleString()}
-        </div>
-        <div className="text-[11px] text-zinc-500 mt-0.5">Total Records</div>
-      </div>
+    <Box>
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", md: "repeat(4, 1fr)" },
+          gap: 1.5,
+        }}
+      >
+          <Card
+            variant="outlined"
+            sx={{ borderRadius: 3, borderColor: "rgba(255, 255, 255, 0.10)", bgcolor: "rgba(255, 255, 255, 0.02)", boxShadow: "none" }}
+          >
+            <CardContent sx={{ p: 2 }}>
+              <Typography sx={{ fontFamily: "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", fontSize: "1.65rem", fontWeight: 700, color: "rgb(244, 244, 245)" }}>
+                {totalRecords.toLocaleString()}
+              </Typography>
+              <Typography variant="caption" sx={{ color: "rgb(113, 113, 122)" }}>
+                Total Records
+              </Typography>
+            </CardContent>
+          </Card>
 
-      {/* Chain Status */}
-      <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-3">
-        <div className="flex items-center gap-2">
-          <span
-            className={`h-3 w-3 rounded-full ${
-              chainStatus?.chain_valid ? "bg-[--app-accent]" : "bg-rose-400"
-            }`}
-          />
-          <span className="text-lg font-semibold text-zinc-100">
-            {chainStatus?.chain_valid ? "Valid" : "Broken"}
-          </span>
-        </div>
-        <div className="text-[11px] text-zinc-500 mt-0.5">Chain Integrity</div>
-      </div>
+          <Card
+            variant="outlined"
+            sx={{ borderRadius: 3, borderColor: "rgba(255, 255, 255, 0.10)", bgcolor: "rgba(255, 255, 255, 0.02)", boxShadow: "none" }}
+          >
+            <CardContent sx={{ p: 2 }}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <Box
+                  sx={{
+                    width: 12,
+                    height: 12,
+                    borderRadius: "50%",
+                    bgcolor: chainStatus?.chain_valid ? "var(--app-accent)" : "rgb(251, 113, 133)",
+                  }}
+                />
+                <Typography sx={{ fontSize: "1.1rem", fontWeight: 700, color: "rgb(244, 244, 245)" }}>
+                  {chainStatus?.chain_valid ? "Valid" : "Broken"}
+                </Typography>
+              </Box>
+              <Typography variant="caption" sx={{ color: "rgb(113, 113, 122)" }}>
+                Chain Integrity
+              </Typography>
+            </CardContent>
+          </Card>
 
-      {/* Unique Actors */}
-      <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-3">
-        <div className="text-2xl font-semibold text-zinc-100 font-mono">
-          {stats.uniqueActors}
-        </div>
-        <div className="text-[11px] text-zinc-500 mt-0.5">Unique Actors</div>
-      </div>
+          <Card
+            variant="outlined"
+            sx={{ borderRadius: 3, borderColor: "rgba(255, 255, 255, 0.10)", bgcolor: "rgba(255, 255, 255, 0.02)", boxShadow: "none" }}
+          >
+            <CardContent sx={{ p: 2 }}>
+              <Typography sx={{ fontFamily: "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", fontSize: "1.65rem", fontWeight: 700, color: "rgb(244, 244, 245)" }}>
+                {stats.uniqueActors}
+              </Typography>
+              <Typography variant="caption" sx={{ color: "rgb(113, 113, 122)" }}>
+                Unique Actors
+              </Typography>
+            </CardContent>
+          </Card>
 
-      {/* Errors */}
-      <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-3">
-        <div className={`text-2xl font-semibold font-mono ${stats.errorCount > 0 ? "text-rose-300" : "text-zinc-100"}`}>
-          {stats.errorCount}
-        </div>
-        <div className="text-[11px] text-zinc-500 mt-0.5">Errors / Denials</div>
-      </div>
+          <Card
+            variant="outlined"
+            sx={{ borderRadius: 3, borderColor: "rgba(255, 255, 255, 0.10)", bgcolor: "rgba(255, 255, 255, 0.02)", boxShadow: "none" }}
+          >
+            <CardContent sx={{ p: 2 }}>
+              <Typography
+                sx={{
+                  fontFamily: "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                  fontSize: "1.65rem",
+                  fontWeight: 700,
+                  color: stats.errorCount > 0 ? "rgb(253, 164, 175)" : "rgb(244, 244, 245)",
+                }}
+              >
+                {stats.errorCount}
+              </Typography>
+              <Typography variant="caption" sx={{ color: "rgb(113, 113, 122)" }}>
+                Errors / Denials
+              </Typography>
+            </CardContent>
+          </Card>
 
-      {/* Top Actions (spans full width) */}
-      <div className="col-span-4 rounded-2xl border border-white/10 bg-white/[0.02] p-3">
-        <div className="text-[10px] font-medium uppercase tracking-[0.15em] text-cyan-300/70 mb-2">
-          Action Distribution
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {stats.topActions.map(([action, count]) => {
-            const pct = totalRecords > 0 ? Math.round((count / totalRecords) * 100) : 0;
-            return (
-              <div key={action} className="flex items-center gap-1.5">
-                <div className="h-1.5 rounded-full bg-cyan-500/60" style={{ width: `${Math.max(pct, 4)}px` }} />
-                <span className="text-[11px] text-zinc-300">{action}</span>
-                <span className="text-[10px] text-zinc-500 font-mono">{count}</span>
-                <span className="text-[10px] text-zinc-600">({pct}%)</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
+        <Box sx={{ gridColumn: "1 / -1" }}>
+          <Card
+            variant="outlined"
+            sx={{ borderRadius: 3, borderColor: "rgba(255, 255, 255, 0.10)", bgcolor: "rgba(255, 255, 255, 0.02)", boxShadow: "none" }}
+          >
+            <CardContent sx={{ p: 2 }}>
+              <Typography variant="overline" sx={{ color: "rgba(103, 232, 249, 0.70)" }}>
+                Action Distribution
+              </Typography>
+              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1.25, mt: 1 }}>
+                {stats.topActions.map(([action, count]) => {
+                  const pct = totalRecords > 0 ? Math.round((count / totalRecords) * 100) : 0;
+                  return (
+                    <Box key={action} sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                      <Box sx={{ height: 6, borderRadius: 999, bgcolor: "rgba(6, 182, 212, 0.60)", width: Math.max(pct, 4) }} />
+                      <Typography variant="body2" sx={{ color: "rgb(212, 212, 216)" }}>
+                        {action}
+                      </Typography>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: "rgb(113, 113, 122)",
+                          fontFamily:
+                            "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                        }}
+                      >
+                        {count}
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: "rgb(82, 82, 91)" }}>
+                        ({pct}%)
+                      </Typography>
+                    </Box>
+                  );
+                })}
+              </Box>
+            </CardContent>
+          </Card>
+        </Box>
+      </Box>
+    </Box>
   );
 }

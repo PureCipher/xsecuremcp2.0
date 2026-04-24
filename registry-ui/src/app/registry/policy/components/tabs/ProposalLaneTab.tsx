@@ -151,13 +151,13 @@ export function ProposalLaneTab({
       <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
         <CardContent sx={{ p: 2.5 }}>
           <Box sx={{ display: "grid", gap: 0.5 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+            <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
               Proposal lane
             </Typography>
             <Typography variant="h5" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
               Review changes before they go live
             </Typography>
-            <Typography sx={{ maxWidth: 900, fontSize: 12, color: "var(--app-muted)" }}>
+            <Typography variant="body2" sx={{ maxWidth: 900, color: "var(--app-muted)" }}>
               Drafts land here first. Approve and apply ready proposals, or reject and withdraw them when they should not ship.
             </Typography>
           </Box>

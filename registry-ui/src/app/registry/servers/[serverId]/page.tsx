@@ -31,8 +31,10 @@ export default async function ServerDetailPage(props: {
             .
           </Typography>
           <Box sx={{ mt: 2 }}>
-            <Link href="/registry/servers" className="text-[11px] font-medium text-[--app-muted] hover:text-[--app-fg]">
-              ← Back to MCP servers
+            <Link href="/registry/servers" className="hover:text-[--app-fg]">
+              <Typography variant="caption" sx={{ fontWeight: 600, color: "var(--app-muted)" }}>
+                ← Back to MCP servers
+              </Typography>
             </Link>
           </Box>
         </CardContent>
@@ -47,13 +49,13 @@ export default async function ServerDetailPage(props: {
     <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
       <Box component="header" sx={{ display: "flex", flexDirection: { xs: "column", sm: "row" }, gap: 2, alignItems: { sm: "flex-end" }, justifyContent: "space-between" }}>
         <Box>
-          <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+          <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
             MCP server profile
           </Typography>
           <Typography variant="h4" sx={{ mt: 0.5, fontWeight: 700, color: "var(--app-fg)" }}>
             {summary.display_name ?? summary.publisher_id}
           </Typography>
-          <Typography sx={{ mt: 0.5, fontSize: 12, color: "var(--app-muted)" }}>
+          <Typography variant="body2" sx={{ mt: 0.5, color: "var(--app-muted)" }}>
             {summary.publisher_id} · {summary.tool_count ?? listings.length} tool{(summary.tool_count ?? listings.length) === 1 ? "" : "s"} in this registry
           </Typography>
         </Box>
@@ -69,8 +71,10 @@ export default async function ServerDetailPage(props: {
       <ServerDetailTabs serverId={decodedId} summary={summary} listings={listings} />
 
       <Box sx={{ pt: 1 }}>
-        <Link href="/registry/servers" className="text-[11px] font-medium text-[--app-muted] hover:text-[--app-fg]">
-          ← Back to MCP servers
+        <Link href="/registry/servers" className="hover:text-[--app-fg]">
+          <Typography variant="caption" sx={{ fontWeight: 600, color: "var(--app-muted)" }}>
+            ← Back to MCP servers
+          </Typography>
         </Link>
       </Box>
     </Box>

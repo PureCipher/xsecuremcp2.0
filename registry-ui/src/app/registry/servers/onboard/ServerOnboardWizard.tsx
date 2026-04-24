@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import type { RegistryToolListing } from "@/lib/registryClient";
 import { KeyValuePanel, EmptyState } from "@/components/security";
+import { Box, Typography } from "@mui/material";
 
 type WizardStep = 1 | 2 | 3 | 4;
 
@@ -98,21 +99,25 @@ export function ServerOnboardWizard({ servers }: { servers: ServerOnboardTarget[
   return (
     <div className="flex flex-col gap-6">
       <header className="space-y-1">
-        <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[--app-muted]">
+        <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
           MCP Servers
-        </p>
-        <h1 className="text-2xl font-semibold text-[--app-fg]">Onboard MCP server</h1>
-        <p className="max-w-2xl text-[11px] text-[--app-muted]">
-          MCP-first onboarding wizard: select a live server source from the registry, discover its tool inventory,
-          then attach Governance defaults (stub until SecureMCP guardrails phase).
-        </p>
+        </Typography>
+        <Typography variant="h5" sx={{ color: "var(--app-fg)" }}>
+          Onboard MCP server
+        </Typography>
+        <Typography variant="body2" sx={{ maxWidth: 720, color: "var(--app-muted)" }}>
+          MCP-first onboarding wizard: select a live server source from the registry, discover its tool inventory, then
+          attach Governance defaults (stub until SecureMCP guardrails phase).
+        </Typography>
       </header>
 
       <section className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-6 ring-1 ring-[--app-surface-ring]">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-2">
-            <h2 className="text-sm font-semibold text-[--app-fg]">Step {step} of 4</h2>
-            <p className="text-[11px] text-[--app-muted]">
+            <Typography variant="body1" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+              Step {step} of 4
+            </Typography>
+            <Typography variant="caption" sx={{ color: "var(--app-muted)" }}>
               {step === 1
                 ? "Select MCP server source + auth settings."
                 : step === 2
@@ -120,7 +125,7 @@ export function ServerOnboardWizard({ servers }: { servers: ServerOnboardTarget[
                   : step === 3
                     ? "Choose default Policy/Contract/Consent bindings."
                     : "Review and activate (stub)."}
-            </p>
+            </Typography>
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -146,9 +151,9 @@ export function ServerOnboardWizard({ servers }: { servers: ServerOnboardTarget[
         {step === 1 ? (
           <div className="mt-6 grid gap-4 md:grid-cols-2">
             <label className="space-y-1">
-              <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-[--app-muted]">
+              <Typography component="span" variant="overline" sx={{ display: "block", color: "var(--app-muted)", letterSpacing: "0.14em" }}>
                 MCP server source
-              </span>
+              </Typography>
               <select
                 value={selectedPublisherId}
                 onChange={(e) => setSelectedPublisherId(e.target.value)}
@@ -164,9 +169,9 @@ export function ServerOnboardWizard({ servers }: { servers: ServerOnboardTarget[
             </label>
 
             <label className="space-y-1">
-              <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-[--app-muted]">
+              <Typography component="span" variant="overline" sx={{ display: "block", color: "var(--app-muted)", letterSpacing: "0.14em" }}>
                 Auth mode
-              </span>
+              </Typography>
               <select
                 value={authMode}
                 onChange={(e) => setAuthMode(e.target.value as "none" | "token")}
@@ -178,10 +183,10 @@ export function ServerOnboardWizard({ servers }: { servers: ServerOnboardTarget[
             </label>
 
             <div className="md:col-span-2">
-              <p className="text-[11px] text-[--app-muted]">
+              <Typography variant="caption" sx={{ color: "var(--app-muted)" }}>
                 This phase focuses on MCP tool inventory discovery using the registry backend. Connectivity validation and
                 activation will be added once SecureMCP guardrails are introduced.
-              </p>
+              </Typography>
             </div>
           </div>
         ) : null}
@@ -189,12 +194,12 @@ export function ServerOnboardWizard({ servers }: { servers: ServerOnboardTarget[
         {step === 2 ? (
           <div className="mt-6 space-y-4">
             <div className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4">
-              <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
+              <Typography variant="overline" sx={{ color: "var(--app-muted)", letterSpacing: "0.16em" }}>
                 Tool discovery
-              </h3>
-              <p className="mt-2 text-[11px] text-[--app-muted]">
+              </Typography>
+              <Typography variant="caption" sx={{ mt: 1, display: "block", color: "var(--app-muted)" }}>
                 Uses registry backend publisher profile as the initial Capability Snapshot source (MCP-first).
-              </p>
+              </Typography>
 
               <div className="mt-4 flex flex-wrap gap-2">
                 <button
@@ -215,7 +220,9 @@ export function ServerOnboardWizard({ servers }: { servers: ServerOnboardTarget[
 
               {toolsError ? (
                 <div className="mt-3 rounded-2xl border border-red-500/40 bg-red-500/10 p-3">
-                  <p className="text-[11px] text-red-200">Discovery failed: {toolsError}</p>
+                  <Typography variant="caption" sx={{ color: "rgb(254, 202, 202)" }}>
+                    Discovery failed: {toolsError}
+                  </Typography>
                 </div>
               ) : null}
             </div>
@@ -267,9 +274,9 @@ export function ServerOnboardWizard({ servers }: { servers: ServerOnboardTarget[
                           {tool.certification_level ?? "unlisted"}
                         </span>
                       </div>
-                      <p className="line-clamp-3 text-[11px] leading-relaxed text-[--app-muted]">
+                      <Typography variant="caption" sx={{ color: "var(--app-muted)", lineHeight: 1.6 }}>
                         {tool.description ?? "No description provided."}
-                      </p>
+                      </Typography>
                     </Link>
                   ))}
                 </div>
@@ -281,9 +288,9 @@ export function ServerOnboardWizard({ servers }: { servers: ServerOnboardTarget[
         {step === 3 ? (
           <div className="mt-6 grid gap-4 md:grid-cols-2">
             <label className="space-y-1">
-              <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-[--app-muted]">
+              <Typography component="span" variant="overline" sx={{ display: "block", color: "var(--app-muted)", letterSpacing: "0.14em" }}>
                 Policy Kernel (default profile)
-              </span>
+              </Typography>
               <select
                 value={defaultPolicyProfile}
                 onChange={(e) => setDefaultPolicyProfile(e.target.value)}
@@ -295,9 +302,9 @@ export function ServerOnboardWizard({ servers }: { servers: ServerOnboardTarget[
             </label>
 
             <label className="space-y-1">
-              <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-[--app-muted]">
+              <Typography component="span" variant="overline" sx={{ display: "block", color: "var(--app-muted)", letterSpacing: "0.14em" }}>
                 Contract Broker (template)
-              </span>
+              </Typography>
               <select
                 value={defaultContractTemplate}
                 onChange={(e) => setDefaultContractTemplate(e.target.value)}
@@ -309,9 +316,9 @@ export function ServerOnboardWizard({ servers }: { servers: ServerOnboardTarget[
             </label>
 
             <label className="space-y-1 md:col-span-2">
-              <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-[--app-muted]">
+              <Typography component="span" variant="overline" sx={{ display: "block", color: "var(--app-muted)", letterSpacing: "0.14em" }}>
                 Consent Graph (baseline)
-              </span>
+              </Typography>
               <select
                 value={consentProfile}
                 onChange={(e) => setConsentProfile(e.target.value)}
@@ -323,9 +330,9 @@ export function ServerOnboardWizard({ servers }: { servers: ServerOnboardTarget[
             </label>
 
             <div className="md:col-span-2">
-              <p className="text-[11px] text-[--app-muted]">
+              <Typography variant="caption" sx={{ color: "var(--app-muted)" }}>
                 Governance attachments are a stub in this MCP-first iteration. SecureMCP guardrails will make these choices enforceable.
-              </p>
+              </Typography>
             </div>
           </div>
         ) : null}
@@ -336,15 +343,15 @@ export function ServerOnboardWizard({ servers }: { servers: ServerOnboardTarget[
 
             <div className="space-y-3">
               <div className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4">
-                <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
+                <Typography variant="overline" sx={{ color: "var(--app-muted)", letterSpacing: "0.16em" }}>
                   Activation (stub)
-                </h3>
-                <p className="mt-2 text-[11px] text-[--app-muted]">
+                </Typography>
+                <Typography variant="caption" sx={{ mt: 1, display: "block", color: "var(--app-muted)" }}>
                   This skeleton will later call backend endpoints to:
                   <br />• activate server snapshot
                   <br />• attach default governance
                   <br />• set initial reflexive learning hooks
-                </p>
+                </Typography>
                 <button
                   type="button"
                   disabled
@@ -355,15 +362,19 @@ export function ServerOnboardWizard({ servers }: { servers: ServerOnboardTarget[
               </div>
 
               <div className="flex flex-col gap-2 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4">
-                <p className="text-[11px] font-semibold text-[--app-fg]">Next</p>
-                <p className="text-[11px] text-[--app-muted]">
+                <Typography variant="caption" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+                  Next
+                </Typography>
+                <Typography variant="caption" sx={{ color: "var(--app-muted)" }}>
                   Back to server directory and review your newly discovered tool inventory.
-                </p>
+                </Typography>
                 <Link
                   href="/registry/servers"
-                  className="text-[11px] font-semibold text-[--app-accent] hover:text-[--app-fg]"
+                  className="hover:text-[--app-fg]"
                 >
-                  ← Back to MCP servers
+                  <Typography variant="caption" sx={{ fontWeight: 700, color: "var(--app-accent)" }}>
+                    ← Back to MCP servers
+                  </Typography>
                 </Link>
               </div>
             </div>

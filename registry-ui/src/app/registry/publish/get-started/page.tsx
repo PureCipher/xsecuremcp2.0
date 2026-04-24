@@ -26,21 +26,13 @@ export default async function PublisherGetStartedPage() {
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
       <Box component="header">
-        <Typography
-          sx={{
-            fontSize: 11,
-            fontWeight: 700,
-            letterSpacing: "0.18em",
-            textTransform: "uppercase",
-            color: "var(--app-muted)",
-          }}
-        >
+        <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
           Publisher onboarding
         </Typography>
         <Typography variant="h4" sx={{ mt: 0.5, fontWeight: 700, color: "var(--app-fg)" }}>
           Get started publishing
         </Typography>
-        <Typography sx={{ mt: 1, maxWidth: 760, fontSize: 12, color: "var(--app-muted)" }}>
+        <Typography variant="body2" sx={{ mt: 1, maxWidth: 760, color: "var(--app-muted)" }}>
           Pick the path that matches where you are today. You can always switch later.
         </Typography>
       </Box>
@@ -50,7 +42,7 @@ export default async function PublisherGetStartedPage() {
           <CardContent sx={{ p: 2.5 }}>
             <Stack spacing={1}>
               <Typography sx={{ fontWeight: 800, color: "var(--app-fg)" }}>I already host an MCP server</Typography>
-              <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+              <Typography variant="body2" sx={{ color: "var(--app-muted)" }}>
                 You run the server; the registry stores the listing, versions, and security manifest so clients can discover and verify it.
               </Typography>
               <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mt: 1 }}>
@@ -59,14 +51,20 @@ export default async function PublisherGetStartedPage() {
                 <Chip size="small" label="Version history" sx={{ borderRadius: 999 }} />
               </Box>
               <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1.25, mt: 2 }}>
-                <Link href="/registry/publish?publish_mode=external&server_type=mcp" legacyBehavior passHref>
-                  <Button component="a" variant="outlined" sx={{ borderRadius: 999, textTransform: "none" }}>
+                <Link
+                  href="/registry/publish?from=onboarding&publish_mode=external&server_type=mcp"
+                  style={{ display: "inline-flex", textDecoration: "none" }}
+                >
+                  <Button component="span" variant="outlined" sx={{ borderRadius: 999, textTransform: "none" }}>
                     Publish MCP server
                   </Button>
                 </Link>
-                <Link href="/registry/publish?publish_mode=external&server_type=securemcp" legacyBehavior passHref>
+                <Link
+                  href="/registry/publish?from=onboarding&publish_mode=external&server_type=securemcp"
+                  style={{ display: "inline-flex", textDecoration: "none" }}
+                >
                   <Button
-                    component="a"
+                    component="span"
                     variant="contained"
                     sx={{
                       borderRadius: 999,
@@ -88,7 +86,7 @@ export default async function PublisherGetStartedPage() {
           <CardContent sx={{ p: 2.5 }}>
             <Stack spacing={1}>
               <Typography sx={{ fontWeight: 800, color: "var(--app-fg)" }}>I have a REST/OpenAPI API</Typography>
-              <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+              <Typography variant="body2" sx={{ color: "var(--app-muted)" }}>
                 Paste an OpenAPI URL, pick endpoints, and the registry hosts a SecureMCP server endpoint for your selected toolset.
               </Typography>
               <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mt: 1 }}>
@@ -97,9 +95,12 @@ export default async function PublisherGetStartedPage() {
                 <Chip size="small" label="SecureMCP" sx={{ borderRadius: 999 }} />
               </Box>
               <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1.25, mt: 2 }}>
-                <Link href="/registry/publish?publish_mode=openapi" legacyBehavior passHref>
+                <Link
+                  href="/registry/publish/openapi"
+                  style={{ display: "inline-flex", textDecoration: "none" }}
+                >
                   <Button
-                    component="a"
+                    component="span"
                     variant="contained"
                     sx={{
                       borderRadius: 999,
@@ -119,9 +120,20 @@ export default async function PublisherGetStartedPage() {
       </Box>
 
       <Box>
-        <Link href="/registry/publish/mine" className="text-[11px] font-medium text-[--app-muted] hover:text-[--app-fg]">
-          Skip → My listings
-        </Link>
+        <Box
+          component="a"
+          href="/registry/publish/mine"
+          sx={{
+            display: "inline-flex",
+            color: "var(--app-muted)",
+            textDecoration: "none",
+            "&:hover": { color: "var(--app-fg)", textDecoration: "underline" },
+          }}
+        >
+          <Typography variant="caption" sx={{ fontWeight: 600 }}>
+            Skip → My listings
+          </Typography>
+        </Box>
       </Box>
     </Box>
   );

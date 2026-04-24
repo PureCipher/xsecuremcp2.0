@@ -1,31 +1,60 @@
 "use client";
 
 import type { ProvenanceChainStatus } from "@/lib/registryClient";
+import { Box, Chip, Typography } from "@mui/material";
 
 function StatusDot({ ok }: { ok: boolean }) {
   return (
-    <span className="relative flex h-3 w-3">
-      {ok && (
-        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[--app-accent] opacity-40" />
-      )}
-      <span
-        className={`relative inline-flex h-3 w-3 rounded-full ${
-          ok ? "bg-[--app-accent]" : "bg-rose-400"
-        }`}
+    <Box sx={{ position: "relative", width: 12, height: 12, display: "inline-flex" }}>
+      {ok ? (
+        <Box
+          sx={{
+            position: "absolute",
+            inset: 0,
+            borderRadius: "50%",
+            bgcolor: "var(--app-accent)",
+            opacity: 0.4,
+            animation: "ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite",
+          }}
+        />
+      ) : null}
+      <Box
+        sx={{
+          position: "relative",
+          width: 12,
+          height: 12,
+          borderRadius: "50%",
+          bgcolor: ok ? "var(--app-accent)" : "rgb(251, 113, 133)",
+        }}
       />
-    </span>
+    </Box>
   );
 }
 
 function HashDisplay({ label, hash }: { label: string; hash: string }) {
   if (!hash) return null;
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-[11px] text-zinc-500">{label}:</span>
-      <code className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] font-mono text-cyan-300/80 select-all">
+    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+      <Typography variant="caption" sx={{ color: "rgb(113, 113, 122)" }}>
+        {label}:
+      </Typography>
+      <Box
+        component="code"
+        sx={{
+          borderRadius: 1,
+          bgcolor: "rgba(255,255,255,0.05)",
+          px: 1,
+          py: 0.25,
+          fontSize: 10,
+          fontFamily:
+            "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+          color: "rgba(103, 232, 249, 0.80)",
+          userSelect: "all",
+        }}
+      >
         {hash}
-      </code>
-    </div>
+      </Box>
+    </Box>
   );
 }
 
@@ -41,120 +70,185 @@ export function ChainIntegrityPanel({ status }: Props) {
     typeof status.record_count === "number" ? status.record_count.toLocaleString() : "—";
 
   return (
-    <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-5 space-y-4">
-      {/* ── Header ──────────────────────────────────────── */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <StatusDot ok={allValid} />
-          <div>
-            <h3 className="text-sm font-medium text-zinc-200">
-              Chain Integrity
-            </h3>
-            <p className="text-[11px] text-zinc-500">
-              Ledger: {status.ledger_id} · {recordCountText} records
-            </p>
-          </div>
-        </div>
-        <span
-          className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
-            allValid
-              ? "bg-[--app-control-active-bg] text-[--app-muted]"
-              : "bg-rose-500/15 text-rose-300"
-          }`}
-        >
-          {allValid ? "Intact" : "Tamper Detected"}
-        </span>
-      </div>
+    <Box sx={{ borderRadius: 4, border: "1px solid rgba(255,255,255,0.10)", bgcolor: "rgba(255,255,255,0.02)", p: 2.5 }}>
+      <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2, flexWrap: "wrap" }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+            <StatusDot ok={allValid} />
+            <Box>
+              <Typography variant="body1" sx={{ fontWeight: 700, color: "rgb(228, 228, 231)" }}>
+                Chain Integrity
+              </Typography>
+              <Typography variant="caption" sx={{ color: "rgb(113, 113, 122)" }}>
+                Ledger: {status.ledger_id} · {recordCountText} records
+              </Typography>
+            </Box>
+          </Box>
+          <Chip
+            size="small"
+            label={allValid ? "Intact" : "Tamper Detected"}
+            sx={{
+              borderRadius: 999,
+              bgcolor: allValid ? "var(--app-control-active-bg)" : "rgba(239, 68, 68, 0.15)",
+              color: allValid ? "var(--app-muted)" : "rgb(253, 164, 175)",
+              fontWeight: 700,
+            }}
+          />
+        </Box>
 
-      {/* ── Integrity checks ────────────────────────────── */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-3">
-          <div className="flex items-center gap-2 mb-1">
-            <span
-              className={`h-2 w-2 rounded-full ${
-                status.chain_valid ? "bg-[--app-accent]" : "bg-rose-400"
-              }`}
-            />
-            <span className="text-xs font-medium text-zinc-300">Hash Chain</span>
-          </div>
-          <p className="text-[11px] text-zinc-500">
-            {status.chain_valid
-              ? "Every record correctly links to its predecessor via SHA-256"
-              : "One or more chain links are broken — possible tampering"}
-          </p>
-        </div>
+        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 1.5 }}>
+          <Box sx={{ borderRadius: 3, border: "1px solid rgba(255,255,255,0.05)", bgcolor: "rgba(255,255,255,0.02)", p: 2 }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75 }}>
+              <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: status.chain_valid ? "var(--app-accent)" : "rgb(251, 113, 133)" }} />
+              <Typography variant="body2" sx={{ fontWeight: 700, color: "rgb(212, 212, 216)" }}>
+                Hash Chain
+              </Typography>
+            </Box>
+            <Typography variant="body2" sx={{ color: "rgb(113, 113, 122)" }}>
+              {status.chain_valid
+                ? "Every record correctly links to its predecessor via SHA-256"
+                : "One or more chain links are broken — possible tampering"}
+            </Typography>
+          </Box>
 
-        <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-3">
-          <div className="flex items-center gap-2 mb-1">
-            <span
-              className={`h-2 w-2 rounded-full ${
-                status.tree_valid ? "bg-[--app-accent]" : "bg-rose-400"
-              }`}
-            />
-            <span className="text-xs font-medium text-zinc-300">Merkle Tree</span>
-          </div>
-          <p className="text-[11px] text-zinc-500">
-            {status.tree_valid
-              ? "All leaf hashes form a consistent Merkle tree"
-              : "Merkle tree rebuild does not match expected root"}
-          </p>
-        </div>
-      </div>
+          <Box sx={{ borderRadius: 3, border: "1px solid rgba(255,255,255,0.05)", bgcolor: "rgba(255,255,255,0.02)", p: 2 }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75 }}>
+              <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: status.tree_valid ? "var(--app-accent)" : "rgb(251, 113, 133)" }} />
+              <Typography variant="body2" sx={{ fontWeight: 700, color: "rgb(212, 212, 216)" }}>
+                Merkle Tree
+              </Typography>
+            </Box>
+            <Typography variant="body2" sx={{ color: "rgb(113, 113, 122)" }}>
+              {status.tree_valid ? "All leaf hashes form a consistent Merkle tree" : "Merkle tree rebuild does not match expected root"}
+            </Typography>
+          </Box>
+        </Box>
 
-      {/* ── Hashes ──────────────────────────────────────── */}
-      <div className="space-y-1.5">
-        <HashDisplay label="Merkle root" hash={status.root_hash} />
-        <HashDisplay label="Chain digest" hash={status.chain_digest} />
-      </div>
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+          <HashDisplay label="Merkle root" hash={status.root_hash} />
+          <HashDisplay label="Chain digest" hash={status.chain_digest} />
+        </Box>
 
-      {/* ── Ledger scheme info ──────────────────────────── */}
-      <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-3">
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-[10px] font-medium uppercase tracking-[0.15em] text-cyan-300/70">
-            Ledger Scheme
-          </span>
-          <span className="rounded-full bg-cyan-500/10 px-2 py-0.5 text-[10px] font-mono text-cyan-300">
-            {scheme?.scheme ?? "unknown"}
-          </span>
-        </div>
+        <Box sx={{ borderRadius: 3, border: "1px solid rgba(255,255,255,0.05)", bgcolor: "rgba(255,255,255,0.02)", p: 2 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5, flexWrap: "wrap" }}>
+            <Typography variant="overline" sx={{ color: "rgba(103, 232, 249, 0.70)" }}>
+              Ledger Scheme
+            </Typography>
+            <Box
+              component="span"
+              sx={{
+                borderRadius: 999,
+                bgcolor: "rgba(6, 182, 212, 0.10)",
+                px: 1,
+                py: 0.25,
+                fontSize: 10,
+                fontFamily:
+                  "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                color: "rgb(103, 232, 249)",
+              }}
+            >
+              {scheme?.scheme ?? "unknown"}
+            </Box>
+          </Box>
 
-        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
-          <div className="text-zinc-500">Leaf count</div>
-          <div className="text-zinc-300 font-mono">{scheme?.leaf_count?.toLocaleString() ?? "—"}</div>
+          <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", columnGap: 3, rowGap: 0.75 }}>
+            <Typography variant="caption" sx={{ color: "rgb(113, 113, 122)" }}>
+              Leaf count
+            </Typography>
+            <Typography
+              variant="caption"
+              sx={{
+                color: "rgb(212, 212, 216)",
+                fontFamily:
+                  "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+              }}
+            >
+              {scheme?.leaf_count?.toLocaleString() ?? "—"}
+            </Typography>
 
-          <div className="text-zinc-500">Tree valid</div>
-          <div className={scheme?.tree_valid ? "text-[--app-muted]" : "text-rose-300"}>
-            {scheme?.tree_valid ? "Yes" : "No"}
-          </div>
+            <Typography variant="caption" sx={{ color: "rgb(113, 113, 122)" }}>
+              Tree valid
+            </Typography>
+            <Typography variant="caption" sx={{ color: scheme?.tree_valid ? "var(--app-muted)" : "rgb(253, 164, 175)" }}>
+              {scheme?.tree_valid ? "Yes" : "No"}
+            </Typography>
 
-          {isAnchored && (
-            <>
-              <div className="text-zinc-500">Anchors committed</div>
-              <div className="text-zinc-300 font-mono">{scheme.anchor_count ?? 0}</div>
+            {isAnchored ? (
+              <>
+                <Typography variant="caption" sx={{ color: "rgb(113, 113, 122)" }}>
+                  Anchors committed
+                </Typography>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: "rgb(212, 212, 216)",
+                    fontFamily:
+                      "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                  }}
+                >
+                  {scheme.anchor_count ?? 0}
+                </Typography>
 
-              <div className="text-zinc-500">Anchors valid</div>
-              <div className={scheme.anchors_valid ? "text-[--app-muted]" : "text-rose-300"}>
-                {scheme.anchors_valid ? "Yes" : "No"}
-              </div>
+                <Typography variant="caption" sx={{ color: "rgb(113, 113, 122)" }}>
+                  Anchors valid
+                </Typography>
+                <Typography variant="caption" sx={{ color: scheme.anchors_valid ? "var(--app-muted)" : "rgb(253, 164, 175)" }}>
+                  {scheme.anchors_valid ? "Yes" : "No"}
+                </Typography>
 
-              <div className="text-zinc-500">Records since anchor</div>
-              <div className="text-zinc-300 font-mono">{scheme.records_since_anchor ?? 0}</div>
+                <Typography variant="caption" sx={{ color: "rgb(113, 113, 122)" }}>
+                  Records since anchor
+                </Typography>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: "rgb(212, 212, 216)",
+                    fontFamily:
+                      "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                  }}
+                >
+                  {scheme.records_since_anchor ?? 0}
+                </Typography>
 
-              <div className="text-zinc-500">Anchor interval</div>
-              <div className="text-zinc-300 font-mono">every {scheme.anchor_interval ?? "?"} records</div>
+                <Typography variant="caption" sx={{ color: "rgb(113, 113, 122)" }}>
+                  Anchor interval
+                </Typography>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: "rgb(212, 212, 216)",
+                    fontFamily:
+                      "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                  }}
+                >
+                  every {scheme.anchor_interval ?? "?"} records
+                </Typography>
 
-              {scheme.latest_anchor && (
-                <>
-                  <div className="text-zinc-500">Latest anchor tx</div>
-                  <div className="text-cyan-300 font-mono text-[10px] truncate">
-                    {String(scheme.latest_anchor.tx_id ?? "—")}
-                  </div>
-                </>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-    </div>
+                {scheme.latest_anchor ? (
+                  <>
+                    <Typography variant="caption" sx={{ color: "rgb(113, 113, 122)" }}>
+                      Latest anchor tx
+                    </Typography>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: "rgb(103, 232, 249)",
+                        fontFamily:
+                          "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {String(scheme.latest_anchor.tx_id ?? "—")}
+                    </Typography>
+                  </>
+                ) : null}
+              </>
+            ) : null}
+          </Box>
+        </Box>
+      </Box>
+    </Box>
   );
 }

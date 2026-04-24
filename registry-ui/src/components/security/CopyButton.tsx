@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Button } from "@mui/material";
 
 async function writeToClipboard(text: string): Promise<boolean> {
   if (typeof navigator === "undefined") return false;
@@ -46,18 +47,40 @@ export function CopyButton({
     return () => window.clearTimeout(t);
   }, [status]);
 
+  const currentLabel = status === "copied" ? "Copied" : status === "failed" ? "Failed" : label;
+
   return (
-    <button
+    <Button
       type="button"
       onClick={async () => {
         const ok = await writeToClipboard(text);
         setStatus(ok ? "copied" : "failed");
       }}
-      className={`rounded-full border border-[--app-border] bg-[--app-control-bg] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted] transition hover:bg-[--app-hover-bg] hover:text-[--app-fg] ${className}`}
+      className={className}
       aria-label={label}
+      variant="outlined"
+      size="small"
+      sx={{
+        borderRadius: 999,
+        borderColor: "var(--app-border)",
+        bgcolor: "var(--app-control-bg)",
+        color: "var(--app-muted)",
+        textTransform: "uppercase",
+        letterSpacing: "0.16em",
+        fontWeight: 800,
+        fontSize: 10,
+        px: 1.5,
+        py: 0.4,
+        minWidth: 0,
+        "&:hover": {
+          bgcolor: "var(--app-hover-bg)",
+          borderColor: "var(--app-border)",
+          color: "var(--app-fg)",
+        },
+      }}
     >
-      {status === "copied" ? "Copied" : status === "failed" ? "Failed" : label}
-    </button>
+      {currentLabel}
+    </Button>
   );
 }
 

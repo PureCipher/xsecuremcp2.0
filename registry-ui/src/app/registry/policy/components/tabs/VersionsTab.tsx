@@ -78,13 +78,13 @@ export function VersionsTab({
       <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
         <CardContent sx={{ p: 2.5 }}>
           <Box sx={{ display: "grid", gap: 0.5 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+            <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
               Version history
             </Typography>
             <Typography variant="h5" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
               Roll back with confidence
             </Typography>
-            <Typography sx={{ maxWidth: 720, fontSize: 12, color: "var(--app-muted)" }}>
+            <Typography variant="body2" sx={{ maxWidth: 720, color: "var(--app-muted)" }}>
               Every live apply creates a saved version of the policy chain. Roll back when a change needs to be reversed quickly.
             </Typography>
           </Box>
@@ -179,13 +179,13 @@ export function VersionsTab({
       <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
         <CardContent sx={{ p: 2.5 }}>
           <Box sx={{ display: "grid", gap: 0.5 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+            <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
               Version diff
             </Typography>
             <Typography variant="h5" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
               See what changed
             </Typography>
-            <Typography sx={{ maxWidth: 720, fontSize: 12, color: "var(--app-muted)" }}>
+            <Typography variant="body2" sx={{ maxWidth: 720, color: "var(--app-muted)" }}>
               Compare two saved versions before you roll back or stage another change.
             </Typography>
           </Box>

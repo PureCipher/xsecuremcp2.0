@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import type { ProvenanceRecord } from "@/lib/registryClient";
+import { Box, ButtonBase, Chip, MenuItem, Select, TextField, Typography } from "@mui/material";
 
 /* ── action → color map ─────────────────────────────────────── */
 const ACTION_COLORS: Record<string, { dot: string; bg: string; text: string }> = {
@@ -105,67 +106,111 @@ export function ProvenanceTimeline({ records, onSelectRecord, selectedRecordId }
   }, [filtered]);
 
   return (
-    <div className="flex flex-col gap-4">
-      {/* ── Filter bar ─────────────────────────────────── */}
-      <div className="flex flex-wrap items-center gap-2">
-        <input
-          type="text"
-          placeholder="Search records…"
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+        <TextField
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 outline-none focus:border-cyan-500/50"
+          placeholder="Search records…"
+          size="small"
+          sx={{
+            minWidth: 220,
+            "& .MuiOutlinedInput-root": {
+              borderRadius: 3,
+              bgcolor: "rgba(255,255,255,0.05)",
+              color: "rgb(228, 228, 231)",
+              "& fieldset": { borderColor: "rgba(255,255,255,0.10)" },
+              "&:hover fieldset": { borderColor: "rgba(6, 182, 212, 0.50)" },
+              "&.Mui-focused fieldset": { borderColor: "rgba(6, 182, 212, 0.50)" },
+            },
+            "& input::placeholder": { color: "rgb(113, 113, 122)", opacity: 1 },
+          }}
         />
-        <select
+        <Select
           value={filterAction}
-          onChange={(e) => setFilterAction(e.target.value)}
-          className="rounded-xl border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-zinc-300 outline-none focus:border-cyan-500/50"
+          onChange={(e) => setFilterAction(String(e.target.value))}
+          size="small"
+          displayEmpty
+          sx={{
+            borderRadius: 3,
+            bgcolor: "rgba(255,255,255,0.05)",
+            color: "rgb(212, 212, 216)",
+            "& fieldset": { borderColor: "rgba(255,255,255,0.10)" },
+            "&:hover fieldset": { borderColor: "rgba(6, 182, 212, 0.50)" },
+            "&.Mui-focused fieldset": { borderColor: "rgba(6, 182, 212, 0.50)" },
+            minWidth: 160,
+          }}
         >
-          <option value="">All actions</option>
+          <MenuItem value="">All actions</MenuItem>
           {actions.map((a) => (
-            <option key={a} value={a}>
+            <MenuItem key={a} value={a}>
               {a}
-            </option>
+            </MenuItem>
           ))}
-        </select>
-        <select
+        </Select>
+        <Select
           value={filterActor}
-          onChange={(e) => setFilterActor(e.target.value)}
-          className="rounded-xl border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-zinc-300 outline-none focus:border-cyan-500/50"
+          onChange={(e) => setFilterActor(String(e.target.value))}
+          size="small"
+          displayEmpty
+          sx={{
+            borderRadius: 3,
+            bgcolor: "rgba(255,255,255,0.05)",
+            color: "rgb(212, 212, 216)",
+            "& fieldset": { borderColor: "rgba(255,255,255,0.10)" },
+            "&:hover fieldset": { borderColor: "rgba(6, 182, 212, 0.50)" },
+            "&.Mui-focused fieldset": { borderColor: "rgba(6, 182, 212, 0.50)" },
+            minWidth: 160,
+          }}
         >
-          <option value="">All actors</option>
+          <MenuItem value="">All actors</MenuItem>
           {actors.map((a) => (
-            <option key={a} value={a}>
+            <MenuItem key={a} value={a}>
               {a}
-            </option>
+            </MenuItem>
           ))}
-        </select>
-        <span className="ml-auto text-[11px] text-zinc-500">
+        </Select>
+        <Typography variant="caption" sx={{ ml: "auto", color: "rgb(113, 113, 122)" }}>
           {filtered.length} of {records.length} records
-        </span>
-      </div>
+        </Typography>
+      </Box>
 
       {/* ── Timeline ────────────────────────────────────── */}
       {filtered.length === 0 ? (
-        <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-8 text-center text-sm text-zinc-500">
-          No provenance records{records.length > 0 ? " match your filters" : " recorded yet"}
-        </div>
+        <Box sx={{ borderRadius: 3, border: "1px solid rgba(255,255,255,0.05)", bgcolor: "rgba(255,255,255,0.02)", p: 4, textAlign: "center" }}>
+          <Typography variant="body2" sx={{ color: "rgb(113, 113, 122)" }}>
+            No provenance records{records.length > 0 ? " match your filters" : " recorded yet"}
+          </Typography>
+        </Box>
       ) : (
-        <div className="relative space-y-6">
+        <Box sx={{ position: "relative" }}>
           {Array.from(grouped.entries()).map(([date, recs]) => (
-            <div key={date}>
-              <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.18em] text-cyan-300/80">
+            <Box key={date} sx={{ mb: 3 }}>
+              <Typography variant="overline" sx={{ mb: 1, color: "rgba(103, 232, 249, 0.80)" }}>
                 {date}
-              </div>
-              <div className="relative ml-3 border-l border-white/10 pl-6 space-y-1">
+              </Typography>
+              <Box sx={{ position: "relative", ml: 1.5, borderLeft: "1px solid rgba(255,255,255,0.10)", pl: 3, display: "flex", flexDirection: "column", gap: 1 }}>
                 {recs.map((rec) => {
                   const c = actionColor(rec.action);
                   const isSelected = rec.record_id === selectedRecordId;
                   return (
-                    <button
+                    <ButtonBase
                       key={rec.record_id}
                       onClick={() => onSelectRecord?.(rec)}
-                      className={`group relative flex w-full items-start gap-3 rounded-xl px-3 py-2 text-left transition
-                        ${isSelected ? "bg-cyan-500/15 ring-1 ring-cyan-500/30" : "hover:bg-white/[0.04]"}`}
+                      sx={{
+                        position: "relative",
+                        width: "100%",
+                        alignItems: "flex-start",
+                        justifyContent: "flex-start",
+                        gap: 1.5,
+                        borderRadius: 3,
+                        px: 2,
+                        py: 1.5,
+                        textAlign: "left",
+                        bgcolor: isSelected ? "rgba(6, 182, 212, 0.15)" : "transparent",
+                        border: isSelected ? "1px solid rgba(6, 182, 212, 0.30)" : "1px solid transparent",
+                        "&:hover": { bgcolor: isSelected ? "rgba(6, 182, 212, 0.15)" : "rgba(255,255,255,0.04)" },
+                      }}
                     >
                       {/* Dot on the line */}
                       <span
@@ -173,49 +218,67 @@ export function ProvenanceTimeline({ records, onSelectRecord, selectedRecordId }
                       />
 
                       {/* Time */}
-                      <span className="mt-0.5 min-w-[60px] text-[11px] font-mono text-zinc-500">
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          mt: 0.25,
+                          minWidth: 74,
+                          color: "rgb(113, 113, 122)",
+                          fontFamily:
+                            "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                        }}
+                      >
                         {formatTime(rec.timestamp)}
-                      </span>
+                      </Typography>
 
                       {/* Action badge */}
-                      <span
-                        className={`mt-0.5 rounded-full px-2 py-0.5 text-[10px] font-medium ${c.bg} ${c.text}`}
-                      >
-                        {rec.action}
-                      </span>
+                      <Chip
+                        size="small"
+                        label={rec.action}
+                        className={`${c.bg} ${c.text}`}
+                        sx={{ mt: 0.25, height: 22, borderRadius: 999, fontSize: 10, fontWeight: 700 }}
+                      />
 
                       {/* Details */}
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="truncate text-xs text-zinc-200">
+                      <Box sx={{ minWidth: 0, flex: 1 }}>
+                        <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, minWidth: 0 }}>
+                          <Typography variant="body2" sx={{ minWidth: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "rgb(228, 228, 231)" }}>
                             {rec.resource_id || "—"}
-                          </span>
-                          {rec.actor_id && (
-                            <span className="text-[10px] text-zinc-500">
+                          </Typography>
+                          {rec.actor_id ? (
+                            <Typography variant="caption" sx={{ color: "rgb(113, 113, 122)" }}>
                               by {rec.actor_id}
-                            </span>
-                          )}
-                        </div>
-                        <div className="mt-0.5 flex gap-3 text-[10px] text-zinc-600">
-                          <span title="Input hash">
+                            </Typography>
+                          ) : null}
+                        </Box>
+                        <Box sx={{ display: "flex", gap: 1.5, mt: 0.5, flexWrap: "wrap" }}>
+                          <Typography variant="caption" sx={{ color: "rgb(82, 82, 91)" }} title="Input hash">
                             in:{truncHash(rec.input_hash, 8)}
-                          </span>
-                          <span title="Output hash">
+                          </Typography>
+                          <Typography variant="caption" sx={{ color: "rgb(82, 82, 91)" }} title="Output hash">
                             out:{truncHash(rec.output_hash, 8)}
-                          </span>
-                          <span title="Chain link" className="font-mono">
+                          </Typography>
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              color: "rgb(82, 82, 91)",
+                              fontFamily:
+                                "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                            }}
+                            title="Chain link"
+                          >
                             ←{truncHash(rec.previous_hash, 8)}
-                          </span>
-                        </div>
-                      </div>
-                    </button>
+                          </Typography>
+                        </Box>
+                      </Box>
+                    </ButtonBase>
                   );
                 })}
-              </div>
-            </div>
+              </Box>
+            </Box>
           ))}
-        </div>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }

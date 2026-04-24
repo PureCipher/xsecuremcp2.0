@@ -4,141 +4,150 @@ import Link from "next/link";
 
 import { useCliTerminalPreferences } from "@/hooks/useCliTerminalPreferences";
 import { CLI_TERMINAL_THEMES } from "@/lib/cliTerminalThemes";
+import { Box, Card, CardContent, FormControl, InputLabel, MenuItem, Select, Typography } from "@mui/material";
 
 export function CliTerminalPreferencesPanel() {
   const { prefs, setThemeId, setFontSize, setFontFamily, setFontWeight, setFontWeightBold } =
     useCliTerminalPreferences();
 
   return (
-    <section
+    <Card
+      variant="outlined"
+      component="section"
       id="browser-cli-terminal"
-      className="scroll-mt-24 rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]"
+      sx={{
+        borderRadius: 4,
+        borderColor: "var(--app-border)",
+        bgcolor: "var(--app-surface)",
+        boxShadow: "none",
+      }}
     >
-      <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-[--app-muted]">Browser CLI terminal</h2>
-      <p className="mt-2 max-w-xl text-[11px] leading-relaxed text-[--app-muted]">
-        Preferences for the in-browser SecureMCP CLI on{" "}
-        <Link
-          href="/registry/cli"
-          className="font-mono text-[--app-muted] underline decoration-[--app-accent]"
-        >
-          /registry/cli
-        </Link>
-        . Stored in this browser only (<span className="font-mono">localStorage</span>).
-      </p>
+      <CardContent sx={{ p: 2.5 }}>
+        <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
+          Browser CLI terminal
+        </Typography>
+        <Typography variant="body2" sx={{ mt: 0.5, maxWidth: 720, color: "var(--app-muted)" }}>
+          Preferences for the in-browser SecureMCP CLI on{" "}
+          <Link href="/registry/cli" style={{ textDecoration: "underline", textDecorationColor: "var(--app-accent)" }}>
+            <Box component="span" sx={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", color: "var(--app-muted)" }}>
+              /registry/cli
+            </Box>
+          </Link>
+          . Stored in this browser only (
+          <Box component="span" sx={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}>
+            localStorage
+          </Box>
+          ).
+        </Typography>
 
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        <div>
-          <label
-            htmlFor="settings-cli-theme"
-            className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-[--app-muted]"
-          >
-            Color profile
-          </label>
-          <p className="mt-0.5 text-[10px] text-[--app-muted]">Background & text — Terminal.app-style presets</p>
-          <select
-            id="settings-cli-theme"
-            value={prefs.themeId}
-            onChange={(e) => setThemeId(e.target.value)}
-            className="mt-2 w-full rounded-xl border border-[--app-border] bg-[--app-control-bg] px-3 py-2 text-[12px] text-[--app-fg] focus:outline-none focus:ring-1 focus:ring-[--app-accent]"
-          >
-            {CLI_TERMINAL_THEMES.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.label} — {t.description}
-              </option>
-            ))}
-          </select>
-        </div>
+        <Box sx={{ mt: 2, display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" } }}>
+          <Box>
+            <FormControl fullWidth size="small">
+              <InputLabel id="settings-cli-theme-label">Color profile</InputLabel>
+              <Select
+                labelId="settings-cli-theme-label"
+                id="settings-cli-theme"
+                label="Color profile"
+                value={prefs.themeId}
+                onChange={(e) => setThemeId(e.target.value)}
+              >
+                {CLI_TERMINAL_THEMES.map((t) => (
+                  <MenuItem key={t.id} value={t.id}>
+                    {t.label} — {t.description}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <Typography variant="caption" sx={{ mt: 0.5, display: "block", color: "var(--app-muted)" }}>
+              Background & text — Terminal.app-style presets
+            </Typography>
+          </Box>
 
-        <div>
-          <label
-            htmlFor="settings-cli-font"
-            className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-[--app-muted]"
-          >
-            Monospace font size
-          </label>
-          <p className="mt-0.5 text-[10px] text-[--app-muted]">xterm font size (px)</p>
-          <select
-            id="settings-cli-font"
-            value={prefs.fontSize}
-            onChange={(e) => setFontSize(Number(e.target.value))}
-            className="mt-2 w-full rounded-xl border border-[--app-border] bg-[--app-control-bg] px-3 py-2 text-[12px] text-[--app-fg] focus:outline-none focus:ring-1 focus:ring-[--app-accent]"
-          >
-            {[10, 11, 12, 13, 14, 15, 16, 18].map((n) => (
-              <option key={n} value={n}>
-                {n}px
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
+          <Box>
+            <FormControl fullWidth size="small">
+              <InputLabel id="settings-cli-font-label">Monospace font size</InputLabel>
+              <Select
+                labelId="settings-cli-font-label"
+                id="settings-cli-font"
+                label="Monospace font size"
+                value={String(prefs.fontSize)}
+                onChange={(e) => setFontSize(Number(e.target.value))}
+              >
+                {[10, 11, 12, 13, 14, 15, 16, 18].map((n) => (
+                  <MenuItem key={n} value={String(n)}>
+                    {n}px
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <Typography variant="caption" sx={{ mt: 0.5, display: "block", color: "var(--app-muted)" }}>
+              xterm font size (px)
+            </Typography>
+          </Box>
+        </Box>
 
-      <div className="mt-4 grid gap-4 sm:grid-cols-3">
-        <div>
-          <label
-            htmlFor="settings-cli-font-family"
-            className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-[--app-muted]"
-          >
-            Font
-          </label>
-          <p className="mt-0.5 text-[10px] text-[--app-muted]">Font family (regular + bold)</p>
-          <select
-            id="settings-cli-font-family"
-            value={prefs.fontFamily}
-            onChange={(e) => setFontFamily(e.target.value)}
-            className="mt-2 w-full rounded-xl border border-[--app-border] bg-[--app-control-bg] px-3 py-2 text-[12px] text-[--app-fg] focus:outline-none focus:ring-1 focus:ring-[--app-accent]"
-          >
-            {[
-              "JetBrains Mono",
-              "Fira Code",
-              "IBM Plex Mono",
-              "Source Code Pro",
-              "ui-monospace",
-            ].map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </div>
+        <Box sx={{ mt: 2, display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" } }}>
+          <Box>
+            <FormControl fullWidth size="small">
+              <InputLabel id="settings-cli-font-family-label">Font</InputLabel>
+              <Select
+                labelId="settings-cli-font-family-label"
+                id="settings-cli-font-family"
+                label="Font"
+                value={prefs.fontFamily}
+                onChange={(e) => setFontFamily(e.target.value)}
+              >
+                {["JetBrains Mono", "Fira Code", "IBM Plex Mono", "Source Code Pro", "ui-monospace"].map((name) => (
+                  <MenuItem key={name} value={name}>
+                    {name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <Typography variant="caption" sx={{ mt: 0.5, display: "block", color: "var(--app-muted)" }}>
+              Font family (regular + bold)
+            </Typography>
+          </Box>
 
-        <div>
-          <label
-            htmlFor="settings-cli-font-weight"
-            className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-[--app-muted]"
-          >
-            Weight (regular)
-          </label>
-          <p className="mt-0.5 text-[10px] text-[--app-muted]">Normal text weight</p>
-          <select
-            id="settings-cli-font-weight"
-            value={prefs.fontWeight}
-            onChange={(e) => setFontWeight(e.target.value as "normal" | "bold")}
-            className="mt-2 w-full rounded-xl border border-[--app-border] bg-[--app-control-bg] px-3 py-2 text-[12px] text-[--app-fg] focus:outline-none focus:ring-1 focus:ring-[--app-accent]"
-          >
-            <option value="normal">Regular</option>
-            <option value="bold">Bold</option>
-          </select>
-        </div>
+          <Box>
+            <FormControl fullWidth size="small">
+              <InputLabel id="settings-cli-font-weight-label">Weight (regular)</InputLabel>
+              <Select
+                labelId="settings-cli-font-weight-label"
+                id="settings-cli-font-weight"
+                label="Weight (regular)"
+                value={prefs.fontWeight}
+                onChange={(e) => setFontWeight(e.target.value as "normal" | "bold")}
+              >
+                <MenuItem value="normal">Regular</MenuItem>
+                <MenuItem value="bold">Bold</MenuItem>
+              </Select>
+            </FormControl>
+            <Typography variant="caption" sx={{ mt: 0.5, display: "block", color: "var(--app-muted)" }}>
+              Normal text weight
+            </Typography>
+          </Box>
 
-        <div>
-          <label
-            htmlFor="settings-cli-font-weight-bold"
-            className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-[--app-muted]"
-          >
-            Weight (bold)
-          </label>
-          <p className="mt-0.5 text-[10px] text-[--app-muted]">Bold text weight</p>
-          <select
-            id="settings-cli-font-weight-bold"
-            value={prefs.fontWeightBold}
-            onChange={(e) => setFontWeightBold(e.target.value as "normal" | "bold")}
-            className="mt-2 w-full rounded-xl border border-[--app-border] bg-[--app-control-bg] px-3 py-2 text-[12px] text-[--app-fg] focus:outline-none focus:ring-1 focus:ring-[--app-accent]"
-          >
-            <option value="bold">Bold</option>
-            <option value="normal">Regular</option>
-          </select>
-        </div>
-      </div>
-    </section>
+          <Box>
+            <FormControl fullWidth size="small">
+              <InputLabel id="settings-cli-font-weight-bold-label">Weight (bold)</InputLabel>
+              <Select
+                labelId="settings-cli-font-weight-bold-label"
+                id="settings-cli-font-weight-bold"
+                label="Weight (bold)"
+                value={prefs.fontWeightBold}
+                onChange={(e) => setFontWeightBold(e.target.value as "normal" | "bold")}
+              >
+                <MenuItem value="bold">Bold</MenuItem>
+                <MenuItem value="normal">Regular</MenuItem>
+              </Select>
+            </FormControl>
+            <Typography variant="caption" sx={{ mt: 0.5, display: "block", color: "var(--app-muted)" }}>
+              Bold text weight
+            </Typography>
+          </Box>
+        </Box>
+      </CardContent>
+    </Card>
   );
 }

@@ -2,57 +2,76 @@
 
 import { APP_THEMES, type AppThemeId } from "@/lib/appThemes";
 import { useAppTheme } from "@/hooks/useAppTheme";
+import { Box, Card, CardContent, FormControl, InputLabel, MenuItem, Select, Typography } from "@mui/material";
 
 export function AppThemePreferencesPanel() {
   const { themeId, setThemeId } = useAppTheme();
 
   return (
-    <section className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
-      <header className="space-y-1">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
-          Appearance
-        </p>
-        <p className="max-w-xl text-[11px] text-[--app-muted]">
-          Sets the registry chrome theme (top bar, sidebar, and footer). Terminal color profiles are
-          configured separately below. Use{" "}
-          <kbd className="rounded border border-[--app-border] bg-[--app-control-bg] px-1 font-mono text-[10px]">
-            Ctrl
-          </kbd>{" "}
-          +{" "}
-          <kbd className="rounded border border-[--app-border] bg-[--app-control-bg] px-1 font-mono text-[10px]">
-            Shift
-          </kbd>{" "}
-          +{" "}
-          <kbd className="rounded border border-[--app-border] bg-[--app-control-bg] px-1 font-mono text-[10px]">
-            C
-          </kbd>{" "}
-          to toggle <strong className="text-[--app-fg]">Navy Command</strong> and{" "}
-          <strong className="text-[--app-fg]">Paper Contrast</strong>.
-        </p>
-      </header>
+    <Card
+      variant="outlined"
+      component="section"
+      sx={{
+        borderRadius: 4,
+        borderColor: "var(--app-border)",
+        bgcolor: "var(--app-surface)",
+        boxShadow: "none",
+      }}
+    >
+      <CardContent sx={{ p: 2.5 }}>
+        <Box component="header" sx={{ display: "grid", gap: 0.5 }}>
+          <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
+            Appearance
+          </Typography>
+          <Typography variant="body2" sx={{ maxWidth: 720, color: "var(--app-muted)" }}>
+            Sets the registry chrome theme (top bar, sidebar, and footer). Terminal color profiles are configured
+            separately below. Use{" "}
+            <Box component="kbd" sx={{ borderRadius: 1, border: "1px solid var(--app-border)", bgcolor: "var(--app-control-bg)", px: 0.75, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", fontSize: 11 }}>
+              Ctrl
+            </Box>{" "}
+            +{" "}
+            <Box component="kbd" sx={{ borderRadius: 1, border: "1px solid var(--app-border)", bgcolor: "var(--app-control-bg)", px: 0.75, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", fontSize: 11 }}>
+              Shift
+            </Box>{" "}
+            +{" "}
+            <Box component="kbd" sx={{ borderRadius: 1, border: "1px solid var(--app-border)", bgcolor: "var(--app-control-bg)", px: 0.75, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", fontSize: 11 }}>
+              C
+            </Box>{" "}
+            to toggle{" "}
+            <Box component="strong" sx={{ color: "var(--app-fg)" }}>
+              Navy Command
+            </Box>{" "}
+            and{" "}
+            <Box component="strong" sx={{ color: "var(--app-fg)" }}>
+              Paper Contrast
+            </Box>
+            .
+          </Typography>
+        </Box>
 
-      <div className="mt-4">
-        <label
-          htmlFor="settings-app-theme"
-          className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-[--app-muted]"
-        >
-          Application theme
-        </label>
-        <p className="mt-0.5 text-[10px] text-[--app-muted]">Controls registry UI surfaces and accents</p>
-        <select
-          id="settings-app-theme"
-          value={themeId}
-          onChange={(e) => setThemeId(e.target.value as AppThemeId)}
-          className="mt-2 w-full rounded-xl border border-[--app-border] bg-[--app-control-bg] px-3 py-2 text-[12px] text-[--app-fg] focus:outline-none focus:ring-1 focus:ring-[--app-accent]"
-        >
-          {APP_THEMES.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.label} — {t.description}
-            </option>
-          ))}
-        </select>
-      </div>
-    </section>
+        <Box sx={{ mt: 2 }}>
+          <FormControl fullWidth size="small">
+            <InputLabel id="settings-app-theme-label">Application theme</InputLabel>
+            <Select
+              labelId="settings-app-theme-label"
+              id="settings-app-theme"
+              label="Application theme"
+              value={themeId}
+              onChange={(e) => setThemeId(e.target.value as AppThemeId)}
+            >
+              {APP_THEMES.map((t) => (
+                <MenuItem key={t.id} value={t.id}>
+                  {t.label} — {t.description}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <Typography variant="caption" sx={{ mt: 0.5, display: "block", color: "var(--app-muted)" }}>
+            Controls registry UI surfaces and accents
+          </Typography>
+        </Box>
+      </CardContent>
+    </Card>
   );
 }
 

@@ -278,8 +278,10 @@ export default async function ListingDetailPage(props: { params: Promise<{ toolN
       ) : null}
 
       <Box sx={{ pt: 1 }}>
-        <Link href="/registry/app" className="text-[11px] font-medium text-[--app-muted] hover:text-[--app-fg]">
-          ← Back to all tools
+        <Link href="/registry/app" className="hover:text-[--app-fg]">
+          <Typography variant="caption" sx={{ fontWeight: 600, color: "var(--app-muted)" }}>
+            ← Back to all tools
+          </Typography>
         </Link>
       </Box>
     </Box>

@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { Typography } from "@mui/material";
 
 import { getRegistrySession } from "@/lib/registryClient";
 import { LoginFormGate } from "./LoginFormGate";
@@ -29,44 +30,69 @@ export default async function LoginPage() {
             <span>Secured MCP Registry</span>
           </div>
           <div className="space-y-3">
-            <h1 className="text-balance text-3xl font-semibold leading-tight text-[--app-fg] md:text-4xl">
+            <Typography variant="h4" sx={{ color: "var(--app-fg)" }}>
               Find a tool you can trust.
-            </h1>
-            <p className="max-w-xl text-sm leading-relaxed text-[--app-muted]">
-              Browse a vetted catalog of MCP tools, understand what each one can access, and share your own
-              listings with clear security context.
-            </p>
+            </Typography>
+            <Typography variant="body1" sx={{ maxWidth: "48rem", color: "var(--app-muted)" }}>
+              Browse a vetted catalog of MCP tools, understand what each one can access, and share your own listings
+              with clear security context.
+            </Typography>
           </div>
           <dl className="grid gap-4 text-xs text-[--app-muted] sm:grid-cols-3">
             <div className="space-y-1 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-3 ring-1 ring-[--app-surface-ring]">
-              <dt className="font-medium text-[--app-fg]">Verified listings</dt>
-              <dd>Attested manifests and certification levels for every published tool.</dd>
+              <Typography component="dt" variant="body2" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+                Verified listings
+              </Typography>
+              <Typography component="dd" variant="body2" sx={{ color: "var(--app-muted)" }}>
+                Attested manifests and certification levels for every published tool.
+              </Typography>
             </div>
             <div className="space-y-1 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-3 ring-1 ring-[--app-surface-ring]">
-              <dt className="font-medium text-[--app-fg]">Role-aware access</dt>
-              <dd>Viewer, publisher, reviewer, and admin roles mapped to real workflows.</dd>
+              <Typography component="dt" variant="body2" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+                Role-aware access
+              </Typography>
+              <Typography component="dd" variant="body2" sx={{ color: "var(--app-muted)" }}>
+                Viewer, publisher, reviewer, and admin roles mapped to real workflows.
+              </Typography>
             </div>
             <div className="space-y-1 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-3 ring-1 ring-[--app-surface-ring]">
-              <dt className="font-medium text-[--app-fg]">Copy-ready setup</dt>
-              <dd>Client, Docker, and CI snippets generated from runtime metadata.</dd>
+              <Typography component="dt" variant="body2" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+                Copy-ready setup
+              </Typography>
+              <Typography component="dd" variant="body2" sx={{ color: "var(--app-muted)" }}>
+                Client, Docker, and CI snippets generated from runtime metadata.
+              </Typography>
             </div>
           </dl>
         </section>
 
         <section className="flex flex-col items-center justify-center gap-4">
           {backendUnreachable ? (
-            <p
-              className="max-w-xs rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-xs text-amber-100"
+            <Typography
+              component="p"
+              variant="body2"
+              className="max-w-xs rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-amber-100"
               role="status"
+              sx={{ color: "rgb(254 243 199)" }}
             >
               Cannot reach the registry API at{" "}
-              <span className="font-mono text-[11px]">
+              <Typography
+                component="span"
+                variant="caption"
+                sx={{ fontFamily: "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}
+              >
                 {process.env.REGISTRY_BACKEND_URL ?? "http://localhost:8000"}
-              </span>
+              </Typography>
               . Start the Python registry (for example{" "}
-              <span className="font-mono text-[11px]">uv run python examples/securemcp/purecipher_registry.py</span>
+              <Typography
+                component="span"
+                variant="caption"
+                sx={{ fontFamily: "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}
+              >
+                uv run python examples/securemcp/purecipher_registry.py
+              </Typography>
               ) then refresh.
-            </p>
+            </Typography>
           ) : null}
           <LoginFormGate />
         </section>

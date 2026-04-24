@@ -54,13 +54,13 @@ export function LiveChainTab({
       <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
         <CardContent sx={{ p: 3 }}>
           <Box sx={{ display: "grid", gap: 0.5 }}>
-            <Typography sx={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+            <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
               Live policy chain
             </Typography>
             <Typography variant="h5" sx={{ fontWeight: 800, color: "var(--app-fg)" }}>
               See what is active right now
             </Typography>
-            <Typography sx={{ maxWidth: 900, fontSize: 13, color: "var(--app-muted)" }}>
+            <Typography variant="body2" sx={{ maxWidth: 900, color: "var(--app-muted)" }}>
               These rules are live today. Draft a change or removal first, then approve and apply it from the Proposals tab.
             </Typography>
           </Box>
@@ -124,7 +124,7 @@ export function LiveChainTab({
                     <CardContent sx={{ p: 2.5 }}>
                       <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "flex-start", justifyContent: "space-between", gap: 2 }}>
                         <Box sx={{ display: "grid", gap: 0.5 }}>
-                          <Typography sx={{ fontSize: 11, fontWeight: 900, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                          <Typography variant="overline" sx={{ color: "var(--app-muted)", letterSpacing: "0.16em" }}>
                             Step {provider.index + 1}
                           </Typography>
                           <Typography sx={{ fontSize: 14, fontWeight: 800, color: "var(--app-fg)" }}>

@@ -140,44 +140,60 @@ export default async function RegistryHealthPage() {
 
         {/* Security Components Grid */}
         {componentCount > 0 ? (
-          <section className="space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
+          <Box component="section" sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+            <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2 }}>
+              <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
                 Security Components
-              </p>
+              </Typography>
               <Chip
                 size="small"
                 label={`${componentCount} active`}
                 sx={{ borderRadius: 999, bgcolor: "var(--app-control-active-bg)", color: "var(--app-muted)", fontWeight: 700, fontSize: 11 }}
               />
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+            </Box>
+            <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", md: "1fr 1fr 1fr", lg: "1fr 1fr 1fr 1fr" } }}>
               {Object.entries(components).map(([key, status]) => {
                 const info = PILLAR_COMPONENTS[key];
                 return (
                   <Link
                     key={key}
                     href={info?.href ?? "/registry/health"}
-                    className="group rounded-2xl border border-[--app-border] bg-[--app-surface] p-3 ring-1 ring-[--app-surface-ring] transition hover:bg-[--app-hover-bg] hover:border-[--app-accent] hover:ring-[--app-accent]"
+                    className="group"
+                    style={{ textDecoration: "none" }}
                   >
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`inline-block h-2 w-2 rounded-full ${
-                          status === "ok" ? "bg-[--app-accent]" : "bg-red-400"
-                        }`}
-                      />
-                      <p className="text-[11px] font-medium text-[--app-muted] group-hover:text-[--app-fg]">
-                        {info?.label ?? key}
-                      </p>
-                    </div>
-                    <p className="mt-1 pl-4 text-[10px] text-[--app-muted]">
-                      {status === "ok" ? "Operational" : status}
-                    </p>
+                    <Box
+                      sx={{
+                        borderRadius: 3,
+                        border: "1px solid var(--app-border)",
+                        bgcolor: "var(--app-surface)",
+                        p: 1.5,
+                        boxShadow: "none",
+                        transition: "background-color 120ms ease, border-color 120ms ease",
+                        "&:hover": { bgcolor: "var(--app-hover-bg)", borderColor: "var(--app-accent)" },
+                      }}
+                    >
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                        <Box
+                          sx={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: "50%",
+                            bgcolor: status === "ok" ? "var(--app-accent)" : "rgb(248, 113, 113)",
+                          }}
+                        />
+                        <Typography variant="caption" sx={{ fontWeight: 600, color: "var(--app-muted)" }}>
+                          {info?.label ?? key}
+                        </Typography>
+                      </Box>
+                      <Typography variant="caption" sx={{ mt: 0.5, display: "block", pl: 2.25, color: "var(--app-muted)", fontSize: 10 }}>
+                        {status === "ok" ? "Operational" : status}
+                      </Typography>
+                    </Box>
                   </Link>
                 );
               })}
-            </div>
-          </section>
+            </Box>
+          </Box>
         ) : null}
 
         {/* Federation Peers */}

@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import type { RegistryToolListing } from "@/lib/registryClient";
 import { EmptyState, KeyValuePanel } from "@/components/security";
+import { Box, Typography } from "@mui/material";
 
 type WizardStep = 1 | 2 | 3 | 4 | 5;
 
@@ -134,21 +135,25 @@ export function ClientOnboardWizard({ servers }: { servers: OnboardServer[] }) {
   return (
     <div className="flex flex-col gap-6">
       <header className="space-y-1">
-        <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[--app-muted]">
+        <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
           Clients
-        </p>
-        <h1 className="text-2xl font-semibold text-[--app-fg]">Onboard client</h1>
-        <p className="max-w-2xl text-[11px] text-[--app-muted]">
+        </Typography>
+        <Typography variant="h5" sx={{ color: "var(--app-fg)" }}>
+          Onboard client
+        </Typography>
+        <Typography variant="body2" sx={{ maxWidth: 720, color: "var(--app-muted)" }}>
           UI skeleton for client onboarding: discover eligible servers, bind governance (Policy/Contract/Ledger/Consent),
           simulate access, and activate.
-        </p>
+        </Typography>
       </header>
 
       <section className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-6 ring-1 ring-[--app-surface-ring]">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-2">
-            <h2 className="text-sm font-semibold text-[--app-fg]">Step {step} of 5</h2>
-            <p className="text-[11px] text-[--app-muted]">
+            <Typography variant="body1" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+              Step {step} of 5
+            </Typography>
+            <Typography variant="caption" sx={{ color: "var(--app-muted)" }}>
               {step === 1
                 ? "Define client identity."
                 : step === 2
@@ -158,7 +163,7 @@ export function ClientOnboardWizard({ servers }: { servers: OnboardServer[] }) {
                     : step === 4
                       ? "Simulate effective access."
                       : "Review and activate (stub)."}
-            </p>
+            </Typography>
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -184,9 +189,9 @@ export function ClientOnboardWizard({ servers }: { servers: OnboardServer[] }) {
         {step === 1 ? (
           <div className="mt-6 grid gap-4 md:grid-cols-2">
             <label className="space-y-1">
-              <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-[--app-muted]">
+              <Typography component="span" variant="overline" sx={{ display: "block", color: "var(--app-muted)", letterSpacing: "0.14em" }}>
                 Client name
-              </span>
+              </Typography>
               <input
                 value={clientName}
                 onChange={(e) => setClientName(e.target.value)}
@@ -196,9 +201,9 @@ export function ClientOnboardWizard({ servers }: { servers: OnboardServer[] }) {
             </label>
 
             <label className="space-y-1">
-              <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-[--app-muted]">
+              <Typography component="span" variant="overline" sx={{ display: "block", color: "var(--app-muted)", letterSpacing: "0.14em" }}>
                 Client type
-              </span>
+              </Typography>
               <select
                 value={clientType}
                 onChange={(e) => setClientType(e.target.value as "desktop" | "agent" | "service")}
@@ -215,16 +220,18 @@ export function ClientOnboardWizard({ servers }: { servers: OnboardServer[] }) {
         {step === 2 ? (
           <div className="mt-6 space-y-4">
             <div className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4">
-              <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
+              <Typography variant="overline" sx={{ color: "var(--app-muted)", letterSpacing: "0.16em" }}>
                 Select servers (live directory)
-              </h3>
-              <p className="mt-2 text-[11px] text-[--app-muted]">
+              </Typography>
+              <Typography variant="caption" sx={{ mt: 1, display: "block", color: "var(--app-muted)" }}>
                 Servers are sourced from the registry backend&apos;s publisher directory. In MCP terms, each server can expose many tools; scope will be implemented next.
-              </p>
+              </Typography>
 
               <div className="mt-4 flex flex-wrap gap-2">
                 {servers.length === 0 ? (
-                  <span className="text-[11px] text-[--app-muted]">No servers available.</span>
+                  <Typography component="span" variant="caption" sx={{ color: "var(--app-muted)" }}>
+                    No servers available.
+                  </Typography>
                 ) : (
                   servers.map((s) => {
                     const selected = selectedServers.includes(s.serverId);
@@ -246,28 +253,30 @@ export function ClientOnboardWizard({ servers }: { servers: OnboardServer[] }) {
                         }`}
                       >
                         {s.displayName}
-                        <span className="ml-2 text-[10px] text-[--app-muted]">
+                        <Typography component="span" variant="caption" sx={{ ml: 1, color: "var(--app-muted)" }}>
                           ({s.toolCount})
-                        </span>
+                        </Typography>
                       </button>
                     );
                   })
                 )}
               </div>
 
-              <p className="mt-3 text-[11px] text-[--app-muted]">
+              <Typography variant="caption" sx={{ mt: 1.5, color: "var(--app-muted)" }}>
                 Selected servers:{" "}
-                <span className="font-semibold text-[--app-fg]">{selectedServers.length}</span>
-              </p>
+                <Box component="span" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+                  {selectedServers.length}
+                </Box>
+              </Typography>
             </div>
 
             <div className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4">
-              <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
+              <Typography variant="overline" sx={{ color: "var(--app-muted)", letterSpacing: "0.16em" }}>
                 Server/tool scope (scaffolding)
-              </h3>
-              <p className="mt-2 text-[11px] text-[--app-muted]">
+              </Typography>
+              <Typography variant="caption" sx={{ mt: 1, display: "block", color: "var(--app-muted)" }}>
                 Choose whether the client binding covers all tools for each selected server, or a scoped subset (UI stub).
-              </p>
+              </Typography>
 
               <div className="mt-4 flex flex-wrap gap-2">
                 <button
@@ -301,11 +310,15 @@ export function ClientOnboardWizard({ servers }: { servers: OnboardServer[] }) {
                 <div className="mt-4">
                   {toolInventoryError ? (
                     <div className="rounded-2xl border border-red-500/40 bg-red-500/10 p-3">
-                      <p className="text-[11px] text-red-200">{toolInventoryError}</p>
+                      <Typography variant="caption" sx={{ color: "rgb(254, 202, 202)" }}>
+                        {toolInventoryError}
+                      </Typography>
                     </div>
                   ) : toolInventoryLoading ? (
                     <div className="rounded-2xl border border-[--app-border] bg-[--app-surface] p-4">
-                      <p className="text-[11px] text-[--app-muted]">Loading tool inventory…</p>
+                      <Typography variant="caption" sx={{ color: "var(--app-muted)" }}>
+                        Loading tool inventory…
+                      </Typography>
                     </div>
                   ) : selectedServers.length === 0 ? (
                     <EmptyState
@@ -325,18 +338,18 @@ export function ClientOnboardWizard({ servers }: { servers: OnboardServer[] }) {
                             className="rounded-2xl border border-[--app-border] bg-[--app-surface] p-4"
                           >
                             <div className="flex items-baseline justify-between gap-3">
-                              <h3 className="text-sm font-semibold text-[--app-fg]">
+                              <Typography variant="body1" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
                                 {server?.displayName ?? serverId}
-                              </h3>
+                              </Typography>
                               <span className="rounded-full bg-[--app-chrome-bg] px-2 py-0.5 text-[10px] font-semibold text-[--app-muted]">
                                 {selectedForServer.length}/{inventory.length} selected
                               </span>
                             </div>
 
                             {inventory.length === 0 ? (
-                              <p className="mt-2 text-[11px] text-[--app-muted]">
+                              <Typography variant="caption" sx={{ mt: 1, display: "block", color: "var(--app-muted)" }}>
                                 No tool listings found for this server profile.
-                              </p>
+                              </Typography>
                             ) : (
                               <div className="mt-3 flex flex-col gap-2">
                                 {inventory.map((tool) => {
@@ -347,13 +360,13 @@ export function ClientOnboardWizard({ servers }: { servers: OnboardServer[] }) {
                                       className="flex cursor-pointer items-start justify-between gap-3 rounded-xl border border-[--app-border] bg-[--app-control-bg] px-3 py-2"
                                     >
                                       <span className="min-w-0">
-                                        <span className="block text-[11px] font-semibold text-[--app-fg]">
+                                        <Typography component="span" variant="caption" sx={{ display: "block", fontWeight: 700, color: "var(--app-fg)" }}>
                                           {tool.display_name ?? tool.tool_name}
-                                        </span>
+                                        </Typography>
                                         {tool.description ? (
-                                          <span className="mt-1 block line-clamp-2 text-[10px] text-[--app-muted]">
+                                          <Typography component="span" variant="caption" sx={{ mt: 0.5, display: "block", color: "var(--app-muted)" }}>
                                             {tool.description}
-                                          </span>
+                                          </Typography>
                                         ) : null}
                                       </span>
                                       <input
@@ -401,9 +414,9 @@ export function ClientOnboardWizard({ servers }: { servers: OnboardServer[] }) {
         {step === 3 ? (
           <div className="mt-6 grid gap-4 md:grid-cols-2">
             <div className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4">
-              <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
+              <Typography variant="overline" sx={{ color: "var(--app-muted)", letterSpacing: "0.16em" }}>
                 Governance layers
-              </h3>
+              </Typography>
               <div className="mt-4 space-y-3">
                 <ToggleRow
                   checked={attachPolicy}
@@ -435,12 +448,12 @@ export function ClientOnboardWizard({ servers }: { servers: OnboardServer[] }) {
         {step === 4 ? (
           <div className="mt-6 space-y-4">
             <div className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4">
-              <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
+              <Typography variant="overline" sx={{ color: "var(--app-muted)", letterSpacing: "0.16em" }}>
                 Access simulation
-              </h3>
-              <p className="mt-2 text-[11px] text-[--app-muted]">
+              </Typography>
+              <Typography variant="caption" sx={{ mt: 1, display: "block", color: "var(--app-muted)" }}>
                 UI skeleton: run a matrix of allowed/denied operations based on Policy Kernel + Consent Graph + Contract terms.
-              </p>
+              </Typography>
               <button
                 type="button"
                 disabled
@@ -451,9 +464,9 @@ export function ClientOnboardWizard({ servers }: { servers: OnboardServer[] }) {
             </div>
 
             <div className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4">
-              <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
+              <Typography variant="overline" sx={{ color: "var(--app-muted)", letterSpacing: "0.16em" }}>
                 Simulation results (placeholder)
-              </h3>
+              </Typography>
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 <MiniCell label="allowed_calls" value="—" />
                 <MiniCell label="denied_calls" value="—" />
@@ -469,15 +482,17 @@ export function ClientOnboardWizard({ servers }: { servers: OnboardServer[] }) {
             <KeyValuePanel title="Final review (stub)" entries={summary} />
             <div className="space-y-3">
               <div className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4">
-                <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-[--app-muted]">
+                <Typography variant="overline" sx={{ color: "var(--app-muted)", letterSpacing: "0.16em" }}>
                   Reflexive Core
-                </h3>
-                <p className="mt-2 text-[11px] text-[--app-muted]">
+                </Typography>
+                <Typography variant="caption" sx={{ mt: 1, display: "block", color: "var(--app-muted)" }}>
                   Reflexive Core will learn from outcomes (allows/denies/overrides) and propose improvements as reviewable proposals.
-                </p>
+                </Typography>
               </div>
               <div className="flex flex-col gap-2 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4">
-                <p className="text-[11px] font-semibold text-[--app-fg]">Activate binding (stub)</p>
+                <Typography variant="caption" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+                  Activate binding (stub)
+                </Typography>
                 <button
                   type="button"
                   disabled
@@ -485,8 +500,10 @@ export function ClientOnboardWizard({ servers }: { servers: OnboardServer[] }) {
                 >
                   Activate client access (coming soon)
                 </button>
-                <Link href="/registry/clients" className="text-[11px] font-semibold text-[--app-accent] hover:text-[--app-fg]">
-                  ← Back to clients
+                <Link href="/registry/clients" className="hover:text-[--app-fg]">
+                  <Typography variant="caption" sx={{ fontWeight: 700, color: "var(--app-accent)" }}>
+                    ← Back to clients
+                  </Typography>
                 </Link>
               </div>
             </div>
@@ -514,7 +531,9 @@ function ToggleRow({
         checked ? "bg-[--app-control-active-bg]" : "bg-[--app-control-bg] hover:bg-[--app-hover-bg]"
       }`}
     >
-      <span className="font-semibold text-[--app-fg]">{label}</span>
+      <Typography component="span" variant="caption" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+        {label}
+      </Typography>
       <span
         className={`inline-flex h-5 w-10 items-center rounded-full px-1 text-[10px] font-bold ${
           checked ? "bg-[--app-accent]" : "bg-[--app-control-border]"
@@ -529,8 +548,12 @@ function ToggleRow({
 function MiniCell({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl border border-[--app-border] bg-[--app-surface] p-3">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">{label}</p>
-      <p className="mt-2 text-[12px] font-semibold text-[--app-fg]">{value}</p>
+      <Typography variant="overline" sx={{ color: "var(--app-muted)", letterSpacing: "0.16em" }}>
+        {label}
+      </Typography>
+      <Typography variant="body2" sx={{ mt: 1, fontWeight: 700, color: "var(--app-fg)" }}>
+        {value}
+      </Typography>
     </div>
   );
 }

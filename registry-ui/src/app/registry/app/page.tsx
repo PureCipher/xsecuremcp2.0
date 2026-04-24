@@ -44,13 +44,13 @@ export default async function RegistryAppPage() {
         }}
       >
         <Box>
-          <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+          <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
             PureCipher Secured MCP Registry
           </Typography>
-          <Typography variant="h4" sx={{ mt: 0.5, fontWeight: 700, color: "var(--app-fg)" }}>
+          <Typography variant="h4" sx={{ mt: 0.5, color: "var(--app-fg)" }}>
             Trusted tool directory
           </Typography>
-          <Typography sx={{ mt: 1, maxWidth: 720, fontSize: 12, color: "var(--app-muted)" }}>
+          <Typography variant="body2" sx={{ mt: 1, maxWidth: 720, color: "var(--app-muted)" }}>
             Search trusted MCP tools, review certification levels, and open listings for install recipes.
           </Typography>
         </Box>
@@ -95,10 +95,10 @@ export default async function RegistryAppPage() {
             }}
           >
             <Box>
-              <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+              <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
                 Quick actions
               </Typography>
-              <Typography sx={{ mt: 0.5, maxWidth: 720, fontSize: 12, color: "var(--app-muted)" }}>
+              <Typography variant="body2" sx={{ mt: 0.5, maxWidth: 720, color: "var(--app-muted)" }}>
                 Shortcuts based on your role: publish submissions or moderate the queue.
               </Typography>
             </Box>

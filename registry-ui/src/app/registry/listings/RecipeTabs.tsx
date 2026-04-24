@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 
 import type { InstallRecipe } from "@/lib/registryClient";
 import { CopyButton, TabBar } from "@/components/security";
+import { Box, Typography } from "@mui/material";
 
 type TabKey = "quickstart" | "client" | "docker" | "verify" | "other";
 
@@ -60,40 +61,53 @@ export function RecipeTabs({
 
   if (tabs.length === 0) {
     return (
-      <div className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
-        <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-[--app-muted]">Install recipes</h2>
-        <p className="mt-2 text-[12px] text-[--app-muted]">
+      <Box sx={{ borderRadius: 4, border: "1px solid var(--app-border)", bgcolor: "var(--app-surface)", p: 2.5, boxShadow: "none" }}>
+        <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
+          Install recipes
+        </Typography>
+        <Typography variant="body2" sx={{ mt: 1, color: "var(--app-muted)" }}>
           This listing doesn&apos;t expose runtime recipes yet.
-        </p>
-      </div>
+        </Typography>
+      </Box>
     );
   }
 
   return (
-    <section className="space-y-3">
-      <div className="flex flex-col gap-2 rounded-3xl border border-[--app-border] bg-[--app-surface] p-5 ring-1 ring-[--app-surface-ring]">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-[--app-muted]">Install recipes</h2>
-          <span className="text-[10px] text-[--app-muted]">
+    <Box component="section" sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 1,
+          borderRadius: 4,
+          border: "1px solid var(--app-border)",
+          bgcolor: "var(--app-surface)",
+          p: 2.5,
+          boxShadow: "none",
+        }}
+      >
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2 }}>
+          <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
+            Install recipes
+          </Typography>
+          <Typography variant="caption" sx={{ color: "var(--app-muted)" }}>
             {tabs.length} section{tabs.length === 1 ? "" : "s"}
-          </span>
-        </div>
-        <TabBar
-          tabs={tabs}
-          activeTab={activeTab}
-          onTabChange={(key) => setActiveTab(key as TabKey)}
-        />
-        <div className="pt-2">{content}</div>
-      </div>
-    </section>
+          </Typography>
+        </Box>
+        <TabBar tabs={tabs} activeTab={activeTab} onTabChange={(key) => setActiveTab(key as TabKey)} />
+        <Box sx={{ pt: 1 }}>{content}</Box>
+      </Box>
+    </Box>
   );
 }
 
 function EmptyPanel() {
   return (
-    <div className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
-      <p className="text-[11px] text-[--app-muted]">No recipes available in this section.</p>
-    </div>
+    <Box sx={{ borderRadius: 3, border: "1px solid var(--app-border)", bgcolor: "var(--app-control-bg)", p: 2, boxShadow: "none" }}>
+      <Typography variant="caption" sx={{ color: "var(--app-muted)" }}>
+        No recipes available in this section.
+      </Typography>
+    </Box>
   );
 }
 
@@ -102,20 +116,35 @@ function PrimaryRecipeCard({ recipe }: { recipe: InstallRecipe }) {
   const content = recipe.content ?? "";
 
   return (
-    <div className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[12px] font-semibold text-[--app-fg]">{title}</p>
-          <p className="mt-1 text-[11px] text-[--app-muted]">
+    <Box sx={{ borderRadius: 3, border: "1px solid var(--app-border)", bgcolor: "var(--app-control-bg)", p: 2, boxShadow: "none" }}>
+      <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 2 }}>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="body2" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+            {title}
+          </Typography>
+          <Typography variant="caption" sx={{ mt: 0.5, display: "block", color: "var(--app-muted)" }}>
             Copy/paste the command below to get running quickly.
-          </p>
-        </div>
+          </Typography>
+        </Box>
         <CopyButton text={content} label="Copy" />
-      </div>
-      <pre className="mt-3 max-h-72 overflow-auto rounded-2xl bg-[--app-chrome-bg] p-3 text-[11px] leading-relaxed text-[--app-fg]">
+      </Box>
+      <Box
+        component="pre"
+        sx={{
+          mt: 2,
+          maxHeight: 288,
+          overflow: "auto",
+          borderRadius: 3,
+          bgcolor: "var(--app-chrome-bg)",
+          p: 1.5,
+          fontSize: 11,
+          lineHeight: 1.6,
+          color: "var(--app-fg)",
+        }}
+      >
         {content}
-      </pre>
-    </div>
+      </Box>
+    </Box>
   );
 }
 
@@ -123,26 +152,53 @@ function RecipeGrid({ recipes }: { recipes: InstallRecipe[] }) {
   if (!recipes || recipes.length === 0) return <EmptyPanel />;
 
   return (
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+    <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: { xs: "1fr", md: "1fr 1fr", xl: "1fr 1fr 1fr" } }}>
       {recipes.map((recipe) => {
         const title = recipe.title ?? recipe.recipe_id;
         const content = recipe.content ?? "";
         return (
-          <article
+          <Box
+            component="article"
             key={recipe.recipe_id}
-            className="flex flex-col gap-2 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]"
+            sx={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 1,
+              borderRadius: 3,
+              border: "1px solid var(--app-border)",
+              bgcolor: "var(--app-control-bg)",
+              p: 2,
+              boxShadow: "none",
+            }}
           >
-            <div className="flex items-start justify-between gap-3">
-              <h3 className="min-w-0 truncate text-[12px] font-semibold text-[--app-fg]">{title}</h3>
+            <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 2 }}>
+              <Typography
+                variant="body2"
+                sx={{ minWidth: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 700, color: "var(--app-fg)" }}
+              >
+                {title}
+              </Typography>
               <CopyButton text={content} label="Copy" className="shrink-0" />
-            </div>
-            <pre className="max-h-48 overflow-auto rounded-xl bg-[--app-chrome-bg] p-2 text-[11px] leading-relaxed text-[--app-fg]">
+            </Box>
+            <Box
+              component="pre"
+              sx={{
+                maxHeight: 192,
+                overflow: "auto",
+                borderRadius: 2.5,
+                bgcolor: "var(--app-chrome-bg)",
+                p: 1.25,
+                fontSize: 11,
+                lineHeight: 1.6,
+                color: "var(--app-fg)",
+              }}
+            >
               {content}
-            </pre>
-          </article>
+            </Box>
+          </Box>
         );
       })}
-    </div>
+    </Box>
   );
 }
 

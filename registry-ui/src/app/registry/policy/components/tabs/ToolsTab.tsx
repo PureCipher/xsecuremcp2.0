@@ -349,20 +349,22 @@ export function ToolsTab({
         <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
           <CardContent sx={{ p: 2.5 }}>
             <Box sx={{ display: "grid", gap: 0.5 }}>
-              <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+              <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
                 Proposal editor
               </Typography>
               <Typography variant="h5" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
                 Refine or hand-edit the JSON
               </Typography>
-              <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+              <Typography variant="body2" sx={{ color: "var(--app-muted)" }}>
                 Use the guided builder above or start from a quick template, then create a proposal that reviewers can approve before it goes live.
               </Typography>
             </Box>
 
             {jurisdictions.length > 0 ? (
               <Box sx={{ mt: 2, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1 }}>
-                <Typography sx={{ fontSize: 11, fontWeight: 700, color: "var(--app-muted)" }}>Filter:</Typography>
+                <Typography variant="caption" sx={{ fontWeight: 700, color: "var(--app-muted)" }}>
+                  Filter:
+                </Typography>
                 <Button
                   type="button"
                   size="small"
@@ -495,13 +497,13 @@ export function ToolsTab({
         <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
           <CardContent sx={{ p: 2.5 }}>
             <Box sx={{ display: "grid", gap: 0.5 }}>
-              <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+              <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
                 Import and export
               </Typography>
               <Typography variant="h5" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
                 Move policy JSON in and out safely
               </Typography>
-              <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+              <Typography variant="body2" sx={{ color: "var(--app-muted)" }}>
                 Export the live chain or a saved version, then import a snapshot, provider list, or single rule. Imports become batch proposals that still go through validation, simulation, approval, and deploy.
               </Typography>
             </Box>
@@ -547,7 +549,7 @@ export function ToolsTab({
                   <Typography sx={{ fontSize: 12, color: "rgb(254, 205, 211)" }}>{importPreview.message}</Typography>
                 ) : importPreview ? (
                   <Box sx={{ display: "grid", gap: 1 }}>
-                    <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                    <Typography variant="overline" sx={{ color: "var(--app-muted)", letterSpacing: "0.16em" }}>
                       Import preview
                     </Typography>
                     <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
@@ -585,13 +587,13 @@ export function ToolsTab({
         <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
           <CardContent sx={{ p: 2.5 }}>
             <Box sx={{ display: "grid", gap: 0.5 }}>
-              <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+              <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
                 Private packs
               </Typography>
               <Typography variant="h5" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
                 Save reusable policy starting points for your team
               </Typography>
-              <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+              <Typography variant="body2" sx={{ color: "var(--app-muted)" }}>
                 Turn a draft, the live chain, or a saved version into a private pack that reviewers can stage again later.
               </Typography>
             </Box>

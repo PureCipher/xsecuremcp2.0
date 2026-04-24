@@ -6,8 +6,12 @@ type Props = {
 type Info = {
   raw: string | null;
   label: string;
-  className: string;
+  bgcolor: string;
+  color: string;
+  borderColor: string;
 };
+
+import { Chip } from "@mui/material";
 
 function info(level?: string): Info {
   const raw = level?.trim() ? level.trim() : null;
@@ -17,7 +21,9 @@ function info(level?: string): Info {
     return {
       raw,
       label: "Unrated",
-      className: "bg-zinc-500/10 text-zinc-200 ring-1 ring-zinc-400/20",
+      bgcolor: "rgba(113, 113, 122, 0.18)",
+      color: "rgb(212, 212, 216)",
+      borderColor: "rgba(212, 212, 216, 0.24)",
     };
   }
 
@@ -25,7 +31,9 @@ function info(level?: string): Info {
     return {
       raw,
       label: raw,
-      className: "bg-[--app-control-active-bg] text-[--app-fg] ring-1 ring-[--app-accent]",
+      bgcolor: "var(--app-control-active-bg)",
+      color: "var(--app-fg)",
+      borderColor: "var(--app-accent)",
     };
   }
 
@@ -33,29 +41,46 @@ function info(level?: string): Info {
     return {
       raw,
       label: raw,
-      className: "bg-sky-500/10 text-sky-100 ring-1 ring-sky-400/20",
+      bgcolor: "rgba(14, 165, 233, 0.18)",
+      color: "rgb(186, 230, 253)",
+      borderColor: "rgba(186, 230, 253, 0.24)",
     };
   }
 
   return {
     raw,
     label: raw,
-    className: "bg-[--app-control-bg] text-[--app-muted] ring-1 ring-[--app-surface-ring]",
+    bgcolor: "var(--app-control-bg)",
+    color: "var(--app-muted)",
+    borderColor: "var(--app-surface-ring)",
   };
 }
 
 export function CertificationBadge({ level, size = "sm" }: Props) {
   const badge = info(level);
-  const textSize = size === "md" ? "text-[10px]" : "text-[10px]";
-  const padding = size === "md" ? "px-3 py-1" : "px-2 py-0.5";
+  const height = size === "md" ? 24 : 22;
 
   return (
-    <span
-      className={`inline-flex items-center rounded-full font-semibold uppercase tracking-[0.16em] ${textSize} ${padding} ${badge.className}`}
+    <Chip
       title={badge.raw ?? "Unrated"}
-    >
-      {badge.label}
-    </span>
+      size="small"
+      label={badge.label}
+      sx={{
+        borderRadius: 999,
+        height,
+        bgcolor: badge.bgcolor,
+        color: badge.color,
+        border: "1px solid",
+        borderColor: badge.borderColor,
+        fontSize: 10,
+        fontWeight: 800,
+        textTransform: "uppercase",
+        letterSpacing: "0.16em",
+        "& .MuiChip-label": {
+          px: size === "md" ? 1.25 : 1,
+        },
+      }}
+    />
   );
 }
 

@@ -58,13 +58,13 @@ export default async function AccessStudioPage({
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
       <Box component="header" sx={{ display: "grid", gap: 0.5 }}>
-        <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+        <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
           Access Studio
         </Typography>
         <Typography variant="h4" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
           Simulate MCP tool eligibility
         </Typography>
-        <Typography sx={{ mt: 0.5, maxWidth: 900, fontSize: 12, color: "var(--app-muted)" }}>
+        <Typography variant="body2" sx={{ mt: 0.5, maxWidth: 900, color: "var(--app-muted)" }}>
           MCP-only phase: server tool inventory + registry certification/verification preview. Contract/ledger/consent enforcement comes next.
         </Typography>
       </Box>
@@ -79,7 +79,9 @@ export default async function AccessStudioPage({
 
       <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
         <CardContent sx={{ p: 2.5 }}>
-          <Typography sx={{ fontSize: 14, fontWeight: 700, color: "var(--app-fg)" }}>MCP simulation query</Typography>
+          <Typography variant="body1" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+            MCP simulation query
+          </Typography>
           <Box component="form" method="GET" sx={{ mt: 2, display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" } }}>
             <TextField
               name="clientId"
@@ -133,7 +135,7 @@ export default async function AccessStudioPage({
                 Run simulation
               </Button>
 
-              <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+              <Typography variant="body2" sx={{ color: "var(--app-muted)" }}>
                 Server:{" "}
                 <Box component="span" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
                   {serverId ? serverId : "—"}
@@ -158,7 +160,9 @@ export default async function AccessStudioPage({
       {serverId ? (
         <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
           <CardContent sx={{ p: 2.5 }}>
-            <Typography sx={{ fontSize: 14, fontWeight: 700, color: "var(--app-fg)" }}>Server tool inventory</Typography>
+            <Typography variant="body1" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+              Server tool inventory
+            </Typography>
 
           {profile?.error ? (
             <EmptyState
@@ -215,7 +219,7 @@ export default async function AccessStudioPage({
                 )}
               </Box>
 
-              <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+              <Typography variant="body2" sx={{ color: "var(--app-muted)" }}>
                   Showing up to 8 tools for performance. Use the Tool dropdown to inspect certification details.
               </Typography>
             </Box>
@@ -234,9 +238,21 @@ export default async function AccessStudioPage({
       )}
 
       {toolName ? (
-        <section className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-6 ring-1 ring-[--app-surface-ring]">
-          <h2 className="mb-4 text-sm font-semibold text-[--app-fg]">Tool verification (registry)</h2>
-          <div className="mt-6 grid gap-4 lg:grid-cols-[1fr_0.95fr]">
+        <Card
+          component="section"
+          variant="outlined"
+          sx={{
+            borderRadius: 4,
+            borderColor: "var(--app-border)",
+            bgcolor: "var(--app-surface)",
+            boxShadow: "none",
+          }}
+        >
+          <CardContent sx={{ p: 3 }}>
+          <Typography variant="body1" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+            Tool verification (registry)
+          </Typography>
+          <Box sx={{ mt: 2, display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", lg: "1fr 0.95fr" } }}>
             <KeyValuePanel
               title="MCP tool eligibility preview"
               entries={[
@@ -254,7 +270,7 @@ export default async function AccessStudioPage({
               ]}
             />
 
-            <div className="space-y-4">
+            <Box sx={{ display: "grid", gap: 2 }}>
               <KeyValuePanel
                 title="Verification details"
                 entries={[
@@ -279,9 +295,10 @@ export default async function AccessStudioPage({
               ) : (
                 <EmptyState title="No verification loaded" message="Run simulation again to fetch verification." />
               )}
-            </div>
-          </div>
-        </section>
+            </Box>
+          </Box>
+          </CardContent>
+        </Card>
       ) : null}
     </Box>
   );

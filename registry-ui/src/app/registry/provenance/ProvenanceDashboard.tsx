@@ -56,22 +56,15 @@ export function ProvenanceDashboard({ records, chainStatus }: Props) {
     <Stack spacing={3}>
       <Box>
         <Typography
-          sx={{
-            mb: 0.5,
-            fontSize: 10,
-            fontWeight: 600,
-            letterSpacing: "0.18em",
-            textTransform: "uppercase",
-            color: "var(--app-accent)",
-            opacity: 0.85,
-          }}
+          variant="overline"
+          sx={{ mb: 0.5, color: "var(--app-accent)", opacity: 0.85 }}
         >
           Provenance ledger
         </Typography>
-        <Typography variant="h5" sx={{ fontWeight: 600, color: "var(--app-fg)" }}>
+        <Typography variant="h5" sx={{ color: "var(--app-fg)" }}>
           Smart provenance & immutable ledgers
         </Typography>
-        <Typography sx={{ mt: 0.5, fontSize: 14, color: "var(--app-muted)", maxWidth: 720 }}>
+        <Typography variant="body2" sx={{ mt: 0.5, color: "var(--app-muted)", maxWidth: 720 }}>
           Every model call, dataset usage, and outcome is hashed and chain-linked to prior events. Tamper-evident audit
           trail with Merkle tree verification.
         </Typography>

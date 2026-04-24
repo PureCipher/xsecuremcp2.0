@@ -114,13 +114,13 @@ export function MigrationTab({
       <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
         <CardContent sx={{ p: 2.5 }}>
           <Box sx={{ display: "grid", gap: 0.5 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+            <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
               Environment promotion
             </Typography>
             <Typography variant="h5" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
               Move policy safely across development, staging, and production
             </Typography>
-            <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+            <Typography variant="body2" sx={{ color: "var(--app-muted)" }}>
               Capture a baseline for each environment, preview the change, then stage a promotion proposal through the same approval workflow.
             </Typography>
           </Box>

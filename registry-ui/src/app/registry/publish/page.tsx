@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { Box, Typography } from "@mui/material";
 
 import { getMyListings, requirePublisherRole } from "@/lib/registryClient";
 import { PublisherForm } from "./PublisherForm";
@@ -53,23 +54,24 @@ export default async function PublishPage(props: { searchParams?: Promise<Record
     : undefined;
 
   return (
-    <div className="flex flex-col gap-6">
-        <header className="space-y-1">
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[--app-muted]">
-            Publisher console
-          </p>
-          <h1 className="text-2xl font-semibold text-[--app-fg]">Share your tool</h1>
-          <p className="max-w-xl text-[11px] text-[--app-muted]">
-            Describe your tool, paste its manifest, and let the registry run SecureMCP guardrails before you
-            publish.
-          </p>
-        </header>
-        <PublisherForm
-          initialDisplayName={initialDisplayName}
-          initialCategories={initialCategories}
-          initialManifestText={initialManifestText}
-          initialRuntimeText={initialRuntimeText}
-        />
-    </div>
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+      <Box component="header" sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
+        <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
+          Publisher console
+        </Typography>
+        <Typography variant="h5" sx={{ color: "var(--app-fg)" }}>
+          Share your tool
+        </Typography>
+        <Typography variant="body2" sx={{ maxWidth: 720, color: "var(--app-muted)" }}>
+          Describe your tool, paste its manifest, and let the registry run SecureMCP guardrails before you publish.
+        </Typography>
+      </Box>
+      <PublisherForm
+        initialDisplayName={initialDisplayName}
+        initialCategories={initialCategories}
+        initialManifestText={initialManifestText}
+        initialRuntimeText={initialRuntimeText}
+      />
+    </Box>
   );
 }

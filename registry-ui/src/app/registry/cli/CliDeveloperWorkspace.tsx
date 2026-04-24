@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
+import { Box, Typography } from "@mui/material";
 
 import { useCliTerminalPreferences } from "@/hooks/useCliTerminalPreferences";
 import { CLI_TERMINAL_THEMES, getCliTerminalTheme } from "@/lib/cliTerminalThemes";
@@ -62,18 +63,24 @@ export function CliDeveloperWorkspace({ defaultMcpUrl, allowedOrigin }: Props) {
   return (
     <div className="flex flex-col gap-4">
       <header className="space-y-2">
-        <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[--app-muted]">Developer access</p>
-        <h1 className="text-2xl font-semibold text-[--app-fg]">SecureMCP CLI</h1>
-        <p className="max-w-3xl text-[12px] leading-relaxed text-[--app-muted]">
+        <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
+          Developer access
+        </Typography>
+        <Typography variant="h5" sx={{ color: "var(--app-fg)" }}>
+          SecureMCP CLI
+        </Typography>
+        <Typography variant="body2" sx={{ maxWidth: 960, color: "var(--app-muted)" }}>
           Multi-session terminal with macOS-style color profiles. Each tab is an independent MCP shell. The cheatsheet stays
           docked on the right for quick copy-paste.
-        </p>
+        </Typography>
       </header>
 
       <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[1fr_min(360px,36%)] lg:items-start">
         <div className="flex min-h-[min(640px,calc(100vh-11rem))] min-w-0 flex-col overflow-hidden border border-[--app-border] bg-[--app-control-bg] ring-1 ring-[--app-surface-ring]">
           <div className="flex flex-wrap items-center gap-2 border-b border-[--app-border] px-3 py-2.5">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[--app-muted]">Profile</span>
+            <Typography component="span" variant="overline" sx={{ color: "var(--app-muted)", letterSpacing: "0.14em" }}>
+              Profile
+            </Typography>
             <label className="sr-only" htmlFor="cli-theme">
               Terminal theme
             </label>
@@ -89,11 +96,15 @@ export function CliDeveloperWorkspace({ defaultMcpUrl, allowedOrigin }: Props) {
                 </option>
               ))}
             </select>
-            <span className="text-[10px] text-[--app-muted]">({theme.macStyle})</span>
+            <Typography component="span" variant="caption" sx={{ color: "var(--app-muted)" }}>
+              ({theme.macStyle})
+            </Typography>
 
             <span className="mx-1 hidden h-4 w-px bg-[--app-border] sm:inline" aria-hidden />
 
-            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[--app-muted]">Font</span>
+            <Typography component="span" variant="overline" sx={{ color: "var(--app-muted)", letterSpacing: "0.14em" }}>
+              Font
+            </Typography>
             <label className="sr-only" htmlFor="cli-font">
               Font size
             </label>
@@ -112,9 +123,11 @@ export function CliDeveloperWorkspace({ defaultMcpUrl, allowedOrigin }: Props) {
 
             <Link
               href="/registry/settings#browser-cli-terminal"
-              className="ml-auto text-[10px] font-medium uppercase tracking-[0.12em] text-[--app-muted] underline decoration-[--app-accent] underline-offset-2 hover:text-[--app-fg]"
+              className="ml-auto underline decoration-[--app-accent] underline-offset-2 hover:text-[--app-fg]"
             >
-              Settings
+              <Typography component="span" variant="overline" sx={{ color: "var(--app-muted)", letterSpacing: "0.12em" }}>
+                Settings
+              </Typography>
             </Link>
           </div>
 
@@ -131,20 +144,24 @@ export function CliDeveloperWorkspace({ defaultMcpUrl, allowedOrigin }: Props) {
                   <button
                     type="button"
                     onClick={() => setSession((s) => ({ ...s, activeId: t.id }))}
-                    className={`max-w-[140px] truncate px-3 py-2 text-left text-[11px] font-medium ${
+                    className={`max-w-[140px] truncate px-3 py-2 text-left ${
                       active ? "text-[--app-fg]" : "text-[--app-muted] hover:text-[--app-fg]"
                     }`}
                   >
-                    {t.label}
+                    <Typography component="span" variant="caption" sx={{ fontWeight: 600 }}>
+                      {t.label}
+                    </Typography>
                   </button>
                   {tabs.length > 1 ? (
                     <button
                       type="button"
                       aria-label={`Close ${t.label}`}
                       onClick={() => closeTab(t.id)}
-                      className="px-2 py-2 text-[12px] text-[--app-muted] hover:text-rose-300"
+                      className="px-2 py-2 text-[--app-muted] hover:text-rose-300"
                     >
-                      ×
+                      <Typography component="span" variant="body2" sx={{ lineHeight: 1 }}>
+                        ×
+                      </Typography>
                     </button>
                   ) : null}
                 </div>
@@ -153,10 +170,12 @@ export function CliDeveloperWorkspace({ defaultMcpUrl, allowedOrigin }: Props) {
             <button
               type="button"
               onClick={addTab}
-              className="mb-0.5 self-end border border-dashed border-[--app-border] px-3 py-1.5 text-[11px] font-semibold text-[--app-muted] hover:border-[--app-accent] hover:text-[--app-fg]"
+              className="mb-0.5 self-end border border-dashed border-[--app-border] px-3 py-1.5 text-[--app-muted] hover:border-[--app-accent] hover:text-[--app-fg]"
               title="New terminal tab"
             >
-              +
+              <Typography component="span" variant="caption" sx={{ fontWeight: 700 }}>
+                +
+              </Typography>
             </button>
           </div>
 
@@ -187,14 +206,39 @@ export function CliDeveloperWorkspace({ defaultMcpUrl, allowedOrigin }: Props) {
         <CliCheatsheet defaultMcpUrl={defaultMcpUrl} allowedOrigin={allowedOrigin} className="lg:sticky lg:top-20" />
       </div>
 
-      <section className="rounded-3xl border border-[--app-border] bg-[--app-surface] p-4 ring-1 ring-[--app-surface-ring]">
-        <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-[--app-muted]">Full Python CLI</h2>
-        <p className="mt-2 text-[11px] leading-relaxed text-[--app-muted]">
-          For <span className="font-mono">stdio</span>, <span className="font-mono">securemcp run</span>, install recipes, and
-          OAuth, use the local <span className="font-mono">securemcp</span> binary (<span className="font-mono">uv sync</span> in
-          this repo).
-        </p>
-      </section>
+      <Box
+        component="section"
+        sx={{
+          borderRadius: 4,
+          border: "1px solid var(--app-border)",
+          bgcolor: "var(--app-surface)",
+          p: 2,
+          boxShadow: "none",
+        }}
+      >
+        <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
+          Full Python CLI
+        </Typography>
+        <Typography variant="caption" sx={{ mt: 1, display: "block", color: "var(--app-muted)", lineHeight: 1.6 }}>
+          For{" "}
+          <Box component="span" sx={{ fontFamily: "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}>
+            stdio
+          </Box>
+          ,{" "}
+          <Box component="span" sx={{ fontFamily: "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}>
+            securemcp run
+          </Box>
+          , install recipes, and OAuth, use the local{" "}
+          <Box component="span" sx={{ fontFamily: "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}>
+            securemcp
+          </Box>{" "}
+          binary (
+          <Box component="span" sx={{ fontFamily: "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}>
+            uv sync
+          </Box>{" "}
+          in this repo).
+        </Typography>
+      </Box>
     </div>
   );
 }

@@ -12,13 +12,13 @@ export default async function RegistrySettingsPage() {
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
       <Box component="header" sx={{ display: "grid", gap: 0.5 }}>
-        <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+        <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
           Registry settings
         </Typography>
         <Typography variant="h4" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
           Policy overview
         </Typography>
-        <Typography sx={{ mt: 0.5, maxWidth: 720, fontSize: 12, color: "var(--app-muted)" }}>
+        <Typography variant="body2" sx={{ mt: 0.5, maxWidth: 720, color: "var(--app-muted)" }}>
           Read-only view of how this SecureMCP registry is configured. Use the dedicated Policy page to manage live
           access rules and rollbacks.
         </Typography>
@@ -28,7 +28,7 @@ export default async function RegistrySettingsPage() {
         <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" } }}>
           <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
             <CardContent sx={{ p: 2.5 }}>
-              <Typography sx={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+              <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
                 Certification & moderation
               </Typography>
               <Box component="ul" sx={{ mt: 1.5, pl: 2, color: "var(--app-muted)", fontSize: 12 }}>
@@ -50,7 +50,7 @@ export default async function RegistrySettingsPage() {
 
           <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
             <CardContent sx={{ p: 2.5 }}>
-              <Typography sx={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+              <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
                 Authentication
               </Typography>
               <Box component="ul" sx={{ mt: 1.5, pl: 2, color: "var(--app-muted)", fontSize: 12 }}>
@@ -83,13 +83,13 @@ export default async function RegistrySettingsPage() {
       <AppThemePreferencesPanel />
       <CliTerminalPreferencesPanel />
 
-      <Typography sx={{ fontSize: 11, color: "var(--app-muted)" }}>
+      <Typography variant="caption" sx={{ color: "var(--app-muted)" }}>
         Policy changes now live in{" "}
-        <Link href="/registry/policy" className="underline">
+        <Link href="/registry/policy" style={{ color: "inherit", textDecoration: "underline" }}>
           Policy
         </Link>
         . For a live snapshot of counts and status, see{" "}
-        <Link href="/registry/health" className="underline">
+        <Link href="/registry/health" style={{ color: "inherit", textDecoration: "underline" }}>
           Health
         </Link>
         .

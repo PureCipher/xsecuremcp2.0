@@ -98,13 +98,13 @@ export function OverviewTab({
         <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
           <CardContent sx={{ p: 2.5 }}>
             <Box sx={{ display: "grid", gap: 0.5 }}>
-              <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+              <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
                 Policy analytics
               </Typography>
               <Typography variant="h5" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
                 See what is blocked, changed, and risky
               </Typography>
-              <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+              <Typography variant="body2" sx={{ color: "var(--app-muted)" }}>
                 Live deny patterns, recent changes, and rollout risk at a glance.
               </Typography>
             </Box>
