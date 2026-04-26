@@ -17,6 +17,8 @@ import {
   Typography,
 } from "@mui/material";
 
+import { useRegistryUserPreferences } from "@/hooks/useRegistryUserPreferences";
+
 type PublishManifest = Record<string, unknown>;
 type PublishMetadata = Record<string, unknown>;
 
@@ -25,6 +27,7 @@ type PublishRequestBody = {
   categories: string[];
   manifest: PublishManifest;
   metadata: PublishMetadata;
+  requested_level?: "basic" | "standard" | "advanced";
 };
 
 type PreflightFinding = {
@@ -237,6 +240,7 @@ export function PublisherForm({
   initialManifestText,
   initialRuntimeText,
 }: Props) {
+  const { prefs } = useRegistryUserPreferences();
   const [activeStep, setActiveStep] = useState(0);
 
   const [displayName, setDisplayName] = useState(initialDisplayName ?? "");
@@ -272,6 +276,20 @@ export function PublisherForm({
   const [builderTags, setBuilderTags] = useState("");
   const [builderPermissions, setBuilderPermissions] = useState("network_access");
   const [builderResourcePatterns, setBuilderResourcePatterns] = useState("");
+  const [mcpWizardDisplayName, setMcpWizardDisplayName] = useState("");
+  const [mcpWizardToolName, setMcpWizardToolName] = useState("");
+  const [mcpWizardAuthor, setMcpWizardAuthor] = useState("");
+  const [mcpWizardDescription, setMcpWizardDescription] = useState("");
+  const [mcpWizardCategories, setMcpWizardCategories] = useState("");
+  const [mcpWizardTags, setMcpWizardTags] = useState("");
+  const [mcpWizardPackage, setMcpWizardPackage] = useState("");
+  const [mcpWizardInstall, setMcpWizardInstall] = useState("");
+  const [mcpWizardCommand, setMcpWizardCommand] = useState("");
+  const [mcpWizardArgs, setMcpWizardArgs] = useState("");
+  const [mcpWizardTransport, setMcpWizardTransport] = useState("stdio");
+  const [mcpWizardTools, setMcpWizardTools] = useState("");
+  const [mcpWizardPermissions, setMcpWizardPermissions] = useState("read_resource,network_access");
+  const [mcpWizardResourcePatterns, setMcpWizardResourcePatterns] = useState("");
 
   function loadBuilderFromManifest(nextManifestText: string) {
     const formatted = tryFormatJson(nextManifestText, "Manifest");
@@ -363,6 +381,112 @@ export function PublisherForm({
     setSuccess("Manifest updated from Manifest Builder.");
   }
 
+  function generateFromMcpWizard() {
+    setError(null);
+    setSuccess(null);
+    const nextDisplayName = mcpWizardDisplayName.trim();
+    const nextToolName = mcpWizardToolName.trim() || slugifyToolName(nextDisplayName);
+    const nextAuthor = mcpWizardAuthor.trim() || publisherUsername || "publisher";
+    const nextDescription = mcpWizardDescription.trim();
+    const nextCommand = mcpWizardCommand.trim();
+
+    if (!nextDisplayName) {
+      setError("MCP wizard needs a display name.");
+      return;
+    }
+    if (!nextToolName) {
+      setError("MCP wizard needs a tool name or a display name that can become a tool name.");
+      return;
+    }
+    if (!nextDescription) {
+      setError("MCP wizard needs a short description.");
+      return;
+    }
+    if (!nextCommand) {
+      setError("MCP wizard needs a run command.");
+      return;
+    }
+
+    const nextCategories = uniqStrings(
+      mcpWizardCategories
+        .split(",")
+        .map((category) => category.trim())
+        .filter(Boolean),
+    );
+    const nextTags = uniqStrings(
+      mcpWizardTags
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter(Boolean),
+    );
+    const nextPermissions = uniqStrings(
+      mcpWizardPermissions
+        .split(",")
+        .map((permission) => permission.trim())
+        .filter(Boolean),
+    );
+    const nextResourcePatterns = mcpWizardResourcePatterns
+      .split("\n")
+      .map((pattern) => pattern.trim())
+      .filter(Boolean);
+    const runtimeArgs = mcpWizardArgs
+      .split(/\s+/)
+      .map((arg) => arg.trim())
+      .filter(Boolean);
+    const runtimeTools = mcpWizardTools
+      .split(",")
+      .map((tool) => tool.trim())
+      .filter(Boolean);
+
+    const manifest = {
+      tool_name: nextToolName,
+      version: "1.0.0",
+      author: nextAuthor,
+      description: nextDescription,
+      permissions: nextPermissions.length ? nextPermissions : ["read_resource"],
+      data_flows: [
+        {
+          source: "input.request",
+          destination: "output.response",
+          classification: nextResourcePatterns.some((pattern) => pattern.startsWith("file:")) ? "internal" : "public",
+          description: "The MCP server receives a tool request and returns the generated response.",
+        },
+      ],
+      resource_access: nextResourcePatterns.map((pattern) => ({
+        resource_pattern: pattern,
+        access_type: "read",
+        description: pattern.startsWith("file:") ? "Reads local resources provided to the MCP server." : "Reads remote resources over the network.",
+        classification: pattern.startsWith("file:") ? "internal" : "public",
+      })),
+      tags: nextTags,
+    };
+    const runtime = {
+      server_type: "mcp",
+      transport: mcpWizardTransport.trim() || "stdio",
+      package: mcpWizardPackage.trim(),
+      install: mcpWizardInstall.trim(),
+      command: nextCommand,
+      args: runtimeArgs,
+      tools: runtimeTools,
+    };
+
+    const manifestTextNext = JSON.stringify(manifest, null, 2);
+    setDisplayName(nextDisplayName);
+    setCategories(nextCategories.length ? nextCategories.join(",") : "utility");
+    setManifestText(manifestTextNext);
+    setRuntimeText(JSON.stringify(runtime, null, 2));
+    setPreflight(null);
+    setBuilderToolName(nextToolName);
+    setBuilderVersion("1.0.0");
+    setBuilderAuthor(nextAuthor);
+    setBuilderDescription(nextDescription);
+    setBuilderTags(nextTags.join(","));
+    setBuilderPermissions((nextPermissions.length ? nextPermissions : ["read_resource"]).join(","));
+    setBuilderResourcePatterns(nextResourcePatterns.join("\n"));
+    setSuccess("MCP wizard generated the manifest and runtime metadata. Review them, then continue.");
+    loadBuilderFromManifest(manifestTextNext);
+  }
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -399,8 +523,9 @@ export function PublisherForm({
       .filter(Boolean);
     body.manifest = JSON.parse(manifestText) as PublishManifest;
     body.metadata = runtimeText.trim() ? (JSON.parse(runtimeText) as PublishMetadata) : {};
+    body.requested_level = prefs.publisher.defaultCertification;
     return body;
-  }, [displayName, categories, manifestText, runtimeText]);
+  }, [displayName, categories, manifestText, runtimeText, prefs.publisher.defaultCertification]);
 
   async function fetchAndIngestOpenAPI() {
     setError(null);
@@ -698,17 +823,9 @@ export function PublisherForm({
 
   return (
     <Stack component="section" spacing={3}>
-      <Card
-        variant="outlined"
-        sx={{
-          borderRadius: 4,
-          borderColor: "var(--app-border)",
-          bgcolor: "var(--app-surface)",
-          boxShadow: "none",
-        }}
-      >
+      <Card variant="outlined">
         <CardContent sx={{ p: 2.5 }}>
-          <Typography sx={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+          <Typography sx={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--app-muted)" }}>
             Publish flow
           </Typography>
           <Typography sx={{ mt: 0.5, fontSize: 13, color: "var(--app-muted)" }}>
@@ -751,12 +868,167 @@ export function PublisherForm({
               <Card
                 variant="outlined"
                 sx={{
-                  borderRadius: 3,
-                  borderColor: "var(--app-border)",
-                  bgcolor: "var(--app-control-bg)",
-                  boxShadow: "none",
+                  bgcolor: "var(--app-surface)",
+                  borderColor: "var(--app-accent)",
+                  boxShadow: "0 20px 60px rgba(37, 99, 235, 0.08)",
                 }}
               >
+                <CardContent sx={{ p: 2.25 }}>
+                  <Box sx={{ display: "grid", gap: 0.75 }}>
+                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, alignItems: "center" }}>
+                      <Typography sx={{ fontWeight: 850, color: "var(--app-fg)" }}>
+                        Guided MCP Server Wizard
+                      </Typography>
+                      <Chip size="small" label="No JSON required" sx={{ bgcolor: "var(--app-control-active-bg)", color: "var(--app-muted)", fontWeight: 800 }} />
+                    </Box>
+                    <Typography sx={{ fontSize: 13, color: "var(--app-muted)", lineHeight: 1.6 }}>
+                      Enter the MCP server package/command details and the wizard will generate the manifest and runtime metadata.
+                      For MarkItDown, category should be <strong>utility</strong>, with <strong>file_system</strong> and
+                      <strong> data_access</strong> as secondary categories.
+                    </Typography>
+                  </Box>
+
+                  <Stack spacing={1.5} sx={{ mt: 2 }}>
+                    <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
+                      <TextField
+                        label="Display name"
+                        value={mcpWizardDisplayName}
+                        onChange={(e) => setMcpWizardDisplayName(e.target.value)}
+                        placeholder="MarkItDown MCP"
+                        size="small"
+                        fullWidth
+                      />
+                      <TextField
+                        label="Tool name"
+                        value={mcpWizardToolName}
+                        onChange={(e) => setMcpWizardToolName(e.target.value)}
+                        placeholder="markitdown"
+                        size="small"
+                        fullWidth
+                      />
+                    </Stack>
+                    <TextField
+                      label="Description"
+                      value={mcpWizardDescription}
+                      onChange={(e) => setMcpWizardDescription(e.target.value)}
+                      placeholder="Convert documents, files, and URLs into Markdown."
+                      size="small"
+                      fullWidth
+                    />
+                    <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
+                      <TextField
+                        label="Author / publisher"
+                        value={mcpWizardAuthor}
+                        onChange={(e) => setMcpWizardAuthor(e.target.value)}
+                        placeholder="microsoft"
+                        size="small"
+                        fullWidth
+                      />
+                      <TextField
+                        label="Categories"
+                        value={mcpWizardCategories}
+                        onChange={(e) => setMcpWizardCategories(e.target.value)}
+                        placeholder="utility,file_system,data_access"
+                        size="small"
+                        fullWidth
+                      />
+                    </Stack>
+                    <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
+                      <TextField
+                        label="Package"
+                        value={mcpWizardPackage}
+                        onChange={(e) => setMcpWizardPackage(e.target.value)}
+                        placeholder="markitdown-mcp"
+                        size="small"
+                        fullWidth
+                      />
+                      <TextField
+                        label="Install command"
+                        value={mcpWizardInstall}
+                        onChange={(e) => setMcpWizardInstall(e.target.value)}
+                        placeholder="pip install markitdown-mcp"
+                        size="small"
+                        fullWidth
+                      />
+                    </Stack>
+                    <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
+                      <TextField
+                        label="Run command"
+                        value={mcpWizardCommand}
+                        onChange={(e) => setMcpWizardCommand(e.target.value)}
+                        placeholder="markitdown-mcp"
+                        size="small"
+                        fullWidth
+                      />
+                      <TextField
+                        label="Args"
+                        value={mcpWizardArgs}
+                        onChange={(e) => setMcpWizardArgs(e.target.value)}
+                        placeholder="--http --host 127.0.0.1 --port 3001"
+                        size="small"
+                        fullWidth
+                      />
+                    </Stack>
+                    <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
+                      <TextField
+                        label="Transport"
+                        value={mcpWizardTransport}
+                        onChange={(e) => setMcpWizardTransport(e.target.value)}
+                        placeholder="stdio"
+                        size="small"
+                        fullWidth
+                      />
+                      <TextField
+                        label="Tools"
+                        value={mcpWizardTools}
+                        onChange={(e) => setMcpWizardTools(e.target.value)}
+                        placeholder="convert_to_markdown"
+                        size="small"
+                        fullWidth
+                      />
+                    </Stack>
+                    <TextField
+                      label="Permissions"
+                      value={mcpWizardPermissions}
+                      onChange={(e) => setMcpWizardPermissions(e.target.value)}
+                      placeholder="read_resource,network_access"
+                      size="small"
+                      fullWidth
+                    />
+                    <TextField
+                      label="Resource access patterns"
+                      value={mcpWizardResourcePatterns}
+                      onChange={(e) => setMcpWizardResourcePatterns(e.target.value)}
+                      placeholder={"file:///*\nhttps://*"}
+                      size="small"
+                      fullWidth
+                      multiline
+                      minRows={3}
+                      sx={{ "& textarea": { fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", fontSize: 12 } }}
+                    />
+                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, alignItems: "center" }}>
+                      <Button
+                        type="button"
+                        variant="contained"
+                        onClick={generateFromMcpWizard}
+                        sx={{
+                          bgcolor: "var(--app-accent)",
+                          color: "var(--app-accent-contrast)",
+                          textTransform: "none",
+                          "&:hover": { bgcolor: "var(--app-accent)" },
+                        }}
+                      >
+                        Generate manifest + runtime
+                      </Button>
+                      <Typography sx={{ fontSize: 11, color: "var(--app-muted)" }}>
+                        MarkItDown category: utility, file_system, data_access
+                      </Typography>
+                    </Box>
+                  </Stack>
+                </CardContent>
+              </Card>
+
+              <Card variant="outlined" sx={{ bgcolor: "var(--app-control-bg)" }}>
                 <CardContent sx={{ p: 2 }}>
                   <Typography sx={{ fontWeight: 700, color: "var(--app-fg)" }}>Manifest Builder</Typography>
                   <Typography sx={{ mt: 0.5, fontSize: 12, color: "var(--app-muted)" }}>
@@ -829,7 +1101,7 @@ export function PublisherForm({
                       label="Resource access patterns (one per line)"
                       value={builderResourcePatterns}
                       onChange={(e) => setBuilderResourcePatterns(e.target.value)}
-                      placeholder="https://api.example.com/*"
+                      placeholder="https://your-service-domain.tld/*"
                       size="small"
                       fullWidth
                       multiline
@@ -842,7 +1114,7 @@ export function PublisherForm({
                         type="button"
                         variant="contained"
                         onClick={applyBuilderToManifest}
-                        sx={{ borderRadius: 999, textTransform: "none" }}
+                        sx={{ textTransform: "none" }}
                       >
                         Apply to manifest JSON
                       </Button>
@@ -850,7 +1122,7 @@ export function PublisherForm({
                         type="button"
                         variant="outlined"
                         onClick={() => loadBuilderFromManifest(manifestText)}
-                        sx={{ borderRadius: 999, textTransform: "none" }}
+                        sx={{ textTransform: "none" }}
                       >
                         Load from current JSON
                       </Button>
@@ -859,15 +1131,7 @@ export function PublisherForm({
                 </CardContent>
               </Card>
 
-              <Card
-                variant="outlined"
-                sx={{
-                  borderRadius: 3,
-                  borderColor: "var(--app-border)",
-                  bgcolor: "var(--app-control-bg)",
-                  boxShadow: "none",
-                }}
-              >
+              <Card variant="outlined" sx={{ bgcolor: "var(--app-control-bg)" }}>
                 <CardContent sx={{ p: 2 }}>
                   <Typography sx={{ fontWeight: 700, color: "var(--app-fg)" }}>REST/OpenAPI helper (MVP)</Typography>
                   <Typography sx={{ mt: 0.5, fontSize: 12, color: "var(--app-muted)" }}>
@@ -880,7 +1144,7 @@ export function PublisherForm({
                       label="OpenAPI URL"
                       value={openapiUrl}
                       onChange={(e) => setOpenapiUrl(e.target.value)}
-                      placeholder="https://api.example.com/openapi.json"
+                      placeholder="https://your-service-domain.tld/openapi.json"
                       size="small"
                       fullWidth
                     />
@@ -889,7 +1153,7 @@ export function PublisherForm({
                       variant="outlined"
                       disabled={openapiLoading}
                       onClick={() => void fetchAndIngestOpenAPI()}
-                      sx={{ borderRadius: 999, textTransform: "none", whiteSpace: "nowrap" }}
+                      sx={{ textTransform: "none", whiteSpace: "nowrap" }}
                     >
                       {openapiLoading ? "Loading…" : "Fetch + ingest"}
                     </Button>
@@ -897,7 +1161,7 @@ export function PublisherForm({
 
                   {openapiOps.length ? (
                     <Box sx={{ mt: 1.5 }}>
-                      <Typography sx={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                      <Typography sx={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--app-muted)" }}>
                         Operations
                       </Typography>
                       <Box sx={{ mt: 1, display: "grid", gap: 0.75 }}>
@@ -930,7 +1194,7 @@ export function PublisherForm({
                           variant="contained"
                           disabled={openapiLoading || selectedKeys.length === 0}
                           onClick={() => void createOpenAPIToolset()}
-                          sx={{ borderRadius: 999, textTransform: "none" }}
+                          sx={{ textTransform: "none" }}
                         >
                           Create toolset ({selectedKeys.length})
                         </Button>
@@ -957,7 +1221,7 @@ export function PublisherForm({
                               size="small"
                               variant="outlined"
                               onClick={() => void copyHostedEndpoint()}
-                              sx={{ borderRadius: 999, textTransform: "none" }}
+                              sx={{ textTransform: "none" }}
                             >
                               Copy endpoint
                             </Button>
@@ -983,7 +1247,7 @@ export function PublisherForm({
                 label="Display name"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="Weather Lookup"
+                placeholder="Your MCP tool"
                 size="small"
                 fullWidth
               />
@@ -996,10 +1260,10 @@ export function PublisherForm({
                 fullWidth
               />
               <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, alignItems: "center" }}>
-                <Typography sx={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                <Typography sx={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--app-muted)" }}>
                   Manifest JSON
                 </Typography>
-                <Button type="button" size="small" variant="outlined" onClick={formatManifestField} sx={{ borderRadius: 999, textTransform: "none" }}>
+                <Button type="button" size="small" variant="outlined" onClick={formatManifestField} sx={{ textTransform: "none" }}>
                   Format manifest
                 </Button>
                 <Button
@@ -1007,7 +1271,7 @@ export function PublisherForm({
                   size="small"
                   variant="text"
                   onClick={() => bumpManifestVersion("patch")}
-                  sx={{ borderRadius: 999, textTransform: "none" }}
+                  sx={{ textTransform: "none" }}
                 >
                   Bump patch
                 </Button>
@@ -1016,7 +1280,7 @@ export function PublisherForm({
                   size="small"
                   variant="text"
                   onClick={() => bumpManifestVersion("minor")}
-                  sx={{ borderRadius: 999, textTransform: "none" }}
+                  sx={{ textTransform: "none" }}
                 >
                   Bump minor
                 </Button>
@@ -1025,7 +1289,7 @@ export function PublisherForm({
                   size="small"
                   variant="text"
                   onClick={() => bumpManifestVersion("major")}
-                  sx={{ borderRadius: 999, textTransform: "none" }}
+                  sx={{ textTransform: "none" }}
                 >
                   Bump major
                 </Button>
@@ -1047,10 +1311,10 @@ export function PublisherForm({
                 Step 2 — How to run or connect (endpoint, transport, Docker, CLI, env). Leave as <Box component="code">{"{}"}</Box> if you only want the listing without install hints.
               </Typography>
               <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, alignItems: "center" }}>
-                <Typography sx={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                <Typography sx={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--app-muted)" }}>
                   Runtime metadata JSON
                 </Typography>
-                <Button type="button" size="small" variant="outlined" onClick={formatRuntimeField} sx={{ borderRadius: 999, textTransform: "none" }}>
+                <Button type="button" size="small" variant="outlined" onClick={formatRuntimeField} sx={{ textTransform: "none" }}>
                   Format JSON
                 </Button>
               </Box>
@@ -1070,13 +1334,15 @@ export function PublisherForm({
               <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
                 Step 3 — Run preflight so the registry can evaluate guardrails and certification posture before you submit.
               </Typography>
+              <Alert severity="info" sx={{ borderRadius: 3 }}>
+                Publisher preference applied: preflight will request <strong>{prefs.publisher.defaultCertification}</strong> certification.
+              </Alert>
               <Button
                 type="button"
                 onClick={() => void runPreflight()}
                 variant="contained"
                 sx={{
                   alignSelf: "flex-start",
-                  borderRadius: 999,
                   bgcolor: "var(--app-accent)",
                   color: "var(--app-accent-contrast)",
                   "&:hover": { bgcolor: "var(--app-accent)" },
@@ -1086,15 +1352,7 @@ export function PublisherForm({
               </Button>
 
               {preflight ? (
-                <Card
-                  variant="outlined"
-                  sx={{
-                    borderRadius: 3,
-                    borderColor: "var(--app-border)",
-                    bgcolor: "var(--app-control-bg)",
-                    boxShadow: "none",
-                  }}
-                >
+                <Card variant="outlined" sx={{ bgcolor: "var(--app-control-bg)" }}>
                   <CardContent sx={{ p: 2 }}>
                     <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1.5 }}>
                       <Typography sx={{ fontWeight: 700, color: "var(--app-fg)" }}>Preflight result</Typography>
@@ -1102,13 +1360,11 @@ export function PublisherForm({
                         size="small"
                         label={preflight.ready_for_publish ? "Ready to publish" : "Needs changes"}
                         sx={{
-                          borderRadius: 999,
                           bgcolor: preflight.ready_for_publish ? "var(--app-control-active-bg)" : "rgba(245, 158, 11, 0.18)",
-                          color: preflight.ready_for_publish ? "var(--app-muted)" : "rgb(253, 230, 138)",
-                          fontSize: 10,
-                          fontWeight: 800,
-                          textTransform: "uppercase",
-                          letterSpacing: "0.12em",
+                          color: preflight.ready_for_publish ? "var(--app-fg)" : "#92400e",
+                          fontSize: 11,
+                          fontWeight: 700,
+                          letterSpacing: "0.01em",
                         }}
                       />
                     </Box>
@@ -1163,7 +1419,7 @@ export function PublisherForm({
               <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
                 Step 4 — Submit the listing. If moderation is enabled, it may stay pending until a reviewer approves.
               </Typography>
-              <Card variant="outlined" sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}>
+              <Card variant="outlined" sx={{ bgcolor: "var(--app-control-bg)" }}>
                 <CardContent sx={{ p: 2 }}>
                   <Typography sx={{ fontWeight: 700, color: "var(--app-fg)" }}>Summary</Typography>
                   <Box component="ul" sx={{ mt: 1, pl: 2, color: "var(--app-muted)", fontSize: 12 }}>
@@ -1187,7 +1443,6 @@ export function PublisherForm({
                 variant="contained"
                 sx={{
                   alignSelf: "flex-start",
-                  borderRadius: 999,
                   bgcolor: "var(--app-accent)",
                   color: "var(--app-accent-contrast)",
                   "&:hover": { bgcolor: "var(--app-accent)" },
@@ -1204,7 +1459,7 @@ export function PublisherForm({
             </Button>
             <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
               {activeStep < 2 ? (
-                <Button type="button" variant="contained" onClick={handleNext} sx={{ borderRadius: 999, textTransform: "none" }}>
+                <Button type="button" variant="contained" onClick={handleNext} sx={{ textTransform: "none" }}>
                   Next
                 </Button>
               ) : null}
@@ -1214,13 +1469,13 @@ export function PublisherForm({
                   variant="contained"
                   disabled={!preflight}
                   onClick={handleNext}
-                  sx={{ borderRadius: 999, textTransform: "none" }}
+                  sx={{ textTransform: "none" }}
                 >
                   Continue to publish
                 </Button>
               ) : null}
               {activeStep === 3 ? (
-                <Button type="button" variant="outlined" onClick={() => setActiveStep(2)} sx={{ borderRadius: 999, textTransform: "none" }}>
+                <Button type="button" variant="outlined" onClick={() => setActiveStep(2)} sx={{ textTransform: "none" }}>
                   Edit preflight
                 </Button>
               ) : null}

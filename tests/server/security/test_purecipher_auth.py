@@ -17,6 +17,34 @@ from purecipher import PureCipherRegistry, RegistryAuthSettings, ToolCategory
 
 TEST_SIGNING_SECRET = "purecipher-registry-signing-secret-for-tests"
 TEST_JWT_SECRET = "purecipher-registry-jwt-secret-for-tests"
+TEST_USERS_JSON = json.dumps(
+    [
+        {
+            "username": "viewer",
+            "password": "viewer123",
+            "role": "viewer",
+            "display_name": "Registry Viewer",
+        },
+        {
+            "username": "admin",
+            "password": "admin123",
+            "role": "admin",
+            "display_name": "Registry Admin",
+        },
+        {
+            "username": "reviewer",
+            "password": "reviewer123",
+            "role": "reviewer",
+            "display_name": "Registry Reviewer",
+        },
+        {
+            "username": "publisher",
+            "password": "publisher123",
+            "role": "publisher",
+            "display_name": "Registry Publisher",
+        },
+    ]
+)
 
 
 def _manifest(**overrides: Any) -> SecurityManifest:
@@ -53,11 +81,60 @@ def _auth_settings() -> RegistryAuthSettings:
         enabled=True,
         issuer="purecipher-registry",
         jwt_secret=TEST_JWT_SECRET,
-        users_json="",
+        users_json=TEST_USERS_JSON,
     )
 
 
 class TestPureCipherRegistryAuth:
+    def test_bootstrap_setup_creates_first_admin(self, tmp_path):
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            auth_settings=RegistryAuthSettings.from_values(
+                enabled=True,
+                issuer="purecipher-registry",
+                jwt_secret=TEST_JWT_SECRET,
+            ),
+            persistence_path=str(tmp_path / "registry.sqlite"),
+        )
+        app = registry.http_app()
+
+        with TestClient(app) as client:
+            session = client.get("/registry/session")
+            assert session.status_code == 200
+            assert session.json()["bootstrap_required"] is True
+
+            login = client.post(
+                "/registry/login",
+                json={"username": "admin", "password": "admin123"},
+            )
+            assert login.status_code == 428
+
+            setup = client.post(
+                "/registry/setup",
+                json={
+                    "username": "admin",
+                    "display_name": "Registry Admin",
+                    "password": "admin456",
+                },
+            )
+            assert setup.status_code == 201
+            assert setup.json()["session"]["role"] == "admin"
+
+            after_setup = client.get("/registry/session")
+            assert after_setup.status_code == 200
+            assert after_setup.json()["bootstrap_required"] is False
+            assert after_setup.json()["session"]["username"] == "admin"
+
+            second_setup = client.post(
+                "/registry/setup",
+                json={
+                    "username": "another-admin",
+                    "display_name": "Another Admin",
+                    "password": "admin789",
+                },
+            )
+            assert second_setup.status_code == 409
+
     def test_login_session_and_logout_round_trip(self):
         registry = PureCipherRegistry(
             signing_secret=TEST_SIGNING_SECRET,
@@ -110,6 +187,331 @@ class TestPureCipherRegistryAuth:
             res = client.get("/registry/notifications")
             assert res.status_code == 401
             assert res.json().get("error") == "Authentication required."
+
+    def test_preferences_require_login_when_auth_enabled(self):
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            auth_settings=_auth_settings(),
+        )
+        app = registry.http_app()
+
+        with TestClient(app) as client:
+            res = client.get("/registry/me/preferences")
+            assert res.status_code == 401
+            assert res.json().get("error") == "Authentication required."
+
+            update = client.put(
+                "/registry/me/preferences",
+                json={"preferences": {"workspace": {"density": "compact"}}},
+            )
+            assert update.status_code == 401
+
+    def test_preferences_persist_per_user(self, tmp_path):
+        db_path = str(tmp_path / "registry.sqlite")
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            auth_settings=_auth_settings(),
+            persistence_path=db_path,
+        )
+        app = registry.http_app()
+
+        with TestClient(app) as client:
+            login = client.post(
+                "/registry/login",
+                json={"username": "publisher", "password": "publisher123"},
+            )
+            assert login.status_code == 200
+
+            update = client.put(
+                "/registry/me/preferences",
+                json={
+                    "preferences": {
+                        "workspace": {"density": "compact"},
+                        "publisher": {"defaultCertification": "advanced"},
+                    }
+                },
+            )
+            assert update.status_code == 200
+            updated = update.json()
+            assert updated["username"] == "publisher"
+            assert updated["preferences"]["workspace"]["density"] == "compact"
+            assert (
+                updated["preferences"]["publisher"]["defaultCertification"]
+                == "advanced"
+            )
+            assert updated["preferences"]["notifications"]["securityAlerts"] is True
+
+            logout = client.get("/registry/logout", follow_redirects=False)
+            assert logout.status_code == 303
+
+        restarted = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            auth_settings=_auth_settings(),
+            persistence_path=db_path,
+        )
+        restarted_app = restarted.http_app()
+
+        with TestClient(restarted_app) as client:
+            login = client.post(
+                "/registry/login",
+                json={"username": "publisher", "password": "publisher123"},
+            )
+            assert login.status_code == 200
+
+            prefs = client.get("/registry/me/preferences")
+            assert prefs.status_code == 200
+            assert prefs.json()["preferences"]["workspace"]["density"] == "compact"
+
+    def test_account_activity_records_login_and_logout(self, tmp_path):
+        db_path = str(tmp_path / "registry.sqlite")
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            auth_settings=_auth_settings(),
+            persistence_path=db_path,
+        )
+        app = registry.http_app()
+
+        with TestClient(app) as client:
+            unauthenticated = client.get("/registry/me/activity")
+            assert unauthenticated.status_code == 401
+
+            failed_login = client.post(
+                "/registry/login",
+                json={"username": "publisher", "password": "wrong"},
+            )
+            assert failed_login.status_code == 401
+
+            login = client.post(
+                "/registry/login",
+                json={"username": "publisher", "password": "publisher123"},
+            )
+            assert login.status_code == 200
+
+            activity = client.get("/registry/me/activity")
+            assert activity.status_code == 200
+            events = [item["event_kind"] for item in activity.json()["items"]]
+            assert "login_success" in events
+            assert "login_failed" in events
+
+            logout = client.get("/registry/logout", follow_redirects=False)
+            assert logout.status_code == 303
+
+            login_again = client.post(
+                "/registry/login",
+                json={"username": "publisher", "password": "publisher123"},
+            )
+            assert login_again.status_code == 200
+
+            latest = client.get("/registry/me/activity")
+            assert latest.status_code == 200
+            latest_events = [item["event_kind"] for item in latest.json()["items"]]
+            assert "logout" in latest_events
+
+    def test_password_change_updates_writable_account_store(self, tmp_path):
+        db_path = str(tmp_path / "registry.sqlite")
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            auth_settings=_auth_settings(),
+            persistence_path=db_path,
+        )
+        app = registry.http_app()
+
+        with TestClient(app) as client:
+            login = client.post(
+                "/registry/login",
+                json={"username": "publisher", "password": "publisher123"},
+            )
+            assert login.status_code == 200
+
+            changed = client.post(
+                "/registry/me/password",
+                json={
+                    "current_password": "publisher123",
+                    "new_password": "publisher456",
+                },
+            )
+            assert changed.status_code == 200
+
+            old_login = client.post(
+                "/registry/login",
+                json={"username": "publisher", "password": "publisher123"},
+            )
+            assert old_login.status_code == 401
+
+            new_login = client.post(
+                "/registry/login",
+                json={"username": "publisher", "password": "publisher456"},
+            )
+            assert new_login.status_code == 200
+
+    def test_sessions_can_be_revoked(self, tmp_path):
+        db_path = str(tmp_path / "registry.sqlite")
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            auth_settings=_auth_settings(),
+            persistence_path=db_path,
+        )
+        app = registry.http_app()
+
+        with TestClient(app) as client:
+            login = client.post(
+                "/registry/login",
+                json={"username": "reviewer", "password": "reviewer123"},
+            )
+            assert login.status_code == 200
+
+            sessions = client.get("/registry/me/sessions")
+            assert sessions.status_code == 200
+            current_session_id = sessions.json()["current_session_id"]
+            assert current_session_id
+
+            revoked = client.delete(f"/registry/me/sessions/{current_session_id}")
+            assert revoked.status_code == 200
+            assert revoked.json()["ok"] is True
+
+            session = client.get("/registry/session")
+            assert session.status_code == 200
+            assert session.json()["session"] is None
+
+    def test_api_tokens_work_as_bearer_tokens_and_can_be_revoked(self, tmp_path):
+        db_path = str(tmp_path / "registry.sqlite")
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            auth_settings=_auth_settings(),
+            persistence_path=db_path,
+        )
+        app = registry.http_app()
+
+        with TestClient(app) as client:
+            login = client.post(
+                "/registry/login",
+                json={"username": "admin", "password": "admin123"},
+            )
+            assert login.status_code == 200
+
+            created = client.post(
+                "/registry/me/tokens",
+                json={"name": "CI token"},
+            )
+            assert created.status_code == 201
+            token_payload = created.json()
+            token = token_payload["token"]
+            token_id = token_payload["token_record"]["token_id"]
+
+            client.get("/registry/logout", follow_redirects=False)
+
+            prefs = client.get(
+                "/registry/me/preferences",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            assert prefs.status_code == 200
+            assert prefs.json()["username"] == "admin"
+
+            login_again = client.post(
+                "/registry/login",
+                json={"username": "admin", "password": "admin123"},
+            )
+            assert login_again.status_code == 200
+
+            revoked = client.delete(f"/registry/me/tokens/{token_id}")
+            assert revoked.status_code == 200
+            assert revoked.json()["ok"] is True
+
+        with TestClient(app) as client:
+            denied = client.get(
+                "/registry/me/preferences",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            assert denied.status_code == 401
+
+    def test_admin_can_manage_users_and_roles(self, tmp_path):
+        db_path = str(tmp_path / "registry.sqlite")
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            auth_settings=_auth_settings(),
+            persistence_path=db_path,
+        )
+        app = registry.http_app()
+
+        with TestClient(app) as client:
+            viewer_login = client.post(
+                "/registry/login",
+                json={"username": "viewer", "password": "viewer123"},
+            )
+            assert viewer_login.status_code == 200
+
+            viewer_denied = client.get("/registry/admin/users")
+            assert viewer_denied.status_code == 403
+
+            admin_login = client.post(
+                "/registry/login",
+                json={"username": "admin", "password": "admin123"},
+            )
+            assert admin_login.status_code == 200
+
+            users = client.get("/registry/admin/users")
+            assert users.status_code == 200
+            assert users.json()["counts"]["admin"] == 1
+
+            created = client.post(
+                "/registry/admin/users",
+                json={
+                    "username": "new-publisher",
+                    "display_name": "New Publisher",
+                    "role": "publisher",
+                    "password": "publisher456",
+                },
+            )
+            assert created.status_code == 201
+            assert created.json()["user"]["role"] == "publisher"
+
+            duplicate = client.post(
+                "/registry/admin/users",
+                json={
+                    "username": "new-publisher",
+                    "display_name": "Duplicate",
+                    "role": "publisher",
+                    "password": "publisher456",
+                },
+            )
+            assert duplicate.status_code == 409
+
+            updated = client.patch(
+                "/registry/admin/users/new-publisher",
+                json={"role": "reviewer", "display_name": "Review Publisher"},
+            )
+            assert updated.status_code == 200
+            assert updated.json()["user"]["role"] == "reviewer"
+
+            reset = client.post(
+                "/registry/admin/users/new-publisher/password",
+                json={"new_password": "publisher789"},
+            )
+            assert reset.status_code == 200
+
+            disable = client.delete("/registry/admin/users/new-publisher")
+            assert disable.status_code == 200
+            assert disable.json()["user"]["active"] is False
+
+            last_admin_demote = client.patch(
+                "/registry/admin/users/admin",
+                json={"role": "reviewer"},
+            )
+            assert last_admin_demote.status_code == 400
+            assert "last active admin" in last_admin_demote.json()["error"]
+
+        with TestClient(app) as client:
+            old_password = client.post(
+                "/registry/login",
+                json={"username": "new-publisher", "password": "publisher456"},
+            )
+            assert old_password.status_code == 401
+
+            disabled_login = client.post(
+                "/registry/login",
+                json={"username": "new-publisher", "password": "publisher789"},
+            )
+            assert disabled_login.status_code == 401
 
     def test_me_listings_require_login_when_auth_enabled(self):
         registry = PureCipherRegistry(

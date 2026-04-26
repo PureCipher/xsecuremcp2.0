@@ -5,21 +5,23 @@ import { Box, Card, CardContent, Chip, Typography } from "@mui/material";
 
 import {
   getInstallRecipes,
+  getListingGovernance,
   getToolDetail,
   verifyTool,
   type InstallRecipe,
   type RegistryDataFlow,
   type RegistryToolListing,
 } from "@/lib/registryClient";
-import { CertificationBadge } from "@/components/security";
+import { AttestationBadge, CertificationBadge } from "@/components/security";
 import { RecipeTabs } from "@/app/registry/listings/RecipeTabs";
+import { ListingGovernanceCard } from "@/app/registry/listings/[toolName]/ListingGovernanceCard";
 
 function isToolDetail(detail: unknown): detail is RegistryToolListing {
   return (
     typeof detail === "object" &&
     detail !== null &&
     "tool_name" in detail &&
-    typeof (detail as any).tool_name === "string"
+    typeof (detail as { tool_name?: unknown }).tool_name === "string"
   );
 }
 
@@ -29,10 +31,11 @@ export default async function PublicListingDetailPage(props: {
   const { toolName } = await props.params;
   const decodedName = decodeURIComponent(toolName);
 
-  const [detail, install, verification] = await Promise.all([
+  const [detail, install, verification, governance] = await Promise.all([
     getToolDetail(decodedName),
     getInstallRecipes(decodedName),
     verifyTool(decodedName),
+    getListingGovernance(decodedName),
   ]);
 
   if (!isToolDetail(detail)) {
@@ -89,6 +92,14 @@ export default async function PublicListingDetailPage(props: {
           <Typography sx={{ mt: 0.5, fontSize: 12, color: "var(--app-muted)" }}>
             {tool.tool_name} · v{tool.version} · {tool.author}
           </Typography>
+          <Box sx={{ mt: 1.25, display: "flex", flexWrap: "wrap", gap: 0.75 }}>
+            <AttestationBadge
+              kind={tool.attestation_kind}
+              curatorId={tool.curator_id}
+              size="md"
+              showAuthor
+            />
+          </Box>
         </Box>
         <CertificationBadge level={tool.certification_level} size="md" />
       </Box>
@@ -147,6 +158,123 @@ export default async function PublicListingDetailPage(props: {
         otherRecipes={otherRecipes}
       />
 
+      <ListingGovernanceCard governance={governance} publicView />
+
+      {/*
+       * Provenance card — only rendered for curator-attested listings.
+       * The curator-vouching trust statement is materially different
+       * from author-attestation, so we surface the pinned upstream
+       * (channel + identifier + version + integrity hash + source) on
+       * the public detail page where a visitor decides whether to
+       * install. Author-attested listings already convey this through
+       * the existing Verification card below.
+       */}
+      {tool.hosting_mode === "proxy" && tool.listing_id ? (
+        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-accent)", bgcolor: "var(--app-control-active-bg)", boxShadow: "none" }}>
+          <CardContent sx={{ p: 2.5 }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
+              <Typography sx={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-fg)" }}>
+                Hosted as SecureMCP
+              </Typography>
+            </Box>
+            <Typography sx={{ fontSize: 13, color: "var(--app-muted)", mb: 2 }}>
+              Connect your client to the registry-hosted endpoint
+              below. Calls flow through a SecureMCP-enforced gateway:
+              an allowlist of curator-vouched tools, the policy
+              engine, and the provenance ledger all run before the
+              call reaches the upstream.
+            </Typography>
+            <Box
+              component="code"
+              sx={{
+                display: "block",
+                p: 1.5,
+                bgcolor: "var(--app-surface)",
+                border: "1px solid var(--app-border)",
+                borderRadius: 1,
+                fontSize: 12,
+                fontFamily:
+                  "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                color: "var(--app-fg)",
+                wordBreak: "break-all",
+              }}
+            >
+              /runtime/proxy/{tool.listing_id}/mcp
+            </Box>
+            <Typography sx={{ mt: 1.5, fontSize: 11, color: "var(--app-muted)" }}>
+              Append this to the registry&apos;s base URL. Tool calls
+              outside the curator-vouched allowlist are denied at the
+              gateway with{" "}
+              <code style={{ fontSize: 11 }}>POLICY_DENIED</code>.
+            </Typography>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {tool.attestation_kind === "curator" && tool.upstream_ref ? (
+        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+          <CardContent sx={{ p: 2.5 }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
+              <Typography sx={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                Curator provenance
+              </Typography>
+              <AttestationBadge
+                kind="curator"
+                curatorId={tool.curator_id}
+                size="sm"
+              />
+            </Box>
+            <Typography sx={{ fontSize: 13, color: "var(--app-muted)", mb: 2 }}>
+              {tool.curator_id ? (
+                <>
+                  <strong style={{ color: "var(--app-fg)" }}>{tool.curator_id}</strong>{" "}
+                  observed this server and signed an attestation pinning
+                  the upstream below. The original author is unaware of
+                  and unaffected by this listing.
+                </>
+              ) : (
+                <>
+                  A PureCipher curator observed this server and signed an
+                  attestation pinning the upstream below. The original
+                  author is unaware of and unaffected by this listing.
+                </>
+              )}
+            </Typography>
+            <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: "auto 1fr", rowGap: 1.25 }}>
+              <ProvenanceRow
+                label="Channel"
+                value={tool.upstream_ref.channel ?? ""}
+              />
+              <ProvenanceRow
+                label={
+                  tool.upstream_ref.channel === "http" ? "URL" : "Package"
+                }
+                value={tool.upstream_ref.identifier ?? ""}
+              />
+              {tool.upstream_ref.version ? (
+                <ProvenanceRow
+                  label="Pinned version"
+                  value={tool.upstream_ref.version}
+                />
+              ) : null}
+              {tool.upstream_ref.pinned_hash ? (
+                <ProvenanceRow
+                  label="Integrity hash"
+                  value={tool.upstream_ref.pinned_hash}
+                />
+              ) : null}
+              {tool.upstream_ref.source_url ? (
+                <ProvenanceRow
+                  label="Source"
+                  value={tool.upstream_ref.source_url}
+                  href={tool.upstream_ref.source_url}
+                />
+              ) : null}
+            </Box>
+          </CardContent>
+        </Card>
+      ) : null}
+
       {verification ? (
         <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
           <CardContent sx={{ p: 2.5 }}>
@@ -204,3 +332,69 @@ export default async function PublicListingDetailPage(props: {
   );
 }
 
+
+/**
+ * Single row inside the curator-provenance grid. Renders the label in
+ * the muted/uppercase nav style and the value in monospace so hashes
+ * and URLs read cleanly. When ``href`` is set, the value renders as a
+ * link (used for source-URL rows).
+ */
+function ProvenanceRow({
+  label,
+  value,
+  href,
+}: {
+  label: string;
+  value: string;
+  href?: string;
+}) {
+  return (
+    <>
+      <Typography
+        sx={{
+          fontSize: 11,
+          fontWeight: 700,
+          color: "var(--app-muted)",
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+          alignSelf: "start",
+          pt: 0.25,
+          minWidth: 130,
+        }}
+      >
+        {label}
+      </Typography>
+      {href ? (
+        <Box
+          component="a"
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          sx={{
+            fontSize: 12,
+            fontFamily:
+              "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+            color: "var(--app-accent)",
+            textDecoration: "none",
+            wordBreak: "break-all",
+            "&:hover": { textDecoration: "underline" },
+          }}
+        >
+          {value}
+        </Box>
+      ) : (
+        <Typography
+          sx={{
+            fontSize: 12,
+            fontFamily:
+              "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+            color: "var(--app-fg)",
+            wordBreak: "break-all",
+          }}
+        >
+          {value}
+        </Typography>
+      )}
+    </>
+  );
+}

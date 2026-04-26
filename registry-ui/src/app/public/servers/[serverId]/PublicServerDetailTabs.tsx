@@ -2,12 +2,17 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Box, Button, Card, CardContent, Tab, Tabs, Typography } from "@mui/material";
+import { Box, Card, CardContent, Tab, Tabs, Typography } from "@mui/material";
 
 import { CertificationBadge, EmptyState, KeyValuePanel } from "@/components/security";
 import type { PublisherSummary, RegistryToolListing } from "@/lib/registryClient";
 
-type TabKey = "overview" | "tools" | "governance" | "observability";
+// The public surface shows only the two tabs that are backed by real
+// data (Overview + Tools). Governance and Observability tabs were
+// previously rendered with `(stub)` strings and developer scaffolding
+// notes visible to anonymous visitors — we now hide them entirely
+// until the backend server-binding layer is wired.
+type TabKey = "overview" | "tools";
 
 export function PublicServerDetailTabs({
   serverId,
@@ -36,40 +41,26 @@ export function PublicServerDetailTabs({
       >
         <Tab value="overview" label="Overview" />
         <Tab value="tools" label="Tools" />
-        <Tab value="governance" label="Governance" />
-        <Tab value="observability" label="Observability" />
       </Tabs>
 
       {activeTab === "overview" ? (
         <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
           <CardContent sx={{ p: 3 }}>
-          <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" } }}>
             <KeyValuePanel
               title="Server snapshot"
               entries={[
                 { label: "server_id", value: serverId },
                 { label: "display_name", value: summary.display_name ?? "—" },
                 { label: "tools_count", value: toolCount.toString() },
-                { label: "drift_status", value: "unknown (stub)" },
               ]}
             />
-            <KeyValuePanel
-              title="Governance defaults"
-              entries={[
-                { label: "Policy Kernel", value: "pending (stub)" },
-                { label: "Contract Broker", value: "pending (stub)" },
-                { label: "Consent Graph", value: "pending (stub)" },
-                { label: "Ledger", value: "enabled (stub)" },
-              ]}
-            />
-          </Box>
-
-          <Box sx={{ mt: 2 }}>
-            <EmptyState
-              title="Next: attach governance + review drift"
-              message="This view is backed by publisher inventory; Governance and drift will become real once the backend server binding layer is wired."
-            />
-          </Box>
+            {summary.description ? (
+              <Box sx={{ mt: 3 }}>
+                <Typography sx={{ fontSize: 13, color: "var(--app-fg)" }}>
+                  {summary.description}
+                </Typography>
+              </Box>
+            ) : null}
           </CardContent>
         </Card>
       ) : null}
@@ -137,62 +128,6 @@ export function PublicServerDetailTabs({
         </Card>
       ) : null}
 
-      {activeTab === "governance" ? (
-        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
-          <CardContent sx={{ p: 3 }}>
-          <Typography variant="h6" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
-            Governance association
-          </Typography>
-          <Typography sx={{ mt: 0.5, fontSize: 12, color: "var(--app-muted)" }}>
-            Stub UI: visualize effective bindings (Policy, Contract, Ledger, Consent) for this server and its tools.
-          </Typography>
-          <Box sx={{ mt: 3, display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" } }}>
-            <KeyValuePanel
-              title="Effective controls"
-              entries={[
-                { label: "Policy Kernel", value: "inherited (stub)" },
-                { label: "Contract Broker", value: "inherited (stub)" },
-                { label: "Consent Graph", value: "inherited (stub)" },
-                { label: "Ledger", value: "recording (stub)" },
-              ]}
-            />
-            <KeyValuePanel
-              title="Overrides"
-              entries={[
-                { label: "Policy overrides", value: "none (stub)" },
-                { label: "Contract overrides", value: "none (stub)" },
-                { label: "Tool-level quarantine", value: "—" },
-                { label: "Pending approvals", value: "0" },
-              ]}
-            />
-          </Box>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {activeTab === "observability" ? (
-        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
-          <CardContent sx={{ p: 3 }}>
-          <Typography variant="h6" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
-            Observability stream
-          </Typography>
-          <Typography sx={{ mt: 0.5, fontSize: 12, color: "var(--app-muted)" }}>
-            Stub UI: show access decision events and ledger integrity checks feeding Reflexive Core recommendations.
-          </Typography>
-          <Box sx={{ mt: 3 }}>
-            <KeyValuePanel
-              title="Reflexive Core (stub)"
-              entries={[
-                { label: "recommendations", value: "none yet" },
-                { label: "alerts", value: "—" },
-                { label: "learning_window", value: "rolling (stub)" },
-                { label: "confidence", value: "0%" },
-              ]}
-            />
-          </Box>
-          </CardContent>
-        </Card>
-      ) : null}
     </Box>
   );
 }

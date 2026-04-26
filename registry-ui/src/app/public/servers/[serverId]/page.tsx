@@ -41,7 +41,17 @@ export default async function PublicServerDetailPage(props: {
     );
   }
 
-  const summary: PublisherSummary = profile.summary ?? { publisher_id: decodedId };
+  // Backend emits the summary fields flat at the top level (see
+  // PublisherProfile.to_dict in src/purecipher/models.py).
+  const summary: PublisherSummary = {
+    publisher_id: profile.publisher_id ?? decodedId,
+    display_name: profile.display_name,
+    description: profile.description,
+    listing_count: profile.listing_count,
+    tool_count: profile.tool_count,
+    verified_tool_count: profile.verified_tool_count,
+    trust_score: profile.trust_score,
+  };
   const listings: RegistryToolListing[] = profile.listings ?? [];
 
   return (

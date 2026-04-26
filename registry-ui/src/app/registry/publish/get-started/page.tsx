@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Box, Button, Card, CardContent, Chip, Stack, Typography } from "@mui/material";
 
+import { RegistryPageHeader } from "@/components/security";
 import { getMyListings, getRegistrySession, requirePublisherRole } from "@/lib/registryClient";
 
 export default async function PublisherGetStartedPage() {
@@ -25,37 +26,31 @@ export default async function PublisherGetStartedPage() {
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
-      <Box component="header">
-        <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
-          Publisher onboarding
-        </Typography>
-        <Typography variant="h4" sx={{ mt: 0.5, fontWeight: 700, color: "var(--app-fg)" }}>
-          Get started publishing
-        </Typography>
-        <Typography variant="body2" sx={{ mt: 1, maxWidth: 760, color: "var(--app-muted)" }}>
-          Pick the path that matches where you are today. You can always switch later.
-        </Typography>
-      </Box>
+      <RegistryPageHeader
+        eyebrow="Publisher onboarding"
+        title="Get started publishing"
+        description="Pick the path that matches where you are today. You can always switch later."
+      />
 
       <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" } }}>
-        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
-          <CardContent sx={{ p: 2.5 }}>
+        <Card variant="outlined">
+          <CardContent>
             <Stack spacing={1}>
-              <Typography sx={{ fontWeight: 800, color: "var(--app-fg)" }}>I already host an MCP server</Typography>
+              <Typography sx={{ fontWeight: 800, color: "var(--app-fg)" }}>I built an MCP server</Typography>
               <Typography variant="body2" sx={{ color: "var(--app-muted)" }}>
-                You run the server; the registry stores the listing, versions, and security manifest so clients can discover and verify it.
+                You authored the code; the registry stores your listing, version history, and signed security manifest so clients can discover and verify it.
               </Typography>
               <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mt: 1 }}>
-                <Chip size="small" label="MCP" sx={{ borderRadius: 999 }} />
-                <Chip size="small" label="SecureMCP" sx={{ borderRadius: 999 }} />
-                <Chip size="small" label="Version history" sx={{ borderRadius: 999 }} />
+                <Chip size="small" label="MCP" />
+                <Chip size="small" label="SecureMCP" />
+                <Chip size="small" label="Version history" />
               </Box>
               <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1.25, mt: 2 }}>
                 <Link
                   href="/registry/publish?from=onboarding&publish_mode=external&server_type=mcp"
                   style={{ display: "inline-flex", textDecoration: "none" }}
                 >
-                  <Button component="span" variant="outlined" sx={{ borderRadius: 999, textTransform: "none" }}>
+                  <Button component="span" variant="outlined">
                     Publish MCP server
                   </Button>
                 </Link>
@@ -67,7 +62,6 @@ export default async function PublisherGetStartedPage() {
                     component="span"
                     variant="contained"
                     sx={{
-                      borderRadius: 999,
                       bgcolor: "var(--app-accent)",
                       color: "var(--app-accent-contrast)",
                       "&:hover": { bgcolor: "var(--app-accent)" },
@@ -82,17 +76,57 @@ export default async function PublisherGetStartedPage() {
           </CardContent>
         </Card>
 
-        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
-          <CardContent sx={{ p: 2.5 }}>
+        <Card variant="outlined">
+          <CardContent>
+            <Stack spacing={1}>
+              <Typography sx={{ fontWeight: 800, color: "var(--app-fg)" }}>
+                I want to onboard a server I trust
+              </Typography>
+              <Typography variant="body2" sx={{ color: "var(--app-muted)" }}>
+                Curator vouches for an existing public MCP server. The
+                registry pins its URL, observes its capability surface,
+                and signs a third-party attestation distinct from
+                author-attested listings. No coding required.
+              </Typography>
+              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mt: 1 }}>
+                <Chip size="small" label="Curator" />
+                <Chip size="small" label="Third-party" />
+                <Chip size="small" label="No coding" />
+              </Box>
+              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1.25, mt: 2 }}>
+                <Link
+                  href="/registry/onboard"
+                  style={{ display: "inline-flex", textDecoration: "none" }}
+                >
+                  <Button
+                    component="span"
+                    variant="contained"
+                    sx={{
+                      bgcolor: "var(--app-accent)",
+                      color: "var(--app-accent-contrast)",
+                      "&:hover": { bgcolor: "var(--app-accent)" },
+                      textTransform: "none",
+                    }}
+                  >
+                    Onboard a third-party server
+                  </Button>
+                </Link>
+              </Box>
+            </Stack>
+          </CardContent>
+        </Card>
+
+        <Card variant="outlined" sx={{ gridColumn: { lg: "1 / -1" } }}>
+          <CardContent>
             <Stack spacing={1}>
               <Typography sx={{ fontWeight: 800, color: "var(--app-fg)" }}>I have a REST/OpenAPI API</Typography>
               <Typography variant="body2" sx={{ color: "var(--app-muted)" }}>
                 Paste an OpenAPI URL, pick endpoints, and the registry hosts a SecureMCP server endpoint for your selected toolset.
               </Typography>
               <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mt: 1 }}>
-                <Chip size="small" label="OpenAPI → Tools" sx={{ borderRadius: 999 }} />
-                <Chip size="small" label="Hosted endpoint" sx={{ borderRadius: 999 }} />
-                <Chip size="small" label="SecureMCP" sx={{ borderRadius: 999 }} />
+                <Chip size="small" label="OpenAPI -> Tools" />
+                <Chip size="small" label="Hosted endpoint" />
+                <Chip size="small" label="SecureMCP" />
               </Box>
               <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1.25, mt: 2 }}>
                 <Link
@@ -103,7 +137,6 @@ export default async function PublisherGetStartedPage() {
                     component="span"
                     variant="contained"
                     sx={{
-                      borderRadius: 999,
                       bgcolor: "var(--app-accent)",
                       color: "var(--app-accent-contrast)",
                       "&:hover": { bgcolor: "var(--app-accent)" },

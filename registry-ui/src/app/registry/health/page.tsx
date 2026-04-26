@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import {
   getRegistryHealth,
   getSecurityHealth,
@@ -6,7 +7,8 @@ import {
   getRevocations,
 } from "@/lib/registryClient";
 
-import { Box, Card, CardContent, Chip, Typography } from "@mui/material";
+import { Box, Card, CardContent, Chip, Divider, Typography } from "@mui/material";
+import { RegistryPageHeader } from "@/components/security";
 
 const PILLAR_COMPONENTS: Record<string, { label: string; href: string }> = {
   policy_engine: { label: "Policy Engine", href: "/registry/policy" },
@@ -28,6 +30,22 @@ const PILLAR_COMPONENTS: Record<string, { label: string; href: string }> = {
   event_bus: { label: "Event Bus", href: "/registry/health" },
 };
 
+const SECURITY_PILLARS = [
+  { label: "Policy Engine", href: "/registry/policy", desc: "Policy packs, validation, audit, and governance" },
+  { label: "Contracts", href: "/registry/contracts", desc: "Negotiated agent agreements and signatures" },
+  { label: "Provenance", href: "/registry/provenance", desc: "Immutable records, chain integrity, and proofs" },
+  { label: "Reflexive", href: "/registry/reflexive", desc: "Behavioral introspection and execution verdicts" },
+  { label: "Consent", href: "/registry/consent", desc: "Federated consent checks and jurisdiction graphs" },
+];
+
+const sectionTitleSx = {
+  fontSize: 12,
+  fontWeight: 800,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+  color: "var(--app-muted)",
+};
+
 export default async function RegistryHealthPage() {
   const [health, securityHealth, federationData, revocationsData] = await Promise.all([
     getRegistryHealth(),
@@ -38,8 +56,8 @@ export default async function RegistryHealthPage() {
 
   if (!health) {
     return (
-      <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
-        <CardContent sx={{ p: 2.5 }}>
+      <Card variant="outlined">
+        <CardContent>
           <Typography variant="h5" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
             Registry health
           </Typography>
@@ -54,306 +72,339 @@ export default async function RegistryHealthPage() {
   const components = securityHealth?.components ?? {};
   const componentCount = securityHealth?.component_count ?? 0;
 
+  const okComponents = Object.values(components).filter((status) => status === "ok").length;
+  const attentionComponents = Math.max(componentCount - okComponents, 0);
+  const peerCount = federationData && !federationData.error ? (federationData.peer_count ?? federationData.peers?.length ?? 0) : 0;
+  const revocationCount = revocationsData && !revocationsData.error ? (revocationsData.count ?? revocationsData.entries?.length ?? 0) : 0;
+
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
-      <Box component="header" sx={{ display: "grid", gap: 0.5 }}>
-        <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
-          Registry health
-        </Typography>
-        <Typography variant="h4" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
-          SecureMCP registry status
-        </Typography>
-        <Typography sx={{ mt: 0.5, maxWidth: 720, fontSize: 12, color: "var(--app-muted)" }}>
-          Comprehensive health view of the SecureMCP guardrail pipeline, all five security pillars, authentication, moderation, and registry counts.
-        </Typography>
-      </Box>
+      <RegistryPageHeader
+        eyebrow="Registry health"
+        title="SecureMCP registry status"
+        description="A calm operational view of registry readiness, security components, federation, revocations, and the five guardrail pillars."
+      />
 
-        {/* Registry Overview */}
-      <Box component="section" sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "repeat(3, minmax(0, 1fr))" } }}>
-        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
-          <CardContent sx={{ p: 2.5 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
-              Status
-            </Typography>
-            <Typography sx={{ mt: 1.5, fontSize: 14, fontWeight: 700, color: "var(--app-fg)" }}>
-              {health.status === "ok" ? "Healthy" : String(health.status)}
-            </Typography>
-            <Typography sx={{ mt: 0.5, fontSize: 12, color: "var(--app-muted)" }}>
-              Minimum level:{" "}
-              <Box component="span" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
-                {health.minimum_certification}
+      <Card variant="outlined" sx={{ overflow: "hidden" }}>
+        <CardContent sx={{ p: 0 }}>
+          <Box
+            sx={{
+              p: { xs: 2.5, md: 3 },
+              display: "grid",
+              gap: 2.5,
+              gridTemplateColumns: { xs: "1fr", lg: "minmax(0, 1.1fr) minmax(280px, 0.9fr)" },
+              alignItems: "stretch",
+            }}
+          >
+            <Box
+              sx={{
+                p: { xs: 2.5, md: 3 },
+                borderRadius: 4,
+                bgcolor: health.status === "ok" ? "var(--app-control-active-bg)" : "rgba(239, 68, 68, 0.10)",
+                border: "1px solid var(--app-border)",
+                display: "grid",
+                gap: 2,
+              }}
+            >
+              <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 2 }}>
+                <Box>
+                  <Typography sx={sectionTitleSx}>Registry posture</Typography>
+                  <Typography sx={{ mt: 1, fontSize: { xs: 24, md: 30 }, lineHeight: 1.1, fontWeight: 850, color: "var(--app-fg)" }}>
+                    {health.status === "ok" ? "Healthy and accepting registry traffic" : `Status: ${String(health.status)}`}
+                  </Typography>
+                  <Typography sx={{ mt: 1, maxWidth: 640, fontSize: 13, color: "var(--app-muted)" }}>
+                    Minimum certification is {health.minimum_certification ?? "not set"}. Authentication is {health.auth_enabled ? "enabled" : "disabled"} and moderation is {health.require_moderation ? "required" : "not required"}.
+                  </Typography>
+                </Box>
+                <Chip
+                  label={health.status === "ok" ? "Healthy" : String(health.status)}
+                  sx={{
+                    bgcolor: health.status === "ok" ? "var(--app-accent)" : "rgba(239, 68, 68, 0.14)",
+                    color: health.status === "ok" ? "var(--app-accent-contrast)" : "#b91c1c",
+                    fontWeight: 800,
+                  }}
+                />
               </Box>
-            </Typography>
-          </CardContent>
-        </Card>
 
-        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
-          <CardContent sx={{ p: 2.5 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
-              Policy
-            </Typography>
-            <Box component="ul" sx={{ mt: 1.5, pl: 2, color: "var(--app-muted)", fontSize: 12 }}>
-              <li>
-                Auth enabled:{" "}
-                <Box component="span" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
-                  {health.auth_enabled ? "Yes" : "No"}
-                </Box>
-              </li>
-              <li>
-                Moderation required:{" "}
-                <Box component="span" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
-                  {health.require_moderation ? "Yes" : "No"}
-                </Box>
-              </li>
+              <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: { xs: "1fr", sm: "repeat(3, minmax(0, 1fr))" } }}>
+                <MetricTile label="Registered tools" value={health.registered_tools ?? 0} />
+                <MetricTile label="Verified tools" value={health.verified_tools ?? 0} />
+                <MetricTile label="Pending review" value={health.pending_review ?? 0} />
+              </Box>
             </Box>
-          </CardContent>
-        </Card>
 
-        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
-          <CardContent sx={{ p: 2.5 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
-              Counts
-            </Typography>
-            <Box component="ul" sx={{ mt: 1.5, pl: 2, color: "var(--app-muted)", fontSize: 12 }}>
-              <li>
-                Registered tools:{" "}
-                <Box component="span" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
-                  {health.registered_tools}
-                </Box>
-              </li>
-              <li>
-                Verified tools:{" "}
-                <Box component="span" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
-                  {health.verified_tools}
-                </Box>
-              </li>
-              <li>
-                Pending review:{" "}
-                <Box component="span" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
-                  {health.pending_review}
-                </Box>
-              </li>
-            </Box>
-          </CardContent>
-        </Card>
-      </Box>
-
-        {/* Security Components Grid */}
-        {componentCount > 0 ? (
-          <Box component="section" sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
-            <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2 }}>
-              <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
-                Security Components
-              </Typography>
-              <Chip
-                size="small"
-                label={`${componentCount} active`}
-                sx={{ borderRadius: 999, bgcolor: "var(--app-control-active-bg)", color: "var(--app-muted)", fontWeight: 700, fontSize: 11 }}
-              />
-            </Box>
-            <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", md: "1fr 1fr 1fr", lg: "1fr 1fr 1fr 1fr" } }}>
-              {Object.entries(components).map(([key, status]) => {
-                const info = PILLAR_COMPONENTS[key];
-                return (
-                  <Link
-                    key={key}
-                    href={info?.href ?? "/registry/health"}
-                    className="group"
-                    style={{ textDecoration: "none" }}
-                  >
-                    <Box
-                      sx={{
-                        borderRadius: 3,
-                        border: "1px solid var(--app-border)",
-                        bgcolor: "var(--app-surface)",
-                        p: 1.5,
-                        boxShadow: "none",
-                        transition: "background-color 120ms ease, border-color 120ms ease",
-                        "&:hover": { bgcolor: "var(--app-hover-bg)", borderColor: "var(--app-accent)" },
-                      }}
-                    >
-                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                        <Box
-                          sx={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: "50%",
-                            bgcolor: status === "ok" ? "var(--app-accent)" : "rgb(248, 113, 113)",
-                          }}
-                        />
-                        <Typography variant="caption" sx={{ fontWeight: 600, color: "var(--app-muted)" }}>
-                          {info?.label ?? key}
-                        </Typography>
-                      </Box>
-                      <Typography variant="caption" sx={{ mt: 0.5, display: "block", pl: 2.25, color: "var(--app-muted)", fontSize: 10 }}>
-                        {status === "ok" ? "Operational" : status}
-                      </Typography>
-                    </Box>
-                  </Link>
-                );
-              })}
+            <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" } }}>
+              <SignalTile label="Security components" value={`${okComponents}/${componentCount}`} detail={attentionComponents ? `${attentionComponents} need attention` : "All reported operational"} tone={attentionComponents ? "warn" : "ok"} />
+              <SignalTile label="Federation peers" value={peerCount} detail={peerCount ? "Trust federation connected" : "No peers configured"} />
+              <SignalTile label="Revocations" value={revocationCount} detail={revocationCount ? "Review revoked certificates" : "All tools in good standing"} tone={revocationCount ? "warn" : "ok"} />
+              <SignalTile label="Server" value={health.server ?? "registry"} detail={health.timestamp ?? "No timestamp"} />
             </Box>
           </Box>
-        ) : null}
 
-        {/* Federation Peers */}
-        {federationData && !federationData.error ? (
-          <section className="space-y-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
-              Federation Peers
-            </p>
-            {federationData.peers && federationData.peers.length > 0 ? (
-              <div className="overflow-hidden rounded-2xl ring-1 ring-[--app-surface-ring]">
-                <table className="w-full text-left text-[11px]">
-                  <thead>
-                    <tr className="border-b border-[--app-border] bg-[--app-surface]">
-                      <th className="px-3 py-2 font-semibold uppercase tracking-wider text-[--app-muted]">
-                        Peer ID
-                      </th>
-                      <th className="px-3 py-2 font-semibold uppercase tracking-wider text-[--app-muted]">
-                        Endpoint
-                      </th>
-                      <th className="px-3 py-2 font-semibold uppercase tracking-wider text-[--app-muted]">
-                        Status
-                      </th>
-                      <th className="px-3 py-2 font-semibold uppercase tracking-wider text-[--app-muted]">
-                        Trust
-                      </th>
-                      <th className="px-3 py-2 font-semibold uppercase tracking-wider text-[--app-muted]">
-                        Last Seen
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
+          <Divider />
+
+          {componentCount > 0 ? (
+            <Box sx={{ p: { xs: 2.5, md: 3 }, display: "grid", gap: 2 }}>
+              <SectionHeader title="Security components" detail={`${componentCount} reported components`} />
+              <Box sx={{ display: "grid", gap: 1.25, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", lg: "repeat(3, minmax(0, 1fr))" } }}>
+                {Object.entries(components).map(([key, status]) => {
+                  const info = PILLAR_COMPONENTS[key];
+                  return (
+                    <Link key={key} href={info?.href ?? "/registry/health"} style={{ textDecoration: "none" }}>
+                      <Box
+                        sx={{
+                          p: 1.75,
+                          minHeight: 82,
+                          borderRadius: 3,
+                          border: "1px solid var(--app-border)",
+                          bgcolor: "var(--app-control-bg)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 1.5,
+                          transition: "background-color 120ms ease, border-color 120ms ease, transform 120ms ease",
+                          "&:hover": { bgcolor: "var(--app-hover-bg)", borderColor: "var(--app-accent)", transform: "translateY(-1px)" },
+                        }}
+                      >
+                        <Box sx={{ minWidth: 0 }}>
+                          <Typography sx={{ fontSize: 13, fontWeight: 800, color: "var(--app-fg)" }}>
+                            {info?.label ?? key}
+                          </Typography>
+                          <Typography sx={{ mt: 0.5, fontSize: 11, color: "var(--app-muted)" }}>
+                            {status === "ok" ? "Operational" : status}
+                          </Typography>
+                        </Box>
+                        <StatusDot ok={status === "ok"} />
+                      </Box>
+                    </Link>
+                  );
+                })}
+              </Box>
+            </Box>
+          ) : null}
+
+          <Divider />
+
+          <Box sx={{ p: { xs: 2.5, md: 3 }, display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" } }}>
+            {federationData && !federationData.error ? (
+              <OperationalPanel title="Federation peers" badge={`${peerCount} peers`}>
+                {federationData.peers && federationData.peers.length > 0 ? (
+                  <Box sx={{ display: "grid", gap: 1 }}>
                     {federationData.peers.map((peer) => (
-                      <tr
-                        key={peer.peer_id}
-                        className="border-b border-[--app-border] bg-[--app-control-bg]"
-                      >
-                        <td className="px-3 py-2 font-mono text-[10px] text-[--app-muted]">
-                          {peer.peer_id}
-                        </td>
-                        <td className="px-3 py-2 text-[--app-fg]">{peer.endpoint}</td>
-                        <td className="px-3 py-2">
-                          <span
-                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
-                              peer.status === "active"
-                                ? "bg-[--app-control-active-bg] text-[--app-muted]"
-                                : "bg-zinc-500/20 text-zinc-300"
-                            }`}
-                          >
-                            {peer.status}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 text-[--app-fg]">
-                          {typeof peer.trust_score === "number"
-                            ? peer.trust_score.toFixed(1)
-                            : "—"}
-                        </td>
-                        <td className="px-3 py-2 text-[10px] text-[--app-muted]">
-                          {peer.last_seen}
-                        </td>
-                      </tr>
+                      <Box key={peer.peer_id} sx={{ p: 1.5, borderRadius: 2.5, border: "1px solid var(--app-border)", bgcolor: "var(--app-control-bg)" }}>
+                        <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1.5 }}>
+                          <Typography sx={{ fontSize: 12, fontWeight: 800, color: "var(--app-fg)", wordBreak: "break-word" }}>
+                            {peer.peer_id}
+                          </Typography>
+                          <Chip size="small" label={peer.status} sx={{ bgcolor: peer.status === "active" ? "var(--app-control-active-bg)" : "rgba(100, 116, 139, 0.14)", color: "var(--app-muted)", fontWeight: 700 }} />
+                        </Box>
+                        <Typography sx={{ mt: 0.75, fontSize: 11, color: "var(--app-muted)", wordBreak: "break-word" }}>
+                          {peer.endpoint}
+                        </Typography>
+                        <Typography sx={{ mt: 0.75, fontSize: 11, color: "var(--app-muted)" }}>
+                          Trust {typeof peer.trust_score === "number" ? peer.trust_score.toFixed(1) : "-"} / Last seen {peer.last_seen}
+                        </Typography>
+                      </Box>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-[--app-border] bg-[--app-surface] py-6 text-center ring-1 ring-[--app-surface-ring]">
-                <p className="text-[11px] text-[--app-muted]">No federation peers configured</p>
-              </div>
-            )}
-          </section>
-        ) : null}
+                  </Box>
+                ) : (
+                  <EmptyPanel title="No federation peers configured" message="This registry is running as a standalone trust domain." />
+                )}
+              </OperationalPanel>
+            ) : null}
 
-        {/* Certificate Revocation List */}
-        {revocationsData && !revocationsData.error ? (
-          <section className="space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
-                Certificate Revocations
-              </p>
-              <span className="rounded-full bg-[--app-surface] px-2 py-0.5 text-[10px] font-medium text-[--app-muted]">
-                {revocationsData.count ?? 0} entries
-              </span>
-            </div>
-            {revocationsData.entries && revocationsData.entries.length > 0 ? (
-              <div className="overflow-hidden rounded-2xl ring-1 ring-[--app-surface-ring]">
-                <table className="w-full text-left text-[11px]">
-                  <thead>
-                    <tr className="border-b border-[--app-border] bg-[--app-surface]">
-                      <th className="px-3 py-2 font-semibold uppercase tracking-wider text-[--app-muted]">
-                        Tool
-                      </th>
-                      <th className="px-3 py-2 font-semibold uppercase tracking-wider text-[--app-muted]">
-                        Reason
-                      </th>
-                      <th className="px-3 py-2 font-semibold uppercase tracking-wider text-[--app-muted]">
-                        Revoked By
-                      </th>
-                      <th className="px-3 py-2 font-semibold uppercase tracking-wider text-[--app-muted]">
-                        Date
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {revocationsData.entries.map((entry, i) => (
-                      <tr
-                        key={i}
-                        className="border-b border-[--app-border] bg-[--app-control-bg]"
-                      >
-                        <td className="px-3 py-2 font-medium text-red-300">
+            {revocationsData && !revocationsData.error ? (
+              <OperationalPanel title="Certificate revocations" badge={`${revocationCount} entries`}>
+                {revocationsData.entries && revocationsData.entries.length > 0 ? (
+                  <Box sx={{ display: "grid", gap: 1 }}>
+                    {revocationsData.entries.map((entry, index) => (
+                      <Box key={`${entry.tool_name}-${index}`} sx={{ p: 1.5, borderRadius: 2.5, border: "1px solid rgba(239, 68, 68, 0.28)", bgcolor: "rgba(239, 68, 68, 0.08)" }}>
+                        <Typography sx={{ fontSize: 12, fontWeight: 800, color: "#b91c1c" }}>
                           {entry.tool_name}
-                        </td>
-                        <td className="px-3 py-2 text-[--app-fg]">{entry.reason}</td>
-                        <td className="px-3 py-2 text-[--app-muted]">{entry.revoked_by}</td>
-                        <td className="px-3 py-2 text-[10px] text-[--app-muted]">
-                          {entry.revoked_at}
-                        </td>
-                      </tr>
+                        </Typography>
+                        <Typography sx={{ mt: 0.75, fontSize: 11, color: "var(--app-muted)" }}>
+                          {entry.reason}
+                        </Typography>
+                        <Typography sx={{ mt: 0.75, fontSize: 10, color: "var(--app-muted)" }}>
+                          Revoked by {entry.revoked_by} on {entry.revoked_at}
+                        </Typography>
+                      </Box>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-[--app-border] bg-[--app-surface] py-6 text-center ring-1 ring-[--app-surface-ring]">
-                <p className="text-[11px] text-[--app-muted]">No revocations — all tools in good standing</p>
-              </div>
-            )}
-          </section>
-        ) : null}
+                  </Box>
+                ) : (
+                  <EmptyPanel title="No certificate revocations" message="No tools are currently blocked by the revocation list." />
+                )}
+              </OperationalPanel>
+            ) : null}
+          </Box>
 
-        {/* Quick Links */}
-        <section className="space-y-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
-            Security Pillars
-          </p>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            {[
-              { label: "Policy Engine", href: "/registry/policy", desc: "Pluggable policies" },
-              { label: "Contracts", href: "/registry/contracts", desc: "Digital agreements" },
-              { label: "Provenance", href: "/registry/provenance", desc: "Immutable ledger" },
-              { label: "Reflexive", href: "/registry/reflexive", desc: "Behavioral gating" },
-              { label: "Consent", href: "/registry/consent", desc: "Federated graphs" },
-            ].map((pillar) => (
-              <Link
-                key={pillar.href}
-                href={pillar.href}
-                className="group rounded-2xl border border-[--app-border] bg-[--app-surface] p-3 ring-1 ring-[--app-surface-ring] transition hover:bg-[--app-hover-bg] hover:border-[--app-accent] hover:ring-[--app-accent]"
-              >
-                <p className="text-[11px] font-semibold text-[--app-muted] group-hover:text-[--app-fg]">
-                  {pillar.label}
-                </p>
-                <p className="mt-0.5 text-[10px] text-[--app-muted]">{pillar.desc}</p>
-              </Link>
-            ))}
-          </div>
-        </section>
+          <Divider />
 
-        <p className="text-[10px] text-[--app-muted]">
-          Last updated: {health.timestamp} · Server: {health.server}
-          {securityHealth?.timestamp ? ` · Security: ${securityHealth.timestamp}` : ""}
-        </p>
+          <Box sx={{ p: { xs: 2.5, md: 3 }, display: "grid", gap: 2 }}>
+            <SectionHeader title="Security pillars" detail="Jump into each guardrail workspace" />
+            <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", lg: "repeat(5, minmax(0, 1fr))" } }}>
+              {SECURITY_PILLARS.map((pillar) => (
+                <Link key={pillar.href} href={pillar.href} style={{ textDecoration: "none" }}>
+                  <Box
+                    sx={{
+                      minHeight: 132,
+                      p: 2,
+                      borderRadius: 3,
+                      border: "1px solid var(--app-border)",
+                      bgcolor: "var(--app-control-bg)",
+                      display: "grid",
+                      alignContent: "space-between",
+                      gap: 1.5,
+                      "&:hover": { bgcolor: "var(--app-hover-bg)", borderColor: "var(--app-accent)" },
+                    }}
+                  >
+                    <Typography sx={{ fontSize: 13, fontWeight: 850, color: "var(--app-fg)" }}>
+                      {pillar.label}
+                    </Typography>
+                    <Typography sx={{ fontSize: 11, lineHeight: 1.55, color: "var(--app-muted)" }}>
+                      {pillar.desc}
+                    </Typography>
+                  </Box>
+                </Link>
+              ))}
+            </Box>
+          </Box>
+
+          <Divider />
+
+          <Box sx={{ px: { xs: 2.5, md: 3 }, py: 1.75, display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 1.5, bgcolor: "var(--app-control-bg)" }}>
+            <Typography sx={{ fontSize: 11, color: "var(--app-muted)" }}>
+              Registry updated: {health.timestamp ?? "-"}
+            </Typography>
+            <Typography sx={{ fontSize: 11, color: "var(--app-muted)" }}>
+              Security updated: {securityHealth?.timestamp ?? "-"}
+            </Typography>
+          </Box>
+        </CardContent>
+      </Card>
+    </Box>
+  );
+}
+
+function MetricTile({ label, value }: { label: string; value: number | string }) {
+  return (
+    <Box
+      sx={{
+        p: 1.5,
+        borderRadius: 2.5,
+        bgcolor: "var(--app-surface)",
+        border: "1px solid var(--app-border)",
+      }}
+    >
+      <Typography sx={{ fontSize: 11, color: "var(--app-muted)" }}>{label}</Typography>
+      <Typography sx={{ mt: 0.5, fontSize: 22, lineHeight: 1, fontWeight: 850, color: "var(--app-fg)" }}>
+        {value}
+      </Typography>
+    </Box>
+  );
+}
+
+function SignalTile({
+  label,
+  value,
+  detail,
+  tone = "neutral",
+}: {
+  label: string;
+  value: number | string;
+  detail: string;
+  tone?: "ok" | "warn" | "neutral";
+}) {
+  const color = tone === "ok" ? "var(--app-accent)" : tone === "warn" ? "#d97706" : "var(--app-muted)";
+  return (
+    <Box
+      sx={{
+        p: 2,
+        borderRadius: 3,
+        border: "1px solid var(--app-border)",
+        bgcolor: "var(--app-surface)",
+        display: "grid",
+        gap: 0.75,
+      }}
+    >
+      <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+        {label}
+      </Typography>
+      <Typography sx={{ fontSize: 20, lineHeight: 1, fontWeight: 850, color }}>
+        {value}
+      </Typography>
+      <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+        {detail}
+      </Typography>
+    </Box>
+  );
+}
+
+function StatusDot({ ok }: { ok: boolean }) {
+  return (
+    <Box
+      sx={{
+        width: 12,
+        height: 12,
+        borderRadius: "50%",
+        bgcolor: ok ? "var(--app-accent)" : "#ef4444",
+        boxShadow: ok ? "0 0 0 4px var(--app-control-active-bg)" : "0 0 0 4px rgba(239, 68, 68, 0.12)",
+        flex: "0 0 auto",
+      }}
+    />
+  );
+}
+
+function SectionHeader({ title, detail }: { title: string; detail: string }) {
+  return (
+    <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2 }}>
+      <Typography sx={sectionTitleSx}>{title}</Typography>
+      <Chip size="small" label={detail} sx={{ bgcolor: "var(--app-control-active-bg)", color: "var(--app-muted)", fontWeight: 700 }} />
+    </Box>
+  );
+}
+
+function OperationalPanel({
+  title,
+  badge,
+  children,
+}: {
+  title: string;
+  badge: string;
+  children: ReactNode;
+}) {
+  return (
+    <Box
+      component="section"
+      sx={{
+        border: "1px solid var(--app-border)",
+        borderRadius: 3,
+        bgcolor: "var(--app-surface)",
+        overflow: "hidden",
+      }}
+    >
+      <Box sx={{ p: 2, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1.5, borderBottom: "1px solid var(--app-border)", bgcolor: "var(--app-control-bg)" }}>
+        <Typography sx={sectionTitleSx}>{title}</Typography>
+        <Chip size="small" label={badge} sx={{ bgcolor: "var(--app-surface)", color: "var(--app-muted)", fontWeight: 700 }} />
+      </Box>
+      <Box sx={{ p: 2 }}>{children}</Box>
+    </Box>
+  );
+}
+
+function EmptyPanel({ title, message }: { title: string; message: string }) {
+  return (
+    <Box
+      sx={{
+        p: 3,
+        borderRadius: 3,
+        border: "1px solid var(--app-border)",
+        bgcolor: "var(--app-control-bg)",
+        textAlign: "center",
+      }}
+    >
+      <Typography sx={{ fontSize: 13, fontWeight: 800, color: "var(--app-fg)" }}>{title}</Typography>
+      <Typography sx={{ mt: 0.75, fontSize: 12, color: "var(--app-muted)" }}>{message}</Typography>
     </Box>
   );
 }

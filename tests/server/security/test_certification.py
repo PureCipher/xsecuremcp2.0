@@ -580,12 +580,57 @@ class TestCertificationPipeline:
         assert not result.is_certified
         assert result.attestation.status == AttestationStatus.PENDING
 
-    def test_certify_without_crypto(self):
+    def test_certify_without_crypto_marks_unsigned(self):
+        """Default behaviour: no crypto handler → status is UNSIGNED, not VALID.
+
+        Regression test for the bug where attestations were marked VALID
+        without a real signature, causing ``is_valid()`` and consumer
+        ``is_certified`` checks to incorrectly trust unsigned material.
+        """
         pipeline = CertificationPipeline()
         result = pipeline.certify(_good_manifest())
-        # Should still be marked valid if level meets min, just unsigned
+        assert result.attestation.signature == ""
+        assert result.attestation.status == AttestationStatus.UNSIGNED
+        assert result.attestation.is_valid() is False
+        assert result.is_certified is False
+
+    def test_certify_without_crypto_legacy_opt_in(self):
+        """``require_crypto_for_valid=False`` restores the pre-fix
+        unsigned-VALID behaviour for environments that explicitly want it."""
+        pipeline = CertificationPipeline(require_crypto_for_valid=False)
+        result = pipeline.certify(_good_manifest())
         assert result.attestation.signature == ""
         assert result.attestation.status == AttestationStatus.VALID
+
+    def test_unsigned_attestation_does_not_update_marketplace(self):
+        """An UNSIGNED attestation must not bump marketplace trust — only
+        cryptographically attested manifests get the trust elevation."""
+        from fastmcp.server.security.gateway.marketplace import (
+            Marketplace,
+            TrustLevel,
+        )
+
+        marketplace = Marketplace()
+        manifest = _good_manifest()
+        # Register a server tagged with the tool name so the pipeline's
+        # marketplace lookup can find it.
+        reg = marketplace.register(
+            name=manifest.tool_name,
+            endpoint="memory://test",
+            tags={manifest.tool_name},
+        )
+        original_level = reg.trust_level
+
+        pipeline = CertificationPipeline(marketplace=marketplace)
+        result = pipeline.certify(manifest)
+        assert result.attestation.status == AttestationStatus.UNSIGNED
+
+        # Trust level for the registered server stays untouched — the
+        # pipeline only elevates trust for attestations that reach VALID.
+        post_reg = marketplace.get(reg.server_id)
+        assert post_reg is not None
+        assert post_reg.trust_level == original_level
+        assert post_reg.trust_level == TrustLevel.UNVERIFIED
 
     def test_manifest_digest_binding(self):
         pipeline = CertificationPipeline(crypto_handler=_crypto())

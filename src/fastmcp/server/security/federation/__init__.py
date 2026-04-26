@@ -10,6 +10,9 @@ from fastmcp.server.security.federation.crl import (
     RevocationReason,
 )
 from fastmcp.server.security.federation.federation import (
+    BroadcastDelivery,
+    BroadcastResult,
+    BroadcastTransport,
     FederatedQuery,
     FederatedTrustResult,
     FederationPeer,
@@ -18,6 +21,9 @@ from fastmcp.server.security.federation.federation import (
 )
 
 __all__ = [
+    "BroadcastDelivery",
+    "BroadcastResult",
+    "BroadcastTransport",
     "CRLEntry",
     "CertificateRevocationList",
     "FederatedQuery",

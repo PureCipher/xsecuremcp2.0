@@ -30,11 +30,11 @@ def _visible_to_session(
 class RegistryNotificationFeed:
     """Append-only feed stored in the registry SQLite file or in memory."""
 
-    def __init__(self, db_path: str | None) -> None:
+    def __init__(self, db_path: str | None, *, ensure_schema: bool = True) -> None:
         self._db_path = db_path
         self._memory: deque[dict[str, Any]] = deque(maxlen=_MAX_ITEMS)
         self._mem_seq = 0
-        if self._db_path:
+        if self._db_path and ensure_schema:
             self._ensure_sqlite()
 
     def _ensure_sqlite(self) -> None:

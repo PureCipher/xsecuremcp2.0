@@ -4,11 +4,29 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { AppBar, Box, ButtonBase, IconButton, Toolbar, Typography } from "@mui/material";
+import { AppBar, Box, ButtonBase, Divider, IconButton, Menu, MenuItem, Toolbar, Typography } from "@mui/material";
 
 import { NavIcon } from "@/components/security";
+import { useRegistryUserPreferences } from "@/hooks/useRegistryUserPreferences";
 
 import { RegistryNotifications } from "./RegistryNotifications";
+
+const topActionButtonSx = {
+  width: 36,
+  height: 36,
+  p: 0,
+  border: "1px solid",
+  borderRadius: 2.5,
+  boxShadow: "0 8px 20px rgba(15, 23, 42, 0.06)",
+};
+
+const topActionLabelSx = {
+  fontSize: 11,
+  lineHeight: 1,
+  fontWeight: 650,
+  letterSpacing: "0.02em",
+  color: "var(--app-muted)",
+};
 
 export function RegistryTopBar({
   authEnabled,
@@ -36,20 +54,23 @@ export function RegistryTopBar({
   onBrandClick?: () => void;
 }) {
   const router = useRouter();
+  const { prefs } = useRegistryUserPreferences();
   const [signingOut, setSigningOut] = useState(false);
-  const actionFx =
-    "transition active:translate-y-[1px] active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[--app-accent] focus-visible:ring-offset-2 focus-visible:ring-offset-[--app-chrome-bg]";
+  const [profileAnchor, setProfileAnchor] = useState<HTMLElement | null>(null);
+  const profileMenuOpen = Boolean(profileAnchor);
+  const preferredLanding = normalizeRegistryLanding(prefs.workspace.defaultLandingPage) ?? "/registry/app";
+  const preferredLandingLabel = landingLabel(preferredLanding);
   const roleLabel = !authEnabled
-    ? "OPEN"
+    ? "Open"
     : !hasSession
-      ? "GUEST"
+      ? "Guest"
     : canAdmin
-      ? "ADMIN"
+      ? "Admin"
       : canReview
-        ? "REVIEWER"
+        ? "Reviewer"
         : canSubmit
-          ? "PUBLISHER"
-          : "VIEWER";
+          ? "Publisher"
+          : "Viewer";
 
   async function handleLogout() {
     setSigningOut(true);
@@ -66,24 +87,29 @@ export function RegistryTopBar({
       position="fixed"
       elevation={0}
       sx={{
-        height: 56,
+        height: 64,
         bgcolor: "var(--app-chrome-bg)",
         color: "var(--app-fg)",
         borderBottom: "1px solid var(--app-chrome-border)",
+        backdropFilter: "blur(18px)",
+        boxShadow: "0 10px 30px rgba(15, 23, 42, 0.04)",
       }}
     >
-      <Toolbar sx={{ minHeight: 56, px: 2, gap: 1.5 }}>
+      <Toolbar sx={{ minHeight: 64, px: { xs: 1.5, sm: 2.5 }, gap: 1.5 }}>
         <IconButton
           onClick={onMenuToggle}
           aria-label={menuOpen ? "Close menu" : "Open menu"}
           aria-expanded={menuOpen}
           sx={{
             display: { xs: "inline-flex", sm: "none" },
+            width: 36,
+            height: 36,
+            borderRadius: 2.5,
             border: "1px solid var(--app-control-border)",
             bgcolor: "var(--app-control-bg)",
           }}
         >
-          <Typography variant="overline" sx={{ letterSpacing: "0.12em" }}>
+          <Typography sx={{ fontSize: 10, fontWeight: 700, lineHeight: 1 }}>
             {menuOpen ? "Close" : "Menu"}
           </Typography>
         </IconButton>
@@ -92,7 +118,7 @@ export function RegistryTopBar({
           onClick={onBrandClick}
           sx={{
             borderRadius: 3,
-            px: 0.5,
+            px: 0.75,
             py: 0.5,
             display: "flex",
             alignItems: "center",
@@ -105,14 +131,15 @@ export function RegistryTopBar({
             sx={{
               width: 36,
               height: 36,
-              borderRadius: 2,
+              borderRadius: 2.5,
               bgcolor: "var(--app-accent)",
               color: "var(--app-accent-contrast)",
               display: "grid",
               placeItems: "center",
-              fontSize: 11,
-              fontWeight: 900,
-              letterSpacing: "0.16em",
+              fontSize: 12,
+              fontWeight: 800,
+              letterSpacing: "0.02em",
+              boxShadow: "0 12px 28px var(--app-active-ring)",
             }}
           >
             PC
@@ -121,11 +148,11 @@ export function RegistryTopBar({
             <Typography
               noWrap
               variant="overline"
-              sx={{ letterSpacing: "0.18em", color: "var(--app-muted)" }}
+              sx={{ display: "block", lineHeight: 1.1, color: "var(--app-muted)" }}
             >
               PureCipher
             </Typography>
-            <Typography noWrap variant="body2" sx={{ color: "var(--app-fg)" }}>
+            <Typography noWrap variant="body2" sx={{ color: "var(--app-fg)", fontWeight: 700 }}>
               Secured MCP Registry
             </Typography>
           </Box>
@@ -133,7 +160,7 @@ export function RegistryTopBar({
 
         <Box sx={{ flex: 1 }} />
 
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 0.75, sm: 1.25 } }}>
           <TopAction href="/public/tools" label="Public">
             <NavIcon name="tools" className="h-4 w-4" />
           </TopAction>
@@ -142,7 +169,7 @@ export function RegistryTopBar({
             <Box sx={{ display: { xs: "none", sm: "block" } }}>
               <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 0.5 }}>
                 <RegistryNotifications />
-                <Typography variant="caption" sx={{ textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--app-muted)" }}>
+                <Typography sx={topActionLabelSx}>
                   Notify
                 </Typography>
               </Box>
@@ -161,76 +188,164 @@ export function RegistryTopBar({
           <TopAction href="/registry/health" label="Health" active={!!healthActive}>
             <NavIcon name="health" className="h-4 w-4" />
           </TopAction>
-          <TopAction href="/registry/settings" label="Settings" active={!!settingsActive}>
-            <NavIcon name="settings" className="h-4 w-4" />
-          </TopAction>
 
-          <Box sx={{ display: { xs: "none", sm: "block" } }}>
-            <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 0.5 }}>
+          <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 0.5 }}>
+            <IconButton
+              onClick={(event) => setProfileAnchor(event.currentTarget)}
+              aria-label="Open profile menu"
+              aria-controls={profileMenuOpen ? "registry-profile-menu" : undefined}
+              aria-haspopup="menu"
+              aria-expanded={profileMenuOpen}
+              sx={{
+                ...topActionButtonSx,
+                borderColor: profileMenuOpen || settingsActive ? "var(--app-accent)" : "var(--app-control-border)",
+                bgcolor: profileMenuOpen || settingsActive ? "var(--app-control-active-bg)" : "var(--app-control-bg)",
+                color: profileMenuOpen || settingsActive ? "var(--app-fg)" : "var(--app-muted)",
+                "&:hover": { bgcolor: "var(--app-hover-bg)" },
+              }}
+            >
+              <NavIcon name="access" className="h-4 w-4" />
+            </IconButton>
+            <Typography sx={topActionLabelSx}>
+              Profile
+            </Typography>
+          </Box>
+
+          <Menu
+            id="registry-profile-menu"
+            anchorEl={profileAnchor}
+            open={profileMenuOpen}
+            onClose={() => setProfileAnchor(null)}
+            anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+            transformOrigin={{ vertical: "top", horizontal: "right" }}
+            slotProps={{
+              paper: {
+                sx: {
+                  mt: 1,
+                  minWidth: 240,
+                  border: "1px solid var(--app-border)",
+                  borderRadius: 3,
+                  bgcolor: "var(--app-surface)",
+                  color: "var(--app-fg)",
+                  backgroundImage: "none",
+                  boxShadow: "0 22px 60px rgba(15, 23, 42, 0.16)",
+                  overflow: "hidden",
+                },
+              },
+            }}
+          >
+            <Box sx={{ px: 1.75, py: 1.5, bgcolor: "var(--app-control-bg)" }}>
+              <Typography sx={{ fontSize: 13, fontWeight: 800, color: "var(--app-fg)" }}>
+                Profile
+              </Typography>
+              <Typography sx={{ mt: 0.25, fontSize: 12, color: "var(--app-muted)" }}>
+                {roleLabel} registry access
+              </Typography>
+            </Box>
+            <Divider />
+            <MenuItem
+              onClick={() => {
+                setProfileAnchor(null);
+                router.push(preferredLanding);
+              }}
+            >
+              <Box sx={{ mr: 1.25, display: "grid", placeItems: "center", color: "var(--app-muted)" }}>
+                <NavIcon name="tools" className="h-4 w-4" />
+              </Box>
+              <Box>
+                <Typography sx={{ fontSize: 13, fontWeight: 600 }}>
+                  Preferred home
+                </Typography>
+                <Typography sx={{ fontSize: 11, color: "var(--app-muted)" }}>
+                  {preferredLandingLabel}
+                </Typography>
+              </Box>
+            </MenuItem>
+            <MenuItem
+              selected={settingsActive}
+              onClick={() => {
+                setProfileAnchor(null);
+                router.push("/registry/settings");
+              }}
+            >
+              <Box sx={{ mr: 1.25, display: "grid", placeItems: "center", color: "var(--app-muted)" }}>
+                <NavIcon name="settings" className="h-4 w-4" />
+              </Box>
+              <Typography sx={{ fontSize: 13, fontWeight: 600 }}>
+                Settings
+              </Typography>
+            </MenuItem>
+            {authEnabled ? (
+              hasSession ? (
+                <MenuItem
+                  disabled={signingOut}
+                  onClick={() => {
+                    setProfileAnchor(null);
+                    void handleLogout();
+                  }}
+                >
+                  <Box sx={{ mr: 1.25, display: "grid", placeItems: "center", color: "var(--app-muted)" }}>
+                    <NavIcon name="access" className="h-4 w-4" />
+                  </Box>
+                  <Typography sx={{ fontSize: 13, fontWeight: 600 }}>
+                    {signingOut ? "Signing out..." : "Sign out"}
+                  </Typography>
+                </MenuItem>
+              ) : (
+                <MenuItem
+                  onClick={() => {
+                    setProfileAnchor(null);
+                    router.push("/login");
+                  }}
+                >
+                    <Box sx={{ mr: 1.25, display: "grid", placeItems: "center", color: "var(--app-muted)" }}>
+                    <NavIcon name="access" className="h-4 w-4" />
+                  </Box>
+                  <Typography sx={{ fontSize: 13, fontWeight: 600 }}>
+                    Sign in
+                  </Typography>
+                </MenuItem>
+              )
+            ) : null}
+            <Divider />
+            <Box sx={{ px: 1.5, py: 1 }}>
               <Box
                 sx={{
-                  px: 1.2,
-                  py: 0.4,
-                  borderRadius: 999,
+                  display: "inline-flex",
+                  px: 1,
+                  py: 0.45,
+                  borderRadius: 2,
                   bgcolor: "var(--app-control-active-bg)",
                   border: "1px solid var(--app-control-border)",
-                  fontSize: 10,
-                  fontWeight: 800,
-                  letterSpacing: "0.14em",
-                  textTransform: "uppercase",
+                  fontSize: 11,
+                  lineHeight: 1,
+                  fontWeight: 700,
+                  letterSpacing: "0.01em",
                   color: "var(--app-muted)",
                 }}
               >
                 {roleLabel}
               </Box>
-              <Typography variant="caption" sx={{ textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--app-muted)" }}>
-                Role
-              </Typography>
             </Box>
-          </Box>
-
-          {authEnabled && hasSession ? (
-            <Box sx={{ display: { xs: "none", sm: "flex" }, flexDirection: "column", alignItems: "center", gap: 0.5 }}>
-              <IconButton
-                onClick={handleLogout}
-                disabled={signingOut}
-                aria-label="Sign out"
-                sx={{
-                  border: "1px solid var(--app-accent)",
-                  color: "var(--app-muted)",
-                  "&:hover": { bgcolor: "var(--app-control-active-bg)" },
-                }}
-              >
-                <NavIcon name="access" className="h-4 w-4" />
-              </IconButton>
-              <Typography variant="caption" sx={{ textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--app-muted)" }}>
-                {signingOut ? "…" : "Sign out"}
-              </Typography>
-            </Box>
-          ) : authEnabled ? (
-            <Box sx={{ display: { xs: "none", sm: "flex" }, flexDirection: "column", alignItems: "center", gap: 0.5 }}>
-              <Link href="/login" legacyBehavior passHref>
-                <IconButton
-                  component="a"
-                  aria-label="Sign in"
-                  sx={{
-                    border: "1px solid var(--app-accent)",
-                    color: "var(--app-muted)",
-                    "&:hover": { bgcolor: "var(--app-control-active-bg)" },
-                  }}
-                >
-                  <NavIcon name="access" className="h-4 w-4" />
-                </IconButton>
-              </Link>
-              <Typography variant="caption" sx={{ textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--app-muted)" }}>
-                Sign in
-              </Typography>
-            </Box>
-          ) : null}
+          </Menu>
         </Box>
       </Toolbar>
     </AppBar>
   );
+}
+
+function normalizeRegistryLanding(value: string | undefined): string | null {
+  if (!value?.startsWith("/registry/")) return null;
+  if (value.includes("://") || value.includes("\\")) return null;
+  return value;
+}
+
+function landingLabel(path: string): string {
+  if (path === "/registry/publish/mine") return "Publisher listings";
+  if (path === "/registry/review") return "Review queue";
+  if (path === "/registry/health") return "Health";
+  if (path === "/registry/settings") return "Settings";
+  return "Trusted tools";
 }
 
 function TopAction({
@@ -250,7 +365,7 @@ function TopAction({
         <IconButton
           component="a"
           sx={{
-            border: "1px solid",
+            ...topActionButtonSx,
             borderColor: active ? "var(--app-accent)" : "var(--app-control-border)",
             bgcolor: active ? "var(--app-control-active-bg)" : "var(--app-control-bg)",
             color: active ? "var(--app-fg)" : "var(--app-muted)",
@@ -260,7 +375,7 @@ function TopAction({
           {children}
         </IconButton>
       </Link>
-      <Typography variant="caption" sx={{ textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--app-muted)" }}>
+      <Typography sx={topActionLabelSx}>
         {label}
       </Typography>
     </Box>

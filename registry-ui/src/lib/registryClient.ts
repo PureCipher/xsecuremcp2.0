@@ -22,7 +22,39 @@ export type RegistrySessionInfo = {
 
 export type RegistrySessionResponse = {
   auth_enabled?: boolean;
+  bootstrap_required?: boolean;
+  setup_url?: string | null;
   session?: RegistrySessionInfo | null;
+};
+
+export type RegistryUserPreferences = {
+  notifications?: {
+    publishUpdates?: boolean;
+    reviewQueue?: boolean;
+    policyChanges?: boolean;
+    securityAlerts?: boolean;
+  };
+  workspace?: {
+    defaultLandingPage?: string;
+    density?: "comfortable" | "compact";
+  };
+  publisher?: {
+    defaultCertification?: "basic" | "standard" | "advanced";
+    openMineFirst?: boolean;
+  };
+  reviewer?: {
+    defaultLane?: "pending" | "approved" | "rejected";
+    highRiskFirst?: boolean;
+  };
+  admin?: {
+    defaultAdminView?: "health" | "policy" | "settings";
+    requireConfirmations?: boolean;
+  };
+};
+
+export type RegistryUserPreferencesResponse = RegistryErrorResponse & {
+  username?: string;
+  preferences?: RegistryUserPreferences;
 };
 
 export type RegistryDataFlow = {
@@ -34,6 +66,15 @@ export type RegistryDataFlow = {
 
 export type RegistryManifestSummary = {
   data_flows?: RegistryDataFlow[];
+};
+
+export type RegistryUpstreamRef = {
+  channel?: string;
+  identifier?: string;
+  version?: string;
+  pinned_hash?: string;
+  source_url?: string;
+  metadata?: Record<string, unknown>;
 };
 
 export type RegistryToolListing = {
@@ -49,6 +90,12 @@ export type RegistryToolListing = {
   author?: string;
   manifest?: RegistryManifestSummary | RegistryPayload | null;
   metadata?: RegistryPayload;
+  // Curator-attestation fields. Present only on listings produced by
+  // the third-party onboarding flow (`/registry/onboard`).
+  attestation_kind?: "author" | "curator" | string;
+  curator_id?: string;
+  hosting_mode?: "catalog" | "proxy" | string;
+  upstream_ref?: RegistryUpstreamRef | null;
 };
 
 export type RegistryToolCatalogResponse = RegistryErrorResponse & {
@@ -88,6 +135,11 @@ export type PublisherSummary = {
   display_name?: string;
   summary?: string;
   description?: string;
+  // ``listing_count`` is the canonical count emitted by the registry
+  // backend (number of *published* listings that belong to the
+  // publisher). ``tool_count`` / ``verified_tool_count`` are kept as
+  // optional aliases in case other surfaces emit one of those names.
+  listing_count?: number;
   tool_count?: number;
   verified_tool_count?: number;
   trust_score?: PublisherTrustScore | null;
@@ -99,10 +151,15 @@ export type PublisherDirectoryResponse = RegistryErrorResponse & {
   generated_at?: string;
 };
 
-export type PublisherProfileResponse = RegistryErrorResponse & {
-  summary?: PublisherSummary;
-  listings?: RegistryToolListing[];
-};
+// The backend emits the publisher summary FLAT at the top level
+// (publisher_id, display_name, listing_count, etc.) plus a
+// ``listings`` array of full tool listings — see
+// ``PublisherProfile.to_dict`` in src/purecipher/models.py. The
+// response shape is the union of those fields.
+export type PublisherProfileResponse = RegistryErrorResponse &
+  Partial<PublisherSummary> & {
+    listings?: RegistryToolListing[];
+  };
 
 export type ReviewLogEntry = {
   action?: string;
@@ -116,6 +173,7 @@ export type ReviewQueueItem = {
   tool_name: string;
   version?: string;
   certification_level?: string;
+  trust_score?: number | null;
   description?: string;
   moderation_log?: ReviewLogEntry[];
   available_actions?: string[];
@@ -580,6 +638,14 @@ export async function getRegistrySession(): Promise<RegistrySessionResponse | nu
   return parseJson<RegistrySessionResponse>(response);
 }
 
+export async function getRegistryUserPreferences(): Promise<RegistryUserPreferencesResponse | null> {
+  const response = await backendFetch("/registry/me/preferences");
+  if (!response.ok) {
+    return null;
+  }
+  return parseJson<RegistryUserPreferencesResponse>(response);
+}
+
 export async function listVerifiedTools(): Promise<RegistryToolCatalogResponse | null> {
   const response = await backendFetch("/registry/tools");
   if (!response.ok) {
@@ -635,6 +701,956 @@ export async function getPublisherProfile(
 ): Promise<PublisherProfileResponse | null> {
   const response = await backendFetch(`/registry/publishers/${encodeURIComponent(publisherId)}`);
   return parseJson<PublisherProfileResponse>(response);
+}
+
+// ── Server governance — Policy Kernel ───────────────────────────
+//
+// Iteration 1 of the MCP-Server profile's Governance tab. Replaces
+// the previous "Policy Kernel: inherited (stub)" placeholder with a
+// real, derived view of how policy applies to each of the
+// publisher's listings. See ``PureCipherRegistry
+// .get_server_policy_governance`` in src/purecipher/registry.py for
+// the canonical contract.
+
+export type ServerRegistryPolicyBlock = {
+  available: boolean;
+  error?: string;
+  policy_set_id?: string | null;
+  current_version?: number | null;
+  version_count?: number | null;
+  fail_closed?: boolean | null;
+  allow_hot_swap?: boolean | null;
+  provider_count?: number | null;
+  evaluation_count?: number | null;
+  deny_count?: number | null;
+};
+
+export type ServerPolicyProvider = {
+  type: string;
+  policy_id?: string;
+  fail_closed?: boolean;
+  allowed_count?: number;
+  allowed_sample?: string[];
+};
+
+// ``binding_source`` is the canonical field describing what gates
+// calls to a tool:
+//
+// - ``inherited``       — no listing-specific policy at the registry
+//                         layer (catalog-only listings, or proxy
+//                         listings without a curator-vouched tool
+//                         surface).
+// - ``proxy_allowlist`` — proxy-mode curator listing whose
+//                         AllowlistPolicy gates calls against the
+//                         curator-vouched tool surface.
+export type ServerPolicyBindingSource = "inherited" | "proxy_allowlist";
+
+export type ServerPolicyToolBinding = {
+  listing_id: string;
+  tool_name: string;
+  display_name?: string;
+  hosting_mode?: "catalog" | "proxy" | string | null;
+  attestation_kind?: "author" | "curator" | string | null;
+  status?: string;
+  binding_source: ServerPolicyBindingSource | string;
+  policy_provider: ServerPolicyProvider | null;
+};
+
+export type ServerPolicyGovernanceSummary = {
+  tool_count: number;
+  inherited_count: number;
+  overridden_count: number;
+};
+
+export type ServerPolicyGovernanceResponse = RegistryErrorResponse & {
+  server_id?: string;
+  registry_policy?: ServerRegistryPolicyBlock;
+  per_tool_policies?: ServerPolicyToolBinding[];
+  summary?: ServerPolicyGovernanceSummary;
+  links?: { policy_kernel_url?: string };
+  generated_at?: string;
+};
+
+export async function getServerPolicyGovernance(
+  serverId: string,
+): Promise<ServerPolicyGovernanceResponse | null> {
+  const response = await backendFetch(
+    `/registry/servers/${encodeURIComponent(serverId)}/governance/policy`,
+  );
+  return parseJson<ServerPolicyGovernanceResponse>(response);
+}
+
+// ── Server governance — Contract Broker ─────────────────────────
+//
+// Iteration 2 of the MCP-Server profile's Governance tab. Renders
+// the registry's Context Broker availability + per-tool agent-
+// contract bindings. See ``PureCipherRegistry
+// .get_server_contract_governance`` in src/purecipher/registry.py
+// for the canonical contract.
+
+export type ServerBrokerDefaultTerm = {
+  term_id?: string;
+  term_type?: string;
+  description?: string;
+  required?: boolean;
+};
+
+export type ServerBrokerBlock = {
+  available: boolean;
+  reason?: string;
+  broker_id?: string;
+  server_id?: string;
+  max_rounds?: number | null;
+  contract_duration_seconds?: number | null;
+  session_timeout_seconds?: number | null;
+  default_term_count?: number;
+  default_terms?: ServerBrokerDefaultTerm[];
+  active_contract_count?: number;
+  negotiation_session_count?: number;
+  exchange_log_session_count?: number;
+  exchange_log_entry_count?: number;
+};
+
+// ``binding_source`` for contract bindings:
+//
+// - ``no_contracts``    — no active contract has terms that
+//                         reference this tool by name or pattern.
+// - ``agent_contracts`` — at least one active contract carries a
+//                         term whose constraint references this
+//                         tool. ``matching_agents`` lists up to 5
+//                         distinct agent_ids.
+export type ServerContractBindingSource =
+  | "no_contracts"
+  | "agent_contracts";
+
+export type ServerContractToolBinding = {
+  listing_id: string;
+  tool_name: string;
+  display_name?: string;
+  hosting_mode?: "catalog" | "proxy" | string | null;
+  attestation_kind?: "author" | "curator" | string | null;
+  status?: string;
+  binding_source: ServerContractBindingSource | string;
+  matching_contract_count: number;
+  matching_agents: string[];
+};
+
+export type ServerContractGovernanceSummary = {
+  tool_count: number;
+  contracted_count: number;
+  uncontracted_count: number;
+};
+
+export type ServerContractGovernanceResponse = RegistryErrorResponse & {
+  server_id?: string;
+  broker?: ServerBrokerBlock;
+  per_tool_contracts?: ServerContractToolBinding[];
+  summary?: ServerContractGovernanceSummary;
+  links?: { contract_broker_url?: string };
+  generated_at?: string;
+};
+
+export async function getServerContractGovernance(
+  serverId: string,
+): Promise<ServerContractGovernanceResponse | null> {
+  const response = await backendFetch(
+    `/registry/servers/${encodeURIComponent(serverId)}/governance/contracts`,
+  );
+  return parseJson<ServerContractGovernanceResponse>(response);
+}
+
+// ── Server governance — Consent Graph ───────────────────────────
+//
+// Iteration 3 of the MCP-Server profile's Governance tab. Combines
+// the deterministic ``SecurityManifest.requires_consent`` signal with
+// a best-effort scan of the Consent Graph for edges that reference
+// each tool. See ``PureCipherRegistry.get_server_consent_governance``
+// in src/purecipher/registry.py for the canonical contract.
+
+export type ServerConsentGraphBlock = {
+  available: boolean;
+  reason?: string;
+  graph_id?: string;
+  node_count?: number;
+  edge_count?: number;
+  active_edge_count?: number;
+  node_counts_by_type?: Record<string, number>;
+  audit_entry_count?: number;
+};
+
+export type ServerConsentFederationBlock = {
+  available: boolean;
+  reason?: string;
+  institution_id?: string;
+  jurisdiction_count?: number;
+  peer_count?: number;
+};
+
+// ``binding_source`` for consent bindings reflects the LISTING's
+// stated posture (manifest.requires_consent), not graph activity.
+// Graph grants are tracked separately on ``graph_grant_count``.
+export type ServerConsentBindingSource =
+  | "consent_required"
+  | "consent_optional";
+
+export type ServerConsentToolBinding = {
+  listing_id: string;
+  tool_name: string;
+  display_name?: string;
+  hosting_mode?: "catalog" | "proxy" | string | null;
+  attestation_kind?: "author" | "curator" | string | null;
+  status?: string;
+  requires_consent: boolean;
+  binding_source: ServerConsentBindingSource | string;
+  graph_grant_count: number;
+  grant_sources: string[];
+};
+
+export type ServerConsentGovernanceSummary = {
+  tool_count: number;
+  requires_consent_count: number;
+  with_grants_count: number;
+  without_grants_count: number;
+};
+
+export type ServerConsentGovernanceResponse = RegistryErrorResponse & {
+  server_id?: string;
+  consent_graph?: ServerConsentGraphBlock;
+  federation?: ServerConsentFederationBlock;
+  per_tool_consent?: ServerConsentToolBinding[];
+  summary?: ServerConsentGovernanceSummary;
+  links?: { consent_graph_url?: string };
+  generated_at?: string;
+};
+
+export async function getServerConsentGovernance(
+  serverId: string,
+): Promise<ServerConsentGovernanceResponse | null> {
+  const response = await backendFetch(
+    `/registry/servers/${encodeURIComponent(serverId)}/governance/consent`,
+  );
+  return parseJson<ServerConsentGovernanceResponse>(response);
+}
+
+// ── Server governance — Provenance Ledger ───────────────────────
+//
+// Iteration 4 of the MCP-Server profile's Governance tab. Surfaces
+// the registry-wide ledger plus per-tool ledger bindings (proxy
+// listings get a dedicated ledger at gateway mount; catalog listings
+// have no registry-attached ledger). See ``PureCipherRegistry
+// .get_server_ledger_governance``.
+
+export type ServerLedgerBlock = {
+  available: boolean;
+  reason?: string;
+  ledger_id?: string;
+  record_count?: number;
+  root_hash?: string;
+  latest_record_at?: string | null;
+  latest_record_action?: string | null;
+  latest_record_resource_id?: string | null;
+  scheme_name?: string | null;
+};
+
+export type ServerLedgerBindingSource = "proxy_ledger" | "no_ledger";
+
+export type ServerLedgerToolBinding = {
+  listing_id: string;
+  tool_name: string;
+  display_name?: string;
+  hosting_mode?: "catalog" | "proxy" | string | null;
+  attestation_kind?: "author" | "curator" | string | null;
+  status?: string;
+  binding_source: ServerLedgerBindingSource | string;
+  expected_ledger_id?: string | null;
+  central_record_count: number;
+  latest_central_record_at?: string | null;
+  latest_central_record_action?: string | null;
+};
+
+export type ServerLedgerGovernanceSummary = {
+  tool_count: number;
+  with_proxy_ledger_count: number;
+  with_central_records_count: number;
+  total_central_records_for_tools: number;
+};
+
+export type ServerLedgerGovernanceResponse = RegistryErrorResponse & {
+  server_id?: string;
+  ledger?: ServerLedgerBlock;
+  per_tool_ledger?: ServerLedgerToolBinding[];
+  summary?: ServerLedgerGovernanceSummary;
+  links?: { provenance_ledger_url?: string };
+  generated_at?: string;
+};
+
+export async function getServerLedgerGovernance(
+  serverId: string,
+): Promise<ServerLedgerGovernanceResponse | null> {
+  const response = await backendFetch(
+    `/registry/servers/${encodeURIComponent(serverId)}/governance/ledger`,
+  );
+  return parseJson<ServerLedgerGovernanceResponse>(response);
+}
+
+// ── Server governance — Overrides ───────────────────────────────
+//
+// Iteration 5 of the MCP-Server profile's Governance tab. Rolls up
+// operator/moderator interventions across all of a server's tools.
+// See ``PureCipherRegistry.get_server_overrides_governance``.
+
+export type ServerModerationDecision = {
+  decision_id?: string;
+  listing_id?: string;
+  moderator_id?: string;
+  action: string;
+  reason?: string;
+  created_at?: string;
+  metadata?: Record<string, unknown>;
+  // Tagged onto the cross-tool feed only.
+  tool_name?: string;
+  display_name?: string;
+};
+
+export type ServerOverrideToolBinding = {
+  listing_id: string;
+  tool_name: string;
+  display_name?: string;
+  hosting_mode?: "catalog" | "proxy" | string | null;
+  attestation_kind?: "author" | "curator" | string | null;
+  status: string;
+  binding_source:
+    | "moderation_pending"
+    | "moderated"
+    | "yanked_versions"
+    | "active"
+    | string;
+  moderation: {
+    open: boolean;
+    log_entries: number;
+    latest_action?: string | null;
+    latest_at?: string | null;
+    latest_reason?: string | null;
+    latest_moderator_id?: string | null;
+    log: ServerModerationDecision[];
+  };
+  policy_override: {
+    active: boolean;
+    allowed_count: number;
+  };
+  yanked_versions: {
+    version: string;
+    yanked: boolean;
+    yank_reason: string;
+    published_at?: string | null;
+  }[];
+};
+
+export type ServerOverridesGovernanceSummary = {
+  tool_count: number;
+  draft_count: number;
+  pending_review_count: number;
+  published_count: number;
+  suspended_count: number;
+  deprecated_count: number;
+  rejected_count: number;
+  yanked_version_count: number;
+  policy_override_count: number;
+  open_moderation_actions: number;
+};
+
+export type ServerOverridesGovernanceResponse = RegistryErrorResponse & {
+  server_id?: string;
+  summary?: ServerOverridesGovernanceSummary;
+  per_tool_overrides?: ServerOverrideToolBinding[];
+  recent_moderation_decisions?: ServerModerationDecision[];
+  links?: { moderation_queue_url?: string };
+  generated_at?: string;
+};
+
+export async function getServerOverridesGovernance(
+  serverId: string,
+): Promise<ServerOverridesGovernanceResponse | null> {
+  const response = await backendFetch(
+    `/registry/servers/${encodeURIComponent(serverId)}/governance/overrides`,
+  );
+  return parseJson<ServerOverridesGovernanceResponse>(response);
+}
+
+// ── Server observability — Reflexive Core ───────────────────────
+//
+// Iteration 6: powers the Observability tab on the server profile.
+// The endpoint lives at ``/observability`` (sibling to
+// ``/governance/*``) because observability is its own tab. See
+// ``PureCipherRegistry.get_server_observability``.
+
+export type ServerSeverityDistribution = {
+  info: number;
+  low: number;
+  medium: number;
+  high: number;
+  critical: number;
+};
+
+export type ServerAnalyzerBlock = {
+  available: boolean;
+  reason?: string;
+  analyzer_id?: string;
+  total_drift_count?: number;
+  monitored_actor_count?: number;
+  tracked_metric_count?: number;
+  tracked_metrics?: string[];
+  detector_count?: number;
+  min_samples?: number;
+  severity_distribution?: ServerSeverityDistribution;
+  latest_drift_at?: string | null;
+  latest_drift_severity?: string | null;
+  latest_drift_actor_id?: string | null;
+};
+
+export type ServerObservabilityBindingSource =
+  | "monitored"
+  | "no_observations";
+
+export type ServerObservabilityToolBinding = {
+  listing_id: string;
+  tool_name: string;
+  display_name?: string;
+  hosting_mode?: "catalog" | "proxy" | string | null;
+  attestation_kind?: "author" | "curator" | string | null;
+  status?: string;
+  binding_source: ServerObservabilityBindingSource | string;
+  drift_event_count: number;
+  severity_distribution: ServerSeverityDistribution;
+  highest_severity?: string | null;
+  latest_drift_at?: string | null;
+  latest_drift_severity?: string | null;
+};
+
+export type ServerDriftEvent = {
+  event_id?: string;
+  drift_type?: string | null;
+  severity?: string | null;
+  actor_id?: string;
+  description?: string;
+  observed_value?: number | null;
+  baseline_value?: number | null;
+  deviation?: number | null;
+  timestamp?: string | null;
+  // Tagged on by the backend when the event matched one of this
+  // server's tools.
+  tool_name?: string | null;
+  display_name?: string | null;
+};
+
+export type ServerObservabilitySummary = {
+  tool_count: number;
+  monitored_count: number;
+  with_high_drift_count: number;
+  with_critical_drift_count: number;
+};
+
+export type ServerObservabilityResponse = RegistryErrorResponse & {
+  server_id?: string;
+  analyzer?: ServerAnalyzerBlock;
+  per_tool_observability?: ServerObservabilityToolBinding[];
+  recent_drift_events?: ServerDriftEvent[];
+  summary?: ServerObservabilitySummary;
+  links?: { reflexive_core_url?: string };
+  generated_at?: string;
+};
+
+export async function getServerObservability(
+  serverId: string,
+): Promise<ServerObservabilityResponse | null> {
+  const response = await backendFetch(
+    `/registry/servers/${encodeURIComponent(serverId)}/observability`,
+  );
+  return parseJson<ServerObservabilityResponse>(response);
+}
+
+// ── Per-listing governance + observability rollup ───────────────
+//
+// Iteration 7: scoped to a single listing. Mirror of the
+// publisher-scoped views, composed from the same projections so
+// per-listing and per-publisher answers are guaranteed identical.
+// See ``PureCipherRegistry.get_listing_governance``.
+
+export type ListingPolicyBlock = {
+  registry_policy: ServerRegistryPolicyBlock;
+  // The plane-specific row fields (binding_source, policy_provider, ...).
+  binding_source: string;
+  policy_provider: ServerPolicyProvider | null;
+  hosting_mode?: string | null;
+  attestation_kind?: string | null;
+  status?: string;
+  listing_id?: string;
+  tool_name?: string;
+  display_name?: string;
+};
+
+export type ListingContractsBlock = {
+  broker: ServerBrokerBlock;
+  binding_source: string;
+  matching_contract_count: number;
+  matching_agents: string[];
+  hosting_mode?: string | null;
+  attestation_kind?: string | null;
+  status?: string;
+};
+
+export type ListingConsentBlock = {
+  consent_graph: ServerConsentGraphBlock;
+  requires_consent: boolean;
+  binding_source: string;
+  graph_grant_count: number;
+  grant_sources: string[];
+  hosting_mode?: string | null;
+  attestation_kind?: string | null;
+  status?: string;
+};
+
+export type ListingLedgerBlock = {
+  ledger: ServerLedgerBlock;
+  binding_source: string;
+  expected_ledger_id?: string | null;
+  central_record_count: number;
+  latest_central_record_at?: string | null;
+  latest_central_record_action?: string | null;
+  hosting_mode?: string | null;
+  attestation_kind?: string | null;
+  status?: string;
+};
+
+export type ListingOverridesBlock = {
+  binding_source: string;
+  status: string;
+  moderation: {
+    open: boolean;
+    log_entries: number;
+    latest_action?: string | null;
+    latest_at?: string | null;
+    latest_reason?: string | null;
+    latest_moderator_id?: string | null;
+    log: ServerModerationDecision[];
+  };
+  policy_override: {
+    active: boolean;
+    allowed_count: number;
+  };
+  yanked_versions: {
+    version: string;
+    yanked: boolean;
+    yank_reason: string;
+    published_at?: string | null;
+  }[];
+};
+
+export type ListingObservabilityBlock = {
+  analyzer: ServerAnalyzerBlock;
+  binding_source: string;
+  drift_event_count: number;
+  severity_distribution: ServerSeverityDistribution;
+  highest_severity?: string | null;
+  latest_drift_at?: string | null;
+  latest_drift_severity?: string | null;
+};
+
+export type ListingGovernanceResponse = RegistryErrorResponse & {
+  listing_id?: string;
+  tool_name?: string;
+  display_name?: string;
+  publisher_id?: string;
+  hosting_mode?: string | null;
+  attestation_kind?: string | null;
+  status?: string;
+  policy?: ListingPolicyBlock;
+  contracts?: ListingContractsBlock;
+  consent?: ListingConsentBlock;
+  ledger?: ListingLedgerBlock;
+  overrides?: ListingOverridesBlock;
+  observability?: ListingObservabilityBlock;
+  links?: {
+    policy_kernel_url?: string;
+    contract_broker_url?: string;
+    consent_graph_url?: string;
+    provenance_ledger_url?: string;
+    moderation_queue_url?: string;
+    reflexive_core_url?: string;
+    publisher_url?: string;
+  };
+  generated_at?: string;
+};
+
+export async function getListingGovernance(
+  toolName: string,
+): Promise<ListingGovernanceResponse | null> {
+  const response = await backendFetch(
+    `/registry/tools/${encodeURIComponent(toolName)}/governance`,
+  );
+  return parseJson<ListingGovernanceResponse>(response);
+}
+
+// ── Iter 9: runtime control-plane toggles ──────────────────────
+//
+// Admin-only. Powers the /registry/settings/control-planes page.
+
+export type ControlPlaneName =
+  | "contracts"
+  | "consent"
+  | "provenance"
+  | "reflexive";
+
+export type ControlPlaneSetting = {
+  plane: string;
+  enabled: boolean;
+  updated_at: number;
+  updated_by: string;
+};
+
+export type ControlPlaneEntry = {
+  plane: string;
+  enabled: boolean;
+  description: string;
+  persisted: ControlPlaneSetting | null;
+};
+
+export type ControlPlaneStatusResponse = RegistryErrorResponse & {
+  planes?: ControlPlaneEntry[];
+  generated_at?: string;
+};
+
+export async function getControlPlaneStatus(): Promise<ControlPlaneStatusResponse | null> {
+  const response = await backendFetch("/registry/admin/control-planes");
+  return parseJson<ControlPlaneStatusResponse>(response);
+}
+
+export async function setControlPlaneEnabled(
+  plane: string,
+  enabled: boolean,
+): Promise<ControlPlaneStatusResponse | null> {
+  const response = await backendFetch(
+    `/registry/admin/control-planes/${encodeURIComponent(plane)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    },
+  );
+  return parseJson<ControlPlaneStatusResponse>(response);
+}
+
+// ── Iter 10: MCP client identities ────────────────────────────
+//
+// Backs the /registry/clients directory + per-client detail pages.
+// Each client has a stable slug that flows through every plane as
+// the request's `actor_id` (see ClientActorResolverMiddleware on
+// the backend), so per-client governance can roll up real
+// telemetry rather than synthetic placeholders.
+
+export type RegistryClientKind =
+  | "agent"
+  | "service"
+  | "framework"
+  | "tooling"
+  | "other";
+
+export type RegistryClientSummary = {
+  client_id: string;
+  slug: string;
+  display_name: string;
+  description: string;
+  intended_use: string;
+  kind: RegistryClientKind | string;
+  owner_publisher_id: string;
+  status: "active" | "suspended" | string;
+  suspended_reason: string;
+  created_at: number;
+  updated_at: number;
+  metadata: Record<string, unknown>;
+};
+
+export type RegistryClientTokenSummary = {
+  token_id: string;
+  client_id: string;
+  name: string;
+  secret_prefix: string;
+  created_by: string;
+  created_at: number;
+  revoked_at: number | null;
+  last_used_at: number | null;
+  active: boolean;
+};
+
+export type RegistryClientListResponse = RegistryErrorResponse & {
+  items?: RegistryClientSummary[];
+  count?: number;
+  kinds?: string[];
+};
+
+export type RegistryClientDetailResponse = RegistryErrorResponse & {
+  client?: RegistryClientSummary;
+  tokens?: RegistryClientTokenSummary[];
+};
+
+export type RegistryClientCreatePayload = {
+  display_name: string;
+  slug?: string;
+  description?: string;
+  intended_use?: string;
+  kind?: RegistryClientKind;
+  owner_publisher_id?: string;
+  issue_initial_token?: boolean;
+  token_name?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type RegistryClientCreateResponse = RegistryErrorResponse & {
+  client?: RegistryClientSummary;
+  token?: RegistryClientTokenSummary | null;
+  // Plain bearer secret. Server returns it exactly once; UI must
+  // surface it to the operator and never persist it.
+  secret?: string | null;
+};
+
+export type RegistryClientUpdatePayload = {
+  display_name?: string;
+  description?: string;
+  intended_use?: string;
+  kind?: RegistryClientKind;
+  metadata?: Record<string, unknown>;
+};
+
+export type RegistryClientMutationResponse = RegistryErrorResponse & {
+  client?: RegistryClientSummary;
+};
+
+export type RegistryClientTokensResponse = RegistryErrorResponse & {
+  client_id?: string;
+  items?: RegistryClientTokenSummary[];
+  count?: number;
+};
+
+export type RegistryClientIssueTokenResponse = RegistryErrorResponse & {
+  token?: RegistryClientTokenSummary;
+  // Plain bearer secret. One-shot — see note above.
+  secret?: string;
+};
+
+export type RegistryClientTokenMutationResponse = RegistryErrorResponse & {
+  token?: RegistryClientTokenSummary;
+};
+
+// ── Per-client governance projection ──────────────────────────
+
+export type ClientGovernanceContractRow = {
+  contract_id?: string;
+  server_id?: string;
+  session_id?: string;
+  status?: string;
+  created_at?: string | null;
+  expires_at?: string | null;
+};
+
+export type ClientGovernanceConsentRow = {
+  edge_id?: string;
+  source_id?: string;
+  target_id?: string;
+  scopes?: string[];
+  status?: string;
+  delegatable?: boolean;
+};
+
+export type ClientGovernanceLedgerRow = {
+  record_id?: string;
+  action?: string;
+  resource_id?: string;
+  timestamp?: string | null;
+  contract_id?: string | null;
+};
+
+export type ClientGovernanceDriftRow = {
+  event_id?: string;
+  drift_type?: string;
+  severity?: string;
+  observed_value?: unknown;
+  baseline_value?: unknown;
+  deviation?: unknown;
+  timestamp?: string | null;
+};
+
+export type ClientGovernanceBaseline = {
+  metric_name: string;
+  mean?: unknown;
+  stddev?: unknown;
+  samples?: unknown;
+};
+
+export type ClientGovernanceResponse = RegistryErrorResponse & {
+  client_id?: string;
+  slug?: string;
+  display_name?: string;
+  kind?: string;
+  owner_publisher_id?: string;
+  status?: string;
+  suspended_reason?: string;
+  intended_use?: string;
+  description?: string;
+  created_at?: number;
+  updated_at?: number;
+  policy?: {
+    registry_policy?: Record<string, unknown>;
+    actor_history?: null;
+    note?: string;
+  };
+  contracts?: {
+    broker?: Record<string, unknown>;
+    active_count?: number;
+    active_contracts?: ClientGovernanceContractRow[];
+  };
+  consent?: {
+    consent_graph?: Record<string, unknown>;
+    outgoing_count?: number;
+    incoming_count?: number;
+    edges_from?: ClientGovernanceConsentRow[];
+    edges_to?: ClientGovernanceConsentRow[];
+  };
+  ledger?: {
+    ledger?: Record<string, unknown>;
+    record_count?: number;
+    recent_records?: ClientGovernanceLedgerRow[];
+  };
+  reflexive?: {
+    analyzer?: Record<string, unknown>;
+    drift_event_count?: number;
+    severity_distribution?: Record<string, number>;
+    recent_drifts?: ClientGovernanceDriftRow[];
+    baselines?: Record<string, ClientGovernanceBaseline>;
+  };
+  tokens?: {
+    total?: number;
+    active?: number;
+    revoked?: number;
+    items?: RegistryClientTokenSummary[];
+  };
+  links?: Record<string, string>;
+  generated_at?: string;
+};
+
+export async function listRegistryClients(): Promise<RegistryClientListResponse | null> {
+  const response = await backendFetch("/registry/clients");
+  return parseJson<RegistryClientListResponse>(response);
+}
+
+export async function getRegistryClient(
+  clientIdOrSlug: string,
+): Promise<RegistryClientDetailResponse | null> {
+  const response = await backendFetch(
+    `/registry/clients/${encodeURIComponent(clientIdOrSlug)}`,
+  );
+  return parseJson<RegistryClientDetailResponse>(response);
+}
+
+export async function createRegistryClient(
+  payload: RegistryClientCreatePayload,
+): Promise<RegistryClientCreateResponse | null> {
+  const response = await backendFetch("/registry/clients", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return parseJson<RegistryClientCreateResponse>(response);
+}
+
+export async function updateRegistryClient(
+  clientIdOrSlug: string,
+  patch: RegistryClientUpdatePayload,
+): Promise<RegistryClientMutationResponse | null> {
+  const response = await backendFetch(
+    `/registry/clients/${encodeURIComponent(clientIdOrSlug)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    },
+  );
+  return parseJson<RegistryClientMutationResponse>(response);
+}
+
+export async function suspendRegistryClient(
+  clientIdOrSlug: string,
+  reason?: string,
+): Promise<RegistryClientMutationResponse | null> {
+  const response = await backendFetch(
+    `/registry/clients/${encodeURIComponent(clientIdOrSlug)}/suspend`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason: reason ?? "" }),
+    },
+  );
+  return parseJson<RegistryClientMutationResponse>(response);
+}
+
+export async function unsuspendRegistryClient(
+  clientIdOrSlug: string,
+): Promise<RegistryClientMutationResponse | null> {
+  const response = await backendFetch(
+    `/registry/clients/${encodeURIComponent(clientIdOrSlug)}/unsuspend`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    },
+  );
+  return parseJson<RegistryClientMutationResponse>(response);
+}
+
+export async function listRegistryClientTokens(
+  clientIdOrSlug: string,
+): Promise<RegistryClientTokensResponse | null> {
+  const response = await backendFetch(
+    `/registry/clients/${encodeURIComponent(clientIdOrSlug)}/tokens`,
+  );
+  return parseJson<RegistryClientTokensResponse>(response);
+}
+
+export async function issueRegistryClientToken(
+  clientIdOrSlug: string,
+  name: string,
+): Promise<RegistryClientIssueTokenResponse | null> {
+  const response = await backendFetch(
+    `/registry/clients/${encodeURIComponent(clientIdOrSlug)}/tokens`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    },
+  );
+  return parseJson<RegistryClientIssueTokenResponse>(response);
+}
+
+export async function revokeRegistryClientToken(
+  clientIdOrSlug: string,
+  tokenId: string,
+): Promise<RegistryClientTokenMutationResponse | null> {
+  const response = await backendFetch(
+    `/registry/clients/${encodeURIComponent(clientIdOrSlug)}` +
+      `/tokens/${encodeURIComponent(tokenId)}`,
+    {
+      method: "DELETE",
+    },
+  );
+  return parseJson<RegistryClientTokenMutationResponse>(response);
+}
+
+export async function getRegistryClientGovernance(
+  clientIdOrSlug: string,
+): Promise<ClientGovernanceResponse | null> {
+  const response = await backendFetch(
+    `/registry/clients/${encodeURIComponent(clientIdOrSlug)}/governance`,
+  );
+  return parseJson<ClientGovernanceResponse>(response);
 }
 
 export async function getReviewQueue(): Promise<ReviewQueueResponse | null> {

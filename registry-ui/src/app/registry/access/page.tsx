@@ -2,17 +2,19 @@
 
 import Link from "next/link";
 
-import { Alert, Box, Button, Card, CardContent, Chip, FormControl, InputLabel, MenuItem, Select, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, Card, CardContent, Chip, Divider, FormControl, InputLabel, MenuItem, Select, TextField, Typography } from "@mui/material";
 
 import {
   getPublisherProfile,
+  getRegistrySession,
   listPublishers,
   type PublisherSummary,
   type RegistryToolListing,
   verifyTool,
   getToolDetail,
 } from "@/lib/registryClient";
-import { JsonViewer, KeyValuePanel, EmptyState } from "@/components/security";
+import { JsonViewer, KeyValuePanel, EmptyState, RegistryPageHeader } from "@/components/security";
+import { UserRoleManagementPanel } from "./UserRoleManagementPanel";
 
 function getStringParam(param: string | string[] | undefined): string | undefined {
   if (typeof param !== "string") return undefined;
@@ -24,8 +26,13 @@ export default async function AccessStudioPage({
 }: {
   searchParams?: Record<string, string | string[] | undefined>;
 }) {
-  const payload = (await listPublishers()) ?? { publishers: [], count: 0 };
-  const publishers: PublisherSummary[] = payload.publishers ?? [];
+  const [payload, sessionPayload] = await Promise.all([
+    listPublishers(),
+    getRegistrySession(),
+  ]);
+  const canAdmin = sessionPayload?.session?.can_admin === true;
+  const resolvedPayload = payload ?? { publishers: [], count: 0 };
+  const publishers: PublisherSummary[] = resolvedPayload.publishers ?? [];
 
   const clientId = getStringParam(searchParams?.clientId);
   const serverIdParam = getStringParam(searchParams?.serverId);
@@ -57,32 +64,56 @@ export default async function AccessStudioPage({
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
-      <Box component="header" sx={{ display: "grid", gap: 0.5 }}>
-        <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
-          Access Studio
-        </Typography>
-        <Typography variant="h4" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
-          Simulate MCP tool eligibility
-        </Typography>
-        <Typography variant="body2" sx={{ mt: 0.5, maxWidth: 900, color: "var(--app-muted)" }}>
-          MCP-only phase: server tool inventory + registry certification/verification preview. Contract/ledger/consent enforcement comes next.
-        </Typography>
-      </Box>
+      <RegistryPageHeader
+        eyebrow="Access Studio"
+        title="Simulate MCP tool eligibility"
+        description="MCP-only phase: server tool inventory + registry certification/verification preview. Contract/ledger/consent enforcement comes next."
+      />
 
-      <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
-        <Link href="/registry/clients" legacyBehavior passHref>
-          <Button component="a" variant="text" sx={{ color: "var(--app-muted)" }}>
-            ← Clients
-          </Button>
-        </Link>
-      </Box>
+      {canAdmin ? <UserRoleManagementPanel /> : null}
 
-      <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
-        <CardContent sx={{ p: 2.5 }}>
-          <Typography variant="body1" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
-            MCP simulation query
-          </Typography>
-          <Box component="form" method="GET" sx={{ mt: 2, display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" } }}>
+      <Card variant="outlined" sx={{ overflow: "hidden" }}>
+        <CardContent sx={{ p: 0 }}>
+          <Box
+            sx={{
+              p: { xs: 2.5, md: 3 },
+              display: "flex",
+              flexDirection: { xs: "column", md: "row" },
+              alignItems: { xs: "flex-start", md: "center" },
+              justifyContent: "space-between",
+              gap: 2,
+            }}
+          >
+            <Box sx={{ display: "grid", gap: 0.75, maxWidth: 720 }}>
+              <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
+                Simulation workspace
+              </Typography>
+              <Typography variant="h6" sx={{ color: "var(--app-fg)" }}>
+                Preview MCP access before onboarding
+              </Typography>
+              <Typography variant="body2" sx={{ color: "var(--app-muted)" }}>
+                Choose a real publisher-backed server, optionally target a tool, then inspect registry eligibility.
+              </Typography>
+            </Box>
+
+            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+              <Chip label={`${publishers.length} servers`} sx={{ bgcolor: "var(--app-control-bg)", color: "var(--app-muted)", fontWeight: 700 }} />
+              <Chip label={serverId ? "server selected" : "select a server"} sx={{ bgcolor: serverId ? "var(--app-control-active-bg)" : "var(--app-control-bg)", color: serverId ? "var(--app-fg)" : "var(--app-muted)", fontWeight: 700 }} />
+              <Link href="/registry/clients" legacyBehavior passHref>
+                <Button component="a" variant="outlined" size="small">
+                  Clients
+                </Button>
+              </Link>
+            </Box>
+          </Box>
+
+          <Divider />
+
+          <Box sx={{ p: { xs: 2, md: 2.5 }, bgcolor: "var(--app-control-bg)" }}>
+            <Typography sx={{ mb: 1.5, fontSize: 12, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+              MCP simulation query
+            </Typography>
+            <Box component="form" method="GET" sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" } }}>
             <TextField
               name="clientId"
               defaultValue={clientId ?? ""}
@@ -130,7 +161,7 @@ export default async function AccessStudioPage({
               <Button
                 type="submit"
                 variant="contained"
-                sx={{ borderRadius: 999, bgcolor: "var(--app-accent)", color: "var(--app-accent-contrast)", "&:hover": { bgcolor: "var(--app-accent)" } }}
+                sx={{ bgcolor: "var(--app-accent)", color: "var(--app-accent-contrast)", "&:hover": { bgcolor: "var(--app-accent)" } }}
               >
                 Run simulation
               </Button>
@@ -152,14 +183,15 @@ export default async function AccessStudioPage({
               </Typography>
             </Box>
           </Box>
+          </Box>
         </CardContent>
       </Card>
 
       {error ? <Alert severity="error">Simulation failed: {error}</Alert> : null}
 
       {serverId ? (
-        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
-          <CardContent sx={{ p: 2.5 }}>
+        <Card variant="outlined">
+          <CardContent>
             <Typography variant="body1" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
               Server tool inventory
             </Typography>
@@ -177,7 +209,11 @@ export default async function AccessStudioPage({
                   { label: "server_id", value: serverId },
                   {
                     label: "tool_count",
-                    value: String(profile?.summary?.tool_count ?? listings.length),
+                    value: String(
+                      profile?.tool_count ??
+                        profile?.listing_count ??
+                        listings.length,
+                    ),
                   },
                   {
                     label: "client_id (optional)",
@@ -197,7 +233,7 @@ export default async function AccessStudioPage({
                     <Card
                       key={tool.tool_name}
                       variant="outlined"
-                      sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}
+                      sx={{ bgcolor: "var(--app-control-bg)" }}
                     >
                       <CardContent sx={{ p: 2 }}>
                         <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 1.5 }}>
@@ -207,7 +243,7 @@ export default async function AccessStudioPage({
                           <Chip
                             size="small"
                             label={tool.certification_level ?? "unlisted"}
-                            sx={{ borderRadius: 999, bgcolor: "var(--app-surface)", color: "var(--app-muted)", fontWeight: 700, fontSize: 11 }}
+                            sx={{ bgcolor: "var(--app-surface)", color: "var(--app-muted)", fontWeight: 700, fontSize: 11 }}
                           />
                         </Box>
                         <Typography sx={{ mt: 1, fontSize: 12, color: "var(--app-muted)" }}>
@@ -227,11 +263,15 @@ export default async function AccessStudioPage({
           </CardContent>
         </Card>
       ) : (
-        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
-          <CardContent sx={{ p: 2.5 }}>
+        <Card variant="outlined" sx={{ overflow: "hidden" }}>
+          <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
+          <Box sx={{ mb: 2, display: "flex", flexWrap: "wrap", gap: 1 }}>
+            <Chip label="No server selected" size="small" sx={{ bgcolor: "var(--app-control-active-bg)", color: "var(--app-fg)", fontWeight: 700 }} />
+            <Chip label="MCP-only preview" size="small" sx={{ bgcolor: "var(--app-control-bg)", color: "var(--app-muted)", fontWeight: 700 }} />
+          </Box>
           <EmptyState
             title="Pick a server to simulate"
-            message="Choose a server (publisher) and optionally a tool, then click “Run simulation”."
+            message="Choose a real MCP server from the publisher inventory, optionally choose a tool, then run the simulation."
           />
           </CardContent>
         </Card>
@@ -241,12 +281,7 @@ export default async function AccessStudioPage({
         <Card
           component="section"
           variant="outlined"
-          sx={{
-            borderRadius: 4,
-            borderColor: "var(--app-border)",
-            bgcolor: "var(--app-surface)",
-            boxShadow: "none",
-          }}
+          sx={{ bgcolor: "var(--app-surface)" }}
         >
           <CardContent sx={{ p: 3 }}>
           <Typography variant="body1" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>

@@ -58,14 +58,19 @@ def _make_cli(**kwargs) -> SecureMCPCLI:
 def _make_full_cli() -> SecureMCPCLI:
     """CLI with all components configured.
 
-    Sets min_level_for_signing to SELF_ATTESTED so that
-    even low-level certifications produce VALID attestations.
+    Sets min_level_for_signing to SELF_ATTESTED so even low-level
+    certifications produce VALID attestations. The pipeline runs
+    without a crypto handler and explicitly opts into the legacy
+    unsigned-VALID path via ``require_crypto_for_valid=False`` —
+    appropriate for CLI tests that exercise the certification flow
+    without a real signing authority.
     """
     registry = TrustRegistry()
     marketplace = ToolMarketplace(trust_registry=registry)
     pipeline = CertificationPipeline(
         validator=ManifestValidator(),
         min_level_for_signing=CertificationLevel.SELF_ATTESTED,
+        require_crypto_for_valid=False,
     )
     return SecureMCPCLI(
         marketplace=marketplace,

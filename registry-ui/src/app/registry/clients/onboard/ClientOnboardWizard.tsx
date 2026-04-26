@@ -2,8 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
-import type { RegistryToolListing } from "@/lib/registryClient";
+import type {
+  RegistryClientCreateResponse,
+  RegistryClientKind,
+  RegistryToolListing,
+} from "@/lib/registryClient";
 import { EmptyState, KeyValuePanel } from "@/components/security";
 import { Box, Typography } from "@mui/material";
 
@@ -15,12 +20,49 @@ type OnboardServer = {
   toolCount: number;
 };
 
+const CLIENT_KIND_OPTIONS: {
+  value: RegistryClientKind;
+  label: string;
+  hint: string;
+}[] = [
+  {
+    value: "agent",
+    label: "Agent",
+    hint: "An LLM-driven client (Claude Desktop, Cursor, custom agents).",
+  },
+  {
+    value: "service",
+    label: "Service",
+    hint: "A backend service that calls MCP servers (CI bot, data sync).",
+  },
+  {
+    value: "framework",
+    label: "Framework",
+    hint: "A toolkit or harness that hosts other clients (LangChain, LlamaIndex).",
+  },
+  {
+    value: "tooling",
+    label: "Tooling",
+    hint: "Developer/operator tools (CLIs, dashboards, scripts).",
+  },
+  { value: "other", label: "Other", hint: "Anything that doesn't fit above." },
+];
+
 export function ClientOnboardWizard({ servers }: { servers: OnboardServer[] }) {
+  const router = useRouter();
   const [step, setStep] = useState<WizardStep>(1);
 
   const [clientName, setClientName] = useState("");
-  const [clientType, setClientType] = useState<"desktop" | "agent" | "service">("agent");
+  const [clientSlug, setClientSlug] = useState("");
+  const [clientDescription, setClientDescription] = useState("");
+  const [clientIntendedUse, setClientIntendedUse] = useState("");
+  const [clientType, setClientType] = useState<RegistryClientKind>("agent");
   const [selectedServers, setSelectedServers] = useState<string[]>([]);
+
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitResult, setSubmitResult] =
+    useState<RegistryClientCreateResponse | null>(null);
 
   const [toolScopeMode, setToolScopeMode] = useState<"all" | "scoped">("all");
   const [selectedToolsByServer, setSelectedToolsByServer] = useState<Record<string, string[]>>({});
@@ -47,8 +89,9 @@ export function ClientOnboardWizard({ servers }: { servers: OnboardServer[] }) {
           ? `Scoped tools (${selectedScopedToolCount})`
           : "Scoped tools (none selected)";
     return [
-      { label: "Client", value: clientName ? clientName : "—" },
-      { label: "Type", value: clientType },
+      { label: "Display name", value: clientName ? clientName : "—" },
+      { label: "Slug", value: clientSlug ? clientSlug : "(auto)" },
+      { label: "Kind", value: clientType },
       { label: "Servers", value: selectedServers.length ? `${selectedServers.length} selected` : "—" },
       { label: "Tool scope", value: toolScopeLabel },
       { label: "Policy attached", value: attachPolicy ? "yes" : "no" },
@@ -58,6 +101,7 @@ export function ClientOnboardWizard({ servers }: { servers: OnboardServer[] }) {
     ];
   }, [
     clientName,
+    clientSlug,
     clientType,
     selectedServers,
     toolScopeMode,
@@ -132,6 +176,45 @@ export function ClientOnboardWizard({ servers }: { servers: OnboardServer[] }) {
     setStep((s) => (s > 1 ? ((s - 1) as WizardStep) : s));
   }
 
+  const canSubmit = clientName.trim().length > 0 && !submitting && !submitResult;
+
+  async function handleActivate() {
+    if (!canSubmit) return;
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      const slug = clientSlug.trim();
+      const payload: Record<string, unknown> = {
+        display_name: clientName.trim(),
+        kind: clientType,
+        description: clientDescription.trim(),
+        intended_use: clientIntendedUse.trim(),
+        issue_initial_token: true,
+        token_name: "Default",
+      };
+      if (slug) payload.slug = slug;
+
+      const res = await fetch("/api/clients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = (await res.json().catch(() => ({}))) as RegistryClientCreateResponse;
+      if (!res.ok) {
+        setSubmitError(
+          (typeof data.error === "string" && data.error) ||
+            `Failed to register client (${res.status})`,
+        );
+        return;
+      }
+      setSubmitResult(data);
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Failed to register client");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <header className="space-y-1">
@@ -190,29 +273,75 @@ export function ClientOnboardWizard({ servers }: { servers: OnboardServer[] }) {
           <div className="mt-6 grid gap-4 md:grid-cols-2">
             <label className="space-y-1">
               <Typography component="span" variant="overline" sx={{ display: "block", color: "var(--app-muted)", letterSpacing: "0.14em" }}>
-                Client name
+                Display name
               </Typography>
               <input
                 value={clientName}
                 onChange={(e) => setClientName(e.target.value)}
-                placeholder="e.g., Cursor agent / Desktop app / CI service"
+                placeholder="e.g., Claude Desktop / Acme CI bot"
                 className="w-full rounded-xl border border-[--app-border] bg-[--app-chrome-bg] px-3 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
               />
             </label>
 
             <label className="space-y-1">
               <Typography component="span" variant="overline" sx={{ display: "block", color: "var(--app-muted)", letterSpacing: "0.14em" }}>
-                Client type
+                Slug (optional — auto-derived)
+              </Typography>
+              <input
+                value={clientSlug}
+                onChange={(e) => setClientSlug(e.target.value)}
+                placeholder="claude-desktop"
+                className="w-full rounded-xl border border-[--app-border] bg-[--app-chrome-bg] px-3 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent] font-mono"
+              />
+              <Typography component="span" variant="caption" sx={{ display: "block", mt: 0.5, color: "var(--app-muted)" }}>
+                Stable identifier broadcast to every plane as <code>actor_id</code>. Cannot be changed after creation.
+              </Typography>
+            </label>
+
+            <label className="space-y-1 md:col-span-2">
+              <Typography component="span" variant="overline" sx={{ display: "block", color: "var(--app-muted)", letterSpacing: "0.14em" }}>
+                Client kind
               </Typography>
               <select
                 value={clientType}
-                onChange={(e) => setClientType(e.target.value as "desktop" | "agent" | "service")}
+                onChange={(e) => setClientType(e.target.value as RegistryClientKind)}
                 className="w-full rounded-xl border border-[--app-border] bg-[--app-chrome-bg] px-3 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
               >
-                <option value="agent">Agent</option>
-                <option value="desktop">Desktop</option>
-                <option value="service">Service</option>
+                {CLIENT_KIND_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
               </select>
+              <Typography component="span" variant="caption" sx={{ display: "block", mt: 0.5, color: "var(--app-muted)" }}>
+                {CLIENT_KIND_OPTIONS.find((o) => o.value === clientType)?.hint}
+              </Typography>
+            </label>
+
+            <label className="space-y-1 md:col-span-2">
+              <Typography component="span" variant="overline" sx={{ display: "block", color: "var(--app-muted)", letterSpacing: "0.14em" }}>
+                Description
+              </Typography>
+              <textarea
+                value={clientDescription}
+                onChange={(e) => setClientDescription(e.target.value)}
+                placeholder="Short description shown on the client's profile"
+                rows={2}
+                className="w-full rounded-xl border border-[--app-border] bg-[--app-chrome-bg] px-3 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
+              />
+            </label>
+
+            <label className="space-y-1 md:col-span-2">
+              <Typography component="span" variant="overline" sx={{ display: "block", color: "var(--app-muted)", letterSpacing: "0.14em" }}>
+                Intended use
+              </Typography>
+              <textarea
+                value={clientIntendedUse}
+                onChange={(e) => setClientIntendedUse(e.target.value)}
+                placeholder="What will this client do? Helps reviewers understand its scope."
+                rows={2}
+                className="w-full rounded-xl border border-[--app-border] bg-[--app-chrome-bg] px-3 py-2 text-xs text-[--app-fg] outline-none focus:border-[--app-accent]"
+              />
             </label>
           </div>
         ) : null}
@@ -452,54 +581,78 @@ export function ClientOnboardWizard({ servers }: { servers: OnboardServer[] }) {
                 Access simulation
               </Typography>
               <Typography variant="caption" sx={{ mt: 1, display: "block", color: "var(--app-muted)" }}>
-                UI skeleton: run a matrix of allowed/denied operations based on Policy Kernel + Consent Graph + Contract terms.
+                Simulation will evaluate selected client bindings against Policy Kernel, Consent Graph, and Contract Broker rules once the binding API is connected.
               </Typography>
               <button
                 type="button"
                 disabled
                 className="mt-4 cursor-not-allowed rounded-full bg-[--app-accent] px-4 py-2 text-xs font-semibold text-[--app-accent-contrast] opacity-60"
               >
-                Run simulation (stub)
+                Run simulation
               </button>
-            </div>
-
-            <div className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4">
-              <Typography variant="overline" sx={{ color: "var(--app-muted)", letterSpacing: "0.16em" }}>
-                Simulation results (placeholder)
-              </Typography>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                <MiniCell label="allowed_calls" value="—" />
-                <MiniCell label="denied_calls" value="—" />
-                <MiniCell label="consent_misses" value="—" />
-                <MiniCell label="contract_violations" value="—" />
-              </div>
             </div>
           </div>
         ) : null}
 
         {step === 5 ? (
           <div className="mt-6 grid gap-4 lg:grid-cols-[1fr_0.9fr]">
-            <KeyValuePanel title="Final review (stub)" entries={summary} />
+            <KeyValuePanel title="Final review" entries={summary} />
             <div className="space-y-3">
               <div className="rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4">
                 <Typography variant="overline" sx={{ color: "var(--app-muted)", letterSpacing: "0.16em" }}>
                   Reflexive Core
                 </Typography>
                 <Typography variant="caption" sx={{ mt: 1, display: "block", color: "var(--app-muted)" }}>
-                  Reflexive Core will learn from outcomes (allows/denies/overrides) and propose improvements as reviewable proposals.
+                  Once the client makes calls, Reflexive Core learns its baseline behavior and surfaces drift events on the per-client governance panel.
                 </Typography>
               </div>
               <div className="flex flex-col gap-2 rounded-2xl border border-[--app-border] bg-[--app-control-bg] p-4">
                 <Typography variant="caption" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
-                  Activate binding (stub)
+                  {submitResult ? "Client registered" : "Register client identity"}
                 </Typography>
-                <button
-                  type="button"
-                  disabled
-                  className="cursor-not-allowed rounded-full bg-[--app-control-bg] px-4 py-2 text-xs font-semibold text-[--app-muted] opacity-60"
-                >
-                  Activate client access (coming soon)
-                </button>
+
+                {submitResult ? (
+                  <SecretPanel
+                    response={submitResult}
+                    onDone={() => {
+                      router.push(
+                        `/registry/clients/${encodeURIComponent(
+                          submitResult.client?.slug ?? "",
+                        )}`,
+                      );
+                    }}
+                  />
+                ) : (
+                  <>
+                    <Typography
+                      variant="caption"
+                      sx={{ color: "var(--app-muted)" }}
+                    >
+                      Creates the client identity, mints an initial API token, and shows you the secret <strong>once</strong>. Server bindings &amp; per-tool scope flow into the per-client governance page after activation.
+                    </Typography>
+
+                    {submitError ? (
+                      <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2">
+                        <Typography
+                          variant="caption"
+                          sx={{ color: "rgb(254, 202, 202)", fontWeight: 600 }}
+                        >
+                          {submitError}
+                        </Typography>
+                      </div>
+                    ) : null}
+
+                    <button
+                      type="button"
+                      onClick={handleActivate}
+                      disabled={!canSubmit}
+                      className="rounded-full bg-[--app-accent] px-4 py-2 text-xs font-semibold text-[--app-accent-contrast] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {submitting ? "Registering…" : "Register client"}
+                    </button>
+                  </>
+                )}
+
                 <Link href="/registry/clients" className="hover:text-[--app-fg]">
                   <Typography variant="caption" sx={{ fontWeight: 700, color: "var(--app-accent)" }}>
                     ← Back to clients
@@ -510,6 +663,102 @@ export function ClientOnboardWizard({ servers }: { servers: OnboardServer[] }) {
           </div>
         ) : null}
       </section>
+    </div>
+  );
+}
+
+function SecretPanel({
+  response,
+  onDone,
+}: {
+  response: RegistryClientCreateResponse;
+  onDone: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const secret = response.secret ?? "";
+  const slug = response.client?.slug ?? "";
+
+  async function copySecret() {
+    if (!secret) return;
+    try {
+      await navigator.clipboard.writeText(secret);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2">
+        <Typography
+          variant="caption"
+          sx={{ color: "rgb(252, 211, 77)", fontWeight: 700 }}
+        >
+          Save this secret now — it won&apos;t be shown again
+        </Typography>
+      </div>
+
+      <div className="rounded-xl border border-[--app-border] bg-[--app-chrome-bg] px-3 py-2">
+        <Typography
+          variant="caption"
+          sx={{
+            display: "block",
+            color: "var(--app-muted)",
+            fontSize: 10,
+            letterSpacing: "0.14em",
+            textTransform: "uppercase",
+          }}
+        >
+          API token
+        </Typography>
+        <div className="mt-1 flex items-center justify-between gap-2">
+          <code className="flex-1 break-all font-mono text-xs text-[--app-fg]">
+            {secret || "(no secret returned)"}
+          </code>
+          <button
+            type="button"
+            onClick={copySecret}
+            disabled={!secret}
+            className="rounded-full border border-[--app-border] bg-[--app-control-bg] px-3 py-1 text-[10px] font-semibold text-[--app-fg] transition hover:bg-[--app-hover-bg] disabled:opacity-50"
+          >
+            {copied ? "Copied" : "Copy"}
+          </button>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-[--app-border] bg-[--app-control-bg] px-3 py-2">
+        <Typography
+          variant="caption"
+          sx={{
+            display: "block",
+            color: "var(--app-muted)",
+            fontSize: 10,
+            letterSpacing: "0.14em",
+            textTransform: "uppercase",
+          }}
+        >
+          Authorization header
+        </Typography>
+        <code className="mt-1 block break-all font-mono text-[11px] text-[--app-fg]">
+          Authorization: Bearer {secret || "<token>"}
+        </code>
+        <Typography
+          variant="caption"
+          sx={{ display: "block", mt: 1, color: "var(--app-muted)" }}
+        >
+          Configure your client to send this header. Every request flows through the registry as <code>actor_id={slug}</code>.
+        </Typography>
+      </div>
+
+      <button
+        type="button"
+        onClick={onDone}
+        className="w-full rounded-full bg-[--app-accent] px-4 py-2 text-xs font-semibold text-[--app-accent-contrast] transition hover:opacity-90"
+      >
+        Open client profile
+      </button>
     </div>
   );
 }
@@ -545,16 +794,4 @@ function ToggleRow({
   );
 }
 
-function MiniCell({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-[--app-border] bg-[--app-surface] p-3">
-      <Typography variant="overline" sx={{ color: "var(--app-muted)", letterSpacing: "0.16em" }}>
-        {label}
-      </Typography>
-      <Typography variant="body2" sx={{ mt: 1, fontWeight: 700, color: "var(--app-fg)" }}>
-        {value}
-      </Typography>
-    </div>
-  );
-}
 

@@ -18,6 +18,8 @@ from fastmcp.server.security.gateway.models import (
 )
 from fastmcp.server.security.gateway.marketplace_bridge import MarketplaceDataBridge
 from fastmcp.server.security.gateway.tool_marketplace import (
+    AttestationKind,
+    HostingMode,
     InstallRecord,
     PublishStatus,
     ReviewRating,
@@ -26,6 +28,8 @@ from fastmcp.server.security.gateway.tool_marketplace import (
     ToolListing,
     ToolMarketplace,
     ToolReview,
+    UpstreamChannel,
+    UpstreamRef,
 )
 from fastmcp.server.security.gateway.tools import (
     create_audit_tools,
@@ -33,11 +37,13 @@ from fastmcp.server.security.gateway.tools import (
 )
 
 __all__ = [
+    "AttestationKind",
     "AuditAPI",
     "AuditQuery",
     "AuditQueryType",
     "AuditResult",
     "HealthStatus",
+    "HostingMode",
     "InstallRecord",
     "Marketplace",
     "MarketplaceDataBridge",
@@ -52,6 +58,8 @@ __all__ = [
     "ToolMarketplace",
     "ToolReview",
     "TrustLevel",
+    "UpstreamChannel",
+    "UpstreamRef",
     "create_audit_tools",
     "create_marketplace_tools",
 ]

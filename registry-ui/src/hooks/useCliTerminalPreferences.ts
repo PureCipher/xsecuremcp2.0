@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 
 import { DEFAULT_CLI_THEME_ID } from "@/lib/cliTerminalThemes";
 
-export const CLI_TERMINAL_PREFS_STORAGE_KEY = "purecipher.registry.cliTerminal.v1";
+export const CLI_TERMINAL_PREFS_STORAGE_KEY = "purecipher.registry.cliTerminal.v3";
 
 export type CliTerminalPreferences = {
   themeId: string;
@@ -19,8 +19,8 @@ export type CliTerminalPreferences = {
 
 const DEFAULT_PREFERENCES: CliTerminalPreferences = {
   themeId: DEFAULT_CLI_THEME_ID,
-  fontSize: 13,
-  fontFamily: "JetBrains Mono",
+  fontSize: 12,
+  fontFamily: "SF Mono",
   fontWeight: "normal",
   fontWeightBold: "bold",
 };
@@ -65,7 +65,7 @@ function writePrefsToStorage(prefs: CliTerminalPreferences) {
 }
 
 /**
- * Browser CLI terminal preferences (theme, font). Shared by /registry/cli and /registry/settings.
+ * Browser CLI terminal preferences (theme, font). Owned by /registry/cli.
  */
 export function useCliTerminalPreferences(): {
   prefs: CliTerminalPreferences;

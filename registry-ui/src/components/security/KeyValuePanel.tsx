@@ -10,23 +10,15 @@ export function KeyValuePanel({
   entries: { label: string; value: React.ReactNode }[];
 }) {
   return (
-    <Card
-      variant="outlined"
-      sx={{
-        borderRadius: 4,
-        borderColor: "var(--app-border)",
-        bgcolor: "var(--app-surface)",
-        boxShadow: "none",
-      }}
-    >
-      <CardContent sx={{ p: 2.5 }}>
+    <Card variant="outlined">
+      <CardContent>
         {title ? (
           <Typography
             sx={{
               mb: 2,
               fontSize: 12,
-              fontWeight: 800,
-              letterSpacing: "0.18em",
+              fontWeight: 700,
+              letterSpacing: "0.04em",
               textTransform: "uppercase",
               color: "var(--app-muted)",
             }}
@@ -35,7 +27,7 @@ export function KeyValuePanel({
           </Typography>
         ) : null}
 
-        <Box component="dl" sx={{ display: "grid", gap: 1 }}>
+        <Box component="dl" sx={{ display: "grid", gap: 1.25 }}>
           {entries.map((e) => (
             <Box
               key={e.label}
@@ -46,10 +38,10 @@ export function KeyValuePanel({
                 gap: 2,
               }}
             >
-              <Typography component="dt" sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+              <Typography component="dt" sx={{ fontSize: 13, color: "var(--app-muted)" }}>
                 {e.label}
               </Typography>
-              <Typography component="dd" sx={{ m: 0, textAlign: "right", fontSize: 12, fontWeight: 700, color: "var(--app-fg)" }}>
+              <Typography component="dd" sx={{ m: 0, textAlign: "right", fontSize: 13, fontWeight: 700, color: "var(--app-fg)" }}>
                 {e.value}
               </Typography>
             </Box>

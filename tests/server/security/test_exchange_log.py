@@ -22,23 +22,30 @@ class TestExchangeLog:
         assert entry.actor_id == "server-1"
         assert entry.data["agent_id"] == "a1"
         assert entry.data_hash  # Non-empty
-        assert entry.previous_hash == "genesis"
+        # First entry's previous_hash is the per-session randomized
+        # genesis nonce, not the literal "genesis" sentinel.
+        assert entry.previous_hash.startswith("genesis-default-s1-")
+        assert entry.previous_hash == log.get_session_genesis("s1")
 
     def test_chain_linking(self):
         log = ExchangeLog()
         e1 = log.record("s1", ExchangeEventType.SESSION_STARTED, "srv")
         e2 = log.record("s1", ExchangeEventType.PROPOSAL_RECEIVED, "agt")
 
-        assert e1.previous_hash == "genesis"
+        assert e1.previous_hash == log.get_session_genesis("s1")
         assert e2.previous_hash == e1.compute_hash()
 
     def test_separate_session_chains(self):
         log = ExchangeLog()
-        log.record("s1", ExchangeEventType.SESSION_STARTED, "srv")
+        e1 = log.record("s1", ExchangeEventType.SESSION_STARTED, "srv")
         e2 = log.record("s2", ExchangeEventType.SESSION_STARTED, "srv")
 
-        # s2's first entry should link to genesis, not s1's entry
-        assert e2.previous_hash == "genesis"
+        # Each session has its own randomized genesis nonce — distinct
+        # per-session, never literal "genesis", never linked to another
+        # session's chain.
+        assert e1.previous_hash != e2.previous_hash
+        assert e2.previous_hash == log.get_session_genesis("s2")
+        assert e2.previous_hash != "genesis"
 
     def test_verify_chain_valid(self):
         log = ExchangeLog()

@@ -17,7 +17,9 @@ export default function PublicLayout({ children }: { children: ReactNode }) {
           bgcolor: "var(--app-chrome-bg)",
           color: "text.primary",
           borderBottom: "1px solid var(--app-chrome-border)",
+          backdropFilter: "blur(18px)",
           backgroundImage: "none",
+          boxShadow: "0 10px 30px rgba(15, 23, 42, 0.04)",
         }}
       >
         <Toolbar sx={{ px: 2 }}>
@@ -66,7 +68,10 @@ export default function PublicLayout({ children }: { children: ReactNode }) {
               <PublicNavLink href="/public/tools" icon="tools" label="Tools" />
               <PublicNavLink href="/public/publishers" icon="publishers" label="Publishers" />
               <PublicNavLink href="/public/servers" icon="servers" label="Servers" />
-              <PublicNavLink href="/public/clients" icon="clients" label="Clients" />
+              {/* /public/clients is hidden until the backend client
+                  directory ships — surfacing a nav link to a dead-end
+                  empty state erodes trust. The route still resolves
+                  for any old bookmarks. */}
             </Box>
 
             <Box sx={{ ml: "auto", display: "flex", alignItems: "center", gap: 1 }}>
@@ -75,9 +80,10 @@ export default function PublicLayout({ children }: { children: ReactNode }) {
                   size="small"
                   variant="outlined"
                   sx={{
-                    borderRadius: 999,
+                    borderRadius: 2.5,
                     borderColor: "var(--app-accent)",
                     color: "var(--app-muted)",
+                    fontWeight: 700,
                     "&:hover": { bgcolor: "var(--app-control-active-bg)", borderColor: "var(--app-accent)" },
                   }}
                 >
@@ -90,10 +96,11 @@ export default function PublicLayout({ children }: { children: ReactNode }) {
                   variant="outlined"
                   sx={{
                     display: { xs: "none", sm: "inline-flex" },
-                    borderRadius: 999,
+                    borderRadius: 2.5,
                     borderColor: "var(--app-control-border)",
                     bgcolor: "var(--app-control-bg)",
                     color: "var(--app-muted)",
+                    fontWeight: 700,
                     "&:hover": { bgcolor: "var(--app-hover-bg)", borderColor: "var(--app-control-border)" },
                   }}
                 >
@@ -110,7 +117,7 @@ export default function PublicLayout({ children }: { children: ReactNode }) {
           <MobilePill href="/public/tools" icon="tools" label="Tools" />
           <MobilePill href="/public/publishers" icon="publishers" label="Publishers" />
           <MobilePill href="/public/servers" icon="servers" label="Servers" />
-          <MobilePill href="/public/clients" icon="clients" label="Clients" />
+          {/* Clients pill hidden — see desktop nav comment above. */}
         </Box>
         {children}
       </Container>
@@ -134,7 +141,7 @@ function PublicNavLink({
         variant="outlined"
         startIcon={<NavIcon name={icon} />}
         sx={{
-          borderRadius: 999,
+          borderRadius: 2.5,
           borderColor: "var(--app-control-border)",
           bgcolor: "var(--app-control-bg)",
           color: "var(--app-muted)",
@@ -167,7 +174,7 @@ function MobilePill({
         variant="outlined"
         startIcon={<NavIcon name={icon} />}
         sx={{
-          borderRadius: 999,
+          borderRadius: 2.5,
           borderColor: "var(--app-control-border)",
           bgcolor: "var(--app-control-bg)",
           color: "var(--app-muted)",

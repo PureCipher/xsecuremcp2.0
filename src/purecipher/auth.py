@@ -5,6 +5,7 @@ from __future__ import annotations
 import hmac
 import json
 import os
+import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import Enum
@@ -46,6 +47,7 @@ class RegistrySession:
     role: RegistryRole
     display_name: str
     expires_at: str
+    session_id: str = ""
 
     def has_any_role(self, *roles: RegistryRole) -> bool:
         """Return True when the session matches one of the allowed roles."""
@@ -60,6 +62,7 @@ class RegistrySession:
             "role": self.role.value,
             "display_name": self.display_name,
             "expires_at": self.expires_at,
+            "session_id": self.session_id,
             "can_submit": self.role
             in {RegistryRole.PUBLISHER, RegistryRole.REVIEWER},
             "can_review": self.role in {RegistryRole.REVIEWER, RegistryRole.ADMIN},
@@ -78,6 +81,9 @@ class RegistryAuthSettings:
     cookie_name: str = "purecipher_registry_token"
     token_ttl_seconds: int = 12 * 60 * 60
     users: tuple[RegistryUser, ...] = ()
+    bootstrap_admin_username: str = "admin"
+    bootstrap_admin_password: str = ""
+    bootstrap_admin_display_name: str = "Registry Admin"
 
     @classmethod
     def from_env(
@@ -114,6 +120,18 @@ class RegistryAuthSettings:
                 12 * 60 * 60,
             ),
             users=users,
+            bootstrap_admin_username=os.getenv(
+                "PURECIPHER_BOOTSTRAP_ADMIN_USERNAME",
+                "admin",
+            ),
+            bootstrap_admin_password=os.getenv(
+                "PURECIPHER_BOOTSTRAP_ADMIN_PASSWORD",
+                "",
+            ),
+            bootstrap_admin_display_name=os.getenv(
+                "PURECIPHER_BOOTSTRAP_ADMIN_DISPLAY_NAME",
+                "Registry Admin",
+            ),
         )
 
     @classmethod
@@ -128,6 +146,9 @@ class RegistryAuthSettings:
         cookie_name: str = "purecipher_registry_token",
         token_ttl_seconds: int = 12 * 60 * 60,
         users_json: str = "",
+        bootstrap_admin_username: str = "admin",
+        bootstrap_admin_password: str = "",
+        bootstrap_admin_display_name: str = "Registry Admin",
     ) -> RegistryAuthSettings:
         """Create auth settings from explicit runtime inputs."""
 
@@ -143,6 +164,9 @@ class RegistryAuthSettings:
             cookie_name=cookie_name,
             token_ttl_seconds=token_ttl_seconds,
             users=users,
+            bootstrap_admin_username=bootstrap_admin_username,
+            bootstrap_admin_password=bootstrap_admin_password,
+            bootstrap_admin_display_name=bootstrap_admin_display_name,
         )
 
     def validate(self) -> None:
@@ -154,8 +178,6 @@ class RegistryAuthSettings:
             raise ValueError(
                 "PureCipher auth is enabled but no JWT secret is configured."
             )
-        if not self.users:
-            raise ValueError("PureCipher auth is enabled but no users are configured.")
 
     def authenticate(self, username: str, password: str) -> RegistryUser | None:
         """Authenticate username/password against configured users."""
@@ -167,15 +189,18 @@ class RegistryAuthSettings:
                 return user
         return None
 
-    def issue_token(self, user: RegistryUser) -> str:
+    def issue_token(self, user: RegistryUser, *, session_id: str | None = None) -> str:
         """Issue a signed JWT for a user."""
 
         now = datetime.now(timezone.utc)
         expires_at = now + timedelta(seconds=self.token_ttl_seconds)
+        resolved_session_id = session_id or secrets.token_urlsafe(18)
         payload = {
             "sub": user.username,
             "role": user.role.value,
             "name": user.display_name,
+            "sid": resolved_session_id,
+            "jti": resolved_session_id,
             "iss": self.issuer,
             "aud": self.audience,
             "iat": int(now.timestamp()),
@@ -218,6 +243,7 @@ class RegistryAuthSettings:
             role=role,
             display_name=str(payload.get("name") or username),
             expires_at=expires_at,
+            session_id=str(payload.get("sid") or payload.get("jti") or ""),
         )
 
 
@@ -252,8 +278,6 @@ def _parse_users(*, raw_users: str, enabled: bool) -> list[RegistryUser]:
         if not isinstance(parsed, list):
             raise ValueError("PURECIPHER_USERS_JSON must be a JSON array.")
         return [_coerce_user(item) for item in parsed]
-    if enabled:
-        return list(_default_dev_users())
     return []
 
 
@@ -271,35 +295,6 @@ def _coerce_user(value: Any) -> RegistryUser:
         password=password,
         role=role,
         display_name=display_name,
-    )
-
-
-def _default_dev_users() -> tuple[RegistryUser, ...]:
-    return (
-        RegistryUser(
-            username="viewer",
-            password="viewer123",
-            role=RegistryRole.VIEWER,
-            display_name="Registry Viewer",
-        ),
-        RegistryUser(
-            username="admin",
-            password="admin123",
-            role=RegistryRole.ADMIN,
-            display_name="Registry Admin",
-        ),
-        RegistryUser(
-            username="reviewer",
-            password="reviewer123",
-            role=RegistryRole.REVIEWER,
-            display_name="Registry Reviewer",
-        ),
-        RegistryUser(
-            username="publisher",
-            password="publisher123",
-            role=RegistryRole.PUBLISHER,
-            display_name="Registry Publisher",
-        ),
     )
 
 

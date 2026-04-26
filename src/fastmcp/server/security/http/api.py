@@ -30,7 +30,11 @@ Standalone usage::
 
 from __future__ import annotations
 
+import functools
+import hmac
+import inspect
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
@@ -495,6 +499,7 @@ class SecurityAPI:
         return export_chain_dump(
             records=self.provenance_ledger.all_records,
             root_hash=self.provenance_ledger.root_hash,
+            genesis_hash=self.provenance_ledger.genesis_hash,
         )
 
     def verify_provenance_bundle(self, bundle_data: dict[str, Any]) -> dict[str, Any]:
@@ -2754,22 +2759,83 @@ class SecurityAPI:
 # ── Route mounting ──────────────────────────────────────────────
 
 
+SecurityAuthVerifier = Callable[
+    [Request, str], "Awaitable[dict[str, Any] | None] | dict[str, Any] | None"
+]
+"""Callable that verifies a bearer token.
+
+Receives the Starlette ``Request`` and the bearer token string. Returns
+a non-empty principal dict on success (recorded as the request's
+authenticated actor) or ``None`` on failure. Sync and async return
+values are both accepted.
+"""
+
+
+def _make_bearer_token_verifier(expected_token: str) -> SecurityAuthVerifier:
+    """Build a verifier that does a constant-time compare against a single token."""
+    expected = expected_token.encode("utf-8")
+
+    def _verify(_request: Request, presented: str) -> dict[str, Any] | None:
+        if hmac.compare_digest(expected, presented.encode("utf-8")):
+            return {"actor": "shared-secret", "auth": "bearer-token"}
+        return None
+
+    return _verify
+
+
+async def _resolve_principal(
+    verifier: SecurityAuthVerifier,
+    request: Request,
+    token: str,
+) -> dict[str, Any] | None:
+    result = verifier(request, token)
+    if inspect.isawaitable(result):
+        result = await result
+    if result and isinstance(result, dict):
+        return result
+    return None
+
+
 def mount_security_routes(
     server: FastMCP,
     *,
     api: SecurityAPI | None = None,
     prefix: str = "/security",
+    require_auth: bool = True,
+    bearer_token: str | None = None,
+    auth_verifier: SecurityAuthVerifier | None = None,
 ) -> SecurityAPI:
     """Mount SecureMCP HTTP routes on a FastMCP server.
 
-    If no ``api`` is provided, one is auto-constructed from the server's
-    attached SecurityContext.
+    All routes are authenticated by default. The destructive endpoints
+    (policy import, version rollback, marketplace moderation, contract
+    signing, etc.) require a verified bearer token before any handler
+    runs. There are three ways to configure auth, in order of precedence:
+
+    1. ``auth_verifier``: a callable returning a principal dict on
+       success or ``None`` on failure. Use this for custom JWT, OAuth
+       introspection, or signed-request integrations.
+    2. ``bearer_token``: a static shared secret. Requests must present
+       ``Authorization: Bearer <bearer_token>``. Constant-time compared.
+    3. ``require_auth=False``: explicit opt-out. Mounting routes
+       unauthenticated logs a CRITICAL-tier warning. Use only in
+       single-tenant local-development scenarios.
+
+    Configuring ``require_auth=True`` (the default) without supplying
+    either ``auth_verifier`` or ``bearer_token`` raises ``RuntimeError``
+    at mount time — the mount fails closed rather than silently
+    accepting all callers.
 
     Args:
         server: The FastMCP server instance.
         prefix: URL prefix for all security routes (default ``/security``).
         api: Optional pre-configured SecurityAPI. If None, built from
             the server's security context.
+        require_auth: If True (default), enforce auth on every route.
+        bearer_token: Static bearer-token secret for the simple shared-
+            secret pattern. Mutually compatible with ``auth_verifier``;
+            if both are passed, ``auth_verifier`` takes precedence.
+        auth_verifier: Custom token verifier. See :data:`SecurityAuthVerifier`.
 
     Returns:
         The SecurityAPI instance (for further customization).
@@ -2782,30 +2848,99 @@ def mount_security_routes(
 
         server = FastMCP("secure-server")
         attach_security(server, SecurityConfig(...))
-        api = mount_security_routes(server)
+        api = mount_security_routes(
+            server,
+            bearer_token=os.environ["SECUREMCP_API_TOKEN"],
+        )
         server.run(transport="streamable-http")
     """
     if api is None:
         api = _build_api_from_server(server)
 
+    verifier: SecurityAuthVerifier | None
+    if auth_verifier is not None:
+        verifier = auth_verifier
+    elif bearer_token is not None:
+        verifier = _make_bearer_token_verifier(bearer_token)
+    else:
+        verifier = None
+
+    if require_auth and verifier is None:
+        raise RuntimeError(
+            "mount_security_routes requires authentication but no "
+            "bearer_token or auth_verifier was supplied. Pass one, or "
+            "explicitly set require_auth=False to mount unauthenticated "
+            "routes (development only)."
+        )
+
+    if not require_auth:
+        logger.warning(
+            "mount_security_routes(require_auth=False): security HTTP API "
+            "is exposed without authentication. Destructive endpoints "
+            "(/policy/import, /policy/versions/rollback, "
+            "/marketplace/{id}/moderate, /contracts/{id}/sign, ...) are "
+            "callable by any HTTP client that can reach the server."
+        )
+
+    async def _enforce_auth(request: Request) -> JSONResponse | None:
+        if not require_auth:
+            return None
+        assert verifier is not None  # require_auth=True implies verifier is set
+        header = request.headers.get("authorization", "")
+        if not header.lower().startswith("bearer "):
+            return JSONResponse(
+                {"error": "Missing 'Authorization: Bearer <token>' header"},
+                status_code=401,
+            )
+        token = header[7:].strip()
+        if not token:
+            return JSONResponse(
+                {"error": "Empty bearer token"},
+                status_code=401,
+            )
+        principal = await _resolve_principal(verifier, request, token)
+        if principal is None:
+            return JSONResponse(
+                {"error": "Invalid or expired token"},
+                status_code=401,
+            )
+        # Stash on request.state for handlers that need to attribute writes.
+        request.state.security_principal = principal
+        return None
+
+    def _secured_route(path: str, *, methods: list[str]):
+        """Wrap the user's route handler with the auth gate."""
+
+        def decorator(handler):
+            @functools.wraps(handler)
+            async def wrapped(request: Request):
+                denial = await _enforce_auth(request)
+                if denial is not None:
+                    return denial
+                return await handler(request)
+
+            return server.custom_route(path, methods=methods)(wrapped)
+
+        return decorator
+
     # Dashboard
-    @server.custom_route(f"{prefix}/dashboard", methods=["GET"])
+    @_secured_route(f"{prefix}/dashboard", methods=["GET"])
     async def dashboard_endpoint(request: Request) -> JSONResponse:
         return JSONResponse(api.get_dashboard())
 
     # Marketplace
-    @server.custom_route(f"{prefix}/marketplace", methods=["GET"])
+    @_secured_route(f"{prefix}/marketplace", methods=["GET"])
     async def marketplace_endpoint(request: Request) -> JSONResponse:
         query = request.query_params.get("q")
         category = request.query_params.get("category")
         return JSONResponse(api.get_marketplace(query=query, category=category))
 
-    @server.custom_route(f"{prefix}/marketplace/{{listing_id}}", methods=["GET"])
+    @_secured_route(f"{prefix}/marketplace/{{listing_id}}", methods=["GET"])
     async def marketplace_detail_endpoint(request: Request) -> JSONResponse:
         lid = request.path_params.get("listing_id", "")
         return JSONResponse(api.get_marketplace_listing(lid))
 
-    @server.custom_route(
+    @_secured_route(
         f"{prefix}/marketplace/{{listing_id}}/install", methods=["POST"]
     )
     async def marketplace_install_endpoint(request: Request) -> JSONResponse:
@@ -2823,7 +2958,7 @@ def mount_security_routes(
             )
         )
 
-    @server.custom_route(
+    @_secured_route(
         f"{prefix}/marketplace/{{listing_id}}/uninstall", methods=["POST"]
     )
     async def marketplace_uninstall_endpoint(request: Request) -> JSONResponse:
@@ -2836,7 +2971,7 @@ def mount_security_routes(
             api.marketplace_uninstall(lid, installer_id=body.get("installer_id", ""))
         )
 
-    @server.custom_route(
+    @_secured_route(
         f"{prefix}/marketplace/{{listing_id}}/moderate", methods=["POST"]
     )
     async def marketplace_moderate_endpoint(request: Request) -> JSONResponse:
@@ -2854,18 +2989,18 @@ def mount_security_routes(
             )
         )
 
-    @server.custom_route(f"{prefix}/marketplace/moderation", methods=["GET"])
+    @_secured_route(f"{prefix}/marketplace/moderation", methods=["GET"])
     async def marketplace_moderation_queue_endpoint(request: Request) -> JSONResponse:
         return JSONResponse(api.marketplace_moderation_queue())
 
-    @server.custom_route(
+    @_secured_route(
         f"{prefix}/marketplace/{{listing_id}}/versions", methods=["GET"]
     )
     async def marketplace_versions_endpoint(request: Request) -> JSONResponse:
         lid = request.path_params.get("listing_id", "")
         return JSONResponse(api.marketplace_version_history(lid))
 
-    @server.custom_route(
+    @_secured_route(
         f"{prefix}/marketplace/{{listing_id}}/versions/{{version}}/yank",
         methods=["POST"],
     )
@@ -2881,38 +3016,38 @@ def mount_security_routes(
         )
 
     # Compliance
-    @server.custom_route(f"{prefix}/compliance", methods=["GET"])
+    @_secured_route(f"{prefix}/compliance", methods=["GET"])
     async def compliance_endpoint(request: Request) -> JSONResponse:
         report_type = request.query_params.get("type", "full")
         return JSONResponse(api.get_compliance_report(report_type=report_type))
 
     # Trust registry
-    @server.custom_route(f"{prefix}/trust", methods=["GET"])
+    @_secured_route(f"{prefix}/trust", methods=["GET"])
     async def trust_registry_endpoint(request: Request) -> JSONResponse:
         return JSONResponse(api.get_trust_registry())
 
-    @server.custom_route(f"{prefix}/trust/{{tool_name}}", methods=["GET"])
+    @_secured_route(f"{prefix}/trust/{{tool_name}}", methods=["GET"])
     async def trust_score_endpoint(request: Request) -> JSONResponse:
         name = request.path_params.get("tool_name", "")
         return JSONResponse(api.get_trust_score(name))
 
     # Federation
-    @server.custom_route(f"{prefix}/federation", methods=["GET"])
+    @_secured_route(f"{prefix}/federation", methods=["GET"])
     async def federation_endpoint(request: Request) -> JSONResponse:
         return JSONResponse(api.get_federation_status())
 
     # CRL
-    @server.custom_route(f"{prefix}/revocations", methods=["GET"])
+    @_secured_route(f"{prefix}/revocations", methods=["GET"])
     async def revocations_endpoint(request: Request) -> JSONResponse:
         return JSONResponse(api.get_revocations())
 
-    @server.custom_route(f"{prefix}/revocations/{{tool_name}}", methods=["GET"])
+    @_secured_route(f"{prefix}/revocations/{{tool_name}}", methods=["GET"])
     async def revocation_check_endpoint(request: Request) -> JSONResponse:
         name = request.path_params.get("tool_name", "")
         return JSONResponse(api.is_revoked(name))
 
     # Provenance
-    @server.custom_route(f"{prefix}/provenance", methods=["GET"])
+    @_secured_route(f"{prefix}/provenance", methods=["GET"])
     async def provenance_endpoint(request: Request) -> JSONResponse:
         resource = request.query_params.get("resource")
         actor = request.query_params.get("actor")
@@ -2924,35 +3059,35 @@ def mount_security_routes(
             )
         )
 
-    @server.custom_route(f"{prefix}/provenance/chain-status", methods=["GET"])
+    @_secured_route(f"{prefix}/provenance/chain-status", methods=["GET"])
     async def provenance_chain_status_endpoint(request: Request) -> JSONResponse:
         return JSONResponse(api.get_provenance_chain_status())
 
-    @server.custom_route(f"{prefix}/provenance/actions", methods=["GET"])
+    @_secured_route(f"{prefix}/provenance/actions", methods=["GET"])
     async def provenance_actions_endpoint(request: Request) -> JSONResponse:
         return JSONResponse(api.get_provenance_actions())
 
-    @server.custom_route(
+    @_secured_route(
         f"{prefix}/provenance/proof/{{record_id}}", methods=["GET"]
     )
     async def provenance_proof_endpoint(request: Request) -> JSONResponse:
         record_id = request.path_params.get("record_id", "")
         return JSONResponse(api.get_provenance_proof(record_id))
 
-    @server.custom_route(f"{prefix}/provenance/export", methods=["GET"])
+    @_secured_route(f"{prefix}/provenance/export", methods=["GET"])
     async def provenance_export_endpoint(request: Request) -> JSONResponse:
         return JSONResponse(api.get_provenance_export())
 
-    @server.custom_route(f"{prefix}/provenance/verify", methods=["POST"])
+    @_secured_route(f"{prefix}/provenance/verify", methods=["POST"])
     async def provenance_verify_endpoint(request: Request) -> JSONResponse:
         body = await request.json()
         return JSONResponse(api.verify_provenance_bundle(body))
 
-    mount_policy_routes(server, api, prefix)
+    mount_policy_routes(server, api, prefix, route_decorator=_secured_route)
 
     # Health
     # Contracts
-    @server.custom_route(f"{prefix}/contracts/negotiate", methods=["POST"])
+    @_secured_route(f"{prefix}/contracts/negotiate", methods=["POST"])
     async def contracts_negotiate_endpoint(request: Request) -> JSONResponse:
         try:
             body = await request.json()
@@ -2960,7 +3095,7 @@ def mount_security_routes(
             body = {}
         return JSONResponse(await api.negotiate_contract(body))
 
-    @server.custom_route(
+    @_secured_route(
         f"{prefix}/contracts/{{contract_id}}/sign", methods=["POST"]
     )
     async def contracts_sign_endpoint(request: Request) -> JSONResponse:
@@ -2971,17 +3106,17 @@ def mount_security_routes(
             body = {}
         return JSONResponse(await api.agent_sign_contract_endpoint(cid, body))
 
-    @server.custom_route(f"{prefix}/contracts/{{contract_id}}", methods=["GET"])
+    @_secured_route(f"{prefix}/contracts/{{contract_id}}", methods=["GET"])
     async def contracts_detail_endpoint(request: Request) -> JSONResponse:
         cid = request.path_params.get("contract_id", "")
         return JSONResponse(api.get_contract_details(cid))
 
-    @server.custom_route(f"{prefix}/contracts", methods=["GET"])
+    @_secured_route(f"{prefix}/contracts", methods=["GET"])
     async def contracts_list_endpoint(request: Request) -> JSONResponse:
         agent_id = request.query_params.get("agent_id", "")
         return JSONResponse(api.list_agent_contracts(agent_id))
 
-    @server.custom_route(
+    @_secured_route(
         f"{prefix}/contracts/{{contract_id}}/revoke", methods=["POST"]
     )
     async def contracts_revoke_endpoint(request: Request) -> JSONResponse:
@@ -2994,12 +3129,12 @@ def mount_security_routes(
             await api.revoke_contract_endpoint(cid, reason=body.get("reason", ""))
         )
 
-    @server.custom_route(f"{prefix}/contracts/exchange-log", methods=["GET"])
+    @_secured_route(f"{prefix}/contracts/exchange-log", methods=["GET"])
     async def contracts_exchange_log_endpoint(request: Request) -> JSONResponse:
         session_id = request.query_params.get("session_id")
         return JSONResponse(api.get_exchange_log_entries(session_id=session_id))
 
-    @server.custom_route(
+    @_secured_route(
         f"{prefix}/contracts/exchange-log/{{session_id}}/verify",
         methods=["GET"],
     )
@@ -3008,7 +3143,7 @@ def mount_security_routes(
         return JSONResponse(api.verify_exchange_chain(sid))
 
     # Federated Consent
-    @server.custom_route(
+    @_secured_route(
         f"{prefix}/consent/federated/evaluate", methods=["POST"]
     )
     async def federated_consent_evaluate(request: Request) -> JSONResponse:
@@ -3026,7 +3161,7 @@ def mount_security_routes(
             )
         )
 
-    @server.custom_route(
+    @_secured_route(
         f"{prefix}/consent/federated/access-rights/{{agent_id}}/{{resource_id}}",
         methods=["GET"],
     )
@@ -3048,7 +3183,7 @@ def mount_security_routes(
             )
         )
 
-    @server.custom_route(
+    @_secured_route(
         f"{prefix}/consent/federated/propagate", methods=["POST"]
     )
     async def federated_consent_propagate(request: Request) -> JSONResponse:
@@ -3060,27 +3195,27 @@ def mount_security_routes(
             )
         )
 
-    @server.custom_route(
+    @_secured_route(
         f"{prefix}/consent/federated/jurisdictions", methods=["GET"]
     )
     async def federated_jurisdictions(request: Request) -> JSONResponse:
         return JSONResponse(api.list_jurisdictions())
 
-    @server.custom_route(
+    @_secured_route(
         f"{prefix}/consent/federated/institutions", methods=["GET"]
     )
     async def federated_institutions(request: Request) -> JSONResponse:
         return JSONResponse(api.list_institutions())
 
     # Reflexive Introspection
-    @server.custom_route(
+    @_secured_route(
         f"{prefix}/reflexive/introspect/{{actor_id}}", methods=["GET"]
     )
     async def reflexive_introspect(request: Request) -> JSONResponse:
         actor_id = request.path_params.get("actor_id", "")
         return JSONResponse(api.get_introspection(actor_id))
 
-    @server.custom_route(
+    @_secured_route(
         f"{prefix}/reflexive/verdict/{{actor_id}}/{{operation}}", methods=["GET"]
     )
     async def reflexive_verdict(request: Request) -> JSONResponse:
@@ -3088,21 +3223,21 @@ def mount_security_routes(
         operation = request.path_params.get("operation", "")
         return JSONResponse(api.get_verdict(actor_id, operation))
 
-    @server.custom_route(
+    @_secured_route(
         f"{prefix}/reflexive/threat-level/{{actor_id}}", methods=["GET"]
     )
     async def reflexive_threat_level(request: Request) -> JSONResponse:
         actor_id = request.path_params.get("actor_id", "")
         return JSONResponse(api.get_actor_threat_level(actor_id))
 
-    @server.custom_route(
+    @_secured_route(
         f"{prefix}/reflexive/constraints/{{actor_id}}", methods=["GET"]
     )
     async def reflexive_constraints(request: Request) -> JSONResponse:
         actor_id = request.path_params.get("actor_id", "")
         return JSONResponse(api.get_actor_constraints(actor_id))
 
-    @server.custom_route(
+    @_secured_route(
         f"{prefix}/reflexive/accountability", methods=["GET"]
     )
     async def reflexive_accountability(request: Request) -> JSONResponse:
@@ -3111,7 +3246,7 @@ def mount_security_routes(
         return JSONResponse(api.get_accountability(actor_id=actor_id, limit=limit))
 
     # Health
-    @server.custom_route(f"{prefix}/health", methods=["GET"])
+    @_secured_route(f"{prefix}/health", methods=["GET"])
     async def health_endpoint(request: Request) -> JSONResponse:
         return JSONResponse(api.get_health())
 

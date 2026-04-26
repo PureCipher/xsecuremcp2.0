@@ -787,3 +787,289 @@ class TestImports:
         assert SortBy is not None
         assert InstallRecord is not None
         assert ToolReview is not None
+
+
+class TestCuratorAttestationFields:
+    """Schema additions for third-party curator onboarding (Iteration 1).
+
+    Verifies the new ``attestation_kind``, ``upstream_ref``,
+    ``curator_id``, and ``hosting_mode`` fields persist correctly,
+    default to author-attestation values for back-compat, and round-trip
+    through ``ToolMarketplace`` serialization.
+    """
+
+    def test_default_attestation_is_author(self):
+        from fastmcp.server.security.gateway.tool_marketplace import (
+            AttestationKind,
+            HostingMode,
+            ToolListing,
+        )
+
+        listing = ToolListing(tool_name="default")
+        assert listing.attestation_kind == AttestationKind.AUTHOR
+        assert listing.hosting_mode == HostingMode.CATALOG
+        assert listing.upstream_ref is None
+        assert listing.curator_id == ""
+
+    def test_to_dict_surfaces_curator_fields(self):
+        from fastmcp.server.security.gateway.tool_marketplace import (
+            AttestationKind,
+            HostingMode,
+            ToolListing,
+            UpstreamChannel,
+            UpstreamRef,
+        )
+
+        upstream = UpstreamRef(
+            channel=UpstreamChannel.PYPI,
+            identifier="markitdown-mcp",
+            version="1.2.3",
+            pinned_hash="sha256:" + "a" * 64,
+            source_url="https://github.com/microsoft/markitdown",
+        )
+        listing = ToolListing(
+            tool_name="markitdown",
+            attestation_kind=AttestationKind.CURATOR,
+            upstream_ref=upstream,
+            curator_id="@purecipher-curator",
+            hosting_mode=HostingMode.PROXY,
+        )
+        d = listing.to_dict()
+        assert d["attestation_kind"] == "curator"
+        assert d["curator_id"] == "@purecipher-curator"
+        assert d["hosting_mode"] == "proxy"
+        assert d["upstream_ref"]["channel"] == "pypi"
+        assert d["upstream_ref"]["identifier"] == "markitdown-mcp"
+        assert d["upstream_ref"]["version"] == "1.2.3"
+        assert d["upstream_ref"]["pinned_hash"].startswith("sha256:")
+
+    def test_summary_dict_includes_attestation_kind(self):
+        from fastmcp.server.security.gateway.tool_marketplace import (
+            AttestationKind,
+            ToolListing,
+        )
+
+        listing = ToolListing(
+            tool_name="t",
+            attestation_kind=AttestationKind.CURATOR,
+            curator_id="@curator",
+        )
+        s = listing.to_summary_dict()
+        assert s["attestation_kind"] == "curator"
+        assert s["curator_id"] == "@curator"
+
+    def test_publish_with_curator_attestation_persists_fields(self):
+        from fastmcp.server.security.gateway.tool_marketplace import (
+            AttestationKind,
+            HostingMode,
+            ToolMarketplace,
+            UpstreamChannel,
+            UpstreamRef,
+        )
+
+        marketplace = ToolMarketplace()
+        listing = marketplace.publish(
+            tool_name="curated-tool",
+            display_name="Curated Tool",
+            version="1.0.0",
+            attestation_kind=AttestationKind.CURATOR,
+            curator_id="@registry-curator",
+            hosting_mode=HostingMode.PROXY,
+            upstream_ref=UpstreamRef(
+                channel=UpstreamChannel.NPM,
+                identifier="@org/some-mcp",
+                version="2.1.0",
+                pinned_hash="sha256:abc",
+            ),
+        )
+        assert listing.attestation_kind == AttestationKind.CURATOR
+        assert listing.curator_id == "@registry-curator"
+        assert listing.hosting_mode == HostingMode.PROXY
+        assert listing.upstream_ref is not None
+        assert listing.upstream_ref.channel == UpstreamChannel.NPM
+        assert listing.upstream_ref.identifier == "@org/some-mcp"
+
+        # And the serialized form preserves them.
+        d = listing.to_dict()
+        assert d["attestation_kind"] == "curator"
+        assert d["upstream_ref"]["channel"] == "npm"
+
+    def test_publish_default_remains_author_attestation(self):
+        """Existing author-publishing path is unchanged — no curator
+        fields appear unless explicitly set."""
+        from fastmcp.server.security.gateway.tool_marketplace import (
+            AttestationKind,
+            HostingMode,
+            ToolMarketplace,
+        )
+
+        marketplace = ToolMarketplace()
+        listing = marketplace.publish(
+            tool_name="author-tool",
+            display_name="Author Tool",
+            version="1.0.0",
+            author="acme",
+        )
+        assert listing.attestation_kind == AttestationKind.AUTHOR
+        assert listing.hosting_mode == HostingMode.CATALOG
+        assert listing.upstream_ref is None
+        assert listing.curator_id == ""
+
+    def test_persistence_roundtrip_preserves_curator_fields(self):
+        """A listing persisted to MemoryBackend and reloaded into a
+        fresh marketplace must keep its curator attestation intact."""
+        from fastmcp.server.security.gateway.tool_marketplace import (
+            AttestationKind,
+            HostingMode,
+            ToolMarketplace,
+            UpstreamChannel,
+            UpstreamRef,
+        )
+        from fastmcp.server.security.storage.memory import MemoryBackend
+
+        backend = MemoryBackend()
+        original = ToolMarketplace(
+            backend=backend, marketplace_id="curator-test"
+        )
+        original.publish(
+            tool_name="persisted-curated",
+            display_name="Persisted",
+            version="1.0.0",
+            attestation_kind=AttestationKind.CURATOR,
+            curator_id="@curator",
+            hosting_mode=HostingMode.PROXY,
+            upstream_ref=UpstreamRef(
+                channel=UpstreamChannel.PYPI,
+                identifier="example-mcp",
+                version="0.5.0",
+                pinned_hash="sha256:beef",
+                source_url="https://github.com/x/y",
+            ),
+        )
+
+        # Reload from backend and confirm the curator fields survived.
+        reloaded = ToolMarketplace(
+            backend=backend, marketplace_id="curator-test"
+        )
+        listing = reloaded.get_by_name("persisted-curated")
+        assert listing is not None
+        assert listing.attestation_kind == AttestationKind.CURATOR
+        assert listing.curator_id == "@curator"
+        assert listing.hosting_mode == HostingMode.PROXY
+        assert listing.upstream_ref is not None
+        assert listing.upstream_ref.channel == UpstreamChannel.PYPI
+        assert listing.upstream_ref.identifier == "example-mcp"
+        assert listing.upstream_ref.pinned_hash == "sha256:beef"
+
+    def test_legacy_listing_without_curator_fields_loads_cleanly(self):
+        """A listing persisted before the curator-fields migration must
+        deserialize as an author-attested listing with empty curator
+        metadata — no exceptions on reload."""
+        from fastmcp.server.security.gateway.tool_marketplace import (
+            AttestationKind,
+            HostingMode,
+            ToolMarketplace,
+        )
+
+        # Hand-craft a legacy persisted dict (no curator fields).
+        legacy_data = {
+            "listing_id": "legacy-001",
+            "tool_name": "legacy-tool",
+            "display_name": "Legacy",
+            "version": "1.0.0",
+            "author": "old-publisher",
+            "status": "published",
+            "categories": ["network"],
+            "tags": ["legacy"],
+            "manifest": None,
+            "attestation": None,
+            "metadata": {},
+        }
+        listing = ToolMarketplace._deserialize_listing(legacy_data)
+        assert listing.attestation_kind == AttestationKind.AUTHOR
+        assert listing.hosting_mode == HostingMode.CATALOG
+        assert listing.upstream_ref is None
+        assert listing.curator_id == ""
+        assert listing.tool_name == "legacy-tool"
+
+    def test_upstream_ref_from_dict_handles_unknown_channel(self):
+        """Forward-compat: an UpstreamRef persisted with a channel value
+        the current build doesn't recognize must fall back to OTHER
+        rather than raise."""
+        from fastmcp.server.security.gateway.tool_marketplace import (
+            UpstreamChannel,
+            UpstreamRef,
+        )
+
+        ref = UpstreamRef.from_dict(
+            {
+                "channel": "future-channel-not-in-enum",
+                "identifier": "x",
+                "version": "1.0",
+            }
+        )
+        assert ref is not None
+        assert ref.channel == UpstreamChannel.OTHER
+        assert ref.identifier == "x"
+
+    def test_upstream_ref_from_dict_returns_none_on_empty(self):
+        from fastmcp.server.security.gateway.tool_marketplace import UpstreamRef
+
+        assert UpstreamRef.from_dict(None) is None
+        assert UpstreamRef.from_dict({}) is None
+
+    def test_republish_does_not_clobber_curator_status(self):
+        """Iteration safety: an author-style republish (no curator
+        kwargs) must NOT overwrite a listing that's already curator-
+        attested. The reverse is also true — a curator-style update
+        won't promote an author listing without intent."""
+        from fastmcp.server.security.gateway.tool_marketplace import (
+            AttestationKind,
+            HostingMode,
+            ToolMarketplace,
+            UpstreamChannel,
+            UpstreamRef,
+        )
+
+        marketplace = ToolMarketplace()
+        # Initial curator-attested publish.
+        marketplace.publish(
+            tool_name="dual",
+            display_name="Dual",
+            version="1.0.0",
+            attestation_kind=AttestationKind.CURATOR,
+            curator_id="@orig-curator",
+            hosting_mode=HostingMode.PROXY,
+            upstream_ref=UpstreamRef(
+                channel=UpstreamChannel.PYPI,
+                identifier="dual-mcp",
+                version="1.0.0",
+            ),
+        )
+        # Same tool republished without curator kwargs — must keep the
+        # original curator metadata.
+        listing = marketplace.publish(
+            tool_name="dual",
+            display_name="Dual Updated",
+            version="1.1.0",
+        )
+        assert listing.attestation_kind == AttestationKind.CURATOR
+        assert listing.curator_id == "@orig-curator"
+        assert listing.hosting_mode == HostingMode.PROXY
+        assert listing.upstream_ref is not None
+        assert listing.upstream_ref.identifier == "dual-mcp"
+
+    def test_top_level_imports_curator_types(self):
+        from fastmcp.server.security import (
+            AttestationKind,
+            HostingMode,
+            UpstreamChannel,
+            UpstreamRef,
+        )
+
+        assert AttestationKind.AUTHOR.value == "author"
+        assert AttestationKind.CURATOR.value == "curator"
+        assert HostingMode.CATALOG.value == "catalog"
+        assert HostingMode.PROXY.value == "proxy"
+        assert UpstreamChannel.HTTP.value == "http"
+        assert UpstreamRef is not None

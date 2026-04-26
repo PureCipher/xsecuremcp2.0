@@ -23,7 +23,7 @@ export const APP_THEMES: readonly AppTheme[] = [
   {
     id: NAVY_COMMAND_THEME_ID,
     label: "Navy Command",
-    description: "Deep navy chrome — default. Press Ctrl+Shift+C for paper contrast.",
+    description: "Clean light workspace with a navy-blue accent. Press Ctrl+Shift+C for paper contrast.",
   },
   {
     id: PAPER_CONTRAST_THEME_ID,
@@ -33,27 +33,27 @@ export const APP_THEMES: readonly AppTheme[] = [
   {
     id: "emerald-forest",
     label: "Emerald Forest",
-    description: "Dark emerald chrome with mint highlights.",
+    description: "Soft mint workspace with emerald accents.",
   },
   {
     id: "slate-night",
     label: "Slate Night",
-    description: "Neutral dark chrome with cool slate accents.",
+    description: "Polished dark workspace with cool slate accents.",
   },
   {
     id: "amethyst-velvet",
     label: "Amethyst Velvet",
-    description: "Deep violet chrome with bright amethyst accents.",
+    description: "Light violet workspace with amethyst accents.",
   },
   {
     id: "aurora-glacier",
     label: "Aurora Glacier",
-    description: "Cool blue-green dark chrome with crisp cyan accents.",
+    description: "Cool blue-green workspace with crisp cyan accents.",
   },
   {
     id: "ember-noir",
     label: "Ember Noir",
-    description: "Charcoal chrome with ember orange accents.",
+    description: "Warm light workspace with ember orange accents.",
   },
   {
     id: "sandstone-day",

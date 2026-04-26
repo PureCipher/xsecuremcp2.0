@@ -224,6 +224,131 @@ class InstallRecord:
     signature_verified: bool = False
 
 
+class AttestationKind(Enum):
+    """Who is attesting to the manifest in a listing.
+
+    The kind of attestation determines the trust statement carried by
+    the published listing:
+
+    - ``AUTHOR``: the original tool author submitted and attested the
+      manifest. Default for self-published listings.
+    - ``CURATOR``: a third-party curator on this registry has observed
+      the upstream MCP server and is vouching for its declared
+      behaviour. The attestation pins the upstream artifact's hash
+      and version. Curator-attested listings cap at the ``BASIC``
+      certification level — strict-tier guarantees require source
+      access the registry does not have.
+    """
+
+    AUTHOR = "author"
+    CURATOR = "curator"
+
+
+class HostingMode(Enum):
+    """How the registry handles a listing's runtime exposure.
+
+    - ``CATALOG``: the registry stores the listing only. Install
+      recipes point at the upstream package or endpoint. The user's
+      MCP client connects directly to the publisher.
+    - ``PROXY``: the registry mounts a SecureMCP gateway in front of
+      the upstream and applies the listing's manifest as the
+      enforcement boundary. Users connect to the registry's hosted
+      endpoint. (Iteration 6 wires this up; the field exists now so
+      curated listings can declare their intended hosting mode.)
+    """
+
+    CATALOG = "catalog"
+    PROXY = "proxy"
+
+
+class UpstreamChannel(Enum):
+    """Distribution channel for a curated upstream MCP server.
+
+    - ``HTTP``: a directly-callable MCP HTTP/SSE endpoint
+      (``https://server.example.com/mcp``). MVP target.
+    - ``PYPI``: a Python package on PyPI (``pypi:pkg-name@1.2.3``).
+    - ``NPM``: an npm package (``npm:@scope/pkg@1.0.0``).
+    - ``DOCKER``: a Docker / OCI image (``docker:image@sha256:...``).
+    - ``GITHUB``: a GitHub repository reference.
+    - ``OTHER``: free-form, opaque to the registry.
+    """
+
+    HTTP = "http"
+    PYPI = "pypi"
+    NPM = "npm"
+    DOCKER = "docker"
+    GITHUB = "github"
+    OTHER = "other"
+
+
+@dataclass(frozen=True)
+class UpstreamRef:
+    """A pinned reference to a third-party MCP server.
+
+    Curators record the channel + identifier + version they observed,
+    plus an integrity hash so that re-installs land on the exact
+    artifact the registry attested to. ``HTTP``-channel refs use the
+    URL as the identifier and may leave ``pinned_hash`` empty (servers
+    behind a URL aren't content-addressable in general).
+
+    Attributes:
+        channel: Distribution channel.
+        identifier: Channel-specific identifier (package name, image
+            ref, URL, repo path).
+        version: Pinned version. Empty string if the channel doesn't
+            have a notion of versions (e.g. raw HTTP endpoints).
+        pinned_hash: Integrity hash (sha256) of the resolved artifact.
+            Empty for HTTP endpoints.
+        source_url: Optional human-facing source link
+            (e.g. github.com/owner/repo).
+        metadata: Channel-specific resolution metadata (resolved
+            tarball URL, manifest title, etc.).
+    """
+
+    channel: UpstreamChannel = UpstreamChannel.OTHER
+    identifier: str = ""
+    version: str = ""
+    pinned_hash: str = ""
+    source_url: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "channel": self.channel.value,
+            "identifier": self.identifier,
+            "version": self.version,
+            "pinned_hash": self.pinned_hash,
+            "source_url": self.source_url,
+            "metadata": dict(self.metadata),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None) -> UpstreamRef | None:
+        """Reconstruct from a serialized dict, or ``None`` on missing/empty.
+
+        Tolerant of unknown channel strings (falls back to ``OTHER``)
+        so persisted listings keep loading after enum additions.
+        """
+        if not data or not isinstance(data, dict):
+            return None
+        raw_channel = data.get("channel", UpstreamChannel.OTHER.value)
+        try:
+            channel = UpstreamChannel(raw_channel)
+        except ValueError:
+            channel = UpstreamChannel.OTHER
+        metadata = data.get("metadata") or {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        return cls(
+            channel=channel,
+            identifier=str(data.get("identifier", "")),
+            version=str(data.get("version", "")),
+            pinned_hash=str(data.get("pinned_hash", "")),
+            source_url=str(data.get("source_url", "")),
+            metadata=dict(metadata),
+        )
+
+
 @dataclass
 class ToolListing:
     """A tool's listing in the marketplace.
@@ -255,6 +380,16 @@ class ToolListing:
         license: License identifier (SPDX).
         tags: Searchable keywords.
         metadata: Additional listing data.
+        attestation_kind: Who is attesting to the manifest. Defaults to
+            ``AUTHOR`` so existing listings keep their author-as-publisher
+            semantics. Curated third-party onboardings set ``CURATOR``.
+        upstream_ref: Pinned reference to the upstream artifact for
+            curator-attested listings. ``None`` for author-published.
+        curator_id: Username of the curator who vouched for this listing
+            (when ``attestation_kind`` is ``CURATOR``).
+        hosting_mode: ``CATALOG`` (registry stores listing only, install
+            points at upstream) or ``PROXY`` (registry hosts a SecureMCP
+            gateway in front of the upstream).
     """
 
     listing_id: str = field(default_factory=lambda: str(uuid.uuid4()))
@@ -279,6 +414,10 @@ class ToolListing:
     license: str = ""
     tags: set[str] = field(default_factory=set)
     metadata: dict[str, Any] = field(default_factory=dict)
+    attestation_kind: AttestationKind = AttestationKind.AUTHOR
+    upstream_ref: UpstreamRef | None = None
+    curator_id: str = ""
+    hosting_mode: HostingMode = HostingMode.CATALOG
 
     @property
     def certification_level(self) -> CertificationLevel:
@@ -342,6 +481,12 @@ class ToolListing:
             "tags": sorted(self.tags),
             "version_count": len(self.version_history),
             "available_versions": self.available_versions,
+            "attestation_kind": self.attestation_kind.value,
+            "curator_id": self.curator_id,
+            "hosting_mode": self.hosting_mode.value,
+            "upstream_ref": (
+                self.upstream_ref.to_dict() if self.upstream_ref is not None else None
+            ),
         }
 
     def to_summary_dict(self) -> dict[str, Any]:
@@ -356,6 +501,8 @@ class ToolListing:
             "average_rating": round(self.average_rating, 2),
             "install_count": self.install_count,
             "categories": [c.value for c in self.categories],
+            "attestation_kind": self.attestation_kind.value,
+            "curator_id": self.curator_id,
         }
 
 
@@ -480,6 +627,14 @@ class ToolMarketplace:
 
         if self._backend is not None:
             self._load_from_backend()
+
+    def attach_event_bus(self, event_bus: SecurityEventBus | None) -> None:
+        """Wire an event bus into this marketplace after construction.
+
+        Public alternative to mutating the private ``_event_bus``
+        attribute from outside the class.
+        """
+        self._event_bus = event_bus
 
     def _load_from_backend(self) -> None:
         """Load marketplace state from persistence."""
@@ -726,7 +881,28 @@ class ToolMarketplace:
         *,
         reviews: list[ToolReview] | None = None,
     ) -> ToolListing:
-        """Reconstruct a ToolListing from a persisted dict."""
+        """Reconstruct a ToolListing from a persisted dict.
+
+        Curator-attestation fields (``attestation_kind``,
+        ``upstream_ref``, ``curator_id``, ``hosting_mode``) default to
+        the author-attestation values when missing so listings
+        persisted before those fields existed continue loading.
+        """
+        # Curator/onboarding fields. Tolerant of missing or unknown
+        # values so older persisted listings round-trip cleanly.
+        try:
+            attestation_kind = AttestationKind(
+                data.get("attestation_kind", AttestationKind.AUTHOR.value)
+            )
+        except ValueError:
+            attestation_kind = AttestationKind.AUTHOR
+        try:
+            hosting_mode = HostingMode(
+                data.get("hosting_mode", HostingMode.CATALOG.value)
+            )
+        except ValueError:
+            hosting_mode = HostingMode.CATALOG
+
         listing = ToolListing(
             listing_id=data.get("listing_id", str(uuid.uuid4())),
             tool_name=data.get("tool_name", ""),
@@ -746,6 +922,10 @@ class ToolMarketplace:
             created_at=cls._parse_datetime(data.get("created_at")),
             updated_at=cls._parse_datetime(data.get("updated_at")),
             metadata=dict(data.get("metadata", {})),
+            attestation_kind=attestation_kind,
+            upstream_ref=UpstreamRef.from_dict(data.get("upstream_ref")),
+            curator_id=str(data.get("curator_id", "")),
+            hosting_mode=hosting_mode,
         )
         # Restore categories
         for cat_val in data.get("categories", []):
@@ -784,6 +964,10 @@ class ToolMarketplace:
         tags: set[str] | None = None,
         metadata: dict[str, Any] | None = None,
         changelog: str = "",
+        attestation_kind: AttestationKind = AttestationKind.AUTHOR,
+        upstream_ref: UpstreamRef | None = None,
+        curator_id: str = "",
+        hosting_mode: HostingMode = HostingMode.CATALOG,
     ) -> ToolListing:
         """Publish a tool to the marketplace.
 
@@ -809,6 +993,15 @@ class ToolMarketplace:
             tags: Searchable keywords.
             metadata: Additional data.
             changelog: What changed in this version.
+            attestation_kind: Who is attesting to the manifest. Default
+                ``AUTHOR``; set to ``CURATOR`` for third-party
+                onboarding flows.
+            upstream_ref: Pinned reference to the upstream artifact for
+                curator-attested listings.
+            curator_id: Username of the curator vouching for this
+                listing (when ``attestation_kind`` is ``CURATOR``).
+            hosting_mode: ``CATALOG`` (registry stores listing only)
+                or ``PROXY`` (registry hosts a SecureMCP gateway).
 
         Returns:
             The created or updated ToolListing.
@@ -840,6 +1033,35 @@ class ToolMarketplace:
                 listing.tags.update(tags)
             if metadata:
                 listing.metadata.update(metadata)
+            # Curator/onboarding fields. The merge is asymmetric on
+            # purpose:
+            #   * a curator-style republish of an existing curator
+            #     listing keeps the curator status — fine.
+            #   * an author-style republish of an existing curator
+            #     listing keeps the curator status — fine (we don't
+            #     downgrade silently).
+            #   * a curator-style republish of an existing AUTHOR
+            #     listing must NOT flip it to curator. Preventing
+            #     this is what blocks the takeover bug where a
+            #     curator submits the same tool_name as an author and
+            #     the marketplace silently re-attributes it.
+            if (
+                attestation_kind == AttestationKind.CURATOR
+                and listing.attestation_kind == AttestationKind.AUTHOR
+            ):
+                raise ValueError(
+                    f"Refusing to overwrite author-attested listing "
+                    f"'{tool_name}' with a curator-attested update. "
+                    "Pick a distinct tool_name for the curated listing."
+                )
+            if attestation_kind != AttestationKind.AUTHOR:
+                listing.attestation_kind = attestation_kind
+            if upstream_ref is not None:
+                listing.upstream_ref = upstream_ref
+            if curator_id:
+                listing.curator_id = curator_id
+            if hosting_mode != HostingMode.CATALOG:
+                listing.hosting_mode = hosting_mode
             listing.updated_at = datetime.now(timezone.utc)
 
             # Record version history if version changed
@@ -878,6 +1100,10 @@ class ToolMarketplace:
             license=tool_license,
             tags=tags or set(),
             metadata=metadata or {},
+            attestation_kind=attestation_kind,
+            upstream_ref=upstream_ref,
+            curator_id=curator_id,
+            hosting_mode=hosting_mode,
         )
 
         # Record initial version

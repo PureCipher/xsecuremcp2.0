@@ -18,6 +18,11 @@ const DEFAULT_STORED_THEME: StoredTheme = {
   themeId: DEFAULT_APP_THEME_ID,
 };
 
+function applyThemeToDocument(themeId: AppThemeId) {
+  if (typeof document === "undefined") return;
+  document.documentElement.dataset.appTheme = themeId;
+}
+
 function readThemeFromStorage(): StoredTheme {
   if (typeof window === "undefined") return DEFAULT_STORED_THEME;
   try {
@@ -38,6 +43,7 @@ function readThemeFromStorage(): StoredTheme {
 
 function writeThemeToStorage(next: StoredTheme) {
   try {
+    applyThemeToDocument(next.themeId);
     localStorage.setItem(APP_THEME_STORAGE_KEY, JSON.stringify(next));
     window.dispatchEvent(new Event("purecipher-app-theme"));
   } catch {
@@ -54,11 +60,17 @@ export function useAppTheme(): {
   const [stored, setStored] = useState<StoredTheme>(DEFAULT_STORED_THEME);
 
   useLayoutEffect(() => {
-    setStored(readThemeFromStorage());
+    const next = readThemeFromStorage();
+    applyThemeToDocument(next.themeId);
+    setStored(next);
   }, []);
 
   useEffect(() => {
-    const sync = () => setStored(readThemeFromStorage());
+    const sync = () => {
+      const next = readThemeFromStorage();
+      applyThemeToDocument(next.themeId);
+      setStored(next);
+    };
     window.addEventListener("storage", sync);
     window.addEventListener("purecipher-app-theme", sync);
     return () => {

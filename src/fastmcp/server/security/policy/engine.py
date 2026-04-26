@@ -149,6 +149,15 @@ class PolicyEngine:
         """The attached version manager, if any."""
         return self._version_manager
 
+    def attach_event_bus(self, event_bus: SecurityEventBus | None) -> None:
+        """Wire an event bus into this engine after construction.
+
+        Public alternative to assigning to the private ``_event_bus``
+        attribute, used by the orchestrator and by application code that
+        builds the engine before the bus exists.
+        """
+        self._event_bus = event_bus
+
     def attach_version_manager(self, version_manager: PolicyVersionManager) -> None:
         """Attach a version manager and sync the live provider state to it."""
 
@@ -224,7 +233,11 @@ class PolicyEngine:
                             SecurityEventType,
                         )
 
-                        self._event_bus.emit(
+                        # We're in an async path — use aemit() so a slow
+                        # subscriber can't block POLICY_DENIED delivery
+                        # to other subscribers (each handler is bounded
+                        # by its timeout).
+                        await self._event_bus.aemit(
                             SecurityEvent(
                                 event_type=SecurityEventType.POLICY_DENIED,
                                 severity=AlertSeverity.WARNING,

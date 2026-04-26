@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Stack } from "@mui/material";
+import { Box, Card, CardContent, Chip, Divider, Stack, Typography } from "@mui/material";
 import type {
   PolicyAnalyticsResponse,
   PolicyGovernanceResponse,
@@ -19,7 +19,6 @@ import { usePolicyApi } from "./hooks/usePolicyApi";
 import { usePolicyContext } from "./contexts/PolicyContext";
 
 import { Banner } from "./components/Banner";
-import { StatsBar } from "./components/StatsBar";
 import { PolicyTabs } from "./components/PolicyTabs";
 import { OverviewTab } from "./components/tabs/OverviewTab";
 import { LiveChainTab } from "./components/tabs/LiveChainTab";
@@ -141,6 +140,10 @@ function PolicyManagerInner({
     ],
   );
 
+  const liveRuleCount = String(policy.provider_count ?? providers.length ?? 0);
+  const liveVersionLabel = currentVersion ? `v${currentVersion}` : "Not versioned";
+  const pendingChangeCount = String(governance.pending_count ?? activeProposalCount ?? 0);
+
   // ── API hook ──────────────────────────────────────────────────────
   const api = usePolicyApi({ setBanner, setBusyKey, refresh });
 
@@ -235,7 +238,7 @@ function PolicyManagerInner({
   }
 
   return (
-    <Stack spacing={3}>
+    <Stack spacing={2.5}>
       {banner ? (
         <Banner
           tone={banner.tone}
@@ -244,16 +247,99 @@ function PolicyManagerInner({
         />
       ) : null}
 
-      <StatsBar stats={stats} />
+      <Card variant="outlined" sx={{ overflow: "hidden" }}>
+        <CardContent sx={{ p: 0 }}>
+          <Box
+            sx={{
+              p: { xs: 2.5, md: 3 },
+              display: "flex",
+              flexDirection: { xs: "column", lg: "row" },
+              alignItems: { xs: "flex-start", lg: "center" },
+              justifyContent: "space-between",
+              gap: 2.5,
+            }}
+          >
+            <Box sx={{ display: "grid", gap: 0.75, maxWidth: 760 }}>
+              <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
+                Policy workspace
+              </Typography>
+              <Typography variant="h6" sx={{ color: "var(--app-fg)" }}>
+                Govern live rules through reviewable changes
+              </Typography>
+              <Typography variant="body2" sx={{ color: "var(--app-muted)" }}>
+                Keep live policy, proposals, versions, tools, and migrations in one controlled workflow.
+              </Typography>
+            </Box>
 
-      <PolicyTabs
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        pendingCount={activeProposalCount}
-        versionCount={versions.length}
-      />
+            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+              <Chip
+                label={requireApproval ? "Approval required" : "Direct deploy enabled"}
+                sx={{
+                  bgcolor: requireApproval ? "var(--app-control-active-bg)" : "var(--app-control-bg)",
+                  color: requireApproval ? "var(--app-fg)" : "var(--app-muted)",
+                  fontWeight: 700,
+                }}
+              />
+              <Chip
+                label={requireSimulation ? "Simulation required" : "Simulation optional"}
+                sx={{ bgcolor: "var(--app-control-bg)", color: "var(--app-muted)", fontWeight: 700 }}
+              />
+            </Box>
+          </Box>
 
-      {renderTab()}
+          <Box
+            sx={{
+              px: { xs: 2.5, md: 3 },
+              pb: { xs: 2.5, md: 3 },
+              display: "grid",
+              gap: 1.25,
+              gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", xl: "repeat(5, 1fr)" },
+            }}
+          >
+            {stats.map((item) => {
+              const emphasized =
+                item.value === liveRuleCount ||
+                item.value === liveVersionLabel ||
+                item.value === pendingChangeCount;
+              return (
+                <Box
+                  key={item.label}
+                  sx={{
+                    p: 1.75,
+                    borderRadius: 2.5,
+                    border: "1px solid var(--app-border)",
+                    bgcolor: emphasized ? "var(--app-control-bg)" : "var(--app-surface)",
+                  }}
+                >
+                  <Typography sx={{ fontSize: 11, fontWeight: 700, color: "var(--app-muted)" }}>
+                    {item.label}
+                  </Typography>
+                  <Typography sx={{ mt: 0.6, fontSize: 24, lineHeight: 1.1, fontWeight: 750, color: "var(--app-fg)" }}>
+                    {item.value}
+                  </Typography>
+                </Box>
+              );
+            })}
+          </Box>
+
+          <Divider />
+
+          <Box sx={{ px: { xs: 1.5, md: 2 }, bgcolor: "var(--app-control-bg)" }}>
+            <PolicyTabs
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+              pendingCount={activeProposalCount}
+              versionCount={versions.length}
+            />
+          </Box>
+
+          <Divider />
+
+          <Box sx={{ p: { xs: 2, md: 2.5 } }}>
+            {renderTab()}
+          </Box>
+        </CardContent>
+      </Card>
     </Stack>
   );
 }

@@ -39,8 +39,28 @@ class TestSecureMCPFacade:
             "secure-server",
             security=SecurityConfig(registry=RegistryConfig()),
             mount_security_api=True,
+            security_api_require_auth=False,
         )
 
+        assert server.security_api is not None
+
+    def test_constructor_mount_without_auth_raises(self):
+        """mount_security_api=True with no auth args must fail closed —
+        no silent unauthenticated mount."""
+        with pytest.raises(RuntimeError, match="bearer_token or auth_verifier"):
+            SecureMCP(
+                "secure-server",
+                security=SecurityConfig(registry=RegistryConfig()),
+                mount_security_api=True,
+            )
+
+    def test_constructor_with_bearer_token(self):
+        server = SecureMCP(
+            "secure-server",
+            security=SecurityConfig(registry=RegistryConfig()),
+            mount_security_api=True,
+            security_api_bearer_token="ops-token",
+        )
         assert server.security_api is not None
 
         paths = {

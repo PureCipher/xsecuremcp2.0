@@ -12,9 +12,11 @@ import {
   ListItemText,
   ListSubheader,
   Toolbar,
+  Typography,
 } from "@mui/material";
 
 import { NavIcon } from "@/components/security";
+import { useRegistryUserPreferences } from "@/hooks/useRegistryUserPreferences";
 import type { RegistryPersonaId } from "@/lib/registryPersona";
 import { RegistryTopBar } from "./topbar";
 
@@ -51,6 +53,7 @@ export function RegistryShell({
   children,
 }: Props) {
   const pathname = usePathname();
+  const { prefs } = useRegistryUserPreferences();
   const publisherOnly = canPublishConsole && !canReview && !canAdmin;
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -87,11 +90,16 @@ export function RegistryShell({
         enabled: canAdmin || (!canPublishConsole && !canReview),
         active: pathname.startsWith("/registry/servers"),
       },
+      // /registry/clients is gated behind NEXT_PUBLIC_REGISTRY_SHOW_CLIENTS
+      // until the onboard wizard's "coming soon" buttons are wired up.
+      // Surfacing the link to a dead-end wizard erodes user trust.
       {
         href: "/registry/clients",
         label: "Clients",
         icon: "clients",
-        enabled: canAdmin || (!canPublishConsole && !canReview),
+        enabled:
+          (canAdmin || (!canPublishConsole && !canReview)) &&
+          process.env.NEXT_PUBLIC_REGISTRY_SHOW_CLIENTS === "1",
         active: pathname.startsWith("/registry/clients"),
       },
     ],
@@ -99,22 +107,22 @@ export function RegistryShell({
   );
 
   const publisherItems: NavItem[] = useMemo(
-    () => [
-      {
+    () => {
+      const mine: NavItem = {
         href: "/registry/publish/mine",
         label: "My listings",
         icon: "tools",
         enabled: canPublishConsole,
         active: pathname.startsWith("/registry/publish/mine"),
-      },
-      {
+      };
+      const getStarted: NavItem = {
         href: "/registry/publish/get-started",
         label: "Get started",
         icon: "publish",
         enabled: canPublishConsole && !publisherHasListings,
         active: pathname.startsWith("/registry/publish/get-started"),
-      },
-      {
+      };
+      const publish: NavItem = {
         href: "/registry/publish",
         label: "Publish",
         icon: "publish",
@@ -123,9 +131,20 @@ export function RegistryShell({
           pathname.startsWith("/registry/publish") &&
           !pathname.startsWith("/registry/publish/get-started") &&
           !pathname.startsWith("/registry/publish/mine"),
-      },
-    ],
-    [pathname, canPublishConsole, canAdmin, canReview, publisherHasListings],
+      };
+      const onboard: NavItem = {
+        href: "/registry/onboard",
+        label: "Onboard third-party",
+        icon: "publish",
+        enabled: canPublishConsole,
+        active: pathname.startsWith("/registry/onboard"),
+      };
+      const ordered = prefs.publisher.openMineFirst
+        ? [mine, getStarted, publish, onboard]
+        : [publish, getStarted, mine, onboard];
+      return ordered;
+    },
+    [pathname, canPublishConsole, publisherHasListings, prefs.publisher.openMineFirst],
   );
 
   const reviewerItems: NavItem[] = useMemo(
@@ -194,7 +213,7 @@ export function RegistryShell({
   }
 
   const drawerExpanded = 240;
-  const drawerCollapsed = 72;
+  const drawerCollapsed = 76;
   const drawerWidth = sidebarCollapsed ? drawerCollapsed : drawerExpanded;
 
   function renderNavSection(
@@ -215,12 +234,12 @@ export function RegistryShell({
             sx={{
               bgcolor: "transparent",
               color: "var(--app-muted)",
-              fontSize: 10,
-              fontWeight: 800,
-              letterSpacing: "0.18em",
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: "0.04em",
               textTransform: "uppercase",
               lineHeight: 1,
-              pb: 1,
+              pb: 0.75,
             }}
           >
             {collapsed ? " " : title}
@@ -236,18 +255,28 @@ export function RegistryShell({
             onClick={opts?.onNavigate}
             selected={item.active}
             sx={{
-              borderRadius: 2,
-              mb: 0.5,
+              borderRadius: 2.5,
+              mb: 0.35,
+              py: 1,
+              minHeight: 42,
               "&.Mui-selected": { bgcolor: "var(--app-control-active-bg)" },
               "&.Mui-selected:hover": { bgcolor: "var(--app-control-active-bg)" },
               "&:hover": { bgcolor: "var(--app-hover-bg)" },
               color: item.active ? "var(--app-fg)" : "var(--app-muted)",
             }}
           >
-            <ListItemIcon sx={{ minWidth: 40, color: "inherit" }}>
+            <ListItemIcon sx={{ minWidth: collapsed ? 0 : 40, mr: collapsed ? 0 : 0.5, color: "inherit" }}>
               <NavIcon name={item.icon} />
             </ListItemIcon>
-            {collapsed ? null : <ListItemText primary={item.label} />}
+            {collapsed ? null : (
+              <ListItemText
+                primary={
+                  <Typography component="span" sx={{ fontSize: 13, fontWeight: item.active ? 700 : 600 }}>
+                    {item.label}
+                  </Typography>
+                }
+              />
+            )}
           </ListItemButton>
         ))}
       </List>
@@ -279,8 +308,8 @@ export function RegistryShell({
       <Box
         sx={{
           position: "fixed",
-          top: 56,
-          bottom: 48,
+          top: 64,
+          bottom: 36,
           left: 0,
           right: 0,
           display: "flex",
@@ -299,11 +328,12 @@ export function RegistryShell({
               bgcolor: "var(--app-chrome-bg)",
               borderRight: "1px solid var(--app-chrome-border)",
               color: "var(--app-fg)",
+              boxShadow: "12px 0 30px rgba(15, 23, 42, 0.03)",
             },
           }}
         >
           <Toolbar sx={{ minHeight: 8 }} />
-          <Box sx={{ px: 1, pt: 1, display: "grid", gap: 1.5 }}>
+          <Box sx={{ px: 1.25, pt: 1.5, display: "grid", gap: 1.75 }}>
             {renderNavSection("Catalog", catalogItems, { collapsed: sidebarCollapsed })}
             {renderNavSection("Publisher", publisherItems, { collapsed: sidebarCollapsed })}
             {renderNavSection("Reviewer", reviewerItems, { collapsed: sidebarCollapsed })}
@@ -327,7 +357,7 @@ export function RegistryShell({
           }}
         >
           <Toolbar sx={{ minHeight: 8 }} />
-          <Box sx={{ px: 1, pt: 1, display: "grid", gap: 1.5 }}>
+          <Box sx={{ px: 1.25, pt: 1.5, display: "grid", gap: 1.75 }}>
             {renderNavSection("Catalog", catalogItems, { onNavigate: closeMobileSidebar })}
             {renderNavSection("Publisher", publisherItems, { onNavigate: closeMobileSidebar })}
             {renderNavSection("Reviewer", reviewerItems, { onNavigate: closeMobileSidebar })}
@@ -335,7 +365,16 @@ export function RegistryShell({
           </Box>
         </Drawer>
 
-        <Box component="main" sx={{ flex: 1, overflowY: "auto", px: { xs: 2, sm: 3 }, py: 3, pb: 10 }}>
+        <Box
+          component="main"
+          sx={{
+            flex: 1,
+            overflowY: "auto",
+            px: { xs: 2, sm: 3, lg: 4 },
+            py: { xs: 2.5, sm: 3.5 },
+            pb: 8,
+          }}
+        >
           {children}
         </Box>
       </Box>
@@ -347,7 +386,7 @@ export function RegistryShell({
           left: 0,
           right: 0,
           bottom: 0,
-          height: 48,
+          height: 36,
           borderTop: "1px solid var(--app-chrome-border)",
           bgcolor: "var(--app-chrome-bg)",
           px: 2,
@@ -357,6 +396,7 @@ export function RegistryShell({
           color: "var(--app-muted)",
           fontSize: 11,
           zIndex: 1200,
+          backdropFilter: "blur(18px)",
         }}
       >
         <span>© {year} PureCipher. All rights reserved.</span>

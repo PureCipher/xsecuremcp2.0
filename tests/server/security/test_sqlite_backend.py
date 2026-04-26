@@ -312,3 +312,183 @@ class TestSQLiteBackendSchemaCreation:
         conn.close()
         backend.close()
         assert mode == "wal"
+
+
+class TestSQLiteBackendThreadSafety:
+    """The backend must give each thread its own sqlite3.Connection.
+
+    Regression test for the bug where a single shared connection across
+    threads risked SQLite's "Recursive use of cursors not allowed" and
+    "SQLite objects created in a thread can only be used in that same
+    thread" failures.
+    """
+
+    def test_each_thread_has_its_own_connection(self, backend):
+        """Two threads must observe two distinct Connection objects."""
+        import threading
+
+        seen: dict[int, object] = {}
+        barrier = threading.Barrier(2)
+
+        def _grab(thread_id: int) -> None:
+            barrier.wait(timeout=5)
+            seen[thread_id] = backend._get_conn()
+
+        threads = [
+            threading.Thread(target=_grab, args=(i,), daemon=True)
+            for i in range(2)
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=5)
+
+        assert len(seen) == 2
+        assert seen[0] is not seen[1]
+
+    def test_writes_from_multiple_threads_do_not_corrupt(self, backend):
+        """50 concurrent threads writing 20 records each must all land."""
+        import threading
+
+        n_threads = 50
+        per_thread = 20
+        errors: list[BaseException] = []
+        barrier = threading.Barrier(n_threads)
+
+        def _writer(thread_id: int) -> None:
+            try:
+                # All threads start writing at the same moment.
+                barrier.wait(timeout=10)
+                for i in range(per_thread):
+                    backend.append_provenance_record(
+                        "shared",
+                        {
+                            "record_id": f"t{thread_id}-r{i}",
+                            "thread_id": thread_id,
+                            "i": i,
+                        },
+                    )
+            except BaseException as exc:  # noqa: BLE001 — collect for assert
+                errors.append(exc)
+
+        threads = [
+            threading.Thread(target=_writer, args=(tid,), daemon=True)
+            for tid in range(n_threads)
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=30)
+
+        assert errors == [], f"writer threads raised: {errors!r}"
+        records = backend.load_provenance_records("shared")
+        assert len(records) == n_threads * per_thread
+        # Sanity check: every (thread_id, i) pair appears exactly once.
+        pairs = {(r["thread_id"], r["i"]) for r in records}
+        assert len(pairs) == n_threads * per_thread
+
+    def test_reader_and_writer_can_share_a_database(self, backend):
+        """WAL must allow a reader to make progress while a writer commits."""
+        import threading
+        import time
+
+        stop = threading.Event()
+        seen_counts: list[int] = []
+        errors: list[BaseException] = []
+
+        def _writer() -> None:
+            try:
+                for i in range(50):
+                    backend.append_provenance_record(
+                        "rw", {"record_id": f"r{i}", "i": i}
+                    )
+                    time.sleep(0)  # yield
+            finally:
+                stop.set()
+
+        def _reader() -> None:
+            try:
+                while not stop.is_set():
+                    seen_counts.append(len(backend.load_provenance_records("rw")))
+                    time.sleep(0)
+                # One final read after the writer is done.
+                seen_counts.append(len(backend.load_provenance_records("rw")))
+            except BaseException as exc:  # noqa: BLE001
+                errors.append(exc)
+
+        writer = threading.Thread(target=_writer, daemon=True)
+        reader = threading.Thread(target=_reader, daemon=True)
+        writer.start()
+        reader.start()
+        writer.join(timeout=30)
+        reader.join(timeout=30)
+
+        assert errors == []
+        assert seen_counts[-1] == 50  # eventually consistent
+
+    def test_close_invalidates_all_thread_connections(self, db_path):
+        """After close, any thread issuing a new query gets a fresh connection
+        instead of hitting "Cannot operate on a closed database."""
+        import threading
+
+        backend = SQLiteBackend(db_path)
+        try:
+            backend.append_provenance_record("ns", {"record_id": "first"})
+
+            # Warm a second thread's per-thread connection.
+            warmed: list[object] = []
+            done = threading.Event()
+
+            def _warm() -> None:
+                warmed.append(backend._get_conn())
+                done.set()
+
+            t = threading.Thread(target=_warm, daemon=True)
+            t.start()
+            assert done.wait(timeout=5)
+            t.join(timeout=5)
+            assert len(warmed) == 1
+
+            # Close from the main thread closes every tracked connection,
+            # including the second thread's.
+            backend.close()
+
+            # Issuing a new write from the main thread must succeed —
+            # close() is non-final.
+            backend.append_provenance_record("ns", {"record_id": "second"})
+
+            # And another thread also reconnects transparently.
+            errors: list[BaseException] = []
+            results: list[list[dict]] = []
+
+            def _read_after_close() -> None:
+                try:
+                    results.append(backend.load_provenance_records("ns"))
+                except BaseException as exc:  # noqa: BLE001
+                    errors.append(exc)
+
+            reader = threading.Thread(target=_read_after_close, daemon=True)
+            reader.start()
+            reader.join(timeout=5)
+            assert errors == []
+            assert len(results) == 1
+            ids = sorted(r["record_id"] for r in results[0])
+            assert ids == ["first", "second"]
+        finally:
+            backend.close()
+
+    def test_busy_timeout_pragma_is_set(self, backend):
+        """Each connection must come with PRAGMA busy_timeout applied."""
+        conn = backend._get_conn()
+        timeout_ms = conn.execute("PRAGMA busy_timeout").fetchone()[0]
+        assert timeout_ms > 0
+
+    def test_busy_timeout_configurable(self, db_path):
+        """Constructor knob must propagate to the connection pragma."""
+        backend = SQLiteBackend(db_path, busy_timeout_ms=12345)
+        try:
+            conn = backend._get_conn()
+            timeout_ms = conn.execute("PRAGMA busy_timeout").fetchone()[0]
+            assert timeout_ms == 12345
+        finally:
+            backend.close()

@@ -10,32 +10,33 @@ export function MuiThemeRoot({ children }: { children: React.ReactNode }) {
   const { themeId } = useAppTheme();
 
   const theme = useMemo(() => {
-    const isLight = themeId === "paper-contrast" || themeId === "sandstone-day";
+    const isDark = themeId === "slate-night";
+    const isLight = !isDark;
     return createTheme({
       palette: {
         mode: isLight ? "light" : "dark",
         background: {
           // Must be concrete colors: MUI parses/manipulates these.
           // We still visually align via CSS variables in globals/CssBaseline.
-          default: isLight ? "#f8fafc" : "#0b1220",
-          paper: isLight ? "#ffffff" : "#0f172a",
+          default: isLight ? "#f6f8fb" : "#0f172a",
+          paper: isLight ? "#ffffff" : "#1e293b",
         },
         text: {
           // Must be concrete colors: MUI parses/manipulates these.
-          primary: isLight ? "#0f172a" : "#e2e8f0",
-          secondary: isLight ? "#475569" : "#94a3b8",
+          primary: isLight ? "#111827" : "#f8fafc",
+          secondary: isLight ? "#64748b" : "#cbd5e1",
         },
         primary: {
           // MUI expects a concrete color value here (it parses the string).
           // We still visually align via CSS variable-driven surfaces/text,
           // but keep palette colors as real hex to avoid SSR/prerender crashes.
-          main: isLight ? "#0ea5a6" : "#22d3ee",
-          contrastText: "#0b1220",
+          main: isLight ? "#2563eb" : "#38bdf8",
+          contrastText: isLight ? "#ffffff" : "#020617",
         },
-        divider: isLight ? "rgba(15, 23, 42, 0.14)" : "rgba(226, 232, 240, 0.14)",
+        divider: isLight ? "rgba(15, 23, 42, 0.1)" : "rgba(226, 232, 240, 0.12)",
       },
       shape: {
-        borderRadius: 14,
+        borderRadius: 0,
       },
       typography: {
         fontFamily: "var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial",
@@ -43,19 +44,19 @@ export function MuiThemeRoot({ children }: { children: React.ReactNode }) {
         // mixed Tailwind + MUI screens converge as we migrate.
         fontSize: 14,
         h4: {
-          fontWeight: 800,
-          fontSize: "1.9rem",
-          lineHeight: 1.15,
+          fontWeight: 750,
+          fontSize: "1.875rem",
+          lineHeight: 1.18,
           letterSpacing: "-0.02em",
         },
         h5: {
-          fontWeight: 800,
+          fontWeight: 750,
           fontSize: "1.45rem",
           lineHeight: 1.2,
           letterSpacing: "-0.015em",
         },
         h6: {
-          fontWeight: 800,
+          fontWeight: 750,
           fontSize: "1.15rem",
           lineHeight: 1.25,
           letterSpacing: "-0.01em",
@@ -75,15 +76,15 @@ export function MuiThemeRoot({ children }: { children: React.ReactNode }) {
         overline: {
           fontSize: "0.7rem",
           lineHeight: 1.4,
-          letterSpacing: "0.16em",
+          letterSpacing: "0.08em",
           textTransform: "uppercase",
-          fontWeight: 800,
+          fontWeight: 700,
         },
         button: {
-          textTransform: "uppercase",
-          letterSpacing: "0.12em",
+          textTransform: "none",
+          letterSpacing: "0.01em",
           fontWeight: 700,
-          fontSize: "0.7rem",
+          fontSize: "0.8125rem",
         },
       },
       components: {
@@ -92,6 +93,30 @@ export function MuiThemeRoot({ children }: { children: React.ReactNode }) {
             body: {
               backgroundColor: "var(--app-bg)",
               color: "var(--app-fg)",
+              textRendering: "optimizeLegibility",
+            },
+          },
+        },
+        MuiCard: {
+          variants: [
+            {
+              props: { variant: "outlined" },
+              style: {
+                borderRadius: 0,
+                borderColor: "var(--app-border)",
+                backgroundColor: "var(--app-surface)",
+                boxShadow: "0 14px 40px rgba(15, 23, 42, 0.06)",
+              },
+            },
+          ],
+        },
+        MuiCardContent: {
+          styleOverrides: {
+            root: {
+              padding: 24,
+              "&:last-child": {
+                paddingBottom: 24,
+              },
             },
           },
         },
@@ -117,7 +142,213 @@ export function MuiThemeRoot({ children }: { children: React.ReactNode }) {
           },
           styleOverrides: {
             root: {
-              borderRadius: 9999,
+              borderRadius: 0,
+              minHeight: 36,
+              boxShadow: "none",
+            },
+          },
+        },
+        MuiToggleButton: {
+          styleOverrides: {
+            root: {
+              borderRadius: 0,
+              borderColor: "var(--app-control-border)",
+              backgroundColor: "var(--app-control-bg)",
+              color: "var(--app-muted)",
+              fontSize: 12,
+              fontWeight: 700,
+              letterSpacing: "0.01em",
+              textTransform: "none",
+              "&.Mui-selected": {
+                borderColor: "var(--app-accent)",
+                backgroundColor: "var(--app-control-active-bg)",
+                color: "var(--app-fg)",
+              },
+              "&.Mui-selected:hover": {
+                backgroundColor: "var(--app-control-active-bg)",
+              },
+              "&:hover": {
+                backgroundColor: "var(--app-hover-bg)",
+              },
+            },
+          },
+        },
+        MuiDialog: {
+          styleOverrides: {
+            paper: {
+              borderRadius: 0,
+              border: "1px solid var(--app-border)",
+              backgroundColor: "var(--app-surface)",
+              backgroundImage: "none",
+              boxShadow: "0 24px 70px rgba(15, 23, 42, 0.22)",
+            },
+          },
+        },
+        MuiDialogTitle: {
+          styleOverrides: {
+            root: {
+              color: "var(--app-fg)",
+              fontWeight: 750,
+            },
+          },
+        },
+        MuiAlert: {
+          styleOverrides: {
+            root: {
+              borderRadius: 0,
+              border: "1px solid var(--app-border)",
+              boxShadow: "none",
+            },
+          },
+        },
+        MuiDivider: {
+          styleOverrides: {
+            root: {
+              borderColor: "var(--app-border)",
+            },
+          },
+        },
+        MuiCardActionArea: {
+          styleOverrides: {
+            root: {
+              borderRadius: 0,
+              "&:hover": {
+                backgroundColor: "var(--app-hover-bg)",
+              },
+            },
+          },
+        },
+        MuiChip: {
+          styleOverrides: {
+            root: {
+              borderRadius: 0,
+              fontWeight: 700,
+              letterSpacing: "0.01em",
+              textTransform: "none",
+            },
+            outlined: {
+              borderColor: "var(--app-control-border)",
+            },
+          },
+        },
+        MuiTabs: {
+          styleOverrides: {
+            root: {
+              minHeight: 44,
+            },
+            indicator: {
+              backgroundColor: "var(--app-accent)",
+              borderRadius: 0,
+              height: 3,
+            },
+          },
+        },
+        MuiTab: {
+          styleOverrides: {
+            root: {
+              minHeight: 44,
+              fontSize: 13,
+              fontWeight: 700,
+              letterSpacing: "0.01em",
+              textTransform: "none",
+              color: "var(--app-muted)",
+              "&.Mui-selected": {
+                color: "var(--app-fg)",
+              },
+            },
+          },
+        },
+        MuiTooltip: {
+          styleOverrides: {
+            tooltip: {
+              backgroundColor: "var(--app-fg)",
+              color: "var(--app-bg)",
+              border: "1px solid var(--app-border)",
+              boxShadow: "0 18px 48px rgba(15, 23, 42, 0.18)",
+              borderRadius: 0,
+              fontSize: 12,
+              lineHeight: 1.45,
+            },
+            arrow: {
+              color: "var(--app-fg)",
+            },
+          },
+        },
+        MuiPopover: {
+          styleOverrides: {
+            paper: {
+              borderRadius: 0,
+              border: "1px solid var(--app-border)",
+              boxShadow: "0 22px 60px rgba(15, 23, 42, 0.16)",
+              backgroundImage: "none",
+            },
+          },
+        },
+        MuiMenu: {
+          styleOverrides: {
+            paper: {
+              backgroundColor: "var(--app-surface)",
+              color: "var(--app-fg)",
+              border: "1px solid var(--app-border)",
+            },
+          },
+        },
+        MuiOutlinedInput: {
+          styleOverrides: {
+            root: {
+              backgroundColor: "var(--app-control-bg)",
+              borderRadius: 0,
+              "& .MuiOutlinedInput-notchedOutline": {
+                borderColor: "var(--app-control-border)",
+              },
+              "&:hover .MuiOutlinedInput-notchedOutline": {
+                borderColor: "var(--app-control-border)",
+              },
+              "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
+                borderColor: "var(--app-accent)",
+                boxShadow: "0 0 0 3px var(--app-control-active-bg)",
+              },
+            },
+            input: {
+              color: "var(--app-fg)",
+            },
+          },
+        },
+        MuiInputLabel: {
+          styleOverrides: {
+            root: {
+              color: "var(--app-muted)",
+              "&.Mui-focused": {
+                color: "var(--app-fg)",
+              },
+            },
+          },
+        },
+        MuiFormHelperText: {
+          styleOverrides: {
+            root: {
+              color: "var(--app-muted)",
+            },
+          },
+        },
+        MuiTableHead: {
+          styleOverrides: {
+            root: {
+              "& .MuiTableCell-root": {
+                fontSize: 12,
+                fontWeight: 700,
+                letterSpacing: "0.01em",
+                textTransform: "none",
+                color: "var(--app-muted)",
+                borderBottomColor: "var(--app-border)",
+              },
+            },
+          },
+        },
+        MuiTableCell: {
+          styleOverrides: {
+            root: {
+              borderBottomColor: "var(--app-border)",
             },
           },
         },

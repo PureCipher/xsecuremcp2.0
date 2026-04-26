@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
-import { Box, Typography } from "@mui/material";
+import { Box } from "@mui/material";
+import { RegistryPageHeader } from "@/components/security";
 
 import {
   getPolicyManagement,
@@ -22,18 +23,11 @@ export default async function PolicyPage() {
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
-      <Box component="header" sx={{ display: "grid", gap: 0.5 }}>
-        <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
-          Policy management
-        </Typography>
-        <Typography variant="h4" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
-          Propose, review, and apply SecureMCP rules
-        </Typography>
-        <Typography variant="body2" sx={{ mt: 0.5, maxWidth: 900, color: "var(--app-muted)" }}>
-          Draft changes first, run a quick simulation, approve them before they go live, and keep every draft tied to
-          the live policy version it came from.
-        </Typography>
-      </Box>
+      <RegistryPageHeader
+        eyebrow="Policy management"
+        title="Propose, review, and apply SecureMCP rules"
+        description="Draft changes first, run a quick simulation, approve them before they go live, and keep every draft tied to the live policy version it came from."
+      />
 
       <PolicyManager initialData={policyData ?? {}} currentUsername={username} />
     </Box>

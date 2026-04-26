@@ -14,21 +14,13 @@ export function MetricCard({
   accent?: boolean;
 }) {
   return (
-    <Card
-      variant="outlined"
-      sx={{
-        borderRadius: 4,
-        borderColor: "var(--app-border)",
-        bgcolor: "var(--app-surface)",
-        boxShadow: "none",
-      }}
-    >
-      <CardContent sx={{ p: 2.5 }}>
+    <Card variant="outlined">
+      <CardContent>
         <Typography
           sx={{
             fontSize: 12,
-            fontWeight: 800,
-            letterSpacing: "0.18em",
+            fontWeight: 700,
+            letterSpacing: "0.04em",
             textTransform: "uppercase",
             color: "var(--app-muted)",
           }}
@@ -39,8 +31,9 @@ export function MetricCard({
         <Typography
           sx={{
             mt: 1,
-            fontSize: 20,
-            fontWeight: 900,
+            fontSize: 24,
+            lineHeight: 1.15,
+            fontWeight: 750,
             color: accent ? "var(--app-accent)" : "var(--app-fg)",
           }}
         >

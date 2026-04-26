@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from starlette.requests import Request
@@ -12,14 +13,43 @@ def _status_code_from_payload(payload: dict[str, Any]) -> int:
     return payload["status"] if isinstance(payload.get("status"), int) else 200
 
 
-def mount_policy_routes(server: Any, api: Any, prefix: str) -> None:
-    """Mount policy-related HTTP routes onto a SecureMCP server."""
+def mount_policy_routes(
+    server: Any,
+    api: Any,
+    prefix: str,
+    *,
+    route_decorator: Callable[..., Callable[[Callable], Callable]] | None = None,
+) -> None:
+    """Mount policy-related HTTP routes onto a SecureMCP server.
 
-    @server.custom_route(f"{prefix}/policy", methods=["GET"])
+    Args:
+        server: The FastMCP server instance.
+        api: The shared SecurityAPI handle.
+        prefix: URL prefix.
+        route_decorator: Optional override that wraps each route's
+            handler before registration. When provided, used in place of
+            ``server.custom_route``. The auth-aware decorator from
+            :func:`fastmcp.server.security.http.api.mount_security_routes`
+            is plumbed through here so policy endpoints inherit the
+            same authentication enforcement as the rest of the API.
+    """
+    if route_decorator is None:
+        # Back-compat: callers that don't pass a decorator get the raw
+        # ``server.custom_route``. ``mount_security_routes`` always
+        # passes the secured wrapper so the security HTTP API is
+        # auth-gated end-to-end.
+        def _default(path: str, *, methods: list[str]):
+            return server.custom_route(path, methods=methods)
+
+        _route = _default
+    else:
+        _route = route_decorator
+
+    @_route(f"{prefix}/policy", methods=["GET"])
     async def policy_status_endpoint(request: Request) -> JSONResponse:
         return JSONResponse(api.get_policy_status())
 
-    @server.custom_route(f"{prefix}/policy/audit", methods=["GET"])
+    @_route(f"{prefix}/policy/audit", methods=["GET"])
     async def policy_audit_endpoint(request: Request) -> JSONResponse:
         actor = request.query_params.get("actor")
         resource = request.query_params.get("resource")
@@ -34,18 +64,18 @@ def mount_policy_routes(server: Any, api: Any, prefix: str) -> None:
             )
         )
 
-    @server.custom_route(f"{prefix}/policy/audit/stats", methods=["GET"])
+    @_route(f"{prefix}/policy/audit/stats", methods=["GET"])
     async def policy_audit_stats_endpoint(request: Request) -> JSONResponse:
         return JSONResponse(api.get_policy_audit_statistics())
 
-    @server.custom_route(f"{prefix}/policy/simulate", methods=["POST"])
+    @_route(f"{prefix}/policy/simulate", methods=["POST"])
     async def policy_simulate_endpoint(request: Request) -> JSONResponse:
         body = await request.json()
         scenarios = body.get("scenarios", [])
         result = await api.simulate_policy(scenarios)
         return JSONResponse(result)
 
-    @server.custom_route(f"{prefix}/policy/schema", methods=["GET"])
+    @_route(f"{prefix}/policy/schema", methods=["GET"])
     async def policy_schema_endpoint(request: Request) -> JSONResponse:
         jurisdiction = request.query_params.get("jurisdiction")
         category = request.query_params.get("category")
@@ -53,15 +83,15 @@ def mount_policy_routes(server: Any, api: Any, prefix: str) -> None:
             api.get_policy_schema(jurisdiction=jurisdiction, category=category)
         )
 
-    @server.custom_route(f"{prefix}/policy/bundles", methods=["GET"])
+    @_route(f"{prefix}/policy/bundles", methods=["GET"])
     async def policy_bundles_endpoint(request: Request) -> JSONResponse:
         return JSONResponse(api.get_policy_bundles())
 
-    @server.custom_route(f"{prefix}/policy/packs", methods=["GET"])
+    @_route(f"{prefix}/policy/packs", methods=["GET"])
     async def policy_packs_endpoint(request: Request) -> JSONResponse:
         return JSONResponse(api.get_policy_packs())
 
-    @server.custom_route(f"{prefix}/policy/packs", methods=["POST"])
+    @_route(f"{prefix}/policy/packs", methods=["POST"])
     async def policy_packs_save_endpoint(request: Request) -> JSONResponse:
         body = await request.json()
         payload = await api.save_policy_pack(
@@ -86,13 +116,13 @@ def mount_policy_routes(server: Any, api: Any, prefix: str) -> None:
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
-    @server.custom_route(f"{prefix}/policy/packs/{{pack_id}}", methods=["DELETE"])
+    @_route(f"{prefix}/policy/packs/{{pack_id}}", methods=["DELETE"])
     async def policy_packs_delete_endpoint(request: Request) -> JSONResponse:
         pack_id = request.path_params.get("pack_id", "")
         payload = api.delete_policy_pack(str(pack_id))
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
-    @server.custom_route(
+    @_route(
         f"{prefix}/policy/bundles/{{bundle_id}}/stage", methods=["POST"]
     )
     async def policy_bundle_stage_endpoint(request: Request) -> JSONResponse:
@@ -105,7 +135,7 @@ def mount_policy_routes(server: Any, api: Any, prefix: str) -> None:
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
-    @server.custom_route(f"{prefix}/policy/packs/{{pack_id}}/stage", methods=["POST"])
+    @_route(f"{prefix}/policy/packs/{{pack_id}}/stage", methods=["POST"])
     async def policy_pack_stage_endpoint(request: Request) -> JSONResponse:
         pack_id = request.path_params.get("pack_id", "")
         body = await request.json()
@@ -116,11 +146,11 @@ def mount_policy_routes(server: Any, api: Any, prefix: str) -> None:
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
-    @server.custom_route(f"{prefix}/policy/environments", methods=["GET"])
+    @_route(f"{prefix}/policy/environments", methods=["GET"])
     async def policy_environments_endpoint(request: Request) -> JSONResponse:
         return JSONResponse(api.get_policy_environment_profiles())
 
-    @server.custom_route(
+    @_route(
         f"{prefix}/policy/environments/{{environment_id}}/capture", methods=["POST"]
     )
     async def policy_environment_capture_endpoint(request: Request) -> JSONResponse:
@@ -143,11 +173,11 @@ def mount_policy_routes(server: Any, api: Any, prefix: str) -> None:
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
-    @server.custom_route(f"{prefix}/policy/promotions", methods=["GET"])
+    @_route(f"{prefix}/policy/promotions", methods=["GET"])
     async def policy_promotions_endpoint(request: Request) -> JSONResponse:
         return JSONResponse(api.get_policy_promotions())
 
-    @server.custom_route(f"{prefix}/policy/promotions", methods=["POST"])
+    @_route(f"{prefix}/policy/promotions", methods=["POST"])
     async def policy_promotions_stage_endpoint(request: Request) -> JSONResponse:
         body = await request.json()
         payload = await api.stage_policy_promotion(
@@ -158,11 +188,11 @@ def mount_policy_routes(server: Any, api: Any, prefix: str) -> None:
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
-    @server.custom_route(f"{prefix}/policy/analytics", methods=["GET"])
+    @_route(f"{prefix}/policy/analytics", methods=["GET"])
     async def policy_analytics_endpoint(request: Request) -> JSONResponse:
         return JSONResponse(api.get_policy_analytics())
 
-    @server.custom_route(f"{prefix}/policy/export", methods=["GET"])
+    @_route(f"{prefix}/policy/export", methods=["GET"])
     async def policy_export_endpoint(request: Request) -> JSONResponse:
         raw_version = request.query_params.get("version")
         try:
@@ -175,7 +205,7 @@ def mount_policy_routes(server: Any, api: Any, prefix: str) -> None:
         payload = api.export_policy_snapshot(version_number=version_number)
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
-    @server.custom_route(f"{prefix}/policy/migrations/preview", methods=["POST"])
+    @_route(f"{prefix}/policy/migrations/preview", methods=["POST"])
     async def policy_migration_preview_endpoint(request: Request) -> JSONResponse:
         body = await request.json()
         payload = api.preview_policy_migration(
@@ -196,7 +226,7 @@ def mount_policy_routes(server: Any, api: Any, prefix: str) -> None:
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
-    @server.custom_route(f"{prefix}/policy/import", methods=["POST"])
+    @_route(f"{prefix}/policy/import", methods=["POST"])
     async def policy_import_endpoint(request: Request) -> JSONResponse:
         try:
             body = await request.json()
@@ -216,52 +246,52 @@ def mount_policy_routes(server: Any, api: Any, prefix: str) -> None:
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
-    @server.custom_route(f"{prefix}/policy/versions", methods=["GET"])
+    @_route(f"{prefix}/policy/versions", methods=["GET"])
     async def policy_versions_endpoint(request: Request) -> JSONResponse:
         return JSONResponse(api.get_policy_versions())
 
-    @server.custom_route(f"{prefix}/policy/versions/rollback", methods=["POST"])
+    @_route(f"{prefix}/policy/versions/rollback", methods=["POST"])
     async def policy_rollback_endpoint(request: Request) -> JSONResponse:
         body = await request.json()
         version_number = body.get("version_number", 0)
         reason = body.get("reason", "")
         return JSONResponse(await api.rollback_policy_version(version_number, reason))
 
-    @server.custom_route(f"{prefix}/policy/versions/diff", methods=["GET"])
+    @_route(f"{prefix}/policy/versions/diff", methods=["GET"])
     async def policy_diff_endpoint(request: Request) -> JSONResponse:
         v1 = int(request.query_params.get("v1", "0"))
         v2 = int(request.query_params.get("v2", "0"))
         return JSONResponse(api.diff_policy_versions(v1, v2))
 
-    @server.custom_route(f"{prefix}/policy/validate", methods=["POST"])
+    @_route(f"{prefix}/policy/validate", methods=["POST"])
     async def policy_validate_endpoint(request: Request) -> JSONResponse:
         body = await request.json()
         config = body.get("config", {})
         return JSONResponse(api.validate_policy(config))
 
-    @server.custom_route(f"{prefix}/policy/validate/providers", methods=["GET"])
+    @_route(f"{prefix}/policy/validate/providers", methods=["GET"])
     async def policy_validate_providers_endpoint(request: Request) -> JSONResponse:
         return JSONResponse(api.validate_providers())
 
-    @server.custom_route(f"{prefix}/policy/metrics", methods=["GET"])
+    @_route(f"{prefix}/policy/metrics", methods=["GET"])
     async def policy_metrics_endpoint(request: Request) -> JSONResponse:
         return JSONResponse(api.get_policy_metrics())
 
-    @server.custom_route(f"{prefix}/policy/alerts", methods=["GET"])
+    @_route(f"{prefix}/policy/alerts", methods=["GET"])
     async def policy_alerts_endpoint(request: Request) -> JSONResponse:
         limit = int(request.query_params.get("limit", "50"))
         return JSONResponse(api.get_policy_alerts(limit=limit))
 
-    @server.custom_route(f"{prefix}/policy/governance", methods=["GET"])
+    @_route(f"{prefix}/policy/governance", methods=["GET"])
     async def policy_governance_endpoint(request: Request) -> JSONResponse:
         return JSONResponse(api.get_governance_proposals())
 
-    @server.custom_route(f"{prefix}/policy/governance/{{proposal_id}}", methods=["GET"])
+    @_route(f"{prefix}/policy/governance/{{proposal_id}}", methods=["GET"])
     async def policy_governance_detail_endpoint(request: Request) -> JSONResponse:
         proposal_id = request.path_params.get("proposal_id", "")
         return JSONResponse(api.get_governance_proposal(proposal_id))
 
-    @server.custom_route(f"{prefix}/policy/governance/proposals", methods=["POST"])
+    @_route(f"{prefix}/policy/governance/proposals", methods=["POST"])
     async def policy_governance_create_endpoint(request: Request) -> JSONResponse:
         body = await request.json()
         payload = await api.create_governance_proposal(
@@ -278,7 +308,7 @@ def mount_policy_routes(server: Any, api: Any, prefix: str) -> None:
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
-    @server.custom_route(
+    @_route(
         f"{prefix}/policy/governance/{{proposal_id}}/approve",
         methods=["POST"],
     )
@@ -292,7 +322,7 @@ def mount_policy_routes(server: Any, api: Any, prefix: str) -> None:
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
-    @server.custom_route(
+    @_route(
         f"{prefix}/policy/governance/{{proposal_id}}/assign",
         methods=["POST"],
     )
@@ -307,7 +337,7 @@ def mount_policy_routes(server: Any, api: Any, prefix: str) -> None:
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
-    @server.custom_route(
+    @_route(
         f"{prefix}/policy/governance/{{proposal_id}}/simulate",
         methods=["POST"],
     )
@@ -321,7 +351,7 @@ def mount_policy_routes(server: Any, api: Any, prefix: str) -> None:
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
-    @server.custom_route(
+    @_route(
         f"{prefix}/policy/governance/{{proposal_id}}/deploy",
         methods=["POST"],
     )
@@ -335,7 +365,7 @@ def mount_policy_routes(server: Any, api: Any, prefix: str) -> None:
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
-    @server.custom_route(
+    @_route(
         f"{prefix}/policy/governance/{{proposal_id}}/reject",
         methods=["POST"],
     )
@@ -349,7 +379,7 @@ def mount_policy_routes(server: Any, api: Any, prefix: str) -> None:
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
-    @server.custom_route(
+    @_route(
         f"{prefix}/policy/governance/{{proposal_id}}/withdraw",
         methods=["POST"],
     )
@@ -363,7 +393,7 @@ def mount_policy_routes(server: Any, api: Any, prefix: str) -> None:
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
-    @server.custom_route(f"{prefix}/policy/plugins", methods=["GET"])
+    @_route(f"{prefix}/policy/plugins", methods=["GET"])
     async def policy_plugins_endpoint(request: Request) -> JSONResponse:
         """List all registered policy type plugins."""
         from fastmcp.server.security.policy.plugin_registry import get_registry

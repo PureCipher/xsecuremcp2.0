@@ -23,8 +23,9 @@ export function JsonViewer({
       sx={{
         borderRadius: 3,
         border: "1px solid var(--app-border)",
-        bgcolor: "var(--app-control-bg)",
+        bgcolor: "var(--app-surface)",
         backgroundImage: "none",
+        boxShadow: "0 12px 34px rgba(15, 23, 42, 0.04)",
         "&:before": { display: "none" },
       }}
     >
@@ -48,7 +49,7 @@ export function JsonViewer({
             p: 1.5,
             borderRadius: 2,
             border: "1px solid var(--app-border)",
-            bgcolor: "var(--app-surface)",
+            bgcolor: "var(--app-control-bg)",
             color: "var(--app-fg)",
             fontSize: 11,
             lineHeight: 1.5,

@@ -8,6 +8,7 @@ and tamper detection for the full operation history.
 from __future__ import annotations
 
 import logging
+import secrets
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
@@ -24,6 +25,13 @@ if TYPE_CHECKING:
     from fastmcp.server.security.provenance.schemes import LedgerScheme
 
 logger = logging.getLogger(__name__)
+
+# Legacy ledgers wrote the literal string ``"genesis"`` as the first
+# record's ``previous_hash``. New ledgers use a per-instance random
+# nonce so an attacker who knows the format can't forge a fresh chain
+# rooted at a guessable sentinel. Both forms are accepted by
+# ``verify_chain`` for backward compatibility.
+_LEGACY_GENESIS_SENTINEL = "genesis"
 
 
 class ProvenanceLedger:
@@ -73,6 +81,7 @@ class ProvenanceLedger:
         backend: StorageBackend | None = None,
         event_bus: SecurityEventBus | None = None,
         scheme: LedgerScheme | None = None,
+        genesis_hash: str | None = None,
     ) -> None:
         self.ledger_id = ledger_id
         self._backend = backend
@@ -81,6 +90,14 @@ class ProvenanceLedger:
         self._records: list[ProvenanceRecord] = []
         self._record_index: dict[str, int] = {}
         self._merkle_tree = MerkleTree()
+        # Per-ledger genesis nonce. Mixed with random entropy so an
+        # attacker can't forge a fresh chain rooted at a guessable
+        # sentinel. Materialized lazily on the first ``record()`` call
+        # if not provided by the caller, then frozen for the ledger's
+        # lifetime. When loading from a backend we recover whatever
+        # nonce the first persisted record used (which may be the
+        # ``_LEGACY_GENESIS_SENTINEL`` for old ledgers).
+        self._genesis_hash: str | None = genesis_hash
 
         # Load persisted records and rebuild indices
         if self._backend is not None:
@@ -103,6 +120,35 @@ class ProvenanceLedger:
             self._merkle_tree.add_leaf(record_hash)
             if self._scheme is not None:
                 self._scheme.add_record_hash(record_hash)
+        # Recover the genesis hash from the first persisted record so
+        # subsequent verify_chain calls match what was written.
+        if self._records and self._genesis_hash is None:
+            self._genesis_hash = self._records[0].previous_hash
+
+    def _get_or_create_genesis_hash(self) -> str:
+        """Return the per-ledger genesis nonce, generating one on first use."""
+        if self._genesis_hash is None:
+            # 32 random bytes = 64 hex chars. Mixed with the ledger_id
+            # so it's visually distinguishable from a record hash and so
+            # different ledgers can't accidentally share a root.
+            self._genesis_hash = (
+                f"genesis-{self.ledger_id}-{secrets.token_hex(32)}"
+            )
+        return self._genesis_hash
+
+    @property
+    def genesis_hash(self) -> str | None:
+        """The ledger's genesis nonce (or ``None`` if no records yet exist)."""
+        return self._genesis_hash
+
+    def attach_event_bus(self, event_bus: SecurityEventBus | None) -> None:
+        """Wire an event bus into this ledger after construction.
+
+        Public alternative to assigning to the private ``_event_bus``
+        attribute. Used by the security orchestrator and by application
+        code that builds the ledger before the bus exists.
+        """
+        self._event_bus = event_bus
 
     def record(
         self,
@@ -135,8 +181,13 @@ class ProvenanceLedger:
         input_hash = hash_data(input_data) if input_data is not None else ""
         output_hash = hash_data(output_data) if output_data is not None else ""
 
-        # Chain to previous record
-        previous_hash = self._records[-1].compute_hash() if self._records else "genesis"
+        # Chain to previous record (or to the per-ledger genesis nonce
+        # for the very first record).
+        previous_hash = (
+            self._records[-1].compute_hash()
+            if self._records
+            else self._get_or_create_genesis_hash()
+        )
 
         entry = ProvenanceRecord(
             action=action,
@@ -261,10 +312,15 @@ class ProvenanceLedger:
         if not self._records:
             return True
 
-        # First record should link to genesis
-        if self._records[0].previous_hash != "genesis":
-            logger.warning("Provenance chain: invalid genesis link")
-            return False
+        # First record must link to either this ledger's genesis nonce
+        # (current behaviour) or the literal legacy ``"genesis"`` string
+        # (back-compat for ledgers persisted before the nonce was added).
+        first_link = self._records[0].previous_hash
+        expected_genesis = self._genesis_hash
+        if expected_genesis is None or first_link != expected_genesis:
+            if first_link != _LEGACY_GENESIS_SENTINEL:
+                logger.warning("Provenance chain: invalid genesis link")
+                return False
 
         # Each subsequent record should link to the hash of its predecessor
         for i in range(1, len(self._records)):
@@ -370,8 +426,14 @@ class ProvenanceLedger:
         record = self._records[idx]
         proof = self._merkle_tree.get_proof(idx)
 
-        # Chain context
-        predecessor_hash = "genesis" if idx == 0 else self._records[idx - 1].compute_hash()
+        # Chain context — use the actual previous_hash on the genesis
+        # record (which may be the per-ledger nonce or, for legacy
+        # ledgers, the literal ``"genesis"`` string).
+        predecessor_hash = (
+            self._records[0].previous_hash
+            if idx == 0
+            else self._records[idx - 1].compute_hash()
+        )
         successor_hash = (
             self._records[idx + 1].compute_hash()
             if idx + 1 < len(self._records)

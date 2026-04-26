@@ -6,7 +6,10 @@ trust queries, tool profiles, compliance integration, decorators, and history.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any, cast
+
+import pytest
 
 from fastmcp.server.security.alerts.bus import SecurityEventBus
 from fastmcp.server.security.alerts.handlers import BufferedHandler
@@ -23,6 +26,11 @@ from fastmcp.server.security.federation.federation import TrustFederation
 from fastmcp.server.security.gateway.tool_marketplace import (
     ToolMarketplace,
 )
+from fastmcp.server.security.policy.engine import PolicyEngine
+from fastmcp.server.security.policy.provider import (
+    AllowAllPolicy,
+    DenyAllPolicy,
+)
 from fastmcp.server.security.registry.registry import TrustRegistry
 from fastmcp.server.security.sandbox.enforcer import SandboxedRunner
 from fastmcp.server.security.sdk.client import (
@@ -31,6 +39,7 @@ from fastmcp.server.security.sdk.client import (
     ToolSecurityProfile,
 )
 from fastmcp.server.security.sdk.decorators import (
+    SecurityDenied,
     SecurityDecorator,
     SecurityDecoratorConfig,
 )
@@ -192,6 +201,119 @@ class TestSecurityChecks:
         client.check_tool("test-tool")
         assert len(handler.events) == 1
         assert handler.events[0].layer == "sdk"
+
+
+# ── Policy engine integration tests ──────────────────────────────
+
+
+class TestPolicyEngineIntegration:
+    """check_tool must actually consult the configured PolicyEngine.
+
+    Regression test for the bug where policy_allowed was wired in but the
+    engine was never invoked, so policy_allowed was always True.
+    """
+
+    def test_check_tool_consults_policy_engine_allow(self):
+        engine = PolicyEngine(providers=[AllowAllPolicy()])
+        client = _make_client(policy_engine=engine)
+
+        result = client.check_tool("good-tool", actor_id="alice")
+
+        assert result.policy_allowed is True
+        assert result.allowed is True
+        # Engine evaluation count proves we actually called it.
+        assert engine.evaluation_count == 1
+
+    def test_check_tool_consults_policy_engine_deny(self):
+        engine = PolicyEngine(providers=[DenyAllPolicy()])
+        client = _make_client(policy_engine=engine)
+
+        result = client.check_tool("any-tool", actor_id="alice")
+
+        assert result.policy_allowed is False
+        assert result.allowed is False
+        assert engine.evaluation_count == 1
+        assert engine.deny_count == 1
+        assert any("deny-all" in r for r in result.reasons)
+
+    def test_check_tool_no_policy_engine_unchanged(self):
+        client = _make_client()
+        result = client.check_tool("any-tool")
+        # When no engine is configured, the field stays at its dataclass
+        # default — but no policy decision was implied.
+        assert result.policy_allowed is True
+        assert result.allowed is True
+
+    def test_check_tool_policy_deny_combines_with_other_signals(self):
+        """A policy DENY must remain a DENY even if everything else allows."""
+        registry = TrustRegistry()
+        registry.register("good-tool", attestation=None)
+        engine = PolicyEngine(providers=[DenyAllPolicy()])
+        client = _make_client(registry=registry, policy_engine=engine)
+
+        result = client.check_tool("good-tool", min_trust_score=0.0)
+
+        assert result.policy_allowed is False
+        assert result.allowed is False
+        assert result.trust_score > 0  # registry signal still recorded
+
+    def test_check_tool_forwards_actor_and_action(self):
+        """The PolicyEvaluationContext must reflect the SDK call's actor."""
+        observed: list[Any] = []
+
+        class RecordingPolicy(AllowAllPolicy):
+            async def evaluate(self, context):
+                observed.append(context)
+                return await super().evaluate(context)
+
+        engine = PolicyEngine(providers=[RecordingPolicy()])
+        client = _make_client(policy_engine=engine)
+
+        client.check_tool(
+            "tool-x",
+            actor_id="alice",
+            policy_action="invoke",
+            policy_metadata={"src": "sdk-test"},
+        )
+
+        assert len(observed) == 1
+        ctx = observed[0]
+        assert ctx.actor_id == "alice"
+        assert ctx.action == "invoke"
+        assert ctx.resource_id == "tool-x"
+        assert ctx.metadata == {"src": "sdk-test"}
+
+    async def test_acheck_tool_awaits_engine_directly(self):
+        engine = PolicyEngine(providers=[DenyAllPolicy()])
+        client = _make_client(policy_engine=engine)
+
+        result = await client.acheck_tool("any-tool", actor_id="bob")
+
+        assert result.policy_allowed is False
+        assert result.allowed is False
+        assert engine.evaluation_count == 1
+
+    async def test_check_tool_inside_running_loop_raises(self):
+        """Sync check_tool inside an event loop must fail loudly, not silently
+        skip the policy. Callers should switch to acheck_tool."""
+        engine = PolicyEngine(providers=[AllowAllPolicy()])
+        client = _make_client(policy_engine=engine)
+
+        with pytest.raises(RuntimeError, match="acheck_tool"):
+            client.check_tool("tool-y")
+
+        # The engine was never evaluated because we refused to deadlock.
+        assert engine.evaluation_count == 0
+
+    def test_check_tool_inside_running_loop_no_engine_still_works(self):
+        """Without a policy engine the loop check is bypassed entirely."""
+
+        async def _run():
+            client = _make_client()  # no policy_engine
+            return client.check_tool("tool-z")
+
+        result = asyncio.run(_run())
+        assert result.allowed is True
 
 
 # ── Trust query tests ────────────────────────────────────────────
@@ -377,6 +499,271 @@ class TestSecurityDecorator:
         d = dec.to_dict()
         assert d["tool_count"] == 1
         assert "tool-a" in d["tools"]
+
+
+# ── SecurityDecorator enforcement tests ─────────────────────────
+
+
+class TestSecurityDecoratorEnforcement:
+    """The decorator must actually wrap and enforce — not just register.
+
+    Regression test for the bug where SecurityDecorator only stored
+    metadata and never gated, signed, or recorded anything at call time.
+    """
+
+    def test_call_without_client_raises(self):
+        """Wrapping works without a client; calling the wrapped fn fails loudly."""
+        security = SecurityDecorator()
+
+        @security("greet")
+        def greet(name: str) -> str:
+            return f"hi {name}"
+
+        # Wrapping itself does not raise — the registry path is intact.
+        assert security.tool_count == 1
+        assert security.get_config("greet") is not None
+
+        # Calling without a client must fail with a clear error.
+        with pytest.raises(RuntimeError, match="no client attached"):
+            greet("world")
+
+    def test_sync_wrapper_allows_when_check_passes(self):
+        client = SecureMCPClient()  # all checks effectively allow
+        security = SecurityDecorator(client=client)
+
+        @security("echo", min_trust_score=0.0)
+        def echo(text: str) -> str:
+            return text.upper()
+
+        assert echo("ping") == "PING"
+        assert client.check_count == 1
+
+    def test_sync_wrapper_blocks_revoked_tool(self):
+        crl = CertificateRevocationList()
+        crl.revoke("bad-tool")
+        client = SecureMCPClient(crl=crl)
+        security = SecurityDecorator(client=client)
+
+        @security("bad-tool")
+        def runs() -> str:  # pragma: no cover — must never execute
+            return "should not run"
+
+        with pytest.raises(SecurityDenied) as exc_info:
+            runs()
+        assert exc_info.value.result.is_revoked is True
+
+    def test_sync_wrapper_blocks_below_trust_threshold(self):
+        registry = TrustRegistry()
+        registry.register("low-trust", attestation=None)  # default trust 0.5
+        client = SecureMCPClient(registry=registry)
+        security = SecurityDecorator(client=client)
+
+        @security("low-trust", min_trust_score=0.99)
+        def runs() -> str:  # pragma: no cover
+            return "nope"
+
+        with pytest.raises(SecurityDenied) as exc_info:
+            runs()
+        assert any("Trust score" in r for r in exc_info.value.result.reasons)
+
+    def test_sync_wrapper_blocks_when_policy_denies(self):
+        engine = PolicyEngine(providers=[DenyAllPolicy()])
+        client = SecureMCPClient(policy_engine=engine)
+        security = SecurityDecorator(client=client)
+
+        @security("any")
+        def runs() -> str:  # pragma: no cover
+            return "nope"
+
+        with pytest.raises(SecurityDenied):
+            runs()
+        assert engine.deny_count == 1
+
+    def test_require_certification_enforced(self):
+        registry = TrustRegistry()
+        registry.register("uncertified", attestation=None)
+        client = SecureMCPClient(registry=registry)
+        security = SecurityDecorator(client=client)
+
+        @security("uncertified", require_certification=True)
+        def runs() -> str:  # pragma: no cover
+            return "nope"
+
+        with pytest.raises(SecurityDenied) as exc_info:
+            runs()
+        assert any(
+            "requires certification" in r for r in exc_info.value.result.reasons
+        )
+
+    def test_required_permissions_denied_without_manifest(self):
+        """If the manifest doesn't grant the required permission, deny."""
+        client = SecureMCPClient()
+        security = SecurityDecorator(client=client)
+
+        @security(
+            "needs-net",
+            required_permissions={PermissionScope.NETWORK_ACCESS},
+            sandbox_enabled=False,  # no manifest available
+        )
+        def runs() -> str:  # pragma: no cover
+            return "nope"
+
+        with pytest.raises(SecurityDenied) as exc_info:
+            runs()
+        assert any(
+            "missing required permissions" in r
+            for r in exc_info.value.result.reasons
+        )
+
+    def test_required_permissions_satisfied_by_manifest(self):
+        runner = SandboxedRunner()
+        client = SecureMCPClient(sandbox_runner=runner)
+
+        manifest = SecurityManifest(
+            tool_name="needs-net",
+            version="1.0.0",
+            author="acme",
+            permissions={PermissionScope.NETWORK_ACCESS},
+        )
+        security = SecurityDecorator(
+            client=client,
+            manifest_provider=lambda name, cfg: manifest,
+        )
+
+        @security(
+            "needs-net",
+            required_permissions={PermissionScope.NETWORK_ACCESS},
+            sandbox_enabled=True,
+        )
+        def runs() -> str:
+            return "ok"
+
+        assert runs() == "ok"
+
+    def test_provenance_recorded_on_success(self):
+        from fastmcp.server.security.provenance.ledger import ProvenanceLedger
+
+        provenance = ProvenanceLedger()
+        client = SecureMCPClient(provenance=provenance)
+        security = SecurityDecorator(client=client)
+
+        @security("traced")
+        def runs(value: int) -> int:
+            return value * 2
+
+        assert runs(21) == 42
+        records = provenance.get_records(resource_id="traced")
+        assert len(records) == 1
+        assert records[0].metadata.get("outcome") == "success"
+
+    def test_provenance_recorded_on_failure(self):
+        from fastmcp.server.security.provenance.ledger import ProvenanceLedger
+
+        provenance = ProvenanceLedger()
+        client = SecureMCPClient(provenance=provenance)
+        security = SecurityDecorator(client=client)
+
+        @security("flaky")
+        def runs() -> str:
+            raise ValueError("boom")
+
+        with pytest.raises(ValueError):
+            runs()
+        records = provenance.get_records(resource_id="flaky")
+        assert len(records) == 1
+        assert records[0].metadata.get("outcome") == "error"
+        assert records[0].metadata.get("error_type") == "ValueError"
+
+    def test_provenance_disabled_skips_recording(self):
+        from fastmcp.server.security.provenance.ledger import ProvenanceLedger
+
+        provenance = ProvenanceLedger()
+        client = SecureMCPClient(provenance=provenance)
+        security = SecurityDecorator(client=client)
+
+        @security("silent", record_provenance=False)
+        def runs() -> str:
+            return "ok"
+
+        runs()
+        assert provenance.get_records(resource_id="silent") == []
+
+    async def test_async_wrapper_enforces_via_acheck_tool(self):
+        engine = PolicyEngine(providers=[DenyAllPolicy()])
+        client = SecureMCPClient(policy_engine=engine)
+        security = SecurityDecorator(client=client)
+
+        @security("async-tool")
+        async def runs() -> str:  # pragma: no cover
+            return "nope"
+
+        with pytest.raises(SecurityDenied):
+            await runs()
+        assert engine.evaluation_count == 1
+
+    async def test_async_wrapper_runs_when_allowed(self):
+        client = SecureMCPClient()
+        security = SecurityDecorator(client=client)
+
+        @security("async-ok")
+        async def runs(value: int) -> int:
+            return value + 1
+
+        assert await runs(41) == 42
+
+    async def test_async_wrapper_enforces_timeout(self):
+        client = SecureMCPClient()
+        security = SecurityDecorator(client=client)
+
+        @security("slow", max_execution_seconds=0.05)
+        async def runs() -> str:
+            await asyncio.sleep(1)
+            return "never"  # pragma: no cover
+
+        with pytest.raises(asyncio.TimeoutError):
+            await runs()
+
+    def test_bare_decorator_uses_function_name(self):
+        client = SecureMCPClient()
+        security = SecurityDecorator(client=client)
+
+        @security
+        def my_named_tool(x: int) -> int:
+            return x
+
+        assert my_named_tool(7) == 7
+        assert security.get_config("my_named_tool") is not None
+
+    def test_decorator_preserves_function_metadata(self):
+        client = SecureMCPClient()
+        security = SecurityDecorator(client=client)
+
+        @security("documented")
+        def documented(x: int) -> int:
+            """Important docstring."""
+            return x
+
+        assert documented.__name__ == "documented"
+        assert documented.__doc__ == "Important docstring."
+
+    def test_security_denied_carries_result(self):
+        crl = CertificateRevocationList()
+        crl.revoke("bad")
+        client = SecureMCPClient(crl=crl)
+        security = SecurityDecorator(client=client)
+
+        @security("bad")
+        def runs() -> None:  # pragma: no cover
+            ...
+
+        try:
+            runs()
+        except SecurityDenied as exc:
+            assert exc.result.tool_name == "bad"
+            assert exc.result.is_revoked is True
+            assert "denied" in str(exc).lower()
+        else:
+            pytest.fail("SecurityDenied not raised")
 
 
 # ── Import tests ─────────────────────────────────────────────────

@@ -7,6 +7,8 @@ verify trust, and run compliance checks — all through one interface.
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -30,6 +32,11 @@ from fastmcp.server.security.federation.crl import CertificateRevocationList
 from fastmcp.server.security.federation.federation import TrustFederation
 from fastmcp.server.security.gateway.tool_marketplace import ToolMarketplace
 from fastmcp.server.security.policy.engine import PolicyEngine
+from fastmcp.server.security.policy.provider import (
+    PolicyDecision,
+    PolicyEvaluationContext,
+    PolicyResult,
+)
 from fastmcp.server.security.provenance.ledger import ProvenanceLedger
 from fastmcp.server.security.provenance.records import ProvenanceAction
 from fastmcp.server.security.registry.registry import TrustRegistry
@@ -37,6 +44,8 @@ from fastmcp.server.security.sandbox.enforcer import (
     ExecutionContext,
     SandboxedRunner,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -169,23 +178,103 @@ class SecureMCPClient:
         actor_id: str = "",
         manifest: SecurityManifest | None = None,
         min_trust_score: float = 0.0,
+        policy_metadata: dict | None = None,
+        policy_action: str = "call_tool",
     ) -> SecurityCheckResult:
         """Run a comprehensive security check on a tool.
 
-        Checks trust score, revocation status, certification,
-        and optionally creates a sandbox context.
+        Checks trust score, revocation status, certification, the configured
+        policy engine, and optionally creates a sandbox context. The policy
+        engine is awaited inline; if called from within a running event loop,
+        use :meth:`acheck_tool` instead.
 
         Args:
             tool_name: Name of the tool to check.
             actor_id: ID of the actor requesting execution.
             manifest: Optional manifest for sandbox context creation.
             min_trust_score: Minimum trust score required.
+            policy_metadata: Optional metadata forwarded to policy evaluation.
+            policy_action: Action label passed to the policy engine
+                (defaults to ``"call_tool"``).
 
         Returns:
             SecurityCheckResult with aggregated findings.
+
+        Raises:
+            RuntimeError: If a policy engine is configured and ``check_tool``
+                is invoked from inside an active asyncio event loop. Use
+                :meth:`acheck_tool` from async contexts.
+        """
+        result, reasons = self._run_local_checks(
+            tool_name=tool_name,
+            actor_id=actor_id,
+            manifest=manifest,
+            min_trust_score=min_trust_score,
+        )
+
+        if self._policy_engine is not None:
+            policy_result = self._evaluate_policy_sync(
+                tool_name=tool_name,
+                actor_id=actor_id,
+                action=policy_action,
+                metadata=policy_metadata,
+            )
+            self._apply_policy_result(result, reasons, policy_result)
+
+        return self._finalize_check(result, reasons)
+
+    async def acheck_tool(
+        self,
+        tool_name: str,
+        *,
+        actor_id: str = "",
+        manifest: SecurityManifest | None = None,
+        min_trust_score: float = 0.0,
+        policy_metadata: dict | None = None,
+        policy_action: str = "call_tool",
+    ) -> SecurityCheckResult:
+        """Async variant of :meth:`check_tool` that awaits the policy engine.
+
+        Use this from async code paths (e.g., inside an ASGI handler or a
+        coroutine). Behaviour is otherwise identical to :meth:`check_tool`.
+        """
+        result, reasons = self._run_local_checks(
+            tool_name=tool_name,
+            actor_id=actor_id,
+            manifest=manifest,
+            min_trust_score=min_trust_score,
+        )
+
+        if self._policy_engine is not None:
+            policy_result = await self._policy_engine.evaluate(
+                self._build_policy_context(
+                    tool_name=tool_name,
+                    actor_id=actor_id,
+                    action=policy_action,
+                    metadata=policy_metadata,
+                )
+            )
+            self._apply_policy_result(result, reasons, policy_result)
+
+        return self._finalize_check(result, reasons)
+
+    # ── Check helpers ────────────────────────────────────────────
+
+    def _run_local_checks(
+        self,
+        *,
+        tool_name: str,
+        actor_id: str,
+        manifest: SecurityManifest | None,
+        min_trust_score: float,
+    ) -> tuple[SecurityCheckResult, list[str]]:
+        """Run the synchronous portion of :meth:`check_tool`.
+
+        Returns the partially-populated result and the running reason list so
+        the policy step (which may be async) can be folded in afterwards.
         """
         result = SecurityCheckResult(tool_name=tool_name)
-        reasons = []
+        reasons: list[str] = []
 
         # Check CRL
         if self._crl and self._crl.is_revoked(tool_name):
@@ -225,6 +314,78 @@ class SecureMCPClient:
                 result.allowed = False
                 reasons.append(f"Sandbox blocked: {ctx.block_reason}")
 
+        return result, reasons
+
+    def _build_policy_context(
+        self,
+        *,
+        tool_name: str,
+        actor_id: str,
+        action: str,
+        metadata: dict | None,
+    ) -> PolicyEvaluationContext:
+        return PolicyEvaluationContext(
+            actor_id=actor_id or None,
+            action=action,
+            resource_id=tool_name,
+            metadata=dict(metadata) if metadata else {},
+        )
+
+    def _evaluate_policy_sync(
+        self,
+        *,
+        tool_name: str,
+        actor_id: str,
+        action: str,
+        metadata: dict | None,
+    ) -> PolicyResult:
+        """Drive the async PolicyEngine from a synchronous caller.
+
+        If a loop is already running we cannot block on it from sync code;
+        raise loudly and direct callers to :meth:`acheck_tool` rather than
+        silently skipping the policy check.
+        """
+        assert self._policy_engine is not None  # caller guards this
+        coro = self._policy_engine.evaluate(
+            self._build_policy_context(
+                tool_name=tool_name,
+                actor_id=actor_id,
+                action=action,
+                metadata=metadata,
+            )
+        )
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(coro)
+
+        # We're inside an active event loop; sync execution would deadlock.
+        coro.close()
+        raise RuntimeError(
+            "SecureMCPClient.check_tool() was called from inside an active "
+            "asyncio event loop, where the async policy engine cannot be "
+            "driven synchronously. Use 'await client.acheck_tool(...)' instead."
+        )
+
+    @staticmethod
+    def _apply_policy_result(
+        result: SecurityCheckResult,
+        reasons: list[str],
+        policy_result: PolicyResult,
+    ) -> None:
+        is_allowed = policy_result.decision == PolicyDecision.ALLOW
+        result.policy_allowed = is_allowed
+        if not is_allowed:
+            result.allowed = False
+            reasons.append(
+                f"Policy {policy_result.policy_id} denied: {policy_result.reason}"
+            )
+
+    def _finalize_check(
+        self,
+        result: SecurityCheckResult,
+        reasons: list[str],
+    ) -> SecurityCheckResult:
         result.reasons = reasons
         self._check_history.append(result)
 
@@ -234,8 +395,11 @@ class SecureMCPClient:
                     event_type=SecurityEventType.TRUST_CHANGED,
                     severity=AlertSeverity.INFO,
                     layer="sdk",
-                    message=f"Security check for '{tool_name}': {'allowed' if result.allowed else 'denied'}",
-                    resource_id=tool_name,
+                    message=(
+                        f"Security check for '{result.tool_name}': "
+                        f"{'allowed' if result.allowed else 'denied'}"
+                    ),
+                    resource_id=result.tool_name,
                     data=result.to_dict(),
                 )
             )

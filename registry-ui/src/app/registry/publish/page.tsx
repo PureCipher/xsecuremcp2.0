@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
-import { Box, Typography } from "@mui/material";
+import { Box } from "@mui/material";
 
+import { RegistryPageHeader } from "@/components/security";
 import { getMyListings, requirePublisherRole } from "@/lib/registryClient";
 import { PublisherForm } from "./PublisherForm";
 
@@ -55,17 +56,11 @@ export default async function PublishPage(props: { searchParams?: Promise<Record
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
-      <Box component="header" sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
-        <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
-          Publisher console
-        </Typography>
-        <Typography variant="h5" sx={{ color: "var(--app-fg)" }}>
-          Share your tool
-        </Typography>
-        <Typography variant="body2" sx={{ maxWidth: 720, color: "var(--app-muted)" }}>
-          Describe your tool, paste its manifest, and let the registry run SecureMCP guardrails before you publish.
-        </Typography>
-      </Box>
+      <RegistryPageHeader
+        eyebrow="Publisher console"
+        title="Share your tool"
+        description="Describe your tool, paste its manifest, and let the registry run SecureMCP guardrails before you publish."
+      />
       <PublisherForm
         initialDisplayName={initialDisplayName}
         initialCategories={initialCategories}

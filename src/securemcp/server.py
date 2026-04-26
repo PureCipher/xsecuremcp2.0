@@ -46,6 +46,9 @@ class SecureMCP(FastMCP[LifespanResultT], Generic[LifespanResultT]):
         mount_security_api: bool = False,
         security_api: SecurityAPI | None = None,
         security_api_prefix: str = "/security",
+        security_api_require_auth: bool = True,
+        security_api_bearer_token: str | None = None,
+        security_api_auth_verifier: Any = None,
         bypass_stdio: bool | None = None,
         security_settings: SecuritySettings | None = None,
         register_gateway_tools: bool = False,
@@ -71,6 +74,9 @@ class SecureMCP(FastMCP[LifespanResultT], Generic[LifespanResultT]):
             self.mount_security_api(
                 api=security_api,
                 prefix=security_api_prefix,
+                require_auth=security_api_require_auth,
+                bearer_token=security_api_bearer_token,
+                auth_verifier=security_api_auth_verifier,
             )
 
     @property
@@ -127,9 +133,24 @@ class SecureMCP(FastMCP[LifespanResultT], Generic[LifespanResultT]):
         *,
         api: SecurityAPI | None = None,
         prefix: str = "/security",
+        require_auth: bool = True,
+        bearer_token: str | None = None,
+        auth_verifier: Any = None,
     ) -> SecurityAPI:
-        """Mount SecureMCP HTTP routes on this server."""
+        """Mount SecureMCP HTTP routes on this server.
 
-        mounted_api = mount_security_routes(self, api=api, prefix=prefix)
+        See :func:`fastmcp.server.security.http.mount_security_routes`
+        for the auth options. The default ``require_auth=True`` requires
+        either ``bearer_token`` or ``auth_verifier`` to be supplied.
+        """
+
+        mounted_api = mount_security_routes(
+            self,
+            api=api,
+            prefix=prefix,
+            require_auth=require_auth,
+            bearer_token=bearer_token,
+            auth_verifier=auth_verifier,
+        )
         self._securemcp_api = mounted_api
         return mounted_api

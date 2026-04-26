@@ -1,8 +1,9 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { Box, Card, CardContent, Chip, Typography } from "@mui/material";
+import { Alert, AlertTitle, Box, Card, CardContent, Chip, Typography } from "@mui/material";
 import {
   getInstallRecipes,
+  getListingGovernance,
   getRegistrySession,
   getToolDetail,
   getToolVersions,
@@ -12,8 +13,9 @@ import {
   type RegistryToolListing,
   type ToolVersionItem,
 } from "@/lib/registryClient";
-import { CertificationBadge } from "@/components/security";
+import { AttestationBadge, CertificationBadge } from "@/components/security";
 import { RecipeTabs } from "../RecipeTabs";
+import { ListingGovernanceCard } from "./ListingGovernanceCard";
 
 function isToolDetail(detail: unknown): detail is RegistryToolListing {
   return (
@@ -33,11 +35,12 @@ export default async function ListingDetailPage(props: { params: Promise<{ toolN
   }
 
   const decodedName = decodeURIComponent(toolName);
-  const [detail, install, verification, versionsPayload] = await Promise.all([
+  const [detail, install, verification, versionsPayload, governance] = await Promise.all([
     getToolDetail(decodedName),
     getInstallRecipes(decodedName),
     verifyTool(decodedName),
     getToolVersions(decodedName),
+    getListingGovernance(decodedName),
   ]);
 
   if (!isToolDetail(detail)) {
@@ -64,8 +67,33 @@ export default async function ListingDetailPage(props: { params: Promise<{ toolN
 
   const versions: ToolVersionItem[] = versionsPayload?.versions ?? [];
 
+  // Listings live in one of several status buckets — PUBLISHED is
+  // the public default, PENDING_REVIEW means a moderator hasn't
+  // approved it yet (typical for fresh curator submissions),
+  // SUSPENDED means a moderator removed it. Surface non-public
+  // status prominently so the curator knows the listing won't be
+  // discoverable in the public catalog yet.
+  const status = (tool.status ?? "").toLowerCase();
+  const statusBanner =
+    status === "pending_review" ? (
+      <Alert severity="warning">
+        <AlertTitle>Pending moderator review</AlertTitle>
+        This listing has been submitted but isn&apos;t yet public. A
+        reviewer will approve or reject it before it appears in the
+        public catalog. You can keep this URL — once approved, the
+        listing will be visible here automatically.
+      </Alert>
+    ) : status === "suspended" ? (
+      <Alert severity="error">
+        <AlertTitle>Suspended</AlertTitle>
+        This listing has been removed from the public catalog by a
+        moderator.
+      </Alert>
+    ) : null;
+
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+      {statusBanner}
       <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 2 }}>
         <Box sx={{ minWidth: 0 }}>
           <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1, color: "var(--app-muted)", fontSize: 12 }}>
@@ -97,6 +125,10 @@ export default async function ListingDetailPage(props: { params: Promise<{ toolN
           </Typography>
         </Box>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <AttestationBadge
+            kind={tool.attestation_kind}
+            curatorId={tool.curator_id}
+          />
           {tool.listing_id ? (
             <Link href={`/registry/publish?from=${encodeURIComponent(tool.listing_id)}`} legacyBehavior passHref>
               <Chip
@@ -104,14 +136,12 @@ export default async function ListingDetailPage(props: { params: Promise<{ toolN
                 clickable
                 label="Publish new version"
                 sx={{
-                  borderRadius: 999,
                   bgcolor: "var(--app-control-bg)",
                   border: "1px solid var(--app-accent)",
                   color: "var(--app-muted)",
-                  fontSize: 10,
-                  fontWeight: 800,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.12em",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: "0.01em",
                   "&:hover": { bgcolor: "var(--app-control-active-bg)" },
                 }}
               />
@@ -122,9 +152,9 @@ export default async function ListingDetailPage(props: { params: Promise<{ toolN
       </Box>
 
       <Box component="section" sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", lg: "minmax(0,1.3fr) minmax(0,1fr)" } }}>
-        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
-          <CardContent sx={{ p: 2.5 }}>
-            <Typography sx={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+        <Card variant="outlined">
+          <CardContent>
+            <Typography sx={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--app-muted)" }}>
               Overview
             </Typography>
             <Typography sx={{ mt: 1.5, fontSize: 13, color: "var(--app-muted)" }}>
@@ -138,7 +168,7 @@ export default async function ListingDetailPage(props: { params: Promise<{ toolN
                     key={cat}
                     label={cat}
                     size="small"
-                    sx={{ borderRadius: 999, bgcolor: "var(--app-control-bg)", color: "var(--app-fg)" }}
+                    sx={{ bgcolor: "var(--app-control-bg)", color: "var(--app-fg)" }}
                   />
                 ))}
               </Box>
@@ -152,7 +182,7 @@ export default async function ListingDetailPage(props: { params: Promise<{ toolN
                   borderRadius: 3,
                   borderColor: "var(--app-border)",
                   bgcolor: "var(--app-control-bg)",
-                  boxShadow: "none",
+                  boxShadow: "0 12px 34px rgba(15, 23, 42, 0.04)",
                 }}
               >
                 <CardContent sx={{ p: 2 }}>
@@ -180,9 +210,9 @@ export default async function ListingDetailPage(props: { params: Promise<{ toolN
           </CardContent>
         </Card>
 
-        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
-          <CardContent sx={{ p: 2.5 }}>
-            <Typography sx={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+        <Card variant="outlined">
+          <CardContent>
+            <Typography sx={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--app-muted)" }}>
               Versions
             </Typography>
             {versions.length ? (
@@ -228,35 +258,35 @@ export default async function ListingDetailPage(props: { params: Promise<{ toolN
         otherRecipes={otherRecipes}
       />
 
-      {verification ? (
-        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
-          <CardContent sx={{ p: 2.5 }}>
+      <ListingGovernanceCard governance={governance} />
+
+      {verification?.verification ? (
+        <Card variant="outlined">
+          <CardContent>
             <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2 }}>
-              <Typography sx={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+              <Typography sx={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--app-muted)" }}>
                 Verification
               </Typography>
               <Chip
                 size="small"
-                label={verification.verification?.signature_valid ? "Signature valid" : "Signature invalid"}
+                label={verification.verification.signature_valid ? "Signature valid" : "Signature invalid"}
                 sx={{
-                  borderRadius: 999,
-                  bgcolor: verification.verification?.signature_valid ? "var(--app-control-active-bg)" : "rgba(244, 63, 94, 0.18)",
-                  color: verification.verification?.signature_valid ? "var(--app-fg)" : "rgb(254, 205, 211)",
-                  fontSize: 10,
-                  fontWeight: 800,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.12em",
+                  bgcolor: verification.verification.signature_valid ? "var(--app-control-active-bg)" : "rgba(244, 63, 94, 0.18)",
+                  color: verification.verification.signature_valid ? "var(--app-fg)" : "#b91c1c",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: "0.01em",
                 }}
               />
             </Box>
             <Typography sx={{ mt: 1.5, fontSize: 12, color: "var(--app-muted)" }}>
               Manifest match:{" "}
               <Box component="span" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
-                {verification.verification?.manifest_match ? "yes" : "no"}
+                {verification.verification.manifest_match ? "yes" : "no"}
               </Box>
             </Typography>
 
-            {Array.isArray(verification.verification?.issues) && verification.verification.issues.length > 0 ? (
+            {Array.isArray(verification.verification.issues) && verification.verification.issues.length > 0 ? (
               <Box component="ul" sx={{ mt: 2, pl: 2, color: "var(--app-muted)", fontSize: 12 }}>
                 {verification.verification.issues.slice(0, 6).map((issue: string, idx: number) => (
                   <li key={idx}>{issue}</li>

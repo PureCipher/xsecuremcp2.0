@@ -24,7 +24,7 @@ function StatusDot({ ok }: { ok: boolean }) {
           width: 12,
           height: 12,
           borderRadius: "50%",
-          bgcolor: ok ? "var(--app-accent)" : "rgb(251, 113, 133)",
+          bgcolor: ok ? "var(--app-accent)" : "#ef4444",
         }}
       />
     </Box>
@@ -35,20 +35,20 @@ function HashDisplay({ label, hash }: { label: string; hash: string }) {
   if (!hash) return null;
   return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-      <Typography variant="caption" sx={{ color: "rgb(113, 113, 122)" }}>
+      <Typography variant="caption" sx={{ color: "var(--app-muted)" }}>
         {label}:
       </Typography>
       <Box
         component="code"
         sx={{
           borderRadius: 1,
-          bgcolor: "rgba(255,255,255,0.05)",
+          bgcolor: "var(--app-control-bg)",
           px: 1,
           py: 0.25,
           fontSize: 10,
           fontFamily:
             "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-          color: "rgba(103, 232, 249, 0.80)",
+          color: "var(--app-accent)",
           userSelect: "all",
         }}
       >
@@ -70,16 +70,16 @@ export function ChainIntegrityPanel({ status }: Props) {
     typeof status.record_count === "number" ? status.record_count.toLocaleString() : "—";
 
   return (
-    <Box sx={{ borderRadius: 4, border: "1px solid rgba(255,255,255,0.10)", bgcolor: "rgba(255,255,255,0.02)", p: 2.5 }}>
+    <Box sx={{ borderRadius: 4, border: "1px solid var(--app-border)", bgcolor: "var(--app-surface)", p: 2.5 }}>
       <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
         <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2, flexWrap: "wrap" }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
             <StatusDot ok={allValid} />
             <Box>
-              <Typography variant="body1" sx={{ fontWeight: 700, color: "rgb(228, 228, 231)" }}>
+              <Typography variant="body1" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
                 Chain Integrity
               </Typography>
-              <Typography variant="caption" sx={{ color: "rgb(113, 113, 122)" }}>
+              <Typography variant="caption" sx={{ color: "var(--app-muted)" }}>
                 Ledger: {status.ledger_id} · {recordCountText} records
               </Typography>
             </Box>
@@ -88,37 +88,36 @@ export function ChainIntegrityPanel({ status }: Props) {
             size="small"
             label={allValid ? "Intact" : "Tamper Detected"}
             sx={{
-              borderRadius: 999,
               bgcolor: allValid ? "var(--app-control-active-bg)" : "rgba(239, 68, 68, 0.15)",
-              color: allValid ? "var(--app-muted)" : "rgb(253, 164, 175)",
+              color: allValid ? "var(--app-muted)" : "#b91c1c",
               fontWeight: 700,
             }}
           />
         </Box>
 
         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 1.5 }}>
-          <Box sx={{ borderRadius: 3, border: "1px solid rgba(255,255,255,0.05)", bgcolor: "rgba(255,255,255,0.02)", p: 2 }}>
+          <Box sx={{ borderRadius: 3, border: "1px solid var(--app-border)", bgcolor: "var(--app-control-bg)", p: 2 }}>
             <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75 }}>
-              <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: status.chain_valid ? "var(--app-accent)" : "rgb(251, 113, 133)" }} />
-              <Typography variant="body2" sx={{ fontWeight: 700, color: "rgb(212, 212, 216)" }}>
+              <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: status.chain_valid ? "var(--app-accent)" : "#ef4444" }} />
+              <Typography variant="body2" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
                 Hash Chain
               </Typography>
             </Box>
-            <Typography variant="body2" sx={{ color: "rgb(113, 113, 122)" }}>
+            <Typography variant="body2" sx={{ color: "var(--app-muted)" }}>
               {status.chain_valid
                 ? "Every record correctly links to its predecessor via SHA-256"
                 : "One or more chain links are broken — possible tampering"}
             </Typography>
           </Box>
 
-          <Box sx={{ borderRadius: 3, border: "1px solid rgba(255,255,255,0.05)", bgcolor: "rgba(255,255,255,0.02)", p: 2 }}>
+          <Box sx={{ borderRadius: 3, border: "1px solid var(--app-border)", bgcolor: "var(--app-control-bg)", p: 2 }}>
             <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75 }}>
-              <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: status.tree_valid ? "var(--app-accent)" : "rgb(251, 113, 133)" }} />
-              <Typography variant="body2" sx={{ fontWeight: 700, color: "rgb(212, 212, 216)" }}>
+              <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: status.tree_valid ? "var(--app-accent)" : "#ef4444" }} />
+              <Typography variant="body2" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
                 Merkle Tree
               </Typography>
             </Box>
-            <Typography variant="body2" sx={{ color: "rgb(113, 113, 122)" }}>
+            <Typography variant="body2" sx={{ color: "var(--app-muted)" }}>
               {status.tree_valid ? "All leaf hashes form a consistent Merkle tree" : "Merkle tree rebuild does not match expected root"}
             </Typography>
           </Box>
@@ -129,22 +128,22 @@ export function ChainIntegrityPanel({ status }: Props) {
           <HashDisplay label="Chain digest" hash={status.chain_digest} />
         </Box>
 
-        <Box sx={{ borderRadius: 3, border: "1px solid rgba(255,255,255,0.05)", bgcolor: "rgba(255,255,255,0.02)", p: 2 }}>
+        <Box sx={{ borderRadius: 3, border: "1px solid var(--app-border)", bgcolor: "var(--app-control-bg)", p: 2 }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5, flexWrap: "wrap" }}>
-            <Typography variant="overline" sx={{ color: "rgba(103, 232, 249, 0.70)" }}>
+            <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
               Ledger Scheme
             </Typography>
             <Box
               component="span"
               sx={{
-                borderRadius: 999,
+                borderRadius: 2,
                 bgcolor: "rgba(6, 182, 212, 0.10)",
                 px: 1,
                 py: 0.25,
                 fontSize: 10,
                 fontFamily:
                   "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-                color: "rgb(103, 232, 249)",
+                color: "var(--app-accent)",
               }}
             >
               {scheme?.scheme ?? "unknown"}
@@ -152,13 +151,13 @@ export function ChainIntegrityPanel({ status }: Props) {
           </Box>
 
           <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", columnGap: 3, rowGap: 0.75 }}>
-            <Typography variant="caption" sx={{ color: "rgb(113, 113, 122)" }}>
+            <Typography variant="caption" sx={{ color: "var(--app-muted)" }}>
               Leaf count
             </Typography>
             <Typography
               variant="caption"
               sx={{
-                color: "rgb(212, 212, 216)",
+                color: "var(--app-fg)",
                 fontFamily:
                   "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
               }}
@@ -166,22 +165,22 @@ export function ChainIntegrityPanel({ status }: Props) {
               {scheme?.leaf_count?.toLocaleString() ?? "—"}
             </Typography>
 
-            <Typography variant="caption" sx={{ color: "rgb(113, 113, 122)" }}>
+            <Typography variant="caption" sx={{ color: "var(--app-muted)" }}>
               Tree valid
             </Typography>
-            <Typography variant="caption" sx={{ color: scheme?.tree_valid ? "var(--app-muted)" : "rgb(253, 164, 175)" }}>
+            <Typography variant="caption" sx={{ color: scheme?.tree_valid ? "var(--app-muted)" : "#b91c1c" }}>
               {scheme?.tree_valid ? "Yes" : "No"}
             </Typography>
 
             {isAnchored ? (
               <>
-                <Typography variant="caption" sx={{ color: "rgb(113, 113, 122)" }}>
+                <Typography variant="caption" sx={{ color: "var(--app-muted)" }}>
                   Anchors committed
                 </Typography>
                 <Typography
                   variant="caption"
                   sx={{
-                    color: "rgb(212, 212, 216)",
+                    color: "var(--app-fg)",
                     fontFamily:
                       "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
                   }}
@@ -189,20 +188,20 @@ export function ChainIntegrityPanel({ status }: Props) {
                   {scheme.anchor_count ?? 0}
                 </Typography>
 
-                <Typography variant="caption" sx={{ color: "rgb(113, 113, 122)" }}>
+                <Typography variant="caption" sx={{ color: "var(--app-muted)" }}>
                   Anchors valid
                 </Typography>
-                <Typography variant="caption" sx={{ color: scheme.anchors_valid ? "var(--app-muted)" : "rgb(253, 164, 175)" }}>
+                <Typography variant="caption" sx={{ color: scheme.anchors_valid ? "var(--app-muted)" : "#b91c1c" }}>
                   {scheme.anchors_valid ? "Yes" : "No"}
                 </Typography>
 
-                <Typography variant="caption" sx={{ color: "rgb(113, 113, 122)" }}>
+                <Typography variant="caption" sx={{ color: "var(--app-muted)" }}>
                   Records since anchor
                 </Typography>
                 <Typography
                   variant="caption"
                   sx={{
-                    color: "rgb(212, 212, 216)",
+                    color: "var(--app-fg)",
                     fontFamily:
                       "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
                   }}
@@ -210,13 +209,13 @@ export function ChainIntegrityPanel({ status }: Props) {
                   {scheme.records_since_anchor ?? 0}
                 </Typography>
 
-                <Typography variant="caption" sx={{ color: "rgb(113, 113, 122)" }}>
+                <Typography variant="caption" sx={{ color: "var(--app-muted)" }}>
                   Anchor interval
                 </Typography>
                 <Typography
                   variant="caption"
                   sx={{
-                    color: "rgb(212, 212, 216)",
+                    color: "var(--app-fg)",
                     fontFamily:
                       "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
                   }}
@@ -226,13 +225,13 @@ export function ChainIntegrityPanel({ status }: Props) {
 
                 {scheme.latest_anchor ? (
                   <>
-                    <Typography variant="caption" sx={{ color: "rgb(113, 113, 122)" }}>
+                    <Typography variant="caption" sx={{ color: "var(--app-muted)" }}>
                       Latest anchor tx
                     </Typography>
                     <Typography
                       variant="caption"
                       sx={{
-                        color: "rgb(103, 232, 249)",
+                        color: "var(--app-accent)",
                         fontFamily:
                           "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
                         overflow: "hidden",

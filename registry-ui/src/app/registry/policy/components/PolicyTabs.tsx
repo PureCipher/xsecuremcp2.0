@@ -1,7 +1,7 @@
 "use client";
 
 import type { PolicyTabKey } from "../hooks/useTabNavigation";
-import { Badge, Box, Tab, Tabs } from "@mui/material";
+import { Box, Tab, Tabs } from "@mui/material";
 
 type PolicyTabsProps = {
   activeTab: PolicyTabKey;
@@ -52,9 +52,28 @@ export function PolicyTabs({
               value={item.key}
               label={
                 badge ? (
-                  <Badge color="primary" badgeContent={badge} sx={{ "& .MuiBadge-badge": { fontWeight: 800 } }}>
-                    {item.label}
-                  </Badge>
+                  <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 0.75 }}>
+                    <Box component="span">{item.label}</Box>
+                    <Box
+                      component="span"
+                      sx={{
+                        minWidth: 20,
+                        height: 20,
+                        px: 0.75,
+                        borderRadius: 999,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        bgcolor: "var(--app-accent)",
+                        color: "var(--app-accent-contrast)",
+                        fontSize: 11,
+                        lineHeight: 1,
+                        fontWeight: 700,
+                      }}
+                    >
+                      {badge}
+                    </Box>
+                  </Box>
                 ) : (
                   item.label
                 )

@@ -10,39 +10,39 @@ const STATUS_COLORS: Record<string, { bgcolor: string; color: string }> = {
 
   // Compliance
   compliant: { bgcolor: "var(--app-control-active-bg)", color: "var(--app-fg)" },
-  elevated_risk: { bgcolor: "rgba(245, 158, 11, 0.18)", color: "rgb(253, 230, 138)" },
-  non_compliant: { bgcolor: "rgba(239, 68, 68, 0.18)", color: "rgb(254, 202, 202)" },
-  unknown: { bgcolor: "rgba(113, 113, 122, 0.18)", color: "rgb(212, 212, 216)" },
+  elevated_risk: { bgcolor: "rgba(245, 158, 11, 0.12)", color: "#92400e" },
+  non_compliant: { bgcolor: "rgba(239, 68, 68, 0.12)", color: "#b91c1c" },
+  unknown: { bgcolor: "rgba(100, 116, 139, 0.12)", color: "var(--app-muted)" },
 
   // Threat levels
   none: { bgcolor: "var(--app-control-active-bg)", color: "var(--app-fg)" },
-  low: { bgcolor: "rgba(14, 165, 233, 0.18)", color: "rgb(186, 230, 253)" },
-  medium: { bgcolor: "rgba(245, 158, 11, 0.18)", color: "rgb(253, 230, 138)" },
-  high: { bgcolor: "rgba(249, 115, 22, 0.18)", color: "rgb(254, 215, 170)" },
-  critical: { bgcolor: "rgba(239, 68, 68, 0.18)", color: "rgb(254, 202, 202)" },
+  low: { bgcolor: "rgba(14, 165, 233, 0.12)", color: "#0369a1" },
+  medium: { bgcolor: "rgba(245, 158, 11, 0.12)", color: "#92400e" },
+  high: { bgcolor: "rgba(249, 115, 22, 0.12)", color: "#c2410c" },
+  critical: { bgcolor: "rgba(239, 68, 68, 0.12)", color: "#b91c1c" },
 
   // Verdicts
   proceed: { bgcolor: "var(--app-control-active-bg)", color: "var(--app-fg)" },
-  throttle: { bgcolor: "rgba(245, 158, 11, 0.18)", color: "rgb(253, 230, 138)" },
-  require_confirmation: { bgcolor: "rgba(249, 115, 22, 0.18)", color: "rgb(254, 215, 170)" },
-  halt: { bgcolor: "rgba(239, 68, 68, 0.18)", color: "rgb(254, 202, 202)" },
+  throttle: { bgcolor: "rgba(245, 158, 11, 0.12)", color: "#92400e" },
+  require_confirmation: { bgcolor: "rgba(249, 115, 22, 0.12)", color: "#c2410c" },
+  halt: { bgcolor: "rgba(239, 68, 68, 0.12)", color: "#b91c1c" },
 
   // Contract statuses
-  proposed: { bgcolor: "rgba(14, 165, 233, 0.18)", color: "rgb(186, 230, 253)" },
-  negotiating: { bgcolor: "rgba(245, 158, 11, 0.18)", color: "rgb(253, 230, 138)" },
+  proposed: { bgcolor: "rgba(14, 165, 233, 0.12)", color: "#0369a1" },
+  negotiating: { bgcolor: "rgba(245, 158, 11, 0.12)", color: "#92400e" },
   accepted: { bgcolor: "var(--app-control-active-bg)", color: "var(--app-fg)" },
-  rejected: { bgcolor: "rgba(239, 68, 68, 0.18)", color: "rgb(254, 202, 202)" },
-  expired: { bgcolor: "rgba(113, 113, 122, 0.18)", color: "rgb(212, 212, 216)" },
-  revoked: { bgcolor: "rgba(239, 68, 68, 0.18)", color: "rgb(254, 202, 202)" },
-  pending: { bgcolor: "rgba(245, 158, 11, 0.18)", color: "rgb(253, 230, 138)" },
+  rejected: { bgcolor: "rgba(239, 68, 68, 0.12)", color: "#b91c1c" },
+  expired: { bgcolor: "rgba(100, 116, 139, 0.12)", color: "var(--app-muted)" },
+  revoked: { bgcolor: "rgba(239, 68, 68, 0.12)", color: "#b91c1c" },
+  pending: { bgcolor: "rgba(245, 158, 11, 0.12)", color: "#92400e" },
 
   // Consent
   granted: { bgcolor: "var(--app-control-active-bg)", color: "var(--app-fg)" },
-  denied: { bgcolor: "rgba(239, 68, 68, 0.18)", color: "rgb(254, 202, 202)" },
-  conditional: { bgcolor: "rgba(245, 158, 11, 0.18)", color: "rgb(253, 230, 138)" },
+  denied: { bgcolor: "rgba(239, 68, 68, 0.12)", color: "#b91c1c" },
+  conditional: { bgcolor: "rgba(245, 158, 11, 0.12)", color: "#92400e" },
 
   // Default
-  default: { bgcolor: "rgba(113, 113, 122, 0.18)", color: "rgb(212, 212, 216)" },
+  default: { bgcolor: "rgba(100, 116, 139, 0.12)", color: "var(--app-muted)" },
 };
 
 export function StatusBadge({ status, className = "" }: { status: string; className?: string }) {
@@ -54,14 +54,14 @@ export function StatusBadge({ status, className = "" }: { status: string; classN
       size="small"
       label={status.replace(/_/g, " ")}
       sx={{
-        borderRadius: 999,
-        height: 22,
+        borderRadius: 2,
+        height: 24,
         bgcolor: colors.bgcolor,
         color: colors.color,
-        fontSize: 10,
-        fontWeight: 800,
-        textTransform: "uppercase",
-        letterSpacing: "0.12em",
+        fontSize: 11,
+        fontWeight: 700,
+        textTransform: "none",
+        letterSpacing: "0.01em",
       }}
     />
   );

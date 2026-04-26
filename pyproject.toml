@@ -27,7 +27,15 @@ dependencies = [
     "uncalled-for>=0.2.0",
     "watchfiles>=1.0.0",
     "PyJWT>=2.10.1",
+    "alembic>=1.17.2",
     "griffelib>=2.0.0",
+    # ``uv`` ships the ``uvx`` launcher which the curator stdio
+    # introspector uses to spawn PyPI-distributed MCP servers as
+    # subprocesses (see purecipher.curation.introspector.StdioIntrospector).
+    # Including it as a runtime dependency means a curator-mode
+    # registry can introspect ``pypi:...`` upstreams out of the box,
+    # without operators having to ``curl … | sh`` it separately.
+    "uv>=0.4.0",
 ]
 
 requires-python = ">=3.10"

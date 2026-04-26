@@ -7,151 +7,25 @@ import json
 from typing import Any
 from urllib.parse import quote, urlencode
 
-SAMPLE_MANIFEST_JSON = json.dumps(
+BLANK_MANIFEST_JSON = json.dumps(
     {
-        "tool_name": "weather-lookup",
+        "tool_name": "",
         "version": "1.0.0",
-        "author": "acme",
-        "description": "Fetch current weather for a city.",
-        "permissions": ["network_access"],
-        "data_flows": [
-            {
-                "source": "input.city",
-                "destination": "output.forecast",
-                "classification": "public",
-                "description": "City name is sent to the weather provider.",
-            }
-        ],
-        "resource_access": [
-            {
-                "resource_pattern": "https://api.weather.example/*",
-                "access_type": "read",
-                "description": "Call weather provider endpoint.",
-                "classification": "public",
-            }
-        ],
-        "tags": ["weather", "api"],
+        "author": "",
+        "description": "",
+        "permissions": [],
+        "data_flows": [],
+        "resource_access": [],
+        "tags": [],
     },
     indent=2,
 )
 
-SAMPLE_RUNTIME_METADATA_JSON = json.dumps(
-    {
-        "endpoint": "https://mcp.acme.example/weather",
-        "transport": "streamable-http",
-        "command": "uvx",
-        "args": ["weather-lookup"],
-        "docker_image": "ghcr.io/acme/weather-lookup:1.0.0",
-        "env": {"WEATHER_API_KEY": "${WEATHER_API_KEY}"},
-    },
-    indent=2,
-)
+BLANK_RUNTIME_METADATA_JSON = json.dumps({}, indent=2)
 
-PUBLISHER_PRESETS = {
-    "remote-http": {
-        "label": "Remote HTTP",
-        "display_name": "Weather Lookup",
-        "categories": "network,utility",
-        "tags": "weather,api",
-        "requested_level": "basic",
-        "source_url": "https://github.com/acme/weather-lookup",
-        "homepage_url": "https://acme.example/weather",
-        "tool_license": "MIT",
-        "manifest_text": SAMPLE_MANIFEST_JSON,
-        "runtime_metadata_text": SAMPLE_RUNTIME_METADATA_JSON,
-    },
-    "local-stdio": {
-        "label": "Local stdio",
-        "display_name": "Filesystem Scout",
-        "categories": "file_system,utility",
-        "tags": "filesystem,local",
-        "requested_level": "standard",
-        "source_url": "https://github.com/acme/filesystem-scout",
-        "homepage_url": "",
-        "tool_license": "Apache-2.0",
-        "manifest_text": json.dumps(
-            {
-                "tool_name": "filesystem-scout",
-                "version": "1.2.0",
-                "author": "acme",
-                "description": "Inspect approved local paths and summarize file state.",
-                "permissions": ["read_resource"],
-                "data_flows": [
-                    {
-                        "source": "resource.local_path",
-                        "destination": "output.summary",
-                        "classification": "internal",
-                        "description": "Local file metadata is summarized for the caller.",
-                    }
-                ],
-                "resource_access": [
-                    {
-                        "resource_pattern": "file:///workspace/*",
-                        "access_type": "read",
-                        "description": "Read approved workspace paths only.",
-                        "classification": "internal",
-                    }
-                ],
-                "tags": ["filesystem", "local"],
-            },
-            indent=2,
-        ),
-        "runtime_metadata_text": json.dumps(
-            {
-                "command": "uvx",
-                "args": ["filesystem-scout"],
-                "env": {"ALLOWED_ROOT": "${ALLOWED_ROOT}"},
-            },
-            indent=2,
-        ),
-    },
-    "dockerized": {
-        "label": "Dockerized",
-        "display_name": "Ledger Scan",
-        "categories": "data_access,monitoring",
-        "tags": "ledger,compliance",
-        "requested_level": "standard",
-        "source_url": "https://github.com/acme/ledger-scan",
-        "homepage_url": "https://acme.example/ledger-scan",
-        "tool_license": "MIT",
-        "manifest_text": json.dumps(
-            {
-                "tool_name": "ledger-scan",
-                "version": "0.9.0",
-                "author": "acme",
-                "description": "Inspect ledger state and expose compliance checks over MCP.",
-                "permissions": ["network_access", "read_resource"],
-                "data_flows": [
-                    {
-                        "source": "input.account_id",
-                        "destination": "output.report",
-                        "classification": "confidential",
-                        "description": "Account identifiers are checked against compliance rules.",
-                    }
-                ],
-                "resource_access": [
-                    {
-                        "resource_pattern": "https://ledger.acme.example/*",
-                        "access_type": "read",
-                        "description": "Read-only access to the ledger API.",
-                        "classification": "confidential",
-                    }
-                ],
-                "tags": ["ledger", "compliance"],
-            },
-            indent=2,
-        ),
-        "runtime_metadata_text": json.dumps(
-            {
-                "endpoint": "https://mcp.acme.example/ledger-scan",
-                "transport": "streamable-http",
-                "docker_image": "ghcr.io/acme/ledger-scan:0.9.0",
-                "env": {"LEDGER_TOKEN": "${LEDGER_TOKEN}"},
-            },
-            indent=2,
-        ),
-    },
-}
+# Backwards-compatible names used by the legacy server-rendered registry UI.
+SAMPLE_MANIFEST_JSON = BLANK_MANIFEST_JSON
+SAMPLE_RUNTIME_METADATA_JSON = BLANK_RUNTIME_METADATA_JSON
 
 BASE_STYLES = """
 :root {
@@ -1337,29 +1211,11 @@ button {
 
 LISTING_INTERACTIONS_SCRIPT = f"""
 <script>
-const REGISTRY_PUBLISH_PRESETS = {json.dumps(PUBLISHER_PRESETS)};
-
 function setRegistryField(id, value) {{
   const field = document.getElementById(id);
   if (field) {{
     field.value = value || "";
   }}
-}}
-
-function applyRegistryPreset(name) {{
-  const preset = REGISTRY_PUBLISH_PRESETS[name];
-  if (!preset) {{
-    return;
-  }}
-  setRegistryField("publish-display-name", preset.display_name);
-  setRegistryField("publish-categories", preset.categories);
-  setRegistryField("publish-tags", preset.tags);
-  setRegistryField("publish-requested-level", preset.requested_level);
-  setRegistryField("publish-source-url", preset.source_url);
-  setRegistryField("publish-homepage-url", preset.homepage_url);
-  setRegistryField("publish-license", preset.tool_license);
-  setRegistryField("publish-runtime-metadata", preset.runtime_metadata_text);
-  setRegistryField("publish-manifest", preset.manifest_text);
 }}
 
 async function copyRegistryBlock(button) {{
@@ -2449,10 +2305,10 @@ def _render_publish_primary_paths(
       <div class="decision-grid">
         <div class="decision-card is-primary">
           <div class="section-kicker">Start</div>
-          <strong>Pick a ready-made example</strong>
-          <p>Most people start from a preset, then adjust the wording and setup details to match their own tool.</p>
+          <strong>Start with your real tool</strong>
+          <p>Begin with the actual manifest, runtime, and publisher details you want reviewers to evaluate.</p>
           <div class="quick-link-grid">
-            <a class="action-link" href="#publish-form">Choose a starting point</a>
+            <a class="action-link" href="#publish-form">Open the blank draft</a>
           </div>
         </div>
         <div class="decision-card">
@@ -2477,25 +2333,21 @@ def _render_publish_primary_paths(
 
 
 def _render_publish_preset_cards() -> str:
-    return "".join(
-        f"""
-        <article class="preset-card">
-          <div class="catalog-row">
-            <strong>{_escape(preset.get("label") or preset_name)}</strong>
-            <span class="pill">{_escape(preset.get("requested_level") or "basic")}</span>
-          </div>
-          <p class="detail-note" style="margin-top: 10px;">
-            Start with a ready-made draft for {_escape(preset.get("display_name") or preset_name)}.
-          </p>
-          <div class="detail-note">Topics: {_escape(preset.get("categories") or "none")}</div>
-          <div class="detail-note">Keywords: {_escape(preset.get("tags") or "none")}</div>
-          <div class="action-row" style="margin-top: 12px;">
-            <button class="button-secondary" type="button" onclick="applyRegistryPreset('{_escape(preset_name)}')">Use this starting point</button>
-          </div>
-        </article>
-        """
-        for preset_name, preset in PUBLISHER_PRESETS.items()
-    )
+    return """
+    <article class="preset-card">
+      <div class="catalog-row">
+        <strong>Blank verified listing</strong>
+        <span class="pill">basic</span>
+      </div>
+      <p class="detail-note" style="margin-top: 10px;">
+        The form starts empty so every submission is based on a real tool, endpoint, and publisher record.
+      </p>
+      <div class="detail-note">Add categories, permissions, runtime metadata, and resource access from your production service.</div>
+      <div class="action-row" style="margin-top: 12px;">
+        <a class="action-link" href="#publish-manifest">Edit manifest JSON</a>
+      </div>
+    </article>
+    """
 
 
 def _render_preflight_panel(preflight: dict[str, Any] | None) -> str:
@@ -2633,9 +2485,9 @@ def _render_publish_form(
       <div class="stacked-panels">
         <section class="section-card is-accent">
           <div class="section-kicker">Step 1</div>
-          <h3>Choose a starting point</h3>
+          <h3>Start from a real listing</h3>
           <div class="detail-note" style="margin-top: 10px;">
-            Start with a ready-made draft so you can shape a good page instead of staring at a blank form.
+            This draft is intentionally blank. Add real listing details rather than starting from bundled demo data.
           </div>
           <div class="preset-grid" style="margin-top: 16px;">
             {_render_publish_preset_cards()}
@@ -2651,7 +2503,7 @@ def _render_publish_form(
           <div class="publish-grid" style="margin-top: 16px;">
             <label class="field-stack">
               <span class="field-label">Public Name</span>
-              <input id="publish-display-name" name="display_name" value="{_escape(display_name)}" placeholder="Weather Lookup" />
+              <input id="publish-display-name" name="display_name" value="{_escape(display_name)}" placeholder="Your MCP tool" />
             </label>
             <label class="field-stack">
               <span class="field-label">Topics People Browse</span>
@@ -2659,7 +2511,7 @@ def _render_publish_form(
             </label>
             <label class="field-stack">
               <span class="field-label">Search Words</span>
-              <input id="publish-tags" name="tags" value="{_escape(tags)}" placeholder="weather,api" />
+              <input id="publish-tags" name="tags" value="{_escape(tags)}" placeholder="security,automation,api" />
             </label>
             <label class="field-stack">
               <span class="field-label">Requested Review Level</span>
@@ -2667,11 +2519,11 @@ def _render_publish_form(
             </label>
             <label class="field-stack">
               <span class="field-label">Source Code</span>
-              <input id="publish-source-url" name="source_url" value="{_escape(source_url)}" placeholder="https://github.com/acme/weather-lookup" />
+              <input id="publish-source-url" name="source_url" value="{_escape(source_url)}" placeholder="https://github.com/your-org/your-tool" />
             </label>
             <label class="field-stack">
               <span class="field-label">Docs Or Homepage</span>
-              <input id="publish-homepage-url" name="homepage_url" value="{_escape(homepage_url)}" placeholder="https://acme.example/weather" />
+              <input id="publish-homepage-url" name="homepage_url" value="{_escape(homepage_url)}" placeholder="https://your-service-domain.tld" />
             </label>
             <label class="field-stack">
               <span class="field-label">License</span>
@@ -2749,8 +2601,8 @@ def create_registry_ui_html(
     query: str = "",
     min_certification: str = "",
     manifest_text: str = SAMPLE_MANIFEST_JSON,
-    display_name: str = "Weather Lookup",
-    categories: str = "network,utility",
+    display_name: str = "",
+    categories: str = "",
     requested_level: str = "basic",
     page_notice_title: str | None = None,
     page_notice_body: str | None = None,
@@ -3061,11 +2913,11 @@ def create_publish_html(
     session: dict[str, Any] | None = None,
     manifest_text: str = SAMPLE_MANIFEST_JSON,
     runtime_metadata_text: str = SAMPLE_RUNTIME_METADATA_JSON,
-    display_name: str = "Weather Lookup",
-    categories: str = "network,utility",
-    tags: str = "weather,api",
+    display_name: str = "",
+    categories: str = "",
+    tags: str = "",
     requested_level: str = "basic",
-    source_url: str = "https://github.com/acme/weather-lookup",
+    source_url: str = "",
     homepage_url: str = "",
     tool_license: str = "MIT",
     preflight: dict[str, Any] | None = None,
@@ -3159,8 +3011,8 @@ def create_publish_html(
               <div class="value">Built in</div>
             </div>
             <div class="metric">
-              <div class="label">Starter Example</div>
-              <div class="value">Remote HTTP</div>
+              <div class="label">Draft Mode</div>
+              <div class="value">Blank</div>
             </div>
           </div>
         </div>
@@ -3201,7 +3053,7 @@ def create_publish_html(
           <div class="section-card">
             <h3>1. Pick a starting point</h3>
             <div class="detail-note" style="margin-top: 10px;">
-              Choose a ready-made example so you do not have to start from a blank page.
+              Start with a blank draft so every field comes from the tool you plan to publish.
             </div>
           </div>
           <div class="section-card">
@@ -3706,7 +3558,8 @@ def _render_review_item(item: dict[str, Any], *, registry_prefix: str) -> str:
         Updated: {_escape(item.get("updated_at") or "n/a")}
       </div>
       <form class="moderation-form" method="post" action="{_escape(f"{registry_prefix}/review/{listing_id}/{actions[0] if actions else 'approve'}")}">
-        <input name="moderator_id" value="purecipher-admin" placeholder="Reviewed by" />
+        <!-- moderator_id is derived from the authenticated session on
+             the server side; submitting it from the form is now ignored. -->
         <input name="reason" placeholder="What changed?" />
         <div class="moderation-actions">{action_buttons}</div>
       </form>
@@ -4151,11 +4004,84 @@ def create_login_html(
 </html>"""
 
 
+def create_setup_html(
+    *,
+    server_name: str,
+    registry_prefix: str,
+    auth_enabled: bool,
+    next_path: str = "/registry",
+    default_username: str = "admin",
+    notice_title: str | None = None,
+    notice_body: str | None = None,
+    notice_is_error: bool = False,
+) -> str:
+    """Render the one-time admin setup page."""
+
+    page_title = "PureCipher Secured MCP Registry"
+    notice_html = _render_optional_notice(
+        notice_title=notice_title,
+        notice_body=notice_body,
+        notice_is_error=notice_is_error,
+    )
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Admin Setup · {page_title}</title>
+    <style>{BASE_STYLES}</style>
+  </head>
+  <body>
+    <main class="shell">
+      {
+        _render_topbar(
+            registry_prefix=registry_prefix,
+            auth_enabled=auth_enabled,
+            session=None,
+            current_page="login",
+            current_path=f"{registry_prefix}/setup",
+        )
+    }
+      <section class="page-stack">
+        {notice_html}
+        <section class="panel">
+          <div class="login-layout">
+            <div class="login-copy">
+              <h2>Create the first admin</h2>
+              <p>No registry account exists yet. Create the first admin account to finish setup and unlock the authenticated registry.</p>
+              <ul class="login-points">
+                <li>This setup form is only available while the account store is empty.</li>
+                <li>The first account receives the admin role.</li>
+                <li>Save the password somewhere secure; it is stored as a PBKDF2 hash.</li>
+              </ul>
+            </div>
+            <div class="login-form-wrapper">
+              <form class="auth-panel" method="post" action="{_escape(f"{registry_prefix}/setup")}">
+              <input type="hidden" name="next" value="{_escape(next_path)}" />
+              <label class="detail-note" for="username">Admin username</label>
+              <input id="username" name="username" value="{_escape(default_username)}" style="margin-top: 8px;" />
+              <label class="detail-note" for="display_name" style="margin-top: 12px; display: block;">Display name</label>
+              <input id="display_name" name="display_name" value="Registry Admin" style="margin-top: 8px;" />
+              <label class="detail-note" for="password" style="margin-top: 12px; display: block;">Password</label>
+              <input id="password" type="password" name="password" placeholder="At least 8 characters" style="margin-top: 8px;" />
+              <button type="submit" style="margin-top: 14px;">Create Admin</button>
+              </form>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+  </body>
+</html>"""
+
+
 __all__ = [
     "SAMPLE_MANIFEST_JSON",
     "SAMPLE_RUNTIME_METADATA_JSON",
     "create_listing_detail_html",
     "create_login_html",
+    "create_setup_html",
     "create_publish_html",
     "create_publisher_index_html",
     "create_publisher_profile_html",

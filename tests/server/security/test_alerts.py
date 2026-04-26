@@ -755,3 +755,198 @@ class TestNoBusBackwardsCompat:
             resource_id="r",
         )
         assert ledger.record_count == 1
+
+
+class TestEventBusTimeoutsAndAsync:
+    """Regression tests for #12: handlers must not block the bus.
+
+    The synchronous emit() path measures and warns on slow handlers.
+    The asynchronous aemit() path concurrently dispatches handlers and
+    hard-bounds each via asyncio.wait_for so a single slow handler can't
+    block delivery to other subscribers.
+    """
+
+    def test_default_timeout_is_set(self):
+        bus = SecurityEventBus()
+        assert bus.default_handler_timeout_ms > 0
+
+    def test_custom_default_timeout(self):
+        bus = SecurityEventBus(default_handler_timeout_ms=250)
+        assert bus.default_handler_timeout_ms == 250
+
+    def test_emit_warns_on_slow_handler(self, caplog):
+        import logging
+        import time as _time
+
+        bus = SecurityEventBus(default_handler_timeout_ms=10)
+
+        def slow_handler(_event):
+            _time.sleep(0.05)  # 50ms — exceeds the 10ms threshold
+
+        bus.subscribe(slow_handler, name="slow")
+
+        with caplog.at_level(logging.WARNING):
+            delivered = bus.emit(_event())
+
+        assert delivered == 1  # slow handler still runs to completion
+        assert bus.slow_handler_count == 1
+        assert any("Slow handler" in r.message for r in caplog.records)
+
+    def test_emit_does_not_warn_for_fast_handler(self, caplog):
+        import logging
+
+        bus = SecurityEventBus(default_handler_timeout_ms=1000)
+        bus.subscribe(lambda e: None, name="fast")
+
+        with caplog.at_level(logging.WARNING):
+            bus.emit(_event())
+
+        assert bus.slow_handler_count == 0
+
+    def test_emit_rejects_async_handler(self, caplog):
+        """A coroutine handler reaching sync emit() must be skipped, not
+        silently fired-and-forgotten or fed to asyncio.run."""
+        import logging
+
+        bus = SecurityEventBus()
+        seen: list = []
+
+        async def async_handler(event):  # pragma: no cover — must not run
+            seen.append(event)
+
+        bus.subscribe(async_handler, name="async")
+
+        with caplog.at_level(logging.ERROR):
+            delivered = bus.emit(_event())
+
+        assert delivered == 0
+        assert seen == []
+        assert bus.error_count == 1
+        assert any(
+            "async but emit() is sync" in r.message for r in caplog.records
+        )
+
+    def test_per_subscription_timeout_overrides_default(self, caplog):
+        import logging
+        import time as _time
+
+        bus = SecurityEventBus(default_handler_timeout_ms=1000)
+
+        def slow_handler(_event):
+            _time.sleep(0.02)
+
+        bus.subscribe(slow_handler, name="strict", timeout_ms=5)
+
+        with caplog.at_level(logging.WARNING):
+            bus.emit(_event())
+
+        assert bus.slow_handler_count == 1
+
+    def test_aemit_dispatches_async_handler(self):
+        bus = SecurityEventBus()
+        seen: list = []
+
+        async def async_handler(event):
+            seen.append(event)
+
+        bus.subscribe(async_handler, name="async")
+        delivered = asyncio.run(bus.aemit(_event()))
+
+        assert delivered == 1
+        assert len(seen) == 1
+
+    def test_aemit_dispatches_sync_handler_off_thread(self):
+        bus = SecurityEventBus()
+        seen: list = []
+
+        def sync_handler(event):
+            seen.append(event)
+
+        bus.subscribe(sync_handler, name="sync")
+        delivered = asyncio.run(bus.aemit(_event()))
+
+        assert delivered == 1
+        assert len(seen) == 1
+
+    def test_aemit_runs_handlers_concurrently(self):
+        """Three handlers each sleeping 100ms should complete in roughly
+        100ms total, not 300ms — proving they ran concurrently."""
+        import time as _time
+
+        bus = SecurityEventBus(default_handler_timeout_ms=2000)
+        for i in range(3):
+            bus.subscribe(
+                lambda _e: _time.sleep(0.1),
+                name=f"handler-{i}",
+            )
+
+        start = _time.monotonic()
+        delivered = asyncio.run(bus.aemit(_event()))
+        elapsed = _time.monotonic() - start
+
+        assert delivered == 3
+        # Concurrent execution: ~100ms; serial would be ~300ms.
+        # Allow generous slack for thread scheduling.
+        assert elapsed < 0.25, f"handlers ran serially ({elapsed:.2f}s)"
+
+    def test_aemit_timeout_isolates_slow_handler(self):
+        """A slow handler must not block delivery to fast handlers, and
+        the timeout fires deterministically."""
+        bus = SecurityEventBus(default_handler_timeout_ms=50)
+
+        async def slow(_event):
+            await asyncio.sleep(2.0)  # would exceed test timeout if not cancelled
+
+        fast_seen: list = []
+
+        def fast(event):
+            fast_seen.append(event)
+
+        bus.subscribe(slow, name="slow")
+        bus.subscribe(fast, name="fast")
+
+        delivered = asyncio.run(bus.aemit(_event()))
+
+        # Fast handler delivered; slow handler timed out.
+        assert delivered == 1
+        assert len(fast_seen) == 1
+        assert bus.timeout_count == 1
+        assert bus.error_count == 1
+
+    def test_aemit_failure_does_not_stop_others(self):
+        bus = SecurityEventBus()
+        ok_seen: list = []
+
+        async def crashing(_event):
+            raise RuntimeError("boom")
+
+        async def good(event):
+            ok_seen.append(event)
+
+        bus.subscribe(crashing, name="bad")
+        bus.subscribe(good, name="good")
+
+        delivered = asyncio.run(bus.aemit(_event()))
+
+        assert delivered == 1
+        assert len(ok_seen) == 1
+        assert bus.error_count == 1
+
+    def test_aemit_respects_filter(self):
+        from fastmcp.server.security.alerts.filters import SeverityFilter
+
+        bus = SecurityEventBus()
+        seen: list = []
+        bus.subscribe(
+            lambda e: seen.append(e),
+            event_filter=SeverityFilter(min_severity=AlertSeverity.CRITICAL),
+            name="crit-only",
+        )
+
+        # WARNING event — filtered out.
+        asyncio.run(bus.aemit(_event(severity=AlertSeverity.WARNING)))
+        assert seen == []
+
+        # CRITICAL event — passes filter.
+        asyncio.run(bus.aemit(_event(severity=AlertSeverity.CRITICAL)))
+        assert len(seen) == 1

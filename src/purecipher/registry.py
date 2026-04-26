@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Generic, TypedDict
 from urllib.parse import quote, urlencode
+
+logger = logging.getLogger(__name__)
 
 from mcp.server.lowlevel.server import LifespanResultT
 from starlette.requests import Request
@@ -35,7 +38,13 @@ from fastmcp.server.security.orchestrator import SecurityContext
 from fastmcp.server.security.registry.registry import TrustRegistry
 from fastmcp.server.security.storage.sqlite import SQLiteBackend
 from fastmcp.utilities.ui import create_secure_html_response
+from purecipher.account_activity import RegistryAccountActivityStore
+from purecipher.account_security import (
+    LoginLockout,
+    RegistryAccountSecurityStore,
+)
 from purecipher.auth import RegistryAuthSettings, RegistryRole, RegistrySession
+from purecipher.db_migrations import migrate_registry_database
 from purecipher.install import build_install_recipes
 from purecipher.moderation import build_review_queue, moderation_action_from_name
 from purecipher.notification_feed import RegistryNotificationFeed
@@ -56,12 +65,35 @@ from purecipher.ui import (
     create_publisher_profile_html,
     create_registry_ui_html,
     create_review_queue_html,
+    create_setup_html,
 )
+from purecipher.clients import (
+    CLIENT_KINDS,
+    ClientStoreError,
+    RegistryClient,
+    RegistryClientStore,
+    RegistryClientToken,
+)
+from purecipher.control_plane_settings import (
+    PLANE_NAMES,
+    RegistryControlPlaneStore,
+)
+from purecipher.middleware.client_actor import (
+    ClientActorResolverMiddleware,
+)
+from purecipher.middleware.client_aware_middleware import (
+    upgrade_middleware_for_client_actor,
+)
+from purecipher.user_preferences import RegistryUserPreferenceStore
 from securemcp import SecureMCP
 from securemcp.config import (
     AlertConfig,
     CertificationConfig,
+    ConsentConfig,
+    ContractConfig,
     PolicyConfig,
+    ProvenanceConfig,
+    ReflexiveConfig,
     RegistryConfig,
     SecurityConfig,
     ToolMarketplaceConfig,
@@ -207,6 +239,17 @@ def _coerce_categories(values: list[str] | set[str] | None) -> set[ToolCategory]
     return {ToolCategory(value) for value in values}
 
 
+def _level_index(level: CertificationLevel) -> int:
+    """Stable integer ordering of ``CertificationLevel`` for clamping.
+
+    Using ``list(CertificationLevel).index(level)`` matches the
+    convention :class:`CertificationPipeline` uses internally so the
+    "cap to BASIC" check resolves identically to the pipeline's own
+    "level meets minimum" check.
+    """
+    return list(CertificationLevel).index(level)
+
+
 def _split_multi_value(request: Request, key: str) -> list[str]:
     values = list(request.query_params.getlist(key))
     if not values:
@@ -214,6 +257,24 @@ def _split_multi_value(request: Request, key: str) -> list[str]:
         if raw:
             values = raw.split(",")
     return [value.strip() for value in values if value.strip()]
+
+
+def _int_query_param(
+    request: Request,
+    key: str,
+    *,
+    default: int,
+    minimum: int,
+    maximum: int,
+) -> int:
+    raw_value = request.query_params.get(key)
+    if raw_value is None:
+        return default
+    try:
+        value = int(raw_value)
+    except ValueError:
+        return default
+    return max(minimum, min(maximum, value))
 
 
 def _status_code_from_payload(payload: dict[str, Any]) -> int:
@@ -260,6 +321,28 @@ def _limit_list_payload(
     return trimmed
 
 
+def _role_from_body(value: Any) -> RegistryRole | None:
+    try:
+        return RegistryRole(str(value))
+    except ValueError:
+        return None
+
+
+def _account_role_counts(users: list[dict[str, Any]]) -> dict[str, int]:
+    counts = {role.value: 0 for role in RegistryRole}
+    counts["active"] = 0
+    counts["disabled"] = 0
+    for user in users:
+        role = str(user.get("role") or "")
+        if role in counts:
+            counts[role] += 1
+        if user.get("active") is True:
+            counts["active"] += 1
+        else:
+            counts["disabled"] += 1
+    return counts
+
+
 class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
     """PureCipher's verified SecureMCP registry MVP.
 
@@ -282,6 +365,24 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         persistence_path: str | None = None,
         security: SecurityConfig | None = None,
         auth_settings: RegistryAuthSettings | None = None,
+        security_api_require_auth: bool = False,
+        security_api_bearer_token: str | None = None,
+        security_api_auth_verifier: Any = None,
+        # Control-plane opt-outs. As of Iter8 the registry's default
+        # SecurityConfig wires all five SecureMCP control planes
+        # (policy + contracts + consent + provenance + reflexive)
+        # plus the existing tool marketplace + certification. An
+        # operator who explicitly *doesn't* want a particular plane
+        # — for cost, simplicity, or compliance reasons — passes
+        # ``False`` for the matching ``enable_*`` flag.
+        #
+        # These flags only apply to the auto-built default config;
+        # callers passing their own ``security=SecurityConfig(...)``
+        # are responsible for plane wiring themselves.
+        enable_contracts: bool = True,
+        enable_consent: bool = True,
+        enable_provenance: bool = True,
+        enable_reflexive: bool = True,
         **kwargs: Any,
     ) -> None:
         if security is None and signing_secret is None:
@@ -293,6 +394,16 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         self._minimum_certification = minimum_certification
         self._require_moderation = require_moderation
         self._registry_prefix = registry_prefix
+        # Saved for the Iter 9 runtime toggles. When an admin
+        # re-enables a plane after disabling it, the helper rebuilds
+        # the plane with default config plus this secret + issuer
+        # so contract signatures, ledger genesis nonces, etc.
+        # remain consistent with the registry's identity.
+        self._signing_secret_bytes: bytes | None = (
+            signing_secret.encode()
+            if isinstance(signing_secret, str)
+            else signing_secret
+        )
         self._registry_api_mounted = False
         self._auth_settings = auth_settings or RegistryAuthSettings.from_env(
             issuer=issuer_id,
@@ -301,8 +412,82 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         self._auth_settings.validate()
 
         self._persistence_path = persistence_path
-        self._notification_feed = RegistryNotificationFeed(persistence_path)
-        self._openapi_store = OpenAPIStore(persistence_path)
+        schema_managed_by_migrations = bool(persistence_path) and persistence_path != ":memory:"
+        if schema_managed_by_migrations:
+            migrate_registry_database(persistence_path)
+        self._notification_feed = RegistryNotificationFeed(
+            persistence_path,
+            ensure_schema=not schema_managed_by_migrations,
+        )
+        self._openapi_store = OpenAPIStore(
+            persistence_path,
+            ensure_schema=not schema_managed_by_migrations,
+        )
+        self._user_preferences = RegistryUserPreferenceStore(
+            persistence_path,
+            ensure_schema=not schema_managed_by_migrations,
+        )
+        # Persistent runtime overrides for the four opt-in control
+        # planes. The store is consulted *after* the constructor's
+        # ``enable_*`` flags so that an admin's UI toggle survives
+        # restart even when the operator hasn't updated their
+        # constructor call.
+        self._control_plane_store = RegistryControlPlaneStore(
+            persistence_path,
+            ensure_schema=not schema_managed_by_migrations,
+        )
+        # Iter 10: persistent MCP-client identity + token store.
+        # Backs the Clients page + onboard wizard + per-client
+        # detail/governance views, and is consulted by the
+        # token-aware actor resolver below.
+        self._client_store = RegistryClientStore(
+            persistence_path,
+            ensure_schema=not schema_managed_by_migrations,
+        )
+        self._account_activity = RegistryAccountActivityStore(
+            persistence_path,
+            ensure_schema=not schema_managed_by_migrations,
+        )
+        self._account_security = RegistryAccountSecurityStore(
+            persistence_path,
+            self._auth_settings.users,
+            ensure_schema=not schema_managed_by_migrations,
+        )
+        # Per-(username, ip) login throttle. Pre-fix the registry had
+        # no rate limiting on POST /registry/login, allowing infinite
+        # password brute force.
+        self._login_lockout = LoginLockout()
+        if self.auth_enabled and self._auth_settings.bootstrap_admin_password:
+            bootstrapped = self._account_security.create_bootstrap_admin(
+                username=self._auth_settings.bootstrap_admin_username,
+                password=self._auth_settings.bootstrap_admin_password,
+                display_name=self._auth_settings.bootstrap_admin_display_name,
+            )
+            if bootstrapped is not None:
+                self._account_activity.append(
+                    username=bootstrapped.username,
+                    event_kind="bootstrap_admin_created",
+                    title="Bootstrap admin created",
+                    detail="Initial registry admin account was created from bootstrap settings.",
+                    metadata={"role": bootstrapped.role.value, "source": "env"},
+                )
+
+        # Apply persisted operator toggles. The store wins over
+        # constructor defaults — an admin who flipped a plane off
+        # via the settings UI shouldn't have it spring back to "on"
+        # the next time the process restarts. ``security=`` callers
+        # are responsible for honoring the store themselves.
+        if security is None:
+            persisted_toggles = self._control_plane_store.get_all()
+            for plane_name, setting in persisted_toggles.items():
+                if plane_name == "contracts":
+                    enable_contracts = setting.enabled
+                elif plane_name == "consent":
+                    enable_consent = setting.enabled
+                elif plane_name == "provenance":
+                    enable_provenance = setting.enabled
+                elif plane_name == "reflexive":
+                    enable_reflexive = setting.enabled
 
         resolved_security = security or self._build_default_security(
             signing_secret=signing_secret,
@@ -310,16 +495,37 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             minimum_certification=minimum_certification,
             require_moderation=require_moderation,
             persistence_path=persistence_path,
+            enable_contracts=enable_contracts,
+            enable_consent=enable_consent,
+            enable_provenance=enable_provenance,
+            enable_reflexive=enable_reflexive,
+            server_id=name or "purecipher-registry",
         )
 
         super().__init__(
             name=name or "purecipher-registry",
             security=resolved_security,
             mount_security_api=mount_security_api,
+            security_api_require_auth=security_api_require_auth,
+            security_api_bearer_token=security_api_bearer_token,
+            security_api_auth_verifier=security_api_auth_verifier,
             **kwargs,
         )
 
         self._validate_registry_context(self._required_context())
+
+        # Iter 10: wire client-actor resolution into the security
+        # middleware chain. The resolver runs first and stashes the
+        # resolved slug in a contextvar; the four downstream
+        # middlewares are upgraded in-place to PureCipher-aware
+        # subclasses that prefer the contextvar over the access-
+        # token prefix when populating ``actor_id``. Net effect:
+        # every plane (Policy, Contract, Consent, Provenance,
+        # Reflexive) sees a stable per-client identifier when an
+        # MCP client presents a registry-issued bearer token.
+        ctx = self._required_context()
+        ctx.middleware = upgrade_middleware_for_client_actor(ctx.middleware)
+        ctx.middleware.insert(0, ClientActorResolverMiddleware(self))
 
         if mount_registry_api:
             self.mount_registry_api(prefix=registry_prefix)
@@ -344,6 +550,11 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         minimum_certification: CertificationLevel,
         require_moderation: bool,
         persistence_path: str | None,
+        enable_contracts: bool = True,
+        enable_consent: bool = True,
+        enable_provenance: bool = True,
+        enable_reflexive: bool = True,
+        server_id: str = "purecipher-registry",
     ) -> SecurityConfig:
         secret_bytes = (
             signing_secret.encode()
@@ -365,6 +576,43 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             secret_key=secret_bytes,
         )
 
+        # Opt-in control planes. As of Iter8 these are *on by
+        # default*: every registry deployment ships with the full
+        # SecureMCP stack (policy + contracts + consent + provenance +
+        # reflexive) wired and recording. Operators who don't want a
+        # specific plane pass ``enable_<plane>=False`` to the
+        # registry constructor; the matching ``*Config`` simply
+        # isn't created.
+        contracts_config: ContractConfig | None = None
+        if enable_contracts:
+            contracts_config = ContractConfig(
+                # Sign contracts with the same crypto handler the
+                # certification pipeline uses so signatures verify
+                # under the same trust root.
+                crypto_handler=crypto,
+                backend=backend,
+            )
+
+        consent_config: ConsentConfig | None = None
+        if enable_consent:
+            consent_config = ConsentConfig(
+                graph_id=server_id,
+                backend=backend,
+            )
+
+        provenance_config: ProvenanceConfig | None = None
+        if enable_provenance:
+            provenance_config = ProvenanceConfig(
+                ledger_id=server_id,
+                backend=backend,
+            )
+
+        reflexive_config: ReflexiveConfig | None = None
+        if enable_reflexive:
+            reflexive_config = ReflexiveConfig(
+                backend=backend,
+            )
+
         return SecurityConfig(
             alerts=AlertConfig(),
             policy=PolicyConfig(
@@ -383,6 +631,10 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     min_level_for_signing=minimum_certification,
                 )
             ),
+            contracts=contracts_config,
+            consent=consent_config,
+            provenance=provenance_config,
+            reflexive=reflexive_config,
         )
 
     def _required_context(self) -> SecurityContext:
@@ -390,6 +642,846 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         if ctx is None:
             raise RuntimeError("SecureMCP is not attached to this PureCipher registry.")
         return ctx
+
+    # ── Iter 10: MCP client identities ────────────────────────────
+
+    def register_client(
+        self,
+        *,
+        display_name: str,
+        owner_publisher_id: str,
+        slug: str | None = None,
+        description: str = "",
+        intended_use: str = "",
+        kind: str = "agent",
+        metadata: dict[str, Any] | None = None,
+        issue_initial_token: bool = True,
+        token_name: str = "Default",
+        created_by: str = "",
+    ) -> dict[str, Any]:
+        """Create a client and (optionally) mint a first token.
+
+        Returns ``{client, token, secret}`` when an initial token
+        was issued; ``{client, token: None, secret: None}`` when
+        ``issue_initial_token=False``. The plain secret is the only
+        place the full token will exist after this call returns —
+        callers must surface it to the user once and never again.
+
+        ``kind`` is the client taxonomy slug (``agent`` /
+        ``service`` / ``framework`` / ``tooling`` / ``other``); it
+        feeds the directory filters and per-kind defaults downstream.
+        """
+        client = self._client_store.create_client(
+            display_name=display_name,
+            owner_publisher_id=owner_publisher_id,
+            slug=slug,
+            description=description,
+            intended_use=intended_use,
+            kind=kind,
+            metadata=metadata,
+        )
+        token: RegistryClientToken | None = None
+        secret: str | None = None
+        if issue_initial_token:
+            token, secret = self._client_store.issue_token(
+                client_id=client.client_id,
+                name=token_name,
+                created_by=created_by or owner_publisher_id,
+            )
+        return {
+            "client": client.to_dict(),
+            "token": token.to_dict() if token is not None else None,
+            "secret": secret,
+        }
+
+    def get_client(self, client_id_or_slug: str) -> RegistryClient | None:
+        """Look up by either UUID or slug — the routes accept both
+        so links from the UI work cleanly."""
+        record = self._client_store.get_client(client_id_or_slug)
+        if record is not None:
+            return record
+        return self._client_store.get_client_by_slug(client_id_or_slug)
+
+    def list_clients_for_caller(
+        self,
+        *,
+        session: Any | None,
+        limit: int = 200,
+    ) -> list[RegistryClient]:
+        """Visibility-aware list.
+
+        Admins (or auth-disabled callers) see every client.
+        Publishers see clients they own. Anyone else gets nothing.
+        The route handler converts the empty list to a 403 when the
+        caller has no role at all.
+        """
+        if not self.auth_enabled:
+            return self._client_store.list_clients(limit=limit)
+        if session is None:
+            return []
+        if self._has_roles(session, {RegistryRole.ADMIN}):
+            return self._client_store.list_clients(limit=limit)
+        if self._has_roles(session, {RegistryRole.PUBLISHER}):
+            return self._client_store.list_clients(
+                owner_publisher_id=publisher_id_from_author(session.username),
+                limit=limit,
+            )
+        return []
+
+    def update_client(
+        self,
+        client_id: str,
+        *,
+        display_name: str | None = None,
+        description: str | None = None,
+        intended_use: str | None = None,
+        kind: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> RegistryClient | None:
+        return self._client_store.update_client(
+            client_id,
+            display_name=display_name,
+            description=description,
+            intended_use=intended_use,
+            kind=kind,
+            metadata=metadata,
+        )
+
+    def suspend_client(
+        self, client_id: str, *, reason: str = ""
+    ) -> RegistryClient | None:
+        return self._client_store.set_status(
+            client_id, status="suspended", reason=reason
+        )
+
+    def unsuspend_client(self, client_id: str) -> RegistryClient | None:
+        return self._client_store.set_status(client_id, status="active")
+
+    def issue_client_token(
+        self,
+        client_id: str,
+        *,
+        name: str,
+        created_by: str,
+    ) -> tuple[RegistryClientToken, str]:
+        return self._client_store.issue_token(
+            client_id=client_id,
+            name=name,
+            created_by=created_by,
+        )
+
+    def list_client_tokens(
+        self, client_id: str, *, include_revoked: bool = True
+    ) -> list[RegistryClientToken]:
+        return self._client_store.list_tokens(
+            client_id, include_revoked=include_revoked
+        )
+
+    def revoke_client_token(self, token_id: str) -> RegistryClientToken | None:
+        return self._client_store.revoke_token(token_id)
+
+    def authenticate_client_token(
+        self, presented_secret: str
+    ) -> tuple[RegistryClient, RegistryClientToken] | None:
+        """Resolve a presented bearer token to its client identity.
+
+        Returns ``None`` when the token doesn't match, was revoked,
+        or its owning client is suspended. On success, updates the
+        token's ``last_used_at`` as a side effect.
+        """
+        return self._client_store.authenticate_token(presented_secret)
+
+    def resolve_actor_from_request(self, request: Request) -> str | None:
+        """Return a stable ``actor_id`` for an HTTP request.
+
+        Looks for a client API token in the ``Authorization: Bearer
+        ...`` header. When found and valid, returns the client's
+        slug — that's the form ledger / drift / contract code reads
+        elsewhere. Falls back to ``None`` when no token is
+        presented or the token doesn't authenticate, mirroring how
+        the existing middleware treats missing authn.
+        """
+        auth = request.headers.get("Authorization", "")
+        if not auth.lower().startswith("bearer "):
+            return None
+        secret = auth[len("Bearer ") :].strip()
+        result = self.authenticate_client_token(secret)
+        if result is None:
+            return None
+        client, _ = result
+        return client.slug
+
+    # ── Iter 10: per-client governance projection ────────────────
+
+    def get_client_governance(
+        self,
+        client_id_or_slug: str,
+        *,
+        sanitize_for_public: bool = False,
+    ) -> dict[str, Any]:
+        """Return the per-client governance + observability rollup.
+
+        Mirrors :meth:`get_listing_governance` but keys every plane
+        projection by the client's slug (which the
+        :class:`ClientActorResolverMiddleware` writes as ``actor_id``
+        on every request). The result lets the per-client UI show:
+
+        * how many active contracts the client has,
+        * how many consent edges name the client as source/target,
+        * how many provenance records the client has appeared in,
+        * what drift events have been flagged against the client,
+        * a token roll-up.
+
+        Visibility:
+
+        * The caller resolves access (the route handler enforces
+          owner-or-admin); this method projects whatever the planes
+          have. When ``sanitize_for_public=True``, identifying
+          counterparties (peer ``source_id`` / ``target_id``,
+          contract ``server_id``) are stripped so a public-facing
+          variant of the page can show *that* the client has
+          activity without leaking *who* they're talking to.
+
+        Returns ``{error, status: 404}`` when the client isn't
+        registered.
+        """
+        record = self.get_client(client_id_or_slug)
+        if record is None:
+            return {
+                "error": f"Client {client_id_or_slug!r} not found.",
+                "status": 404,
+            }
+
+        slug = record.slug
+        prefix = self._registry_prefix
+
+        header = {
+            "client_id": record.client_id,
+            "slug": slug,
+            "display_name": record.display_name,
+            "kind": record.kind,
+            "owner_publisher_id": record.owner_publisher_id,
+            "status": record.status,
+            "suspended_reason": record.suspended_reason,
+            "intended_use": record.intended_use,
+            "description": record.description,
+            "created_at": record.created_at,
+            "updated_at": record.updated_at,
+        }
+
+        # Contracts: broker-level summary + filtered active list.
+        broker = self._broker_or_none()
+        contracts_block = self._summarize_broker(broker)
+        active_contracts: list[dict[str, Any]] = []
+        if broker is not None:
+            try:
+                rows = list(broker.get_active_contracts_for_agent(slug))
+            except Exception:
+                rows = []
+            for c in rows[:50]:
+                active_contracts.append(
+                    {
+                        "contract_id": getattr(c, "contract_id", ""),
+                        "server_id": getattr(c, "server_id", ""),
+                        "session_id": getattr(c, "session_id", ""),
+                        "status": getattr(
+                            getattr(c, "status", None),
+                            "value",
+                            str(getattr(c, "status", "") or ""),
+                        ),
+                        "created_at": (
+                            c.created_at.isoformat()
+                            if getattr(c, "created_at", None)
+                            else None
+                        ),
+                        "expires_at": (
+                            c.expires_at.isoformat()
+                            if getattr(c, "expires_at", None)
+                            else None
+                        ),
+                    }
+                )
+
+        # Consent: graph-level summary + per-direction edge counts.
+        consent_graph = self._consent_graph_or_none()
+        consent_block = self._summarize_consent_graph(consent_graph)
+        edges_from: list[dict[str, Any]] = []
+        edges_to: list[dict[str, Any]] = []
+        if consent_graph is not None:
+            try:
+                outgoing = list(consent_graph.get_consents_from(slug))
+            except Exception:
+                outgoing = []
+            try:
+                incoming = list(consent_graph.get_consents_for(slug))
+            except Exception:
+                incoming = []
+            for edge in outgoing[:50]:
+                edges_from.append(
+                    {
+                        "edge_id": getattr(edge, "edge_id", ""),
+                        "target_id": getattr(edge, "target_id", ""),
+                        "scopes": list(getattr(edge, "scopes", []) or []),
+                        "status": getattr(
+                            getattr(edge, "status", None),
+                            "value",
+                            str(getattr(edge, "status", "") or ""),
+                        ),
+                        "delegatable": bool(
+                            getattr(edge, "delegatable", False)
+                        ),
+                    }
+                )
+            for edge in incoming[:50]:
+                edges_to.append(
+                    {
+                        "edge_id": getattr(edge, "edge_id", ""),
+                        "source_id": getattr(edge, "source_id", ""),
+                        "scopes": list(getattr(edge, "scopes", []) or []),
+                        "status": getattr(
+                            getattr(edge, "status", None),
+                            "value",
+                            str(getattr(edge, "status", "") or ""),
+                        ),
+                        "delegatable": bool(
+                            getattr(edge, "delegatable", False)
+                        ),
+                    }
+                )
+
+        # Ledger: ledger-level summary + per-actor record window.
+        ledger = self._ledger_or_none()
+        ledger_block = self._summarize_ledger(ledger)
+        recent_records: list[dict[str, Any]] = []
+        record_count = 0
+        if ledger is not None:
+            try:
+                rows = list(ledger.get_records(actor_id=slug, limit=1000))
+            except Exception:
+                rows = []
+            record_count = len(rows)
+            for row in rows[:50]:
+                recent_records.append(
+                    {
+                        "record_id": getattr(row, "record_id", ""),
+                        "action": getattr(
+                            getattr(row, "action", None),
+                            "value",
+                            str(getattr(row, "action", "") or ""),
+                        ),
+                        "resource_id": getattr(row, "resource_id", ""),
+                        "timestamp": (
+                            row.timestamp.isoformat()
+                            if getattr(row, "timestamp", None)
+                            else None
+                        ),
+                        "contract_id": getattr(row, "contract_id", None),
+                    }
+                )
+
+        # Reflexive: analyzer summary + drift history filtered by actor.
+        analyzer = self._analyzer_or_none()
+        analyzer_block = self._summarize_analyzer(analyzer)
+        recent_drifts: list[dict[str, Any]] = []
+        drift_event_count = 0
+        severity_dist: dict[str, int] = {}
+        baselines: dict[str, Any] = {}
+        if analyzer is not None:
+            try:
+                drift_history = list(
+                    analyzer.get_drift_history(actor_id=slug)
+                )
+            except Exception:
+                drift_history = []
+            drift_event_count = len(drift_history)
+            for ev in drift_history[:50]:
+                severity = getattr(
+                    getattr(ev, "severity", None),
+                    "value",
+                    str(getattr(ev, "severity", "") or ""),
+                )
+                severity_dist[severity] = severity_dist.get(severity, 0) + 1
+                recent_drifts.append(
+                    {
+                        "event_id": getattr(ev, "event_id", ""),
+                        "drift_type": getattr(
+                            getattr(ev, "drift_type", None),
+                            "value",
+                            str(getattr(ev, "drift_type", "") or ""),
+                        ),
+                        "severity": severity,
+                        "observed_value": getattr(ev, "observed_value", None),
+                        "baseline_value": getattr(ev, "baseline_value", None),
+                        "deviation": getattr(ev, "deviation", None),
+                        "timestamp": (
+                            ev.timestamp.isoformat()
+                            if getattr(ev, "timestamp", None)
+                            else None
+                        ),
+                    }
+                )
+            try:
+                bls = analyzer.get_actor_baselines(slug) or {}
+            except Exception:
+                bls = {}
+            for metric, baseline in list(bls.items())[:50]:
+                baselines[str(metric)] = {
+                    "metric_name": str(metric),
+                    "mean": getattr(baseline, "mean", None),
+                    "stddev": getattr(baseline, "stddev", None),
+                    "samples": getattr(baseline, "samples", None),
+                }
+
+        # Tokens: active vs revoked count for the client.
+        tokens = self.list_client_tokens(record.client_id)
+        active_tokens = [t for t in tokens if t.is_active()]
+        revoked_tokens = [t for t in tokens if not t.is_active()]
+
+        result: dict[str, Any] = {
+            **header,
+            "policy": {
+                # PolicyEngine is stateless (decisions per-call);
+                # there's no per-actor decision log to project.
+                # The registry policy summary still gives operators
+                # a sense of what gates a request would pass through.
+                "registry_policy": self._summarize_registry_policy(),
+                "actor_history": None,
+                "note": (
+                    "Policy decisions are evaluated per-request; "
+                    "per-actor history is captured downstream by the "
+                    "ledger plane (see `ledger.recent_records`)."
+                ),
+            },
+            "contracts": {
+                "broker": contracts_block,
+                "active_count": len(active_contracts),
+                "active_contracts": active_contracts,
+            },
+            "consent": {
+                "consent_graph": consent_block,
+                "outgoing_count": len(edges_from),
+                "incoming_count": len(edges_to),
+                "edges_from": edges_from,
+                "edges_to": edges_to,
+            },
+            "ledger": {
+                "ledger": ledger_block,
+                "record_count": record_count,
+                "recent_records": recent_records,
+            },
+            "reflexive": {
+                "analyzer": analyzer_block,
+                "drift_event_count": drift_event_count,
+                "severity_distribution": severity_dist,
+                "recent_drifts": recent_drifts,
+                "baselines": baselines,
+            },
+            "tokens": {
+                "total": len(tokens),
+                "active": len(active_tokens),
+                "revoked": len(revoked_tokens),
+                "items": [t.to_dict() for t in tokens],
+            },
+            "links": {
+                "policy_kernel_url": f"{prefix}/policy",
+                "contract_broker_url": f"{prefix}/contracts",
+                "consent_graph_url": f"{prefix}/consent",
+                "provenance_ledger_url": f"{prefix}/provenance",
+                "reflexive_core_url": f"{prefix}/reflexive",
+                "publisher_url": (
+                    f"{prefix}/publishers/{record.owner_publisher_id}"
+                ),
+                "client_url": f"{prefix}/clients/{slug}",
+            },
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+        if sanitize_for_public:
+            result = self._sanitize_client_governance(result)
+        return result
+
+    @staticmethod
+    def _sanitize_client_governance(
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Strip per-counterparty identifiers from a client governance
+        payload so a public viewer sees activity volume without
+        learning *who* the client is talking to.
+
+        Removes:
+
+        - contracts: ``server_id``, ``session_id``, ``contract_id``
+        - consent edges: ``source_id``, ``target_id``, ``edge_id``
+        - ledger records: ``resource_id``, ``contract_id``, ``record_id``
+        - drift events: ``event_id`` (severity / type / counts stay)
+        - tokens: full ``items`` list (counts stay)
+        """
+        sanitized = dict(payload)
+
+        contracts = dict(sanitized.get("contracts") or {})
+        contracts["active_contracts"] = [
+            {
+                k: v
+                for k, v in row.items()
+                if k not in {"server_id", "session_id", "contract_id"}
+            }
+            for row in contracts.get("active_contracts", []) or []
+        ]
+        sanitized["contracts"] = contracts
+
+        consent = dict(sanitized.get("consent") or {})
+        consent["edges_from"] = [
+            {
+                k: v
+                for k, v in row.items()
+                if k not in {"target_id", "edge_id"}
+            }
+            for row in consent.get("edges_from", []) or []
+        ]
+        consent["edges_to"] = [
+            {
+                k: v
+                for k, v in row.items()
+                if k not in {"source_id", "edge_id"}
+            }
+            for row in consent.get("edges_to", []) or []
+        ]
+        sanitized["consent"] = consent
+
+        ledger = dict(sanitized.get("ledger") or {})
+        ledger["recent_records"] = [
+            {
+                k: v
+                for k, v in row.items()
+                if k not in {"resource_id", "contract_id", "record_id"}
+            }
+            for row in ledger.get("recent_records", []) or []
+        ]
+        sanitized["ledger"] = ledger
+
+        reflexive = dict(sanitized.get("reflexive") or {})
+        reflexive["recent_drifts"] = [
+            {k: v for k, v in row.items() if k != "event_id"}
+            for row in reflexive.get("recent_drifts", []) or []
+        ]
+        sanitized["reflexive"] = reflexive
+
+        # Tokens: drop the full token records — counts only.
+        tokens = dict(sanitized.get("tokens") or {})
+        tokens.pop("items", None)
+        sanitized["tokens"] = tokens
+
+        return sanitized
+
+    # ── Iter 9: runtime control-plane toggles ─────────────────────
+
+    def get_control_plane_status(self) -> dict[str, Any]:
+        """Snapshot of each opt-in plane's current state + persisted toggle.
+
+        Used by the admin settings UI. Returns a list of plane
+        records, each carrying:
+
+        - ``plane``: canonical plane name.
+        - ``enabled``: whether the plane is currently attached to
+          the running security context.
+        - ``persisted``: the most recent persisted toggle (with
+          actor + timestamp), or ``None`` if the plane has never
+          been toggled via the admin UI.
+        - ``description``: short copy explaining what the plane
+          does, for the UI.
+        """
+        ctx = self._required_context()
+        persisted = self._control_plane_store.get_all()
+        descriptions = {
+            "contracts": (
+                "Context Broker: negotiates and records agent ↔ "
+                "server contracts."
+            ),
+            "consent": (
+                "Consent Graph: federated consent + jurisdiction "
+                "policy evaluator."
+            ),
+            "provenance": (
+                "Provenance Ledger: append-only audit trail of "
+                "every operation, hash-chained."
+            ),
+            "reflexive": (
+                "Reflexive Core: per-actor behavioral baselines + "
+                "drift detection."
+            ),
+        }
+        live_state = {
+            "contracts": getattr(ctx, "broker", None) is not None,
+            "consent": getattr(ctx, "consent_graph", None) is not None,
+            "provenance": getattr(ctx, "provenance_ledger", None) is not None,
+            "reflexive": (
+                getattr(ctx, "behavioral_analyzer", None) is not None
+            ),
+        }
+        planes = []
+        for name in sorted(PLANE_NAMES):
+            persisted_record = persisted.get(name)
+            planes.append(
+                {
+                    "plane": name,
+                    "enabled": live_state[name],
+                    "description": descriptions.get(name, ""),
+                    "persisted": (
+                        persisted_record.to_dict()
+                        if persisted_record is not None
+                        else None
+                    ),
+                }
+            )
+        return {
+            "planes": planes,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    def enable_plane(
+        self,
+        plane: str,
+        *,
+        actor_id: str = "admin",
+    ) -> dict[str, Any]:
+        """Attach an opt-in control plane at runtime.
+
+        Effect:
+            1. Constructs the plane with default config (using the
+               registry's persistence backend + signing secret where
+               relevant).
+            2. Sets the matching attribute on the security context
+               so governance panels report it as available.
+            3. Appends the plane's middleware to ``ctx.middleware``
+               so MCP traffic actually flows through enforcement.
+            4. Persists the toggle so the plane stays on after a
+               restart.
+
+        Idempotent: re-enabling an already-enabled plane simply
+        refreshes the persisted record without rebuilding state.
+
+        Raises:
+            ValueError: When ``plane`` isn't a known plane name.
+        """
+        if plane not in PLANE_NAMES:
+            raise ValueError(
+                f"Unknown control plane: {plane!r}. "
+                f"Expected one of: {sorted(PLANE_NAMES)}."
+            )
+        ctx = self._required_context()
+        already_attached = self._is_plane_attached(plane, ctx)
+        if not already_attached:
+            self._attach_plane(plane, ctx)
+        self._control_plane_store.set(
+            plane, enabled=True, updated_by=actor_id or "admin"
+        )
+        return self.get_control_plane_status()
+
+    def disable_plane(
+        self,
+        plane: str,
+        *,
+        actor_id: str = "admin",
+    ) -> dict[str, Any]:
+        """Detach an opt-in control plane at runtime.
+
+        Drops the plane's in-memory state, removes its middleware
+        from the chain, nulls the security-context attribute, and
+        persists the toggle so the plane stays off across restarts.
+
+        State loss: the broker's active contracts, the consent
+        graph's nodes/edges, the analyzer's baselines, and the
+        ledger's record buffer are dropped. Operators who want to
+        retain plane state across toggles must wire a
+        ``persistence_path`` so each plane's backend persists to
+        disk; on re-enable, the plane reloads from that backend.
+
+        Raises:
+            ValueError: When ``plane`` isn't a known plane name.
+        """
+        if plane not in PLANE_NAMES:
+            raise ValueError(
+                f"Unknown control plane: {plane!r}. "
+                f"Expected one of: {sorted(PLANE_NAMES)}."
+            )
+        ctx = self._required_context()
+        if self._is_plane_attached(plane, ctx):
+            self._detach_plane(plane, ctx)
+        self._control_plane_store.set(
+            plane, enabled=False, updated_by=actor_id or "admin"
+        )
+        return self.get_control_plane_status()
+
+    def _is_plane_attached(self, plane: str, ctx: SecurityContext) -> bool:
+        if plane == "contracts":
+            return getattr(ctx, "broker", None) is not None
+        if plane == "consent":
+            return getattr(ctx, "consent_graph", None) is not None
+        if plane == "provenance":
+            return getattr(ctx, "provenance_ledger", None) is not None
+        if plane == "reflexive":
+            return getattr(ctx, "behavioral_analyzer", None) is not None
+        return False
+
+    def _backend_for_runtime_planes(self) -> Any:
+        """Return the SQLite backend matching the registry's
+        persistence config, or ``None`` for ephemeral registries.
+
+        Used by the runtime attach helpers so newly-instantiated
+        planes share storage with their original counterparts.
+        """
+        if not self._persistence_path:
+            return None
+        return SQLiteBackend(self._persistence_path)
+
+    def _attach_plane(self, plane: str, ctx: SecurityContext) -> None:
+        """Construct a fresh plane + its middleware and attach both.
+
+        Uses default config — operators who need custom config
+        (e.g. broker default_terms, analyzer thresholds) should
+        construct the registry with ``enable_<plane>=False`` and
+        pass their own ``security=SecurityConfig(...)`` instead of
+        relying on runtime toggles.
+        """
+        backend = self._backend_for_runtime_planes()
+        server_id = self.name or "purecipher-registry"
+
+        if plane == "contracts":
+            from fastmcp.server.security.contracts.broker import ContextBroker
+            from fastmcp.server.security.contracts.crypto import (
+                ContractCryptoHandler,
+                SigningAlgorithm,
+            )
+            from fastmcp.server.security.middleware.contract_validation import (
+                ContractValidationMiddleware,
+            )
+
+            crypto = (
+                ContractCryptoHandler(
+                    algorithm=SigningAlgorithm.HMAC_SHA256,
+                    secret_key=self._signing_secret_bytes,
+                )
+                if self._signing_secret_bytes is not None
+                else None
+            )
+            broker = ContextBroker(
+                server_id=server_id,
+                crypto_handler=crypto,
+                backend=backend,
+            )
+            ctx.broker = broker
+            ctx.middleware.append(
+                ContractValidationMiddleware(broker=broker)
+            )
+            return
+
+        if plane == "consent":
+            from fastmcp.server.security.consent.graph import ConsentGraph
+            from fastmcp.server.security.middleware.consent_enforcement import (
+                ConsentEnforcementMiddleware,
+            )
+
+            graph = ConsentGraph(graph_id=server_id, backend=backend)
+            ctx.consent_graph = graph
+            ctx.middleware.append(
+                ConsentEnforcementMiddleware(graph=graph)
+            )
+            return
+
+        if plane == "provenance":
+            from fastmcp.server.security.middleware.provenance_recording import (
+                ProvenanceRecordingMiddleware,
+            )
+            from fastmcp.server.security.provenance.ledger import (
+                ProvenanceLedger,
+            )
+
+            ledger = ProvenanceLedger(ledger_id=server_id, backend=backend)
+            ctx.provenance_ledger = ledger
+            ctx.middleware.append(
+                ProvenanceRecordingMiddleware(ledger=ledger)
+            )
+            return
+
+        if plane == "reflexive":
+            from fastmcp.server.security.middleware.reflexive import (
+                ReflexiveMiddleware,
+            )
+            from fastmcp.server.security.reflexive.analyzer import (
+                BehavioralAnalyzer,
+                EscalationEngine,
+            )
+
+            analyzer = BehavioralAnalyzer(backend=backend)
+            escalation_engine = EscalationEngine(backend=backend)
+            ctx.behavioral_analyzer = analyzer
+            ctx.escalation_engine = escalation_engine
+            ctx.middleware.append(
+                ReflexiveMiddleware(
+                    analyzer=analyzer,
+                    escalation_engine=escalation_engine,
+                )
+            )
+            return
+
+    def _detach_plane(self, plane: str, ctx: SecurityContext) -> None:
+        """Remove a plane from the security context.
+
+        Filters out the plane's middleware class from
+        ``ctx.middleware`` *and* nulls the matching attribute so
+        ``_*_or_none()`` helpers report unavailable. Plane-specific
+        in-memory state (contracts dict, consent graph, ledger
+        records, baselines) is dropped — it's gc'd along with the
+        plane object once nothing else references it.
+        """
+        if plane == "contracts":
+            from fastmcp.server.security.middleware.contract_validation import (
+                ContractValidationMiddleware,
+            )
+
+            ctx.broker = None
+            ctx.middleware = [
+                m for m in ctx.middleware
+                if not isinstance(m, ContractValidationMiddleware)
+            ]
+            return
+
+        if plane == "consent":
+            from fastmcp.server.security.middleware.consent_enforcement import (
+                ConsentEnforcementMiddleware,
+            )
+
+            ctx.consent_graph = None
+            ctx.middleware = [
+                m for m in ctx.middleware
+                if not isinstance(m, ConsentEnforcementMiddleware)
+            ]
+            return
+
+        if plane == "provenance":
+            from fastmcp.server.security.middleware.provenance_recording import (
+                ProvenanceRecordingMiddleware,
+            )
+
+            ctx.provenance_ledger = None
+            ctx.middleware = [
+                m for m in ctx.middleware
+                if not isinstance(m, ProvenanceRecordingMiddleware)
+            ]
+            return
+
+        if plane == "reflexive":
+            from fastmcp.server.security.middleware.reflexive import (
+                ReflexiveMiddleware,
+            )
+
+            ctx.behavioral_analyzer = None
+            ctx.escalation_engine = None
+            ctx.middleware = [
+                m for m in ctx.middleware
+                if not isinstance(m, ReflexiveMiddleware)
+            ]
+            return
 
     @staticmethod
     def _validate_registry_context(ctx: SecurityContext) -> None:
@@ -539,18 +1631,42 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             return None
 
         token = request.cookies.get(self._auth_settings.cookie_name, "")
+        bearer_token = ""
         if not token:
             authorization = request.headers.get("authorization", "")
             scheme, _, candidate = authorization.partition(" ")
             if scheme.lower() == "bearer":
-                token = candidate.strip()
+                bearer_token = candidate.strip()
+                token = bearer_token
         if not token:
             return None
-        return self._auth_settings.decode_token(token)
+        session = self._auth_settings.decode_token(token)
+        if session is not None:
+            if not self._account_security.session_is_active(
+                session.session_id,
+                username=session.username,
+            ):
+                return None
+            return session
+
+        if bearer_token:
+            user = self._account_security.authenticate_api_token(bearer_token)
+            if user is not None:
+                return RegistrySession(
+                    username=user.username,
+                    role=user.role,
+                    display_name=user.display_name,
+                    expires_at="",
+                    session_id="",
+                )
+        return None
 
     @staticmethod
     def _session_payload(session: RegistrySession | None) -> dict[str, Any] | None:
         return session.to_dict() if session is not None else None
+
+    def _bootstrap_required(self) -> bool:
+        return self.auth_enabled and not self._account_security.has_accounts()
 
     @staticmethod
     def _has_roles(
@@ -569,6 +1685,36 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         if not allowed_roles:
             return False
         return session.role in allowed_roles
+
+    def _guard_last_admin_change(
+        self,
+        username: str,
+        new_role: RegistryRole | None,
+        disabled: bool | None,
+    ) -> str | None:
+        """Prevent admin lifecycle changes that would lock out the registry."""
+
+        users = self._account_security.list_accounts()
+        target = next((user for user in users if user.get("username") == username), None)
+        if target is None or target.get("role") != RegistryRole.ADMIN.value:
+            return None
+        active_admins = [
+            user
+            for user in users
+            if user.get("role") == RegistryRole.ADMIN.value and user.get("active") is True
+        ]
+        is_last_active_admin = (
+            target.get("active") is True
+            and len(active_admins) == 1
+            and active_admins[0].get("username") == username
+        )
+        if not is_last_active_admin:
+            return None
+        if disabled is True:
+            return "Cannot disable the last active admin account."
+        if new_role is not None and new_role != RegistryRole.ADMIN:
+            return "Cannot remove the last active admin role."
+        return None
 
     def _moderation_roles_for_action(
         self,
@@ -676,6 +1822,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             "minimum_certification": self.minimum_certification.value,
             "require_moderation": self._require_moderation,
             "auth_enabled": self.auth_enabled,
+            "bootstrap_required": self._bootstrap_required(),
             "registered_tools": trust_registry.record_count,
             "verified_tools": len(published),
             "pending_review": len(pending),
@@ -1203,6 +2350,1821 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             }
         return profile.to_dict()
 
+    def _listings_for_publisher(
+        self,
+        publisher_id: str,
+        *,
+        include_non_public: bool,
+    ) -> list[ToolListing]:
+        """Filter all marketplace listings down to one publisher's, with
+        visibility honored.
+
+        The visibility rule mirrors the rest of the registry's
+        session-aware endpoints:
+
+        - ``include_non_public=False`` (anonymous / auth-disabled):
+          only listings that pass :meth:`_is_public_listing`
+          (PUBLISHED + certified at min level).
+        - ``include_non_public=True`` (authenticated session): every
+          listing the publisher owns, regardless of status — so
+          curators can inspect how their just-submitted listings will
+          be governed before a moderator approves them.
+
+        Returns the listings ordered most-recently-updated first so
+        the curator's freshest activity is at the top.
+        """
+        marketplace = self._marketplace()
+        target_listings: list[ToolListing] = []
+        for listing in marketplace.get_all_listings():
+            if publisher_id_from_author(listing.author) != publisher_id:
+                continue
+            if include_non_public or self._is_public_listing(listing):
+                target_listings.append(listing)
+        target_listings.sort(key=lambda item: item.updated_at, reverse=True)
+        return target_listings
+
+    def get_server_policy_governance(
+        self,
+        publisher_id: str,
+        *,
+        include_non_public: bool = False,
+    ) -> dict[str, Any]:
+        """Return the policy-kernel governance view for a server (publisher).
+
+        Two layers of policy data are surfaced:
+
+        1. **Registry-wide policy** (the one rendered on the
+           ``/registry/policy`` Policy Kernel page) — currentVersion,
+           policy-set ID, provider count, fail-closed flag,
+           evaluation/deny counters.
+        2. **Per-listing policy bindings** for every tool the publisher
+           owns — distinguishes ``inherited`` (no listing-specific
+           override; either a catalog-only listing or a listing whose
+           call surface isn't gated by a registry-attached policy)
+           from ``proxy_allowlist`` (a curator-attested proxy listing
+           whose AllowlistPolicy gates calls against the
+           curator-vouched tool surface).
+
+        Args:
+            publisher_id: The publisher slug — i.e. the value
+                ``publisher_id_from_author(listing.author)`` returns
+                for the publisher's listings.
+            include_non_public: When True, include non-public
+                listings (e.g. ``PENDING_REVIEW``). Authenticated
+                callers should pass True so curators can see how
+                their just-submitted listings will be governed.
+
+        Returns:
+            ``{server_id, registry_policy, per_tool_policies, summary,
+            links, generated_at}`` on success.
+            ``{error, status: 404}`` when the publisher has no
+            visible listings under the caller's visibility.
+        """
+
+        target_listings = self._listings_for_publisher(
+            publisher_id, include_non_public=include_non_public
+        )
+        if not target_listings:
+            return {
+                "error": f"Publisher '{publisher_id}' not found",
+                "status": 404,
+            }
+
+        registry_policy = self._summarize_registry_policy()
+        per_tool: list[dict[str, Any]] = []
+        for listing in target_listings:
+            per_tool.append(self._summarize_listing_policy_binding(listing))
+
+        inherited_count = sum(
+            1 for entry in per_tool if entry["binding_source"] == "inherited"
+        )
+        overridden_count = len(per_tool) - inherited_count
+
+        return {
+            "server_id": publisher_id,
+            "registry_policy": registry_policy,
+            "per_tool_policies": per_tool,
+            "summary": {
+                "tool_count": len(per_tool),
+                "inherited_count": inherited_count,
+                "overridden_count": overridden_count,
+            },
+            "links": {
+                "policy_kernel_url": f"{self._registry_prefix}/policy",
+            },
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    def _summarize_registry_policy(self) -> dict[str, Any]:
+        """Pull a UI-shaped snapshot of the registry-wide policy engine.
+
+        We intentionally project a small subset of the
+        ``SecurityAPI.get_policy_status()`` payload — UI surfaces
+        should not have to know about every internal field, and
+        bringing the whole thing across the wire couples the server
+        profile page tightly to the policy-status contract.
+        """
+        api = self._policy_api()
+        status = api.get_policy_status()
+        if "error" in status:
+            return {
+                "available": False,
+                "error": status.get("error"),
+            }
+        versioning = status.get("versioning") or {}
+        return {
+            "available": True,
+            "policy_set_id": versioning.get("policy_set_id"),
+            "current_version": versioning.get("current_version"),
+            "version_count": versioning.get("version_count"),
+            "fail_closed": status.get("fail_closed"),
+            "allow_hot_swap": status.get("allow_hot_swap"),
+            "provider_count": status.get("provider_count"),
+            "evaluation_count": status.get("evaluation_count"),
+            "deny_count": status.get("deny_count"),
+        }
+
+    def _summarize_listing_policy_binding(
+        self, listing: ToolListing
+    ) -> dict[str, Any]:
+        """Project a single listing into a policy-binding row.
+
+        Encodes the contract:
+
+        - ``proxy`` listings whose ``listing.metadata["introspection"]
+          ["tool_names"]`` is populated render as
+          ``binding_source="proxy_allowlist"`` with the curator-
+          vouched tool count + a small sample of names.
+        - Any other listing renders as
+          ``binding_source="inherited"`` — calls aren't gated by a
+          listing-specific policy at the registry layer.
+        """
+        from fastmcp.server.security.gateway.tool_marketplace import HostingMode
+
+        base = {
+            "listing_id": listing.listing_id,
+            "tool_name": listing.tool_name,
+            "display_name": listing.display_name or listing.tool_name,
+            "hosting_mode": (
+                listing.hosting_mode.value
+                if listing.hosting_mode is not None
+                else None
+            ),
+            "attestation_kind": (
+                listing.attestation_kind.value
+                if listing.attestation_kind is not None
+                else None
+            ),
+            "status": listing.status.value,
+        }
+
+        if listing.hosting_mode == HostingMode.PROXY:
+            allowed = self._observed_tool_allowlist(listing)
+            if allowed:
+                # Truncate the inline sample so a 500-tool surface
+                # doesn't blow up the response payload. Curators who
+                # want the full list click through to the listing
+                # detail page where the manifest is rendered.
+                sample = sorted(allowed)[:10]
+                return {
+                    **base,
+                    "binding_source": "proxy_allowlist",
+                    "policy_provider": {
+                        "type": "allowlist",
+                        "policy_id": (
+                            f"curator-allowlist-{listing.listing_id}"
+                        ),
+                        "fail_closed": True,
+                        "allowed_count": len(allowed),
+                        "allowed_sample": sample,
+                    },
+                }
+
+        return {
+            **base,
+            "binding_source": "inherited",
+            "policy_provider": None,
+        }
+
+    def get_listing_governance(
+        self,
+        tool_name: str,
+        *,
+        include_non_public: bool = False,
+        sanitize_for_public: bool = True,
+    ) -> dict[str, Any]:
+        """Return the per-listing governance + observability rollup.
+
+        Mirrors the publisher-scoped server-profile views, but
+        scoped to a single listing. Composes the same
+        ``_summarize_listing_*`` helpers we already use for the
+        publisher endpoints so the per-listing projection is
+        guaranteed consistent with the per-publisher projection.
+
+        Visibility rules:
+
+        - When ``include_non_public=False`` (anonymous, or auth
+          disabled), only public listings are visible. Pending /
+          suspended / etc. listings 404.
+        - When ``include_non_public=True`` (authenticated session),
+          any listing the registry knows about is visible.
+
+        ``sanitize_for_public=True`` (default for anonymous callers)
+        strips identifying fields from the response — actor IDs,
+        moderator IDs, agent IDs — so a public viewer browsing a
+        listing sees its trust posture without operator-private
+        details.
+
+        Args:
+            tool_name: The listing's canonical tool name.
+            include_non_public: Visibility flag (mirror of the other
+                governance endpoints).
+            sanitize_for_public: When True, strip identifying fields
+                before returning. The route handler passes True for
+                anonymous callers, False for authenticated.
+
+        Returns:
+            ``{listing_id, tool_name, ..., policy, contracts, consent,
+            ledger, overrides, observability, links, generated_at}``
+            on success;
+            ``{error, status: 404}`` when the listing isn't visible
+            under the caller's visibility.
+        """
+        marketplace = self._marketplace()
+        if include_non_public:
+            listing = marketplace.get_by_name(tool_name)
+        else:
+            listing = self._get_public_listing(tool_name)
+        if listing is None:
+            return {
+                "error": f"Tool '{tool_name}' not found",
+                "status": 404,
+            }
+
+        # Identifying header — same fields the per-tool blocks on the
+        # publisher endpoints emit, so the consumer can pivot.
+        publisher_id = publisher_id_from_author(listing.author)
+        header = {
+            "listing_id": listing.listing_id,
+            "tool_name": listing.tool_name,
+            "display_name": listing.display_name or listing.tool_name,
+            "publisher_id": publisher_id,
+            "hosting_mode": (
+                listing.hosting_mode.value
+                if listing.hosting_mode is not None
+                else None
+            ),
+            "attestation_kind": (
+                listing.attestation_kind.value
+                if listing.attestation_kind is not None
+                else None
+            ),
+            "status": listing.status.value,
+        }
+
+        # Compose per-plane projections from the same helpers the
+        # publisher endpoints use. These are pure projections of the
+        # listing + relevant context, so per-listing and per-publisher
+        # views can never disagree about what a listing's binding is.
+        policy_row = self._summarize_listing_policy_binding(listing)
+        registry_policy = self._summarize_registry_policy()
+
+        contracts_broker = self._broker_or_none()
+        contracts_block = self._summarize_broker(contracts_broker)
+        contracts_row = self._summarize_listing_contract_binding(
+            listing,
+            self._active_contracts_snapshot(contracts_broker),
+        )
+
+        consent_graph = self._consent_graph_or_none()
+        consent_block = self._summarize_consent_graph(consent_graph)
+        consent_row = self._summarize_listing_consent_binding(
+            listing,
+            self._active_consent_edges_snapshot(consent_graph),
+        )
+
+        ledger = self._ledger_or_none()
+        ledger_block = self._summarize_ledger(ledger)
+        ledger_row = self._summarize_listing_ledger_binding(listing, ledger)
+
+        overrides_row = self._summarize_listing_overrides(listing, marketplace)
+
+        analyzer = self._analyzer_or_none()
+        analyzer_block = self._summarize_analyzer(analyzer)
+        observability_row = self._summarize_listing_observability(
+            listing, self._drift_events_snapshot(analyzer)
+        )
+
+        result = {
+            **header,
+            "policy": {
+                "registry_policy": registry_policy,
+                **policy_row,
+            },
+            "contracts": {
+                "broker": contracts_block,
+                **contracts_row,
+            },
+            "consent": {
+                "consent_graph": consent_block,
+                **consent_row,
+            },
+            "ledger": {
+                "ledger": ledger_block,
+                **ledger_row,
+            },
+            "overrides": overrides_row,
+            "observability": {
+                "analyzer": analyzer_block,
+                **observability_row,
+            },
+            "links": {
+                "policy_kernel_url": f"{self._registry_prefix}/policy",
+                "contract_broker_url": f"{self._registry_prefix}/contracts",
+                "consent_graph_url": f"{self._registry_prefix}/consent",
+                "provenance_ledger_url": f"{self._registry_prefix}/provenance",
+                "moderation_queue_url": f"{self._registry_prefix}/review",
+                "reflexive_core_url": f"{self._registry_prefix}/reflexive",
+                "publisher_url": (
+                    f"{self._registry_prefix}/publishers/{publisher_id}"
+                ),
+            },
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+        if sanitize_for_public:
+            result = self._sanitize_listing_governance(result)
+        return result
+
+    def _sanitize_listing_governance(
+        self, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Strip identifying fields from a listing governance payload.
+
+        Public viewers should see *that* a tool has activity (counts,
+        binding sources, severities, statuses) without seeing *who*
+        was involved (actor IDs, moderator IDs, agent IDs). The
+        sanitization is in-place on the dict structure and returns
+        the same dict for chaining.
+        """
+        # Contracts block — drop the agent IDs but keep the count.
+        contracts = payload.get("contracts")
+        if isinstance(contracts, dict):
+            if "matching_agents" in contracts:
+                contracts["matching_agents"] = []
+
+        # Consent block — drop grant source IDs.
+        consent = payload.get("consent")
+        if isinstance(consent, dict):
+            if "grant_sources" in consent:
+                consent["grant_sources"] = []
+
+        # Overrides block — drop moderator IDs from the latest +
+        # individual log entries, but keep counts and timestamps so
+        # public viewers see "this listing was suspended on date X"
+        # without seeing "by moderator Y".
+        overrides = payload.get("overrides")
+        if isinstance(overrides, dict):
+            moderation = overrides.get("moderation")
+            if isinstance(moderation, dict):
+                moderation.pop("latest_moderator_id", None)
+                # Public callers don't need the full log either —
+                # this could leak operator process. Keep the count.
+                if "log" in moderation:
+                    moderation["log"] = []
+
+        # Observability block — actor IDs are the most sensitive
+        # field on drift events because they identify the agent.
+        observability = payload.get("observability")
+        if isinstance(observability, dict):
+            analyzer = observability.get("analyzer")
+            if isinstance(analyzer, dict):
+                analyzer.pop("latest_drift_actor_id", None)
+
+        return payload
+
+    def get_server_observability(
+        self,
+        publisher_id: str,
+        *,
+        include_non_public: bool = False,
+        recent_event_limit: int = 10,
+    ) -> dict[str, Any]:
+        """Return the Reflexive-Core observability view for a server.
+
+        Surfaces the BehavioralAnalyzer's state plus per-tool drift
+        bindings. Two layers, parallel to the governance endpoints:
+
+        1. **Analyzer block** — opt-in via
+           ``SecurityConfig.reflexive``. When wired, the registry's
+           ``BehavioralAnalyzer`` tracks per-actor metric baselines
+           (calls_per_minute, error_rate, etc.) and raises
+           ``DriftEvent`` records when observed values exceed the
+           configured sigma thresholds. We project the analyzer's
+           identifying metadata, total drift count, severity
+           distribution, monitored-actor count, tracked-metric
+           count, registered detectors, and latest drift activity.
+        2. **Per-listing observability bindings** — drift events
+           are *actor-centric* (``actor_id``), not tool-centric, so
+           tool-binding here is best-effort. We scan
+           ``event.metadata`` for the standard tool-targeting keys
+           (``tool_name`` / ``resource_id`` / ``tool_names``) plus
+           literal substring matches in ``event.description``.
+           Rows surface drift count, highest severity observed,
+           latest drift timestamp, and a per-severity distribution.
+           ``binding_source`` is ``monitored`` when at least one
+           event references the tool, else ``no_observations``.
+
+        Args:
+            publisher_id: Publisher slug.
+            include_non_public: Mirror of the governance endpoints'
+                visibility flag.
+            recent_event_limit: Cap on the cross-tool
+                ``recent_drift_events`` feed. Default 10.
+        """
+
+        target_listings = self._listings_for_publisher(
+            publisher_id, include_non_public=include_non_public
+        )
+        if not target_listings:
+            return {
+                "error": f"Publisher '{publisher_id}' not found",
+                "status": 404,
+            }
+
+        analyzer = self._analyzer_or_none()
+        analyzer_block = self._summarize_analyzer(analyzer)
+        events = self._drift_events_snapshot(analyzer)
+
+        per_tool: list[dict[str, Any]] = []
+        with_observations_count = 0
+        with_high_severity_count = 0
+        with_critical_severity_count = 0
+        for listing in target_listings:
+            row = self._summarize_listing_observability(listing, events)
+            per_tool.append(row)
+            if row["binding_source"] == "monitored":
+                with_observations_count += 1
+            highest = row.get("highest_severity")
+            if highest == "critical":
+                with_critical_severity_count += 1
+            elif highest == "high":
+                with_high_severity_count += 1
+
+        # Cross-tool feed: tag each event with the matching tool
+        # if any, sort desc by timestamp, cap at limit.
+        listing_lookup = {
+            listing.tool_name: listing for listing in target_listings
+        }
+        recent_events: list[dict[str, Any]] = []
+        for event in events:
+            for listing in target_listings:
+                if self._drift_event_references_tool(event, listing.tool_name):
+                    matched = listing
+                    break
+            else:
+                matched = None
+            recent_events.append(self._serialize_drift_event(event, matched))
+        # Filter to events that reference one of this server's tools
+        # — otherwise the feed dilutes with unrelated drift across
+        # the registry. Operators looking at the global view go to
+        # /registry/reflexive.
+        recent_events = [
+            entry for entry in recent_events if entry.get("tool_name")
+        ]
+        recent_events.sort(
+            key=lambda entry: entry.get("timestamp", ""), reverse=True
+        )
+        recent_events = recent_events[:recent_event_limit]
+        # Avoid emitting unused lookup once recent events are built.
+        del listing_lookup
+
+        return {
+            "server_id": publisher_id,
+            "analyzer": analyzer_block,
+            "per_tool_observability": per_tool,
+            "recent_drift_events": recent_events,
+            "summary": {
+                "tool_count": len(per_tool),
+                "monitored_count": with_observations_count,
+                "with_high_drift_count": with_high_severity_count,
+                "with_critical_drift_count": with_critical_severity_count,
+            },
+            "links": {
+                "reflexive_core_url": f"{self._registry_prefix}/reflexive",
+            },
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    def _analyzer_or_none(self):
+        """Return the registry's :class:`BehavioralAnalyzer` or None.
+
+        Like the broker / consent graph / provenance ledger, the
+        analyzer is opt-in via :class:`SecurityConfig.reflexive`.
+        When the operator hasn't configured it,
+        ``ctx.behavioral_analyzer`` is ``None`` and observability
+        gracefully degrades.
+        """
+        try:
+            ctx = self._required_context()
+        except RuntimeError:
+            return None
+        return getattr(ctx, "behavioral_analyzer", None)
+
+    def _summarize_analyzer(self, analyzer) -> dict[str, Any]:
+        """Project the analyzer's identifying metadata + activity.
+
+        Returns a stable shape regardless of availability — the
+        ``available`` flag tells the consumer whether the rest of
+        the fields carry real data.
+        """
+        if analyzer is None:
+            return {
+                "available": False,
+                "reason": (
+                    "The Reflexive Core is not enabled on this "
+                    "registry. Operators can opt in by passing "
+                    "SecurityConfig(reflexive=ReflexiveConfig(...)) "
+                    "when constructing the registry."
+                ),
+            }
+
+        from fastmcp.server.security.reflexive.models import DriftSeverity
+
+        baselines_by_actor = getattr(analyzer, "_baselines", {}) or {}
+        actor_count = len(baselines_by_actor)
+        metric_names: set[str] = set()
+        for metrics in baselines_by_actor.values():
+            for metric_name in metrics.keys():
+                metric_names.add(str(metric_name))
+
+        history = list(getattr(analyzer, "_drift_history", []) or [])
+        severity_dist: dict[str, int] = {sev.value: 0 for sev in DriftSeverity}
+        for event in history:
+            try:
+                severity_dist[event.severity.value] += 1
+            except (AttributeError, KeyError):
+                continue
+
+        latest = history[-1] if history else None
+        latest_at = (
+            latest.timestamp.isoformat() if latest is not None else None
+        )
+        latest_severity = (
+            latest.severity.value if latest is not None else None
+        )
+        latest_actor = (
+            getattr(latest, "actor_id", None) if latest is not None else None
+        )
+
+        return {
+            "available": True,
+            "analyzer_id": getattr(analyzer, "analyzer_id", "default"),
+            "total_drift_count": int(
+                getattr(analyzer, "total_drift_count", 0) or 0
+            ),
+            "monitored_actor_count": actor_count,
+            "tracked_metric_count": len(metric_names),
+            "tracked_metrics": sorted(metric_names),
+            "detector_count": len(getattr(analyzer, "_detectors", []) or []),
+            "min_samples": int(getattr(analyzer, "_min_samples", 0) or 0),
+            "severity_distribution": severity_dist,
+            "latest_drift_at": latest_at,
+            "latest_drift_severity": latest_severity,
+            "latest_drift_actor_id": latest_actor,
+        }
+
+    def _drift_events_snapshot(self, analyzer) -> list[Any]:
+        """Return the analyzer's drift events as a list.
+
+        Pulled into a helper so the per-tool walk doesn't have to
+        re-read on every iteration. Returns empty when analyzer
+        isn't configured.
+        """
+        if analyzer is None:
+            return []
+        return list(getattr(analyzer, "_drift_history", []) or [])
+
+    def _summarize_listing_observability(
+        self,
+        listing: ToolListing,
+        events: list[Any],
+    ) -> dict[str, Any]:
+        """Project one listing into an observability-binding row.
+
+        Walks the analyzer's drift history for events that reference
+        this tool by name (best-effort). When matches exist, the
+        row carries a per-severity distribution, the highest
+        severity observed (escalation order: critical > high >
+        medium > low > info), and the latest match's timestamp.
+        """
+        from fastmcp.server.security.reflexive.models import DriftSeverity
+
+        severity_order = ["info", "low", "medium", "high", "critical"]
+        severity_dist: dict[str, int] = {sev.value: 0 for sev in DriftSeverity}
+        latest_at: str | None = None
+        latest_severity: str | None = None
+        highest_idx = -1
+        match_count = 0
+        for event in events:
+            if not self._drift_event_references_tool(event, listing.tool_name):
+                continue
+            match_count += 1
+            try:
+                severity = event.severity.value
+            except AttributeError:
+                severity = "info"
+            severity_dist[severity] = severity_dist.get(severity, 0) + 1
+            try:
+                idx = severity_order.index(severity)
+            except ValueError:
+                idx = -1
+            if idx > highest_idx:
+                highest_idx = idx
+            timestamp = (
+                event.timestamp.isoformat()
+                if getattr(event, "timestamp", None)
+                else ""
+            )
+            if latest_at is None or timestamp > latest_at:
+                latest_at = timestamp
+                latest_severity = severity
+
+        highest = severity_order[highest_idx] if highest_idx >= 0 else None
+
+        base = {
+            "listing_id": listing.listing_id,
+            "tool_name": listing.tool_name,
+            "display_name": listing.display_name or listing.tool_name,
+            "hosting_mode": (
+                listing.hosting_mode.value
+                if listing.hosting_mode is not None
+                else None
+            ),
+            "attestation_kind": (
+                listing.attestation_kind.value
+                if listing.attestation_kind is not None
+                else None
+            ),
+            "status": listing.status.value,
+        }
+
+        return {
+            **base,
+            "binding_source": "monitored" if match_count > 0 else "no_observations",
+            "drift_event_count": match_count,
+            "severity_distribution": severity_dist,
+            "highest_severity": highest,
+            "latest_drift_at": latest_at,
+            "latest_drift_severity": latest_severity,
+        }
+
+    def _drift_event_references_tool(self, event, tool_name: str) -> bool:
+        """Return True when a drift event references ``tool_name``.
+
+        Heuristic in order of confidence:
+
+        1. ``event.metadata`` contains a string field whose value
+           equals ``tool_name`` (or list/set/tuple containing it).
+           Common keys: ``tool_name``, ``resource_id``,
+           ``tool_names``, ``resource_pattern``.
+        2. ``event.description`` literally contains ``tool_name``
+           as a substring.
+        """
+        metadata = getattr(event, "metadata", None) or {}
+        if isinstance(metadata, dict):
+            for value in metadata.values():
+                if isinstance(value, str) and value == tool_name:
+                    return True
+                if isinstance(value, (list, tuple, set)):
+                    for item in value:
+                        if isinstance(item, str) and item == tool_name:
+                            return True
+
+        description = getattr(event, "description", None) or ""
+        if isinstance(description, str) and tool_name and tool_name in description:
+            return True
+
+        return False
+
+    def _serialize_drift_event(
+        self, event, matched_listing: ToolListing | None
+    ) -> dict[str, Any]:
+        """Project a drift event for the cross-tool feed.
+
+        Tags the event with the matching listing's tool name +
+        display name when one was found, so the consumer can render
+        a tool link without joining on listing_id.
+        """
+        return {
+            "event_id": getattr(event, "event_id", ""),
+            "drift_type": (
+                event.drift_type.value
+                if getattr(event, "drift_type", None) is not None
+                else None
+            ),
+            "severity": (
+                event.severity.value
+                if getattr(event, "severity", None) is not None
+                else None
+            ),
+            "actor_id": getattr(event, "actor_id", ""),
+            "description": getattr(event, "description", ""),
+            "observed_value": getattr(event, "observed_value", None),
+            "baseline_value": getattr(event, "baseline_value", None),
+            "deviation": getattr(event, "deviation", None),
+            "timestamp": (
+                event.timestamp.isoformat()
+                if getattr(event, "timestamp", None) is not None
+                else None
+            ),
+            "tool_name": (
+                matched_listing.tool_name if matched_listing is not None else None
+            ),
+            "display_name": (
+                (matched_listing.display_name or matched_listing.tool_name)
+                if matched_listing is not None
+                else None
+            ),
+        }
+
+    def get_server_overrides_governance(
+        self,
+        publisher_id: str,
+        *,
+        include_non_public: bool = False,
+        recent_decision_limit: int = 10,
+    ) -> dict[str, Any]:
+        """Return the Overrides governance view for a server.
+
+        This is the rollup view of operator/moderator interventions
+        across this server's tools. Overrides come from three real
+        sources already in the system:
+
+        1. **Status overrides** — every listing has a
+           :class:`PublishStatus`. ``PUBLISHED`` is the default;
+           ``PENDING_REVIEW`` / ``SUSPENDED`` / ``DEPRECATED`` /
+           ``REJECTED`` are operator-imposed overrides.
+        2. **Moderation log** — every
+           ``approve``/``reject``/``suspend``/``unsuspend``/
+           ``deprecate``/``request_changes`` decision is recorded on
+           ``listing.moderation_log`` chronologically.
+        3. **Yanked versions** — :attr:`ToolVersion.yanked` +
+           ``yank_reason`` give per-version overrides without
+           taking down the whole listing.
+
+        Plus a cross-reference: per-listing policy overrides (the
+        proxy AllowlistPolicy) are already on the Policy panel —
+        we surface a ``policy_override.active`` flag here so a
+        moderator scanning the server sees them in one place.
+
+        Per-tool ``binding_source`` reflects the most-salient
+        override for that tool:
+
+        - ``moderation_pending`` — ``status == PENDING_REVIEW``
+        - ``moderated`` — listing has at least one decision in the
+          moderation log (suspended / approved / rejected /
+          deprecated / etc.)
+        - ``yanked_versions`` — at least one published version was
+          yanked
+        - ``active`` — ``PUBLISHED`` with no other override
+
+        Args:
+            publisher_id: Publisher slug.
+            include_non_public: Visibility flag (mirrors the other
+                governance endpoints).
+            recent_decision_limit: Cap on the cross-tool
+                ``recent_moderation_decisions`` feed. Default 10.
+        """
+
+        target_listings = self._listings_for_publisher(
+            publisher_id, include_non_public=include_non_public
+        )
+        if not target_listings:
+            return {
+                "error": f"Publisher '{publisher_id}' not found",
+                "status": 404,
+            }
+
+        marketplace = self._marketplace()
+
+        per_tool: list[dict[str, Any]] = []
+        all_decisions: list[dict[str, Any]] = []
+        for listing in target_listings:
+            row = self._summarize_listing_overrides(listing, marketplace)
+            per_tool.append(row)
+            for entry in row["moderation"]["log"]:
+                # Tag each decision with the owning tool name so the
+                # cross-tool feed below renders without the consumer
+                # having to join on listing_id.
+                all_decisions.append(
+                    {
+                        **entry,
+                        "tool_name": listing.tool_name,
+                        "display_name": listing.display_name
+                        or listing.tool_name,
+                    }
+                )
+
+        # Sort recent decisions across all the publisher's tools by
+        # most-recent first, capped.
+        all_decisions.sort(
+            key=lambda item: item.get("created_at", ""), reverse=True
+        )
+        recent_decisions = all_decisions[:recent_decision_limit]
+
+        # Summary aggregates.
+        status_counts = {
+            "draft": 0,
+            "pending_review": 0,
+            "published": 0,
+            "suspended": 0,
+            "deprecated": 0,
+            "rejected": 0,
+        }
+        yanked_version_count = 0
+        policy_override_count = 0
+        open_moderation_actions = 0
+        for row in per_tool:
+            status = row.get("status") or ""
+            if status in status_counts:
+                status_counts[status] += 1
+            yanked_version_count += len(row.get("yanked_versions", []))
+            if row.get("policy_override", {}).get("active"):
+                policy_override_count += 1
+            if row.get("moderation", {}).get("open"):
+                open_moderation_actions += 1
+
+        return {
+            "server_id": publisher_id,
+            "summary": {
+                "tool_count": len(per_tool),
+                **{
+                    f"{key}_count": value
+                    for key, value in status_counts.items()
+                },
+                "yanked_version_count": yanked_version_count,
+                "policy_override_count": policy_override_count,
+                "open_moderation_actions": open_moderation_actions,
+            },
+            "per_tool_overrides": per_tool,
+            "recent_moderation_decisions": recent_decisions,
+            "links": {
+                "moderation_queue_url": f"{self._registry_prefix}/review",
+            },
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    def _summarize_listing_overrides(
+        self,
+        listing: ToolListing,
+        marketplace,
+    ) -> dict[str, Any]:
+        """Project one listing into an overrides-binding row.
+
+        Decision precedence for ``binding_source``:
+
+        1. ``moderation_pending`` if the listing is awaiting a
+           moderator (``PENDING_REVIEW``).
+        2. ``moderated`` if the listing has any decisions in its
+           moderation log OR the status is one of the moderated
+           statuses (suspended / deprecated / rejected).
+        3. ``yanked_versions`` if at least one version was yanked.
+        4. ``active`` otherwise.
+        """
+        from fastmcp.server.security.gateway.tool_marketplace import (
+            HostingMode,
+            PublishStatus,
+        )
+
+        status = listing.status
+
+        # Moderation log + open-action flag.
+        log = list(listing.moderation_log or [])
+        log_dicts = [decision.to_dict() for decision in log]
+        log_dicts.sort(
+            key=lambda item: item.get("created_at", ""), reverse=True
+        )
+        latest = log_dicts[0] if log_dicts else None
+        open_moderation = status == PublishStatus.PENDING_REVIEW
+
+        # Yanked versions for this listing.
+        try:
+            versions = marketplace.get_version_history(listing.listing_id)
+        except Exception:
+            # Defensive: if the marketplace doesn't expose history
+            # for this listing (storage error, etc.), treat as no
+            # yanks rather than blowing up the entire projection.
+            versions = []
+        yanked = [
+            {
+                "version": getattr(v, "version", ""),
+                "yanked": True,
+                "yank_reason": getattr(v, "yank_reason", "") or "",
+                "published_at": (
+                    v.published_at.isoformat()
+                    if getattr(v, "published_at", None)
+                    else None
+                ),
+            }
+            for v in versions
+            if getattr(v, "yanked", False)
+        ]
+
+        # Per-listing policy override flag — proxy listings whose
+        # observed-tool surface is recorded carry an AllowlistPolicy
+        # at the proxy gateway. Mirrors what the Policy panel renders.
+        override_active = False
+        allowed_count = 0
+        if listing.hosting_mode == HostingMode.PROXY:
+            allowed = self._observed_tool_allowlist(listing)
+            if allowed:
+                override_active = True
+                allowed_count = len(allowed)
+
+        # Pick the most-salient binding source.
+        moderated_statuses = {
+            PublishStatus.SUSPENDED,
+            PublishStatus.DEPRECATED,
+            PublishStatus.REJECTED,
+        }
+        if open_moderation:
+            binding_source = "moderation_pending"
+        elif status in moderated_statuses or log:
+            binding_source = "moderated"
+        elif yanked:
+            binding_source = "yanked_versions"
+        else:
+            binding_source = "active"
+
+        return {
+            "listing_id": listing.listing_id,
+            "tool_name": listing.tool_name,
+            "display_name": listing.display_name or listing.tool_name,
+            "hosting_mode": (
+                listing.hosting_mode.value
+                if listing.hosting_mode is not None
+                else None
+            ),
+            "attestation_kind": (
+                listing.attestation_kind.value
+                if listing.attestation_kind is not None
+                else None
+            ),
+            "status": status.value,
+            "binding_source": binding_source,
+            "moderation": {
+                "open": open_moderation,
+                "log_entries": len(log_dicts),
+                "latest_action": latest["action"] if latest else None,
+                "latest_at": latest["created_at"] if latest else None,
+                "latest_reason": latest["reason"] if latest else None,
+                "latest_moderator_id": (
+                    latest["moderator_id"] if latest else None
+                ),
+                "log": log_dicts,
+            },
+            "policy_override": {
+                "active": override_active,
+                "allowed_count": allowed_count,
+            },
+            "yanked_versions": yanked,
+        }
+
+    def get_server_ledger_governance(
+        self,
+        publisher_id: str,
+        *,
+        include_non_public: bool = False,
+    ) -> dict[str, Any]:
+        """Return the Provenance-Ledger governance view for a server.
+
+        Surfaces two layers honestly, parallel to the Policy Kernel
+        story:
+
+        1. **Registry-wide ledger** — opt-in via
+           ``SecurityConfig.provenance``. When wired, it records
+           registry-side actions (submissions, policy decisions,
+           etc.). The block carries ``ledger_id``, ``record_count``,
+           the current Merkle ``root_hash``, ``latest_record_at``,
+           and (when present) the pluggable scheme name. Chain /
+           tree verification is deferred to a separate endpoint —
+           ``verify_chain()`` walks every record and is too
+           expensive to run on every panel load.
+
+        2. **Per-listing ledger bindings** — every curator-attested
+           proxy listing gets its OWN dedicated ledger spun up at
+           gateway mount time
+           (``ProvenanceConfig(ledger_id=f"curator-proxy-{listing_id}")``
+           — see ``purecipher.curation.proxy_runtime
+           ._build_proxy_security_config``). Catalog-only listings
+           don't pass through any registry-attached ledger; calls
+           bypass the registry entirely. The row's
+           ``binding_source`` reflects this:
+           ``proxy_ledger`` for proxy-hosted listings (with the
+           ``expected_ledger_id`` they would use), ``no_ledger`` for
+           catalog listings.
+
+           When the registry-wide ledger is configured, we also
+           scan it for records whose ``resource_id`` literally
+           matches the listing's ``tool_name`` and surface a
+           ``central_record_count`` + ``latest_central_record_at``.
+           This is best-effort: per-listing proxy ledgers are
+           constructed fresh per gateway mount and don't share state
+           with the central ledger by default. Operators wanting one
+           unified audit trail wire a shared backend.
+        """
+
+        target_listings = self._listings_for_publisher(
+            publisher_id, include_non_public=include_non_public
+        )
+        if not target_listings:
+            return {
+                "error": f"Publisher '{publisher_id}' not found",
+                "status": 404,
+            }
+
+        ledger = self._ledger_or_none()
+        ledger_block = self._summarize_ledger(ledger)
+
+        per_tool: list[dict[str, Any]] = []
+        with_proxy_count = 0
+        with_central_records_count = 0
+        total_central_records = 0
+        for listing in target_listings:
+            row = self._summarize_listing_ledger_binding(listing, ledger)
+            per_tool.append(row)
+            if row["binding_source"] == "proxy_ledger":
+                with_proxy_count += 1
+            if row["central_record_count"] > 0:
+                with_central_records_count += 1
+                total_central_records += row["central_record_count"]
+
+        return {
+            "server_id": publisher_id,
+            "ledger": ledger_block,
+            "per_tool_ledger": per_tool,
+            "summary": {
+                "tool_count": len(per_tool),
+                "with_proxy_ledger_count": with_proxy_count,
+                "with_central_records_count": with_central_records_count,
+                "total_central_records_for_tools": total_central_records,
+            },
+            "links": {
+                "provenance_ledger_url": f"{self._registry_prefix}/provenance",
+            },
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    def _ledger_or_none(self):
+        """Return the registry's :class:`ProvenanceLedger` or ``None``.
+
+        Like the broker and consent graph, the provenance ledger is
+        opt-in via :class:`SecurityConfig.provenance`. When the
+        operator hasn't configured it,
+        ``ctx.provenance_ledger`` is ``None`` and ledger
+        governance gracefully degrades.
+        """
+        try:
+            ctx = self._required_context()
+        except RuntimeError:
+            return None
+        return getattr(ctx, "provenance_ledger", None)
+
+    def _summarize_ledger(self, ledger) -> dict[str, Any]:
+        """Project the registry-wide ledger's identifying metadata + counts.
+
+        Cheap projection: reads counts and latest-record metadata.
+        Does NOT run ``verify_chain()`` / ``verify_tree()`` because
+        those are O(N) over every record and too expensive for a
+        panel load. Verification belongs on a dedicated endpoint.
+        """
+        if ledger is None:
+            return {
+                "available": False,
+                "reason": (
+                    "The Provenance Ledger is not enabled on this "
+                    "registry. Operators can opt in by passing "
+                    "SecurityConfig(provenance=ProvenanceConfig(...)) "
+                    "when constructing the registry. Note: every "
+                    "curator-attested proxy listing still records "
+                    "calls to its own dedicated ledger at gateway "
+                    "mount time."
+                ),
+            }
+
+        latest = getattr(ledger, "latest_record", None)
+        latest_at = (
+            latest.timestamp.isoformat() if latest is not None else None
+        )
+        latest_resource = getattr(latest, "resource_id", None) if latest else None
+        latest_action = (
+            getattr(latest.action, "value", str(latest.action))
+            if latest is not None
+            else None
+        )
+
+        scheme = getattr(ledger, "scheme", None)
+        scheme_name = type(scheme).__name__ if scheme is not None else None
+
+        return {
+            "available": True,
+            "ledger_id": getattr(ledger, "ledger_id", "default"),
+            "record_count": int(
+                getattr(ledger, "record_count", 0) or 0
+            ),
+            "root_hash": getattr(ledger, "root_hash", "") or "",
+            "latest_record_at": latest_at,
+            "latest_record_action": latest_action,
+            "latest_record_resource_id": latest_resource,
+            "scheme_name": scheme_name,
+        }
+
+    def _summarize_listing_ledger_binding(
+        self,
+        listing: ToolListing,
+        ledger,
+    ) -> dict[str, Any]:
+        """Project one listing into a ledger-binding row.
+
+        Encodes the contract:
+
+        - ``proxy`` listings → ``binding_source="proxy_ledger"``
+          with the ``expected_ledger_id`` the proxy gateway would
+          use (matches what
+          ``purecipher.curation.proxy_runtime._build_proxy_security_config``
+          assigns).
+        - ``catalog`` listings → ``binding_source="no_ledger"``;
+          calls bypass the registry entirely.
+
+        When the registry-wide ledger is configured, we additionally
+        surface per-tool record counts on the central ledger
+        (filtered by ``resource_id == tool_name``).
+        """
+        from fastmcp.server.security.gateway.tool_marketplace import HostingMode
+
+        is_proxy = listing.hosting_mode == HostingMode.PROXY
+
+        base = {
+            "listing_id": listing.listing_id,
+            "tool_name": listing.tool_name,
+            "display_name": listing.display_name or listing.tool_name,
+            "hosting_mode": (
+                listing.hosting_mode.value
+                if listing.hosting_mode is not None
+                else None
+            ),
+            "attestation_kind": (
+                listing.attestation_kind.value
+                if listing.attestation_kind is not None
+                else None
+            ),
+            "status": listing.status.value,
+            "binding_source": (
+                "proxy_ledger" if is_proxy else "no_ledger"
+            ),
+            "expected_ledger_id": (
+                f"curator-proxy-{listing.listing_id}" if is_proxy else None
+            ),
+        }
+
+        # Best-effort scan of the registry-wide ledger for records
+        # whose resource_id matches this tool. Caps the scan at a
+        # reasonable per-call limit so a multi-thousand-record ledger
+        # doesn't slow the panel.
+        central_records: list[Any] = []
+        if ledger is not None:
+            try:
+                central_records = list(
+                    ledger.get_records(
+                        resource_id=listing.tool_name,
+                        limit=1000,
+                    )
+                )
+            except Exception:
+                # If the ledger can't be queried (e.g. a future
+                # variant exposes a different surface), fall back to
+                # zero rather than blow up the whole projection.
+                central_records = []
+
+        latest_central_at = (
+            central_records[0].timestamp.isoformat()
+            if central_records
+            else None
+        )
+        latest_central_action = (
+            getattr(central_records[0].action, "value", None)
+            if central_records
+            else None
+        )
+
+        return {
+            **base,
+            "central_record_count": len(central_records),
+            "latest_central_record_at": latest_central_at,
+            "latest_central_record_action": latest_central_action,
+        }
+
+    def get_server_consent_governance(
+        self,
+        publisher_id: str,
+        *,
+        include_non_public: bool = False,
+    ) -> dict[str, Any]:
+        """Return the Consent-Graph governance view for a server.
+
+        Surfaces three layers honestly:
+
+        1. **Consent graph availability + topology** — like the
+           Context Broker, the Consent Graph is opt-in on the
+           registry's :class:`SecurityConfig`. When unavailable, the
+           response says so explicitly. When available, it carries
+           ``graph_id``, total node/edge counts, an ``active_edge_count``
+           that respects edge expiry/revocation, a per-NodeType
+           breakdown, and the audit-log entry count.
+        2. **Federation block** — a lightweight indicator for whether
+           a :class:`FederatedConsentGraph` is wired. Federation isn't
+           tracked on the security context today, so this defaults to
+           ``available=false`` with operator-actionable copy until a
+           future iteration plumbs it through.
+        3. **Per-listing consent bindings** — there are two
+           orthogonal signals per tool:
+
+           - ``binding_source`` from
+             :attr:`SecurityManifest.requires_consent`: deterministic
+             "this tool says it needs consent" flag
+             (``consent_required`` vs ``consent_optional``).
+           - ``graph_grant_count``: best-effort heuristic that walks
+             the graph's active edges looking for tool-name references
+             in the edge's ``scopes``, ``metadata`` (string match),
+             ``source_id``, or ``target_id``. ``grant_sources``
+             surfaces a bounded sample of the matching edges' source
+             IDs so the curator can see who's granting access.
+
+        These two axes aren't redundant: a tool can be marked
+        required but have zero grants (operator gap), or marked
+        optional yet appear in scope-prefixed grants (defensive
+        opt-ins by users), or both, or neither.
+        """
+
+        target_listings = self._listings_for_publisher(
+            publisher_id, include_non_public=include_non_public
+        )
+        if not target_listings:
+            return {
+                "error": f"Publisher '{publisher_id}' not found",
+                "status": 404,
+            }
+
+        graph = self._consent_graph_or_none()
+        graph_block = self._summarize_consent_graph(graph)
+        federation_block = self._summarize_consent_federation()
+        active_edges = self._active_consent_edges_snapshot(graph)
+
+        per_tool: list[dict[str, Any]] = []
+        for listing in target_listings:
+            per_tool.append(
+                self._summarize_listing_consent_binding(
+                    listing, active_edges
+                )
+            )
+
+        requires_consent_count = sum(
+            1 for entry in per_tool if entry["requires_consent"]
+        )
+        with_grants_count = sum(
+            1 for entry in per_tool if entry["graph_grant_count"] > 0
+        )
+        without_grants_count = len(per_tool) - with_grants_count
+
+        return {
+            "server_id": publisher_id,
+            "consent_graph": graph_block,
+            "federation": federation_block,
+            "per_tool_consent": per_tool,
+            "summary": {
+                "tool_count": len(per_tool),
+                "requires_consent_count": requires_consent_count,
+                "with_grants_count": with_grants_count,
+                "without_grants_count": without_grants_count,
+            },
+            "links": {
+                # The consent UI is provisional — link to the
+                # observability/consent surface. Resolves cleanly even
+                # when the surface isn't built yet (404 falls back to
+                # the registry root).
+                "consent_graph_url": f"{self._registry_prefix}/consent",
+            },
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    def _consent_graph_or_none(self):
+        """Return the registry's :class:`ConsentGraph` or ``None``.
+
+        Like the broker, the consent graph is opt-in via
+        :class:`SecurityConfig.consent`. When the operator hasn't
+        configured it, ``ctx.consent_graph`` is ``None`` and consent
+        governance gracefully degrades.
+        """
+        try:
+            ctx = self._required_context()
+        except RuntimeError:
+            return None
+        return getattr(ctx, "consent_graph", None)
+
+    def _summarize_consent_graph(self, graph) -> dict[str, Any]:
+        """Project the consent graph's topology + activity counts.
+
+        Returns a stable shape regardless of availability — the
+        ``available`` flag tells the consumer whether the rest of
+        the fields carry real data.
+        """
+        if graph is None:
+            return {
+                "available": False,
+                "reason": (
+                    "The Consent Graph is not enabled on this "
+                    "registry. Operators can opt in by passing "
+                    "SecurityConfig(consent=ConsentConfig(...)) when "
+                    "constructing the registry."
+                ),
+            }
+
+        from fastmcp.server.security.consent.models import NodeType
+
+        nodes_by_type: dict[str, int] = {nt.value: 0 for nt in NodeType}
+        for node in getattr(graph, "_nodes", {}).values():
+            try:
+                nodes_by_type[node.node_type.value] = (
+                    nodes_by_type.get(node.node_type.value, 0) + 1
+                )
+            except AttributeError:
+                # Unknown node shape — skip rather than blow up the
+                # whole projection.
+                continue
+
+        edges = list(getattr(graph, "_edges", {}).values())
+        active_edges = [edge for edge in edges if edge.is_valid()]
+
+        audit_entries = list(getattr(graph, "_audit_log", []) or [])
+
+        return {
+            "available": True,
+            "graph_id": getattr(graph, "graph_id", "default"),
+            "node_count": len(getattr(graph, "_nodes", {})),
+            "edge_count": len(edges),
+            "active_edge_count": len(active_edges),
+            "node_counts_by_type": nodes_by_type,
+            "audit_entry_count": len(audit_entries),
+        }
+
+    def _summarize_consent_federation(self) -> dict[str, Any]:
+        """Federation isn't tracked on the security context today.
+
+        Returns a stable shape with ``available=false`` so the UI can
+        render a clear "coming in a follow-up" empty state instead of
+        guessing. When federation gets plumbed through, this method
+        starts returning real metadata.
+        """
+        return {
+            "available": False,
+            "reason": (
+                "Federated consent (cross-jurisdiction / multi-"
+                "institution) isn't surfaced on this registry yet. "
+                "FederatedConsentGraph exists at the engine layer but "
+                "isn't attached to the security context."
+            ),
+        }
+
+    def _active_consent_edges_snapshot(self, graph) -> list[Any]:
+        """Return the graph's currently-valid edges as a list.
+
+        Pulled into a helper so the per-tool walk below doesn't
+        re-filter on every iteration. Returns an empty list when the
+        consent graph isn't configured.
+        """
+        if graph is None:
+            return []
+        edges = getattr(graph, "_edges", {})
+        return [edge for edge in edges.values() if edge.is_valid()]
+
+    def _summarize_listing_consent_binding(
+        self,
+        listing: ToolListing,
+        active_edges: list[Any],
+    ) -> dict[str, Any]:
+        """Project one listing into a consent-binding row.
+
+        Combines the manifest-declared ``requires_consent`` flag
+        (deterministic) with a best-effort scan of the consent graph
+        for edges that reference the tool by name (heuristic).
+        """
+        manifest_requires_consent = False
+        if listing.manifest is not None:
+            manifest_requires_consent = bool(
+                getattr(listing.manifest, "requires_consent", False)
+            )
+
+        base = {
+            "listing_id": listing.listing_id,
+            "tool_name": listing.tool_name,
+            "display_name": listing.display_name or listing.tool_name,
+            "hosting_mode": (
+                listing.hosting_mode.value
+                if listing.hosting_mode is not None
+                else None
+            ),
+            "attestation_kind": (
+                listing.attestation_kind.value
+                if listing.attestation_kind is not None
+                else None
+            ),
+            "status": listing.status.value,
+            "requires_consent": manifest_requires_consent,
+            "binding_source": (
+                "consent_required"
+                if manifest_requires_consent
+                else "consent_optional"
+            ),
+        }
+
+        grant_sources: list[str] = []
+        grant_count = 0
+        for edge in active_edges:
+            if self._consent_edge_references_tool(edge, listing.tool_name):
+                grant_count += 1
+                source = getattr(edge, "source_id", "")
+                if source and source not in grant_sources:
+                    grant_sources.append(source)
+
+        return {
+            **base,
+            "graph_grant_count": grant_count,
+            "grant_sources": grant_sources[:5],
+        }
+
+    def _consent_edge_references_tool(
+        self, edge, tool_name: str
+    ) -> bool:
+        """Return True when a consent edge references ``tool_name``.
+
+        Heuristics, in order of confidence:
+
+        1. ``edge.source_id`` or ``edge.target_id`` equals
+           ``tool_name`` (or ``tool:{tool_name}``) — a direct node
+           reference.
+        2. Any of ``edge.scopes`` matches ``tool_name`` directly,
+           contains ``:{tool_name}`` (e.g. ``"call:weather-lookup"``)
+           or ``"call_tool:weather-lookup"``, or matches via the same
+           glob logic AllowlistPolicy uses.
+        3. ``edge.metadata`` carries a string field whose value
+           literally equals ``tool_name`` (only string fields, not
+           nested traversal — keeps the heuristic bounded).
+
+        These cover the most common patterns we observed in the
+        consent test suite without overreaching into "any string
+        anywhere on the graph contains the tool name."
+        """
+        from fastmcp.server.security.policy.policies.allowlist import (
+            _matches_any,
+        )
+
+        source_id = str(getattr(edge, "source_id", ""))
+        target_id = str(getattr(edge, "target_id", ""))
+        if source_id in (tool_name, f"tool:{tool_name}"):
+            return True
+        if target_id in (tool_name, f"tool:{tool_name}"):
+            return True
+
+        scopes = getattr(edge, "scopes", set()) or set()
+        if scopes:
+            scope_strs = {str(s) for s in scopes if s}
+            if tool_name in scope_strs:
+                return True
+            for scope in scope_strs:
+                # ``call:weather-lookup`` / ``call_tool:weather-lookup``
+                # / ``execute:weather-lookup``-style scope strings.
+                if scope.endswith(f":{tool_name}"):
+                    return True
+            if _matches_any(tool_name, scope_strs) is not None:
+                return True
+
+        metadata = getattr(edge, "metadata", None) or {}
+        if isinstance(metadata, dict):
+            for value in metadata.values():
+                if isinstance(value, str) and value == tool_name:
+                    return True
+                if isinstance(value, (list, tuple, set)):
+                    for item in value:
+                        if isinstance(item, str) and item == tool_name:
+                            return True
+        return False
+
+    def get_server_contract_governance(
+        self,
+        publisher_id: str,
+        *,
+        include_non_public: bool = False,
+    ) -> dict[str, Any]:
+        """Return the Contract-Broker governance view for a server.
+
+        Surfaces two layers honestly:
+
+        1. **Broker availability + config** — the Context Broker is
+           an opt-in component on the registry; not every deployment
+           wires it in. When unavailable, the response says so
+           explicitly with operator-actionable copy. When available,
+           the response carries the broker's identifying metadata,
+           negotiation defaults (max rounds, contract duration,
+           session timeout), default-term summary, and live
+           counts (active contracts, sessions, exchange-log entries).
+        2. **Per-listing contract bindings** — contracts in this
+           system are scoped to ``(agent_id, server_id)``, not
+           ``(agent_id, tool_name)``. Tool-targeting lives inside the
+           term constraints (``allowed_resources``, ``resource_id``,
+           ``resource_pattern``, etc.). For each of the publisher's
+           listings, we walk every active contract's terms and
+           surface those that reference the tool by name or glob —
+           ``binding_source="agent_contracts"`` when matches exist,
+           ``"no_contracts"`` otherwise. ``matching_agents`` carries a
+           bounded sample of agent IDs whose contracts touch this
+           tool.
+
+        Args:
+            publisher_id: The publisher slug.
+            include_non_public: When True, include non-public
+                listings (PENDING_REVIEW, etc.) — same visibility
+                rule as the policy-governance endpoint.
+
+        Returns:
+            ``{server_id, broker, per_tool_contracts, summary, links,
+            generated_at}`` on success;
+            ``{error, status: 404}`` when no listings match.
+        """
+
+        target_listings = self._listings_for_publisher(
+            publisher_id, include_non_public=include_non_public
+        )
+        if not target_listings:
+            return {
+                "error": f"Publisher '{publisher_id}' not found",
+                "status": 404,
+            }
+
+        broker = self._broker_or_none()
+        broker_block = self._summarize_broker(broker)
+        active_contracts = self._active_contracts_snapshot(broker)
+
+        per_tool: list[dict[str, Any]] = []
+        for listing in target_listings:
+            per_tool.append(
+                self._summarize_listing_contract_binding(
+                    listing, active_contracts
+                )
+            )
+
+        contracted_count = sum(
+            1
+            for entry in per_tool
+            if entry["binding_source"] == "agent_contracts"
+        )
+        uncontracted_count = len(per_tool) - contracted_count
+
+        return {
+            "server_id": publisher_id,
+            "broker": broker_block,
+            "per_tool_contracts": per_tool,
+            "summary": {
+                "tool_count": len(per_tool),
+                "contracted_count": contracted_count,
+                "uncontracted_count": uncontracted_count,
+            },
+            "links": {
+                # The contracts management page is server-rendered HTML
+                # today; the same URL works for both navigation and
+                # opt-in JSON consumption (?view=html for the latter
+                # if the operator wires it).
+                "contract_broker_url": f"{self._registry_prefix}/contracts",
+            },
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    def _broker_or_none(self):
+        """Return the registry's :class:`ContextBroker` or ``None``.
+
+        The Context Broker is opt-in on the registry's
+        :class:`SecurityConfig`. When the operator hasn't configured
+        ``contracts=ContractConfig(...)``, ``ctx.broker`` is ``None``
+        and contract governance gracefully degrades.
+        """
+        try:
+            ctx = self._required_context()
+        except RuntimeError:
+            return None
+        return getattr(ctx, "broker", None)
+
+    def _summarize_broker(self, broker) -> dict[str, Any]:
+        """Project the broker's identifying metadata + live counts.
+
+        Returns a stable shape regardless of whether the broker is
+        available — the ``available`` flag tells the consumer
+        whether the rest of the fields carry real data.
+        """
+        if broker is None:
+            return {
+                "available": False,
+                "reason": (
+                    "The Context Broker is not enabled on this "
+                    "registry. Operators can opt in by passing "
+                    "SecurityConfig(contracts=ContractConfig(...)) "
+                    "when constructing the registry."
+                ),
+            }
+
+        default_terms = list(getattr(broker, "default_terms", []) or [])
+        exchange_log = getattr(broker, "exchange_log", None)
+        return {
+            "available": True,
+            "broker_id": getattr(broker, "broker_id", "default"),
+            "server_id": getattr(broker, "server_id", ""),
+            "max_rounds": getattr(broker, "max_rounds", None),
+            "contract_duration_seconds": int(
+                getattr(broker, "contract_duration").total_seconds()
+            )
+            if hasattr(broker, "contract_duration")
+            else None,
+            "session_timeout_seconds": int(
+                getattr(broker, "session_timeout").total_seconds()
+            )
+            if hasattr(broker, "session_timeout")
+            else None,
+            "default_term_count": len(default_terms),
+            "default_terms": [
+                {
+                    "term_id": getattr(term, "term_id", ""),
+                    "term_type": getattr(
+                        getattr(term, "term_type", None), "value", ""
+                    ),
+                    "description": getattr(term, "description", ""),
+                    "required": bool(getattr(term, "required", False)),
+                }
+                for term in default_terms
+            ],
+            "active_contract_count": int(
+                getattr(broker, "active_contract_count", 0) or 0
+            ),
+            "negotiation_session_count": int(
+                getattr(broker, "session_count", 0) or 0
+            ),
+            "exchange_log_session_count": int(
+                getattr(exchange_log, "session_count", 0) or 0
+            )
+            if exchange_log is not None
+            else 0,
+            "exchange_log_entry_count": int(
+                getattr(exchange_log, "entry_count", 0) or 0
+            )
+            if exchange_log is not None
+            else 0,
+        }
+
+    def _active_contracts_snapshot(self, broker) -> list[Any]:
+        """Return the broker's currently-valid contracts as a list.
+
+        Pulled into a helper so the per-tool walk below doesn't have
+        to re-filter on every iteration. Returns an empty list when
+        the broker isn't configured.
+        """
+        if broker is None:
+            return []
+        contracts_map = getattr(broker, "_active_contracts", {}) or {}
+        return [c for c in contracts_map.values() if c.is_valid()]
+
+    def _summarize_listing_contract_binding(
+        self,
+        listing: ToolListing,
+        active_contracts: list[Any],
+    ) -> dict[str, Any]:
+        """Project one listing into a contract-binding row.
+
+        Walks every active contract's terms looking for tool-name
+        references; any match gets the listing labelled
+        ``agent_contracts`` with a bounded ``matching_agents`` sample.
+        """
+        base = {
+            "listing_id": listing.listing_id,
+            "tool_name": listing.tool_name,
+            "display_name": listing.display_name or listing.tool_name,
+            "hosting_mode": (
+                listing.hosting_mode.value
+                if listing.hosting_mode is not None
+                else None
+            ),
+            "attestation_kind": (
+                listing.attestation_kind.value
+                if listing.attestation_kind is not None
+                else None
+            ),
+            "status": listing.status.value,
+        }
+
+        matching_agents: list[str] = []
+        match_count = 0
+        for contract in active_contracts:
+            if self._contract_references_tool(contract, listing.tool_name):
+                match_count += 1
+                agent_id = getattr(contract, "agent_id", "")
+                if agent_id and agent_id not in matching_agents:
+                    matching_agents.append(agent_id)
+                # Cap the inline sample so a busy broker doesn't blow
+                # up the response payload.
+                if len(matching_agents) >= 5:
+                    pass
+
+        if match_count == 0:
+            return {
+                **base,
+                "binding_source": "no_contracts",
+                "matching_contract_count": 0,
+                "matching_agents": [],
+            }
+        return {
+            **base,
+            "binding_source": "agent_contracts",
+            "matching_contract_count": match_count,
+            "matching_agents": matching_agents[:5],
+        }
+
+    def _contract_references_tool(self, contract, tool_name: str) -> bool:
+        """Return True when any of a contract's terms references ``tool_name``.
+
+        Walks the constraint dicts looking for the standard
+        tool-targeting keys (``allowed_resources``,
+        ``resource_pattern``, ``resource_id``, ``tool_name``,
+        ``tool_names``). Glob-style values are matched via the same
+        helper :class:`AllowlistPolicy` uses, so a constraint of
+        ``{"resource_pattern": "weather-*"}`` correctly matches a tool
+        ``weather-lookup``.
+        """
+        from fastmcp.server.security.policy.policies.allowlist import (
+            _matches_any,
+        )
+
+        terms = getattr(contract, "terms", []) or []
+        for term in terms:
+            constraint = getattr(term, "constraint", None) or {}
+            if not isinstance(constraint, dict):
+                continue
+            for key in (
+                "allowed_resources",
+                "resource_id",
+                "resource_pattern",
+                "tool_name",
+                "tool_names",
+            ):
+                raw = constraint.get(key)
+                if raw is None:
+                    continue
+                if isinstance(raw, str):
+                    candidates: set[str] = {raw}
+                elif isinstance(raw, (list, tuple, set)):
+                    candidates = {str(item) for item in raw if item}
+                else:
+                    continue
+                if _matches_any(tool_name, candidates) is not None:
+                    return True
+                # Literal equality fallback (some constraints write
+                # plain tool names without globs).
+                if tool_name in candidates:
+                    return True
+        return False
+
+    def _observed_tool_allowlist(self, listing: ToolListing) -> set[str]:
+        """Resolve the curator-vouched tool surface for a listing.
+
+        Mirrors :func:`purecipher.curation.proxy_runtime
+        ._build_proxy_security_config` so this method's "what the
+        proxy gateway would actually enforce" answer stays accurate.
+        """
+        observed: set[str] = set()
+        metadata = listing.metadata or {}
+        if isinstance(metadata, dict):
+            introspection = metadata.get("introspection")
+            if isinstance(introspection, dict):
+                tool_names = introspection.get("tool_names")
+                if isinstance(tool_names, list):
+                    for name in tool_names:
+                        s = str(name).strip()
+                        if s:
+                            observed.add(s)
+        if not observed and listing.manifest is not None:
+            for tag in listing.manifest.tags or set():
+                tag_str = str(tag)
+                if tag_str in {"curated", "third-party"}:
+                    continue
+                observed.add(tag_str)
+        return observed
+
     def get_install_recipes(
         self,
         tool_name: str,
@@ -1328,15 +4290,58 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         metadata: dict[str, Any] | None = None,
         changelog: str = "",
         requested_level: CertificationLevel | None = None,
+        attestation_kind: Any = None,
+        upstream_ref: Any = None,
+        curator_id: str = "",
+        hosting_mode: Any = None,
     ) -> RegistrySubmissionResult:
-        """Certify and publish a tool into the PureCipher registry."""
+        """Certify and publish a tool into the PureCipher registry.
+
+        ``attestation_kind``, ``upstream_ref``, ``curator_id``, and
+        ``hosting_mode`` propagate through to the marketplace listing.
+        Pass them when curating a third-party MCP server; leave at
+        defaults for the standard author-attested publish flow.
+        """
+        from fastmcp.server.security.gateway.tool_marketplace import (
+            AttestationKind,
+            HostingMode,
+            UpstreamRef,
+        )
+
+        # Late-bind the curator/hosting arguments so callers don't have
+        # to import the enums when they want defaults.
+        kind = attestation_kind or AttestationKind.AUTHOR
+        hosting = hosting_mode or HostingMode.CATALOG
+        if not isinstance(kind, AttestationKind):
+            raise TypeError("attestation_kind must be an AttestationKind")
+        if not isinstance(hosting, HostingMode):
+            raise TypeError("hosting_mode must be a HostingMode")
+        if upstream_ref is not None and not isinstance(upstream_ref, UpstreamRef):
+            raise TypeError("upstream_ref must be an UpstreamRef")
+
+        # Curator-attested listings cap the certification tier at BASIC.
+        # The registry observed the protocol surface and signed the
+        # attestation, but it did NOT review the upstream's source —
+        # so STANDARD or STRICT (which imply source-level guarantees)
+        # would be a misleading trust signal on a third-party listing.
+        # Authors can still hit the higher tiers; only curator
+        # submissions are clamped here. This applies regardless of
+        # what the caller passed for ``requested_level``.
+        effective_requested_level = requested_level
+        if kind == AttestationKind.CURATOR:
+            if (
+                effective_requested_level is None
+                or _level_index(effective_requested_level)
+                > _level_index(CertificationLevel.BASIC)
+            ):
+                effective_requested_level = CertificationLevel.BASIC
 
         preflight = self.preflight_submission(
             manifest,
             display_name=display_name,
             categories=categories,
             metadata=metadata,
-            requested_level=requested_level,
+            requested_level=effective_requested_level,
         )
         if not preflight.ready_for_publish:
             return RegistrySubmissionResult(
@@ -1366,6 +4371,10 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 **(metadata or {}),
             },
             changelog=changelog,
+            attestation_kind=kind,
+            upstream_ref=upstream_ref,
+            curator_id=curator_id,
+            hosting_mode=hosting,
         )
 
         prefix = self._registry_prefix
@@ -1408,6 +4417,242 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             manifest_digest=preflight.manifest_digest,
             listing=listing,
         )
+
+    # ── Curator workflow ──────────────────────────────────────────
+
+    def _curation_introspector(self) -> Any:
+        """Return the channel-aware introspector used by curate routes.
+
+        Defaults to the multi-channel :class:`Introspector` dispatcher
+        so the wizard handles HTTP/PyPI/npm uniformly. Pre-fix the
+        default was the single-channel ``HTTPIntrospector``, which
+        caused PyPI / npm refs to be rejected at the introspect step
+        with "This iteration supports HTTP upstreams only" — a
+        regression from iteration 4 that wasn't caught because tests
+        explicitly install their own dispatcher via
+        :meth:`set_curation_introspector`.
+
+        Cached on the instance so tests can still swap it.
+        """
+        introspector = getattr(self, "_curate_introspector_instance", None)
+        if introspector is None:
+            from purecipher.curation import Introspector
+
+            introspector = Introspector()
+            self._curate_introspector_instance = introspector
+        return introspector
+
+    def set_curation_introspector(self, introspector: Any) -> None:
+        """Override the curator-flow introspector (test-only seam)."""
+        self._curate_introspector_instance = introspector
+
+    async def _curate_submit_handler(
+        self,
+        body: dict[str, Any],
+        session: Any,
+    ) -> dict[str, Any]:
+        """Backend for ``POST /registry/curate/submit``.
+
+        Validates the body, re-runs introspection (so the manifest
+        always reflects what the registry actually saw at submit
+        time), applies the curator's confirm/remove choices, builds
+        and submits the manifest as a curator-attested listing.
+        """
+        from fastmcp.server.security.gateway.tool_marketplace import (
+            AttestationKind,
+            HostingMode,
+        )
+        from purecipher.curation import (
+            IntrospectionError,
+            UpstreamFetcher,
+            UpstreamResolutionError,
+            derive_manifest_draft,
+        )
+        from purecipher.curation.manifest_generator import (
+            reconcile_curator_selection,
+        )
+
+        if not isinstance(body, dict):
+            raise ValueError("Submission body must be an object.")
+
+        raw_input = str(
+            body.get("upstream") or body.get("upstream_url") or ""
+        ).strip()
+
+        # Validate hosting_mode early — before the expensive resolve +
+        # introspect roundtrips — so a wizard misclick fails fast.
+        raw_hosting_early = str(
+            body.get("hosting_mode", "catalog")
+        ).strip().lower()
+        if raw_hosting_early not in {"catalog", "proxy"}:
+            return {
+                "error": (
+                    "hosting_mode must be 'catalog' or 'proxy' "
+                    f"(got {raw_hosting_early!r})."
+                ),
+                "status": 400,
+            }
+
+        try:
+            preview = UpstreamFetcher().resolve(raw_input)
+        except UpstreamResolutionError as exc:
+            return {"error": str(exc), "status": 400}
+
+        # Proxy mode now supports HTTP, PyPI, npm, and Docker channels.
+        # PyPI/npm/Docker upstreams are hosted per-session via uvx /
+        # npx / docker-run subprocess transports — see
+        # ``build_curator_proxy_server`` for the channel-dispatched
+        # client factory.
+
+        introspector = self._curation_introspector()
+        try:
+            introspection = await introspector.introspect(preview.upstream_ref)
+        except IntrospectionError as exc:
+            return {"error": str(exc), "status": 502}
+
+        # An upstream that exposes zero tools, resources, AND prompts
+        # is functionally empty — vouching for it carries no useful
+        # trust signal. The most likely cause is auth-gating: the
+        # registry can connect but the upstream filters its capability
+        # surface to anonymous callers. Refuse the submission with a
+        # clear message rather than minting a meaningless attestation.
+        if (
+            introspection.tool_count == 0
+            and introspection.resource_count == 0
+            and introspection.prompt_count == 0
+        ):
+            return {
+                "error": (
+                    "The upstream exposed zero tools, resources, or "
+                    "prompts. Either it requires authentication the "
+                    "registry doesn't have, or it isn't an MCP server. "
+                    "Curator-attested listings need an observable surface."
+                ),
+                "status": 422,
+            }
+
+        # Re-derive the suggestion list at submit time so the curator's
+        # selection is reconciled against THIS introspection's
+        # observations — not whatever was shown earlier in the wizard.
+        # Curator can only confirm/remove; new scopes are dropped.
+        baseline = derive_manifest_draft(
+            introspection,
+            suggested_tool_name=str(body.get("tool_name", "")).strip()
+            or preview.suggested_tool_name,
+            suggested_display_name=str(body.get("display_name", "")).strip()
+            or preview.suggested_display_name,
+        )
+        selected = body.get("selected_permissions") or []
+        if not isinstance(selected, list):
+            return {
+                "error": "selected_permissions must be a list",
+                "status": 400,
+            }
+        draft = reconcile_curator_selection(baseline, selected)
+
+        tool_name = str(body.get("tool_name", "")).strip() or draft.suggested_tool_name
+        if not tool_name:
+            return {
+                "error": (
+                    "tool_name is required (auto-suggestion was empty too)."
+                ),
+                "status": 400,
+            }
+        display_name = (
+            str(body.get("display_name", "")).strip()
+            or draft.suggested_display_name
+            or tool_name
+        )
+        version = str(body.get("version", "")).strip() or "0.1.0"
+        description = str(body.get("description", "")).strip()
+        categories = _coerce_categories(body.get("categories")) or None
+        curator_id = (
+            session.username if session is not None else "local"
+        )
+        # Map the validated raw_hosting string from earlier into the
+        # HostingMode enum (validation already ran before resolve).
+        hosting_mode = (
+            HostingMode.PROXY
+            if raw_hosting_early == "proxy"
+            else HostingMode.CATALOG
+        )
+
+        manifest = draft.build_manifest(
+            tool_name=tool_name,
+            display_name=display_name,
+            version=version,
+            author=curator_id,
+            description=description,
+        )
+
+        result = self.submit_tool(
+            manifest,
+            display_name=display_name,
+            description=description,
+            categories=categories,
+            source_url=preview.upstream_ref.source_url
+            or preview.upstream_ref.identifier,
+            metadata={
+                "curated": True,
+                "upstream_url": preview.upstream_ref.identifier,
+                "introspection": {
+                    "tool_count": introspection.tool_count,
+                    "resource_count": introspection.resource_count,
+                    "prompt_count": introspection.prompt_count,
+                    # Persist the observed tool surface so the proxy
+                    # runtime can build an AllowlistPolicy from it.
+                    # Without this, hosting_mode="proxy" silently
+                    # falls back to AllowAllPolicy.
+                    "tool_names": [t.name for t in introspection.tools],
+                    "resource_uris": [r.uri for r in introspection.resources],
+                    "prompt_names": [p.name for p in introspection.prompts],
+                },
+            },
+            attestation_kind=AttestationKind.CURATOR,
+            upstream_ref=preview.upstream_ref,
+            curator_id=curator_id,
+            hosting_mode=hosting_mode,
+        )
+        if not result.accepted:
+            return {
+                "error": result.reason,
+                "status": 400,
+                "report": result.report.to_dict() if result.report else None,
+            }
+        # Track the submission in the curator's activity feed.
+        if session is not None:
+            try:
+                self._account_activity.append(
+                    username=session.username,
+                    event_kind="curated_listing_submitted",
+                    title=f"Curated listing: {display_name}",
+                    detail=(
+                        f"Vouched for {preview.upstream_ref.identifier} "
+                        f"({introspection.tool_count} tool(s) observed)"
+                    ),
+                    metadata={
+                        "tool_name": tool_name,
+                        "upstream_url": preview.upstream_ref.identifier,
+                    },
+                )
+            except Exception:
+                logger.warning(
+                    "Failed to record curator activity for %s",
+                    session.username,
+                    exc_info=True,
+                )
+
+        return {
+            "accepted": True,
+            "listing": result.listing.to_dict() if result.listing else None,
+            "manifest_digest": result.manifest_digest,
+            "introspection": {
+                "tool_count": introspection.tool_count,
+                "resource_count": introspection.resource_count,
+                "prompt_count": introspection.prompt_count,
+            },
+            "status": 201,
+        }
 
     def preflight_submission(
         self,
@@ -1498,11 +4743,27 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         tool_name: str,
         *,
         manifest: SecurityManifest | None = None,
+        include_non_public: bool = False,
     ) -> dict[str, Any]:
-        """Verify a registered tool's attestation."""
+        """Verify a registered tool's attestation.
+
+        Args:
+            tool_name: The tool's canonical name.
+            manifest: Optional manifest override; defaults to the
+                listing's stored manifest.
+            include_non_public: When ``True``, accept listings whose
+                status isn't ``PUBLISHED`` (e.g. ``PENDING_REVIEW``).
+                The route handler sets this for authenticated callers
+                so curators can verify their own just-submitted
+                listings. Anonymous callers should not pass this —
+                pending listings are not part of the public surface.
+        """
 
         certification_pipeline = self._certification_pipeline()
-        listing = self._get_public_listing(tool_name)
+        if include_non_public:
+            listing = self._marketplace().get_by_name(tool_name)
+        else:
+            listing = self._get_public_listing(tool_name)
         if listing is None:
             return {"error": f"Tool '{tool_name}' not found", "status": 404}
         if listing.attestation is None:
@@ -1526,8 +4787,8 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         min_certification: str = "",
         selected_tool: str = "",
         manifest_text: str = SAMPLE_MANIFEST_JSON,
-        display_name: str = "Weather Lookup",
-        categories: str = "network,utility",
+        display_name: str = "",
+        categories: str = "",
         requested_level: str = CertificationLevel.BASIC.value,
         session: RegistrySession | None = None,
         submission_title: str | None = None,
@@ -1586,11 +4847,11 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         session: RegistrySession | None = None,
         manifest_text: str = SAMPLE_MANIFEST_JSON,
         runtime_metadata_text: str = SAMPLE_RUNTIME_METADATA_JSON,
-        display_name: str = "Weather Lookup",
-        categories: str = "network,utility",
-        tags: str = "weather,api",
+        display_name: str = "",
+        categories: str = "",
+        tags: str = "",
         requested_level: str = CertificationLevel.BASIC.value,
-        source_url: str = "https://github.com/acme/weather-lookup",
+        source_url: str = "",
         homepage_url: str = "",
         tool_license: str = "MIT",
         preflight: dict[str, Any] | None = None,
@@ -1854,6 +5115,10 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             return JSONResponse(
                 {
                     "auth_enabled": self.auth_enabled,
+                    "bootstrap_required": self._bootstrap_required(),
+                    "setup_url": f"{prefix}/setup"
+                    if self._bootstrap_required()
+                    else None,
                     "session": self._session_payload(session),
                 }
             )
@@ -1879,6 +5144,608 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     limit=limit,
                 )
             )
+
+        @self.custom_route(f"{prefix}/me/preferences", methods=["GET"])
+        async def registry_my_preferences(request: Request) -> JSONResponse:
+            session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            username = session.username if session is not None else "local"
+            return JSONResponse(
+                {
+                    "username": username,
+                    "preferences": self._user_preferences.get(username),
+                }
+            )
+
+        @self.custom_route(f"{prefix}/me/preferences", methods=["PUT"])
+        async def registry_update_my_preferences(request: Request) -> JSONResponse:
+            session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            try:
+                body = await request.json()
+            except Exception:
+                body = None
+            if not isinstance(body, dict):
+                return JSONResponse(
+                    {"error": "Invalid JSON body", "status": 400},
+                    status_code=400,
+                )
+            raw_preferences = body.get("preferences", body)
+            if not isinstance(raw_preferences, dict):
+                return JSONResponse(
+                    {"error": "`preferences` must be an object.", "status": 400},
+                    status_code=400,
+                )
+            username = session.username if session is not None else "local"
+            preferences = self._user_preferences.set(username, raw_preferences)
+            return JSONResponse(
+                {
+                    "username": username,
+                    "preferences": preferences,
+                }
+            )
+
+        @self.custom_route(f"{prefix}/me/preferences", methods=["DELETE"])
+        async def registry_reset_my_preferences(request: Request) -> JSONResponse:
+            session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            username = session.username if session is not None else "local"
+            return JSONResponse(
+                {
+                    "username": username,
+                    "preferences": self._user_preferences.reset(username),
+                }
+            )
+
+        @self.custom_route(f"{prefix}/me/activity", methods=["GET"])
+        async def registry_my_activity(request: Request) -> JSONResponse:
+            session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            username = session.username if session is not None else "local"
+            limit = _int_query_param(request, "limit", default=20, minimum=1, maximum=50)
+            return JSONResponse(
+                {
+                    "username": username,
+                    "items": self._account_activity.list_recent(
+                        username=username,
+                        limit=limit,
+                    ),
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+
+        @self.custom_route(f"{prefix}/me/password", methods=["POST"])
+        async def registry_change_my_password(request: Request) -> JSONResponse:
+            session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            if session is None:
+                return JSONResponse(
+                    {"error": "Password changes require auth.", "status": 400},
+                    status_code=400,
+                )
+            try:
+                body = await request.json()
+            except Exception:
+                body = None
+            if not isinstance(body, dict):
+                return JSONResponse(
+                    {"error": "Invalid JSON body", "status": 400},
+                    status_code=400,
+                )
+            current_password = str(body.get("current_password") or "")
+            new_password = str(body.get("new_password") or "")
+            if len(new_password) < 8:
+                return JSONResponse(
+                    {
+                        "error": "New password must be at least 8 characters.",
+                        "status": 400,
+                    },
+                    status_code=400,
+                )
+            changed = self._account_security.change_password(
+                username=session.username,
+                current_password=current_password,
+                new_password=new_password,
+            )
+            if not changed:
+                self._account_activity.append(
+                    username=session.username,
+                    event_kind="password_change_failed",
+                    title="Password change failed",
+                    detail="Current password did not match.",
+                    metadata={"client": request.client.host if request.client else ""},
+                )
+                return JSONResponse(
+                    {"error": "Current password is incorrect.", "status": 403},
+                    status_code=403,
+                )
+            self._account_activity.append(
+                username=session.username,
+                event_kind="password_changed",
+                title="Password changed",
+                detail="Password was updated and other sessions were revoked.",
+                metadata={"client": request.client.host if request.client else ""},
+            )
+            response = JSONResponse({"ok": True, "revoked_other_sessions": True})
+            self._clear_auth_cookie(response)
+            return response
+
+        @self.custom_route(f"{prefix}/me/sessions", methods=["GET"])
+        async def registry_my_sessions(request: Request) -> JSONResponse:
+            session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            username = session.username if session is not None else "local"
+            return JSONResponse(
+                {
+                    "username": username,
+                    "current_session_id": session.session_id if session else "",
+                    "items": self._account_security.list_sessions(username=username),
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+
+        @self.custom_route(f"{prefix}/me/sessions/{{session_id}}", methods=["DELETE"])
+        async def registry_revoke_my_session(request: Request) -> JSONResponse:
+            session_id = request.path_params.get("session_id", "")
+            session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            if session is None:
+                return JSONResponse({"ok": True})
+            revoked = self._account_security.revoke_session(
+                session_id=session_id,
+                username=session.username,
+            )
+            self._account_activity.append(
+                username=session.username,
+                event_kind="session_revoked",
+                title="Session revoked",
+                detail="A registry session was revoked from settings.",
+                metadata={"session_id": session_id},
+            )
+            response = JSONResponse({"ok": revoked})
+            if session.session_id == session_id:
+                self._clear_auth_cookie(response)
+            return response
+
+        @self.custom_route(f"{prefix}/me/tokens", methods=["GET"])
+        async def registry_my_tokens(request: Request) -> JSONResponse:
+            session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            username = session.username if session is not None else "local"
+            return JSONResponse(
+                {
+                    "username": username,
+                    "items": self._account_security.list_api_tokens(username=username),
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+
+        @self.custom_route(f"{prefix}/me/tokens", methods=["POST"])
+        async def registry_create_my_token(request: Request) -> JSONResponse:
+            session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            if session is None:
+                return JSONResponse(
+                    {"error": "API tokens require auth.", "status": 400},
+                    status_code=400,
+                )
+            try:
+                body = await request.json()
+            except Exception:
+                body = {}
+            name = str(body.get("name") or "") if isinstance(body, dict) else ""
+            created = self._account_security.create_api_token(
+                username=session.username,
+                name=name,
+            )
+            self._account_activity.append(
+                username=session.username,
+                event_kind="api_token_created",
+                title="API token created",
+                detail=created["token_record"]["name"],
+                metadata={"token_id": created["token_record"]["token_id"]},
+            )
+            return JSONResponse(created, status_code=201)
+
+        @self.custom_route(f"{prefix}/me/tokens/{{token_id}}", methods=["DELETE"])
+        async def registry_revoke_my_token(request: Request) -> JSONResponse:
+            token_id = request.path_params.get("token_id", "")
+            session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            if session is None:
+                return JSONResponse({"ok": True})
+            revoked = self._account_security.revoke_api_token(
+                username=session.username,
+                token_id=token_id,
+            )
+            if revoked:
+                self._account_activity.append(
+                    username=session.username,
+                    event_kind="api_token_revoked",
+                    title="API token revoked",
+                    detail="Personal API token was revoked.",
+                    metadata={"token_id": token_id},
+                )
+            return JSONResponse({"ok": revoked})
+
+        @self.custom_route(f"{prefix}/admin/users", methods=["GET"])
+        async def registry_admin_list_users(request: Request) -> JSONResponse:
+            session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            if not self._has_roles(session, {RegistryRole.ADMIN}):
+                return JSONResponse(
+                    {"error": "Admin role required.", "status": 403},
+                    status_code=403,
+                )
+            users = self._account_security.list_accounts()
+            return JSONResponse(
+                {
+                    "users": users,
+                    "roles": [role.value for role in RegistryRole],
+                    "counts": _account_role_counts(users),
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+
+        @self.custom_route(f"{prefix}/admin/users", methods=["POST"])
+        async def registry_admin_create_user(request: Request) -> JSONResponse:
+            session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            if not self._has_roles(session, {RegistryRole.ADMIN}):
+                return JSONResponse(
+                    {"error": "Admin role required.", "status": 403},
+                    status_code=403,
+                )
+            try:
+                body = await request.json()
+            except Exception:
+                body = None
+            if not isinstance(body, dict):
+                return JSONResponse(
+                    {"error": "Invalid JSON body", "status": 400},
+                    status_code=400,
+                )
+            username = str(body.get("username") or "").strip()
+            display_name = str(body.get("display_name") or "").strip()
+            password = str(body.get("password") or "")
+            role = _role_from_body(body.get("role"))
+            if role is None:
+                return JSONResponse(
+                    {"error": "Invalid role.", "status": 400},
+                    status_code=400,
+                )
+            if not username or len(password) < 8:
+                return JSONResponse(
+                    {
+                        "error": "Username and an 8+ character password are required.",
+                        "status": 400,
+                    },
+                    status_code=400,
+                )
+            created = self._account_security.create_account(
+                username=username,
+                password=password,
+                role=role,
+                display_name=display_name,
+            )
+            if created is None:
+                return JSONResponse(
+                    {"error": "User already exists.", "status": 409},
+                    status_code=409,
+                )
+            self._account_activity.append(
+                username=session.username if session else "admin",
+                event_kind="admin_user_created",
+                title="User created",
+                detail=f"{username} was created with role {role.value}.",
+                metadata={"target_username": username, "role": role.value},
+            )
+            return JSONResponse({"user": created}, status_code=201)
+
+        @self.custom_route(f"{prefix}/admin/users/{{username}}", methods=["PATCH"])
+        async def registry_admin_update_user(request: Request) -> JSONResponse:
+            username = request.path_params.get("username", "")
+            session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            if not self._has_roles(session, {RegistryRole.ADMIN}):
+                return JSONResponse(
+                    {"error": "Admin role required.", "status": 403},
+                    status_code=403,
+                )
+            try:
+                body = await request.json()
+            except Exception:
+                body = None
+            if not isinstance(body, dict):
+                return JSONResponse(
+                    {"error": "Invalid JSON body", "status": 400},
+                    status_code=400,
+                )
+            requested_role = body.get("role")
+            role = _role_from_body(requested_role) if requested_role is not None else None
+            if requested_role is not None and role is None:
+                return JSONResponse(
+                    {"error": "Invalid role.", "status": 400},
+                    status_code=400,
+                )
+            disabled = body.get("disabled")
+            disabled_bool = bool(disabled) if isinstance(disabled, bool) else None
+            if session and session.username == username and disabled_bool is True:
+                return JSONResponse(
+                    {"error": "You cannot disable your own admin account.", "status": 400},
+                    status_code=400,
+                )
+            guard_error = self._guard_last_admin_change(username, role, disabled_bool)
+            if guard_error:
+                return JSONResponse({"error": guard_error, "status": 400}, status_code=400)
+            updated = self._account_security.update_account(
+                username=username,
+                role=role,
+                display_name=str(body.get("display_name")).strip()
+                if "display_name" in body
+                else None,
+                disabled=disabled_bool,
+            )
+            if updated is None:
+                return JSONResponse(
+                    {"error": "User not found.", "status": 404},
+                    status_code=404,
+                )
+            self._account_activity.append(
+                username=session.username if session else "admin",
+                event_kind="admin_user_updated",
+                title="User updated",
+                detail=f"{username} account settings were updated.",
+                metadata={
+                    "target_username": username,
+                    "role": updated.get("role"),
+                    "active": updated.get("active"),
+                },
+            )
+            return JSONResponse({"user": updated})
+
+        @self.custom_route(f"{prefix}/admin/users/{{username}}", methods=["DELETE"])
+        async def registry_admin_disable_user(request: Request) -> JSONResponse:
+            username = request.path_params.get("username", "")
+            session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            if not self._has_roles(session, {RegistryRole.ADMIN}):
+                return JSONResponse(
+                    {"error": "Admin role required.", "status": 403},
+                    status_code=403,
+                )
+            if session and session.username == username:
+                return JSONResponse(
+                    {"error": "You cannot disable your own admin account.", "status": 400},
+                    status_code=400,
+                )
+            guard_error = self._guard_last_admin_change(username, None, True)
+            if guard_error:
+                return JSONResponse({"error": guard_error, "status": 400}, status_code=400)
+            updated = self._account_security.update_account(
+                username=username,
+                disabled=True,
+            )
+            if updated is None:
+                return JSONResponse(
+                    {"error": "User not found.", "status": 404},
+                    status_code=404,
+                )
+            self._account_activity.append(
+                username=session.username if session else "admin",
+                event_kind="admin_user_disabled",
+                title="User disabled",
+                detail=f"{username} account was disabled.",
+                metadata={"target_username": username},
+            )
+            return JSONResponse({"user": updated})
+
+        @self.custom_route(f"{prefix}/admin/users/{{username}}/password", methods=["POST"])
+        async def registry_admin_reset_user_password(request: Request) -> JSONResponse:
+            username = request.path_params.get("username", "")
+            session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            if not self._has_roles(session, {RegistryRole.ADMIN}):
+                return JSONResponse(
+                    {"error": "Admin role required.", "status": 403},
+                    status_code=403,
+                )
+            try:
+                body = await request.json()
+            except Exception:
+                body = None
+            if not isinstance(body, dict):
+                return JSONResponse(
+                    {"error": "Invalid JSON body", "status": 400},
+                    status_code=400,
+                )
+            new_password = str(body.get("new_password") or "")
+            if len(new_password) < 8:
+                return JSONResponse(
+                    {
+                        "error": "New password must be at least 8 characters.",
+                        "status": 400,
+                    },
+                    status_code=400,
+                )
+            changed = self._account_security.reset_password(
+                username=username,
+                new_password=new_password,
+            )
+            if not changed:
+                return JSONResponse(
+                    {"error": "User not found.", "status": 404},
+                    status_code=404,
+                )
+            self._account_activity.append(
+                username=session.username if session else "admin",
+                event_kind="admin_password_reset",
+                title="Password reset by admin",
+                detail=f"{username} password was reset and sessions were revoked.",
+                metadata={"target_username": username},
+            )
+            return JSONResponse({"ok": True})
+
+        @self.custom_route(
+            f"{prefix}/admin/control-planes", methods=["GET"]
+        )
+        async def registry_admin_control_planes(
+            request: Request,
+        ) -> JSONResponse:
+            """Admin-only snapshot of every opt-in plane's state.
+
+            Used by the settings UI to render the toggle switches.
+            Iter 9.
+            """
+            session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            if self.auth_enabled and not self._has_roles(
+                session, {RegistryRole.ADMIN}
+            ):
+                return JSONResponse(
+                    {"error": "Admin role required.", "status": 403},
+                    status_code=403,
+                )
+            return JSONResponse(self.get_control_plane_status())
+
+        @self.custom_route(
+            f"{prefix}/admin/control-planes/{{plane}}", methods=["POST"]
+        )
+        async def registry_admin_toggle_control_plane(
+            request: Request,
+        ) -> JSONResponse:
+            """Toggle an opt-in plane on or off at runtime.
+
+            Body: ``{"enabled": true|false}``. Admin-only. Iter 9.
+
+            The toggle takes effect immediately — the plane's
+            attribute on the security context is mutated and its
+            middleware is added to / removed from the chain. The
+            persisted record survives restart so the operator's
+            intent doesn't get reverted by the next process boot.
+            """
+            session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            if self.auth_enabled and not self._has_roles(
+                session, {RegistryRole.ADMIN}
+            ):
+                return JSONResponse(
+                    {"error": "Admin role required.", "status": 403},
+                    status_code=403,
+                )
+            plane = request.path_params.get("plane", "")
+            try:
+                body = await request.json()
+            except Exception:
+                body = None
+            if not isinstance(body, dict) or "enabled" not in body:
+                return JSONResponse(
+                    {
+                        "error": (
+                            "Body must be JSON like "
+                            '{"enabled": true}.'
+                        ),
+                        "status": 400,
+                    },
+                    status_code=400,
+                )
+            requested = bool(body.get("enabled"))
+            actor = (
+                session.username if session is not None else "anonymous"
+            )
+            try:
+                if requested:
+                    payload = self.enable_plane(plane, actor_id=actor)
+                else:
+                    payload = self.disable_plane(plane, actor_id=actor)
+            except ValueError as exc:
+                return JSONResponse(
+                    {"error": str(exc), "status": 400},
+                    status_code=400,
+                )
+            self._account_activity.append(
+                username=actor,
+                event_kind="admin_control_plane_toggle",
+                title=(
+                    f"Control plane {plane} "
+                    f"{'enabled' if requested else 'disabled'}"
+                ),
+                detail=(
+                    f"{actor} "
+                    f"{'enabled' if requested else 'disabled'} the "
+                    f"{plane} control plane."
+                ),
+                metadata={"plane": plane, "enabled": requested},
+            )
+            return JSONResponse(payload)
 
         @self.custom_route(f"{prefix}/openapi/ingest", methods=["POST"])
         async def registry_openapi_ingest(request: Request) -> JSONResponse:
@@ -2026,6 +5893,161 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             allowed_roles={RegistryRole.REVIEWER, RegistryRole.ADMIN},
         )
 
+        @self.custom_route(f"{prefix}/setup", methods=["GET"])
+        async def registry_setup_page(request: Request):
+            next_path = _safe_next_path(
+                request.query_params.get("next"),
+                default=prefix,
+            )
+            if not self.auth_enabled:
+                return RedirectResponse(url=next_path, status_code=303)
+            if not self._bootstrap_required():
+                return RedirectResponse(url=f"{prefix}/login", status_code=303)
+            return create_secure_html_response(
+                create_setup_html(
+                    server_name=self.name,
+                    registry_prefix=prefix,
+                    auth_enabled=self.auth_enabled,
+                    next_path=next_path,
+                    default_username=self._auth_settings.bootstrap_admin_username
+                    or "admin",
+                    notice_title=request.query_params.get("notice") or None,
+                    notice_body=request.query_params.get("detail") or None,
+                    notice_is_error=request.query_params.get("tone") == "error",
+                )
+            )
+
+        @self.custom_route(f"{prefix}/setup", methods=["POST"])
+        async def registry_setup(request: Request):
+            if not self.auth_enabled:
+                payload = {"error": "Registry auth is disabled.", "status": 400}
+                return JSONResponse(payload, status_code=400)
+            if not self._bootstrap_required():
+                payload = {"error": "Registry setup is already complete.", "status": 409}
+                if _wants_json(request):
+                    return JSONResponse(payload, status_code=409)
+                return RedirectResponse(url=f"{prefix}/login", status_code=303)
+
+            content_type = request.headers.get("content-type", "")
+            expects_json = _wants_json(request)
+            try:
+                if "application/json" in content_type:
+                    raw_payload = await request.json()
+                    if not isinstance(raw_payload, dict):
+                        raise ValueError("JSON request body must be an object.")
+                else:
+                    form = await request.form()
+                    raw_payload = {str(key): value for key, value in form.items()}
+            except Exception as exc:
+                message = str(exc) or "Invalid setup request."
+                if expects_json:
+                    return JSONResponse(
+                        {"error": message, "status": 400},
+                        status_code=400,
+                    )
+                return create_secure_html_response(
+                    create_setup_html(
+                        server_name=self.name,
+                        registry_prefix=prefix,
+                        auth_enabled=self.auth_enabled,
+                        next_path=prefix,
+                        notice_title="Setup failed",
+                        notice_body=message,
+                        notice_is_error=True,
+                    ),
+                    status_code=400,
+                )
+
+            username = str(raw_payload.get("username", "admin")).strip() or "admin"
+            password = str(raw_payload.get("password", ""))
+            display_name = str(raw_payload.get("display_name", "Registry Admin"))
+            next_path = _safe_next_path(str(raw_payload.get("next", "")), default=prefix)
+            if len(password) < 8:
+                payload = {
+                    "error": "Admin password must be at least 8 characters.",
+                    "status": 400,
+                }
+                if expects_json:
+                    return JSONResponse(payload, status_code=400)
+                return create_secure_html_response(
+                    create_setup_html(
+                        server_name=self.name,
+                        registry_prefix=prefix,
+                        auth_enabled=self.auth_enabled,
+                        next_path=next_path,
+                        default_username=username,
+                        notice_title="Setup failed",
+                        notice_body=payload["error"],
+                        notice_is_error=True,
+                    ),
+                    status_code=400,
+                )
+
+            user = self._account_security.create_bootstrap_admin(
+                username=username,
+                password=password,
+                display_name=display_name,
+            )
+            if user is None:
+                payload = {
+                    "error": "Registry setup is already complete or the admin username is invalid.",
+                    "status": 409,
+                }
+                if expects_json:
+                    return JSONResponse(payload, status_code=409)
+                return RedirectResponse(url=f"{prefix}/login", status_code=303)
+
+            self._account_activity.append(
+                username=user.username,
+                event_kind="bootstrap_admin_created",
+                title="Bootstrap admin created",
+                detail="Initial registry admin account was created from setup.",
+                metadata={
+                    "role": user.role.value,
+                    "client": request.client.host if request.client else "",
+                    "source": "setup",
+                },
+            )
+            session_record = self._account_security.create_session(
+                user=user,
+                ttl_seconds=self._auth_settings.token_ttl_seconds,
+            )
+            token = self._auth_settings.issue_token(
+                user,
+                session_id=session_record.session_id,
+            )
+            session = self._auth_settings.decode_token(token)
+            if session is None:
+                payload = {
+                    "error": "Admin account was created, but session creation failed.",
+                    "status": 500,
+                }
+                return JSONResponse(payload, status_code=500)
+            self._account_activity.append(
+                username=session.username,
+                event_kind="login_success",
+                title="Signed in",
+                detail=f"{session.display_name} opened the first admin session.",
+                metadata={
+                    "role": session.role.value,
+                    "client": request.client.host if request.client else "",
+                },
+            )
+
+            if expects_json:
+                response = JSONResponse(
+                    {
+                        "ok": True,
+                        "bootstrap_complete": True,
+                        "session": session.to_dict(),
+                    },
+                    status_code=201,
+                )
+            else:
+                response = RedirectResponse(url=next_path, status_code=303)
+            self._set_auth_cookie(response, token)
+            return response
+
         @self.custom_route(f"{prefix}/login", methods=["GET"])
         async def registry_login_page(request: Request):
             next_path = _safe_next_path(
@@ -2035,6 +6057,11 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             session = self._session_from_request(request)
             if not self.auth_enabled:
                 return RedirectResponse(url=next_path, status_code=303)
+            if self._bootstrap_required():
+                return RedirectResponse(
+                    url=f"{prefix}/setup?{urlencode({'next': next_path})}",
+                    status_code=303,
+                )
             if session is not None:
                 return RedirectResponse(url=next_path, status_code=303)
             return create_secure_html_response(
@@ -2065,6 +6092,16 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     ),
                     status_code=400,
                 )
+
+            if self._bootstrap_required():
+                payload = {
+                    "error": "Admin setup is required before sign-in.",
+                    "status": 428,
+                    "setup_url": f"{prefix}/setup",
+                }
+                if _wants_json(request):
+                    return JSONResponse(payload, status_code=428)
+                return RedirectResponse(url=f"{prefix}/setup", status_code=303)
 
             content_type = request.headers.get("content-type", "")
             expects_json = _wants_json(request)
@@ -2103,8 +6140,102 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 str(raw_payload.get("next", "")),
                 default=prefix,
             )
-            user = self._auth_settings.authenticate(username, password)
+
+            client_ip = request.client.host if request.client else ""
+            locked, retry_after = self._login_lockout.is_locked(
+                username, client_ip
+            )
+            if locked:
+                # Still record the attempt for forensics — but as a
+                # `login_locked` event so it's distinguishable from a
+                # plain bad-password failure.
+                self._account_activity.append(
+                    username=username or "(unknown)",
+                    event_kind="login_locked",
+                    title="Sign-in blocked: too many failed attempts",
+                    detail=(
+                        f"This (username, IP) is locked for "
+                        f"{int(retry_after)}s after {self._login_lockout.max_failures} "
+                        "consecutive failures."
+                    ),
+                    metadata={"client": client_ip, "retry_after": retry_after},
+                )
+                payload = {
+                    "error": (
+                        "Too many failed sign-in attempts. "
+                        f"Try again in {int(retry_after)} seconds."
+                    ),
+                    "status": 429,
+                    "retry_after": int(retry_after),
+                }
+                headers = {"Retry-After": str(int(retry_after))}
+                if expects_json:
+                    return JSONResponse(
+                        payload, status_code=429, headers=headers
+                    )
+                return create_secure_html_response(
+                    self._render_login_ui(
+                        prefix=prefix,
+                        next_path=next_path,
+                        notice_title="Sign-in blocked",
+                        notice_body=payload["error"],
+                        notice_is_error=True,
+                    ),
+                    status_code=429,
+                    headers=headers,
+                )
+
+            user = self._account_security.authenticate(username, password)
             if user is None:
+                now_locked, retry_after, failures = (
+                    self._login_lockout.register_failure(username, client_ip)
+                )
+                if username:
+                    self._account_activity.append(
+                        username=username,
+                        event_kind="login_failed",
+                        title="Failed sign-in attempt",
+                        detail=(
+                            "Registry rejected the supplied credentials."
+                            + (
+                                f" Account locked for {int(retry_after)}s "
+                                f"after {failures} failures."
+                                if now_locked
+                                else f" Failure {failures}/"
+                                f"{self._login_lockout.max_failures}."
+                            )
+                        ),
+                        metadata={
+                            "client": client_ip,
+                            "failures": failures,
+                            "now_locked": now_locked,
+                        },
+                    )
+                if now_locked:
+                    payload = {
+                        "error": (
+                            "Too many failed sign-in attempts. "
+                            f"Try again in {int(retry_after)} seconds."
+                        ),
+                        "status": 429,
+                        "retry_after": int(retry_after),
+                    }
+                    headers = {"Retry-After": str(int(retry_after))}
+                    if expects_json:
+                        return JSONResponse(
+                            payload, status_code=429, headers=headers
+                        )
+                    return create_secure_html_response(
+                        self._render_login_ui(
+                            prefix=prefix,
+                            next_path=next_path,
+                            notice_title="Sign-in blocked",
+                            notice_body=payload["error"],
+                            notice_is_error=True,
+                        ),
+                        status_code=429,
+                        headers=headers,
+                    )
                 payload = {
                     "error": "Invalid username or password.",
                     "status": 401,
@@ -2122,7 +6253,21 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     status_code=401,
                 )
 
-            token = self._auth_settings.issue_token(user)
+            # Auth itself succeeded — but don't clear the failure counter
+            # yet. We only consider the login truly complete once the
+            # session record is created AND a usable token is issued AND
+            # it decodes cleanly. Clearing the counter prematurely would
+            # let an attacker who knows the password reset their lockout
+            # budget every attempt even when session issuance keeps
+            # failing (e.g. JWT misconfig, transient DB error).
+            session_record = self._account_security.create_session(
+                user=user,
+                ttl_seconds=self._auth_settings.token_ttl_seconds,
+            )
+            token = self._auth_settings.issue_token(
+                user,
+                session_id=session_record.session_id,
+            )
             session = self._auth_settings.decode_token(token)
             if session is None:
                 payload = {
@@ -2142,6 +6287,21 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     status_code=500,
                 )
 
+            # Now the login is fully successful — clear the lockout
+            # counter for this (username, ip) tuple.
+            self._login_lockout.register_success(username, client_ip)
+
+            self._account_activity.append(
+                username=session.username,
+                event_kind="login_success",
+                title="Signed in",
+                detail=f"{session.display_name} opened a registry session.",
+                metadata={
+                    "role": session.role.value,
+                    "client": request.client.host if request.client else "",
+                },
+            )
+
             if expects_json:
                 response = JSONResponse(
                     {
@@ -2156,10 +6316,26 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
         @self.custom_route(f"{prefix}/logout", methods=["GET"])
         async def registry_logout(request: Request):
+            session = self._session_from_request(request)
             next_path = _safe_next_path(
                 request.query_params.get("next"),
                 default=prefix,
             )
+            if session is not None:
+                self._account_security.revoke_session(
+                    session_id=session.session_id,
+                    username=session.username,
+                )
+                self._account_activity.append(
+                    username=session.username,
+                    event_kind="logout",
+                    title="Signed out",
+                    detail="Current browser session was closed.",
+                    metadata={
+                        "role": session.role.value,
+                        "client": request.client.host if request.client else "",
+                    },
+                )
             response = RedirectResponse(url=next_path, status_code=303)
             self._clear_auth_cookie(response)
             return response
@@ -2281,9 +6457,25 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         async def registry_publisher_profile(request: Request):
             publisher_id = request.path_params.get("publisher_id", "")
             session = self._session_from_request(request)
+            payload = self.get_publisher_profile(publisher_id)
+
+            # Match the content-negotiation contract used by
+            # ``/registry/publishers`` (the parent list route) and by
+            # the tool-detail endpoint: JSON by default, HTML only
+            # when the caller explicitly asks via ``?view=html``.
+            # Pre-fix this route returned HTML unconditionally, which
+            # caused the Next.js publisher-profile page to receive
+            # an HTML body, fail JSON parsing, and render
+            # "Publisher not found" even when the publisher existed.
+            wants_html = request.query_params.get("view") == "html"
+            if not wants_html:
+                return JSONResponse(
+                    payload,
+                    status_code=_status_code_from_payload(payload),
+                )
+
             if self.auth_enabled and session is None:
                 return self._login_redirect(request, prefix=prefix)
-            payload = self.get_publisher_profile(publisher_id)
             if "error" in payload:
                 return create_secure_html_response(
                     self._render_registry_ui(
@@ -2303,6 +6495,159 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     auth_enabled=self.auth_enabled,
                     session=self._session_payload(session),
                 )
+            )
+
+        @self.custom_route(
+            f"{prefix}/servers/{{server_id}}/governance/policy",
+            methods=["GET"],
+        )
+        async def registry_server_governance_policy(
+            request: Request,
+        ) -> JSONResponse:
+            """Return the policy-kernel governance view for a server.
+
+            Session-aware visibility: anonymous (or auth-disabled)
+            callers see only public listings; authenticated callers
+            see all of the publisher's listings — same pattern used
+            by the tool-detail / verify endpoints so curators can
+            inspect their pending submissions immediately after
+            submit.
+            """
+            server_id = request.path_params.get("server_id", "")
+            session = self._session_from_request(request)
+            include_non_public = bool(
+                self.auth_enabled and session is not None
+            )
+            payload = self.get_server_policy_governance(
+                server_id, include_non_public=include_non_public
+            )
+            return JSONResponse(
+                payload, status_code=_status_code_from_payload(payload)
+            )
+
+        @self.custom_route(
+            f"{prefix}/servers/{{server_id}}/governance/contracts",
+            methods=["GET"],
+        )
+        async def registry_server_governance_contracts(
+            request: Request,
+        ) -> JSONResponse:
+            """Return the Contract-Broker governance view for a server.
+
+            Same session-aware visibility as the policy-governance
+            endpoint. Anonymous callers see only public listings,
+            authenticated callers see all of the publisher's listings.
+            """
+            server_id = request.path_params.get("server_id", "")
+            session = self._session_from_request(request)
+            include_non_public = bool(
+                self.auth_enabled and session is not None
+            )
+            payload = self.get_server_contract_governance(
+                server_id, include_non_public=include_non_public
+            )
+            return JSONResponse(
+                payload, status_code=_status_code_from_payload(payload)
+            )
+
+        @self.custom_route(
+            f"{prefix}/servers/{{server_id}}/governance/consent",
+            methods=["GET"],
+        )
+        async def registry_server_governance_consent(
+            request: Request,
+        ) -> JSONResponse:
+            """Return the Consent-Graph governance view for a server.
+
+            Same session-aware visibility as the other governance
+            endpoints.
+            """
+            server_id = request.path_params.get("server_id", "")
+            session = self._session_from_request(request)
+            include_non_public = bool(
+                self.auth_enabled and session is not None
+            )
+            payload = self.get_server_consent_governance(
+                server_id, include_non_public=include_non_public
+            )
+            return JSONResponse(
+                payload, status_code=_status_code_from_payload(payload)
+            )
+
+        @self.custom_route(
+            f"{prefix}/servers/{{server_id}}/governance/ledger",
+            methods=["GET"],
+        )
+        async def registry_server_governance_ledger(
+            request: Request,
+        ) -> JSONResponse:
+            """Return the Provenance-Ledger governance view for a server.
+
+            Same session-aware visibility as the other governance
+            endpoints.
+            """
+            server_id = request.path_params.get("server_id", "")
+            session = self._session_from_request(request)
+            include_non_public = bool(
+                self.auth_enabled and session is not None
+            )
+            payload = self.get_server_ledger_governance(
+                server_id, include_non_public=include_non_public
+            )
+            return JSONResponse(
+                payload, status_code=_status_code_from_payload(payload)
+            )
+
+        @self.custom_route(
+            f"{prefix}/servers/{{server_id}}/governance/overrides",
+            methods=["GET"],
+        )
+        async def registry_server_governance_overrides(
+            request: Request,
+        ) -> JSONResponse:
+            """Return the Overrides governance view for a server.
+
+            Same session-aware visibility as the other governance
+            endpoints. Surfaces operator interventions (status,
+            moderation log, yanked versions, per-listing policy
+            overrides) across this server's tools in one place.
+            """
+            server_id = request.path_params.get("server_id", "")
+            session = self._session_from_request(request)
+            include_non_public = bool(
+                self.auth_enabled and session is not None
+            )
+            payload = self.get_server_overrides_governance(
+                server_id, include_non_public=include_non_public
+            )
+            return JSONResponse(
+                payload, status_code=_status_code_from_payload(payload)
+            )
+
+        @self.custom_route(
+            f"{prefix}/servers/{{server_id}}/observability",
+            methods=["GET"],
+        )
+        async def registry_server_observability(
+            request: Request,
+        ) -> JSONResponse:
+            """Return the Reflexive-Core observability view for a server.
+
+            Powers the Observability tab on the server profile page.
+            Same session-aware visibility as the governance
+            endpoints — the URL lives outside ``/governance/`` because
+            observability is a sibling tab, not a control plane.
+            """
+            server_id = request.path_params.get("server_id", "")
+            session = self._session_from_request(request)
+            include_non_public = bool(
+                self.auth_enabled and session is not None
+            )
+            payload = self.get_server_observability(
+                server_id, include_non_public=include_non_public
+            )
+            return JSONResponse(
+                payload, status_code=_status_code_from_payload(payload)
             )
 
         @self.custom_route(f"{prefix}/review", methods=["GET"])
@@ -2477,14 +6822,56 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     )
                 metadata = parsed
 
+            # Moderator identity comes from the authenticated session, never
+            # from the request body. Pre-fix the body's ``moderator_id`` was
+            # honored, allowing any caller to spoof attribution in the audit
+            # log. ``"local"`` is used as the unauthenticated fallback only
+            # when ``auth_enabled`` is False (single-tenant local dev).
+            session_moderator_id = (
+                session.username if session is not None else "local"
+            )
             payload = self.moderate_listing(
                 listing_id,
                 action_name=action_name,
-                moderator_id=str(raw_payload.get("moderator_id", "purecipher-admin")),
+                moderator_id=session_moderator_id,
                 reason=str(raw_payload.get("reason", "")),
                 metadata=metadata,
             )
             status_code = _status_code_from_payload(payload)
+
+            # Record moderation actions in the moderator's own activity
+            # feed so admins reviewing a user's history see what they did.
+            # Pre-fix moderation was traceable only via the listing's
+            # moderation_log, never in the reviewer's account history.
+            if (
+                session is not None
+                and "error" not in payload
+                and isinstance(payload.get("listing"), dict)
+            ):
+                listing_data = payload["listing"]
+                try:
+                    self._account_activity.append(
+                        username=session.username,
+                        event_kind="moderation_action",
+                        title=f"Moderated '{listing_data.get('display_name', listing_id)}'",
+                        detail=(
+                            f"Action {action_name!r} → status "
+                            f"{listing_data.get('status', 'unknown')}"
+                        ),
+                        metadata={
+                            "listing_id": listing_id,
+                            "tool_name": listing_data.get("tool_name", ""),
+                            "action": action_name,
+                            "new_status": listing_data.get("status", ""),
+                            "reason": str(raw_payload.get("reason", "")),
+                        },
+                    )
+                except Exception:
+                    logger.warning(
+                        "Failed to record moderation activity for %s",
+                        session.username,
+                        exc_info=True,
+                    )
             if expects_json:
                 return JSONResponse(payload, status_code=status_code)
 
@@ -2546,8 +6933,63 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         @self.custom_route(f"{prefix}/tools/{{tool_name}}", methods=["GET"])
         async def registry_tool_detail(request: Request) -> JSONResponse:
             tool_name = request.path_params.get("tool_name", "")
-            payload = self.get_verified_tool(tool_name)
-            return JSONResponse(payload, status_code=_status_code_from_payload(payload))
+            session = self._session_from_request(request)
+
+            # Logged-in users (publishers / reviewers / admins / curators)
+            # need to see their just-submitted listings even when those
+            # listings are still ``PENDING_REVIEW`` — otherwise the
+            # post-submit "View listing" link 404s. Mirror the
+            # ``/tools/{name}/versions`` endpoint's session-aware
+            # lookup: with auth disabled OR no session, return the
+            # public listing only; with a session, fall back to a
+            # by-name lookup that doesn't filter on publish status.
+            if not self.auth_enabled or session is None:
+                payload = self.get_verified_tool(tool_name)
+                return JSONResponse(
+                    payload, status_code=_status_code_from_payload(payload)
+                )
+
+            listing = self._marketplace().get_by_name(tool_name)
+            if listing is None:
+                # Fall back to public-only lookup so the response shape
+                # matches when the listing genuinely doesn't exist (or
+                # was suspended in a way the requestor can't see).
+                payload = self.get_verified_tool(tool_name)
+                return JSONResponse(
+                    payload, status_code=_status_code_from_payload(payload)
+                )
+            return JSONResponse(self._serialize_listing_detail(listing))
+
+        @self.custom_route(
+            f"{prefix}/tools/{{tool_name}}/governance",
+            methods=["GET"],
+        )
+        async def registry_tool_governance(request: Request) -> JSONResponse:
+            """Per-listing governance + observability rollup.
+
+            Sibling to the publisher-scoped governance routes — same
+            data sources, scoped to one listing. Visibility mirrors
+            the listing detail endpoint:
+
+            - Authenticated: any listing the registry knows about.
+            - Anonymous (or auth disabled): public listings only,
+              and the response is sanitized (actor / moderator /
+              agent IDs stripped) so public viewers see governance
+              posture without operator-private details.
+            """
+            tool_name = request.path_params.get("tool_name", "")
+            session = self._session_from_request(request)
+            include_non_public = bool(
+                self.auth_enabled and session is not None
+            )
+            payload = self.get_listing_governance(
+                tool_name,
+                include_non_public=include_non_public,
+                sanitize_for_public=not include_non_public,
+            )
+            return JSONResponse(
+                payload, status_code=_status_code_from_payload(payload)
+            )
 
         @self.custom_route(f"{prefix}/tools/{{tool_name}}/versions", methods=["GET"])
         async def registry_tool_versions(request: Request) -> JSONResponse:
@@ -2712,6 +7154,148 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
             return JSONResponse(preflight.to_dict())
 
+        # ── Curate (third-party onboarding) ────────────────────────
+        # MVP: HTTP-transport upstreams + catalog-only hosting.
+        # Stdio / Docker / hosted-proxy modes land in later iterations.
+
+        @self.custom_route(f"{prefix}/curate/resolve", methods=["POST"])
+        async def registry_curate_resolve(request: Request) -> JSONResponse:
+            session = self._session_from_request(request)
+            if self.auth_enabled and not self._has_roles(
+                session,
+                {
+                    RegistryRole.PUBLISHER,
+                    RegistryRole.REVIEWER,
+                    RegistryRole.ADMIN,
+                },
+            ):
+                return JSONResponse(
+                    {
+                        "error": (
+                            "Publisher, reviewer, or admin role required "
+                            "to curate third-party listings."
+                        ),
+                        "status": 401 if session is None else 403,
+                    },
+                    status_code=401 if session is None else 403,
+                )
+            try:
+                body = await request.json()
+            except Exception:
+                return JSONResponse(
+                    {"error": "Invalid JSON body", "status": 400},
+                    status_code=400,
+                )
+            # Accept either ``upstream`` (canonical, channel-agnostic)
+            # or the legacy ``upstream_url`` for back-compat with the
+            # earlier HTTP-only iteration of the wizard.
+            raw_input = str(
+                body.get("upstream") or body.get("upstream_url") or ""
+            ).strip()
+            from purecipher.curation import (
+                UpstreamFetcher,
+                UpstreamResolutionError,
+            )
+
+            try:
+                preview = UpstreamFetcher().resolve(raw_input)
+            except UpstreamResolutionError as exc:
+                return JSONResponse(
+                    {"error": str(exc), "status": 400},
+                    status_code=400,
+                )
+            return JSONResponse({"preview": preview.to_dict()})
+
+        @self.custom_route(f"{prefix}/curate/introspect", methods=["POST"])
+        async def registry_curate_introspect(request: Request) -> JSONResponse:
+            session = self._session_from_request(request)
+            if self.auth_enabled and not self._has_roles(
+                session,
+                {
+                    RegistryRole.PUBLISHER,
+                    RegistryRole.REVIEWER,
+                    RegistryRole.ADMIN,
+                },
+            ):
+                return JSONResponse(
+                    {"error": "Authorization required.", "status": 401},
+                    status_code=401,
+                )
+            try:
+                body = await request.json()
+            except Exception:
+                return JSONResponse(
+                    {"error": "Invalid JSON body", "status": 400},
+                    status_code=400,
+                )
+            raw_input = str(
+                body.get("upstream") or body.get("upstream_url") or ""
+            ).strip()
+            from purecipher.curation import (
+                IntrospectionError,
+                UpstreamFetcher,
+                UpstreamResolutionError,
+                derive_manifest_draft,
+            )
+
+            try:
+                preview = UpstreamFetcher().resolve(raw_input)
+            except UpstreamResolutionError as exc:
+                return JSONResponse(
+                    {"error": str(exc), "status": 400},
+                    status_code=400,
+                )
+            introspector = self._curation_introspector()
+            try:
+                result = await introspector.introspect(preview.upstream_ref)
+            except IntrospectionError as exc:
+                return JSONResponse(
+                    {"error": str(exc), "status": 502},
+                    status_code=502,
+                )
+            draft = derive_manifest_draft(
+                result,
+                suggested_tool_name=preview.suggested_tool_name,
+                suggested_display_name=preview.suggested_display_name,
+            )
+            return JSONResponse(
+                {
+                    "introspection": result.to_dict(),
+                    "draft": draft.to_dict(),
+                }
+            )
+
+        @self.custom_route(f"{prefix}/curate/submit", methods=["POST"])
+        async def registry_curate_submit(request: Request) -> JSONResponse:
+            session = self._session_from_request(request)
+            if self.auth_enabled and not self._has_roles(
+                session,
+                {
+                    RegistryRole.PUBLISHER,
+                    RegistryRole.REVIEWER,
+                    RegistryRole.ADMIN,
+                },
+            ):
+                return JSONResponse(
+                    {"error": "Authorization required.", "status": 401},
+                    status_code=401,
+                )
+            try:
+                body = await request.json()
+            except Exception:
+                return JSONResponse(
+                    {"error": "Invalid JSON body", "status": 400},
+                    status_code=400,
+                )
+            try:
+                payload = await self._curate_submit_handler(body, session)
+            except (KeyError, TypeError, ValueError) as exc:
+                return JSONResponse(
+                    {"error": str(exc), "status": 400},
+                    status_code=400,
+                )
+            return JSONResponse(payload, status_code=_status_code_from_payload(payload))
+
         @self.custom_route(f"{prefix}/verify", methods=["POST"])
         async def registry_verify(request: Request) -> JSONResponse:
             try:
@@ -2745,8 +7329,629 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                         status_code=400,
                     )
 
-            payload = self.verify_tool(tool_name, manifest=manifest)
+            # Logged-in users (the curator who just submitted, the
+            # publisher who owns the listing, or a reviewer/admin)
+            # need to verify their listing's attestation even when it
+            # hasn't been moderated to ``PUBLISHED`` yet — otherwise
+            # the post-submit detail page shows a misleading
+            # "Signature invalid" because verify_tool 404s on a
+            # ``PENDING_REVIEW`` listing. Anonymous callers stay on
+            # the public-only path.
+            session = self._session_from_request(request)
+            include_non_public = bool(self.auth_enabled and session is not None)
+            payload = self.verify_tool(
+                tool_name,
+                manifest=manifest,
+                include_non_public=include_non_public,
+            )
             return JSONResponse(payload, status_code=_status_code_from_payload(payload))
+
+        # ── Iter 10: MCP client identity routes ────────────────────
+
+        def _resolve_client_or_404(
+            client_id_or_slug: str,
+        ) -> RegistryClient | JSONResponse:
+            """Return the client or a 404 JSON response.
+
+            The path param accepts either UUID or slug — same shape
+            as the publishers route — so the UI can link to either
+            without translation.
+            """
+            record = self.get_client(client_id_or_slug)
+            if record is None:
+                return JSONResponse(
+                    {
+                        "error": (
+                            f"Client {client_id_or_slug!r} not found."
+                        ),
+                        "status": 404,
+                    },
+                    status_code=404,
+                )
+            return record
+
+        def _can_manage_client(
+            session: RegistrySession | None,
+            record: RegistryClient,
+        ) -> bool:
+            """Owner-or-admin gate for mutating routes.
+
+            When auth is disabled every caller can manage; otherwise
+            the caller must either be an admin or be the publisher
+            who owns the client. The publisher mapping comes from
+            ``publisher_id_from_author`` so the UI's session model
+            translates 1:1 to the client store's ownership column.
+            """
+            if not self.auth_enabled:
+                return True
+            if session is None:
+                return False
+            if self._has_roles(session, {RegistryRole.ADMIN}):
+                return True
+            return (
+                publisher_id_from_author(session.username)
+                == record.owner_publisher_id
+            )
+
+        @self.custom_route(f"{prefix}/clients", methods=["GET"])
+        async def registry_clients_list(
+            request: Request,
+        ) -> JSONResponse:
+            """List clients visible to the caller.
+
+            Admins see everything; publishers see clients they own;
+            anyone else gets ``403`` (so the UI's empty-state can
+            distinguish "you have no clients" from "you can't see
+            this surface"). When auth is disabled the list is
+            unfiltered.
+            """
+            session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            limit = int(request.query_params.get("limit", "200"))
+            if (
+                self.auth_enabled
+                and session is not None
+                and not self._has_roles(
+                    session,
+                    {RegistryRole.ADMIN, RegistryRole.PUBLISHER},
+                )
+            ):
+                return JSONResponse(
+                    {
+                        "error": (
+                            "Publisher or admin role required to view "
+                            "registered MCP clients."
+                        ),
+                        "status": 403,
+                    },
+                    status_code=403,
+                )
+            records = self.list_clients_for_caller(
+                session=session, limit=limit
+            )
+            return JSONResponse(
+                {
+                    "items": [r.to_dict() for r in records],
+                    "count": len(records),
+                    "kinds": sorted(CLIENT_KINDS),
+                }
+            )
+
+        @self.custom_route(f"{prefix}/clients", methods=["POST"])
+        async def registry_clients_create(
+            request: Request,
+        ) -> JSONResponse:
+            """Register a new MCP client + (optionally) issue its
+            first token.
+
+            Body shape:
+              ``{display_name, slug?, description?, intended_use?,
+                 kind?, owner_publisher_id?, issue_initial_token?,
+                 token_name?, metadata?}``
+
+            ``owner_publisher_id`` is honored only for admins —
+            publishers can only create clients owned by themselves
+            (the value is overwritten with their derived publisher
+            id). The plain token secret is included in the response
+            and is the only place it will ever appear; callers must
+            surface it once.
+            """
+            session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            if (
+                self.auth_enabled
+                and session is not None
+                and not self._has_roles(
+                    session,
+                    {RegistryRole.ADMIN, RegistryRole.PUBLISHER},
+                )
+            ):
+                return JSONResponse(
+                    {
+                        "error": (
+                            "Publisher or admin role required to register "
+                            "MCP clients."
+                        ),
+                        "status": 403,
+                    },
+                    status_code=403,
+                )
+            try:
+                body = await request.json()
+            except Exception:
+                body = None
+            if not isinstance(body, dict):
+                return JSONResponse(
+                    {"error": "Body must be a JSON object.", "status": 400},
+                    status_code=400,
+                )
+            display_name = str(body.get("display_name", "") or "").strip()
+            if not display_name:
+                return JSONResponse(
+                    {"error": "`display_name` is required.", "status": 400},
+                    status_code=400,
+                )
+            slug_raw = body.get("slug")
+            slug = str(slug_raw).strip() if slug_raw else None
+            description = str(body.get("description", "") or "")
+            intended_use = str(body.get("intended_use", "") or "")
+            kind = str(body.get("kind", "agent") or "agent").strip() or "agent"
+            metadata = body.get("metadata") if isinstance(body.get("metadata"), dict) else None
+            issue_initial_token = bool(body.get("issue_initial_token", True))
+            token_name = (
+                str(body.get("token_name", "Default") or "Default").strip()
+                or "Default"
+            )
+
+            # Owner publisher resolution: admins may pick; publishers
+            # are pinned to their own derived id.
+            requested_owner = str(
+                body.get("owner_publisher_id", "") or ""
+            ).strip()
+            if self.auth_enabled and session is not None:
+                is_admin = self._has_roles(session, {RegistryRole.ADMIN})
+                if is_admin and requested_owner:
+                    owner_publisher_id = requested_owner
+                else:
+                    owner_publisher_id = publisher_id_from_author(
+                        session.username
+                    )
+            else:
+                owner_publisher_id = requested_owner or "publisher"
+
+            actor = (
+                session.username if session is not None else "anonymous"
+            )
+            try:
+                payload = self.register_client(
+                    display_name=display_name,
+                    owner_publisher_id=owner_publisher_id,
+                    slug=slug,
+                    description=description,
+                    intended_use=intended_use,
+                    kind=kind,
+                    metadata=metadata,
+                    issue_initial_token=issue_initial_token,
+                    token_name=token_name,
+                    created_by=actor,
+                )
+            except (ClientStoreError, ValueError) as exc:
+                return JSONResponse(
+                    {"error": str(exc), "status": 400},
+                    status_code=400,
+                )
+            self._account_activity.append(
+                username=actor,
+                event_kind="client_registered",
+                title=f"MCP client registered: {payload['client']['slug']}",
+                detail=(
+                    f"{actor} registered MCP client "
+                    f"{payload['client']['slug']!r} "
+                    f"(kind={payload['client']['kind']})."
+                ),
+                metadata={
+                    "client_id": payload["client"]["client_id"],
+                    "slug": payload["client"]["slug"],
+                    "kind": payload["client"]["kind"],
+                },
+            )
+            return JSONResponse(payload, status_code=201)
+
+        @self.custom_route(
+            f"{prefix}/clients/{{client_id}}", methods=["GET"]
+        )
+        async def registry_clients_get(
+            request: Request,
+        ) -> JSONResponse:
+            """Fetch a single client by id or slug.
+
+            Visibility mirrors the list endpoint: admins see anyone,
+            publishers see their own; anyone else gets a 403 (or
+            404 when the client doesn't exist).
+            """
+            session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            client_id = request.path_params.get("client_id", "")
+            resolved = _resolve_client_or_404(client_id)
+            if isinstance(resolved, JSONResponse):
+                return resolved
+            if not _can_manage_client(session, resolved):
+                return JSONResponse(
+                    {
+                        "error": (
+                            "Not allowed to view this client."
+                        ),
+                        "status": 403,
+                    },
+                    status_code=403,
+                )
+            tokens = self.list_client_tokens(resolved.client_id)
+            return JSONResponse(
+                {
+                    "client": resolved.to_dict(),
+                    "tokens": [t.to_dict() for t in tokens],
+                }
+            )
+
+        @self.custom_route(
+            f"{prefix}/clients/{{client_id}}", methods=["PATCH"]
+        )
+        async def registry_clients_update(
+            request: Request,
+        ) -> JSONResponse:
+            """Update editable fields on a client.
+
+            Body accepts any of ``display_name``, ``description``,
+            ``intended_use``, ``kind``, ``metadata``. ``slug`` is
+            intentionally immutable post-creation — the slug is the
+            actor identity broadcast to every plane, so changing it
+            silently would break governance attribution.
+            """
+            session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            client_id = request.path_params.get("client_id", "")
+            resolved = _resolve_client_or_404(client_id)
+            if isinstance(resolved, JSONResponse):
+                return resolved
+            if not _can_manage_client(session, resolved):
+                return JSONResponse(
+                    {
+                        "error": "Not allowed to update this client.",
+                        "status": 403,
+                    },
+                    status_code=403,
+                )
+            try:
+                body = await request.json()
+            except Exception:
+                body = None
+            if not isinstance(body, dict):
+                return JSONResponse(
+                    {"error": "Body must be a JSON object.", "status": 400},
+                    status_code=400,
+                )
+            kwargs: dict[str, Any] = {}
+            if "display_name" in body:
+                kwargs["display_name"] = str(body["display_name"] or "")
+            if "description" in body:
+                kwargs["description"] = str(body["description"] or "")
+            if "intended_use" in body:
+                kwargs["intended_use"] = str(body["intended_use"] or "")
+            if "kind" in body:
+                kwargs["kind"] = str(body["kind"] or "")
+            if "metadata" in body and isinstance(body["metadata"], dict):
+                kwargs["metadata"] = body["metadata"]
+            try:
+                updated = self.update_client(resolved.client_id, **kwargs)
+            except (ClientStoreError, ValueError) as exc:
+                return JSONResponse(
+                    {"error": str(exc), "status": 400},
+                    status_code=400,
+                )
+            if updated is None:
+                return JSONResponse(
+                    {"error": "Client disappeared.", "status": 404},
+                    status_code=404,
+                )
+            return JSONResponse({"client": updated.to_dict()})
+
+        @self.custom_route(
+            f"{prefix}/clients/{{client_id}}/suspend",
+            methods=["POST"],
+        )
+        async def registry_clients_suspend(
+            request: Request,
+        ) -> JSONResponse:
+            """Suspend a client.
+
+            Suspended clients can't authenticate (the resolver
+            still resolves the slug for telemetry, but
+            :meth:`authenticate_client_token` returns ``None`` for
+            non-active clients) and can't have new tokens issued.
+            Body: ``{"reason": "..."}``.
+            """
+            session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            client_id = request.path_params.get("client_id", "")
+            resolved = _resolve_client_or_404(client_id)
+            if isinstance(resolved, JSONResponse):
+                return resolved
+            if not _can_manage_client(session, resolved):
+                return JSONResponse(
+                    {
+                        "error": "Not allowed to suspend this client.",
+                        "status": 403,
+                    },
+                    status_code=403,
+                )
+            try:
+                body = await request.json()
+            except Exception:
+                body = None
+            reason = ""
+            if isinstance(body, dict):
+                reason = str(body.get("reason", "") or "")
+            updated = self.suspend_client(resolved.client_id, reason=reason)
+            if updated is None:
+                return JSONResponse(
+                    {"error": "Client disappeared.", "status": 404},
+                    status_code=404,
+                )
+            actor = session.username if session is not None else "anonymous"
+            self._account_activity.append(
+                username=actor,
+                event_kind="client_suspended",
+                title=f"MCP client suspended: {updated.slug}",
+                detail=(
+                    f"{actor} suspended {updated.slug!r}"
+                    + (f" — {reason}" if reason else "")
+                ),
+                metadata={"client_id": updated.client_id, "slug": updated.slug},
+            )
+            return JSONResponse({"client": updated.to_dict()})
+
+        @self.custom_route(
+            f"{prefix}/clients/{{client_id}}/unsuspend",
+            methods=["POST"],
+        )
+        async def registry_clients_unsuspend(
+            request: Request,
+        ) -> JSONResponse:
+            """Re-activate a previously suspended client."""
+            session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            client_id = request.path_params.get("client_id", "")
+            resolved = _resolve_client_or_404(client_id)
+            if isinstance(resolved, JSONResponse):
+                return resolved
+            if not _can_manage_client(session, resolved):
+                return JSONResponse(
+                    {
+                        "error": "Not allowed to unsuspend this client.",
+                        "status": 403,
+                    },
+                    status_code=403,
+                )
+            updated = self.unsuspend_client(resolved.client_id)
+            if updated is None:
+                return JSONResponse(
+                    {"error": "Client disappeared.", "status": 404},
+                    status_code=404,
+                )
+            actor = session.username if session is not None else "anonymous"
+            self._account_activity.append(
+                username=actor,
+                event_kind="client_unsuspended",
+                title=f"MCP client unsuspended: {updated.slug}",
+                detail=f"{actor} unsuspended {updated.slug!r}.",
+                metadata={"client_id": updated.client_id, "slug": updated.slug},
+            )
+            return JSONResponse({"client": updated.to_dict()})
+
+        @self.custom_route(
+            f"{prefix}/clients/{{client_id}}/tokens",
+            methods=["GET"],
+        )
+        async def registry_clients_list_tokens(
+            request: Request,
+        ) -> JSONResponse:
+            session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            client_id = request.path_params.get("client_id", "")
+            resolved = _resolve_client_or_404(client_id)
+            if isinstance(resolved, JSONResponse):
+                return resolved
+            if not _can_manage_client(session, resolved):
+                return JSONResponse(
+                    {
+                        "error": "Not allowed to view tokens for this client.",
+                        "status": 403,
+                    },
+                    status_code=403,
+                )
+            tokens = self.list_client_tokens(resolved.client_id)
+            return JSONResponse(
+                {
+                    "client_id": resolved.client_id,
+                    "items": [t.to_dict() for t in tokens],
+                    "count": len(tokens),
+                }
+            )
+
+        @self.custom_route(
+            f"{prefix}/clients/{{client_id}}/tokens",
+            methods=["POST"],
+        )
+        async def registry_clients_issue_token(
+            request: Request,
+        ) -> JSONResponse:
+            """Issue a new token for the client.
+
+            Body: ``{"name": "..."}``. Returns ``{token, secret}``;
+            the secret is shown to the operator exactly once.
+            """
+            session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            client_id = request.path_params.get("client_id", "")
+            resolved = _resolve_client_or_404(client_id)
+            if isinstance(resolved, JSONResponse):
+                return resolved
+            if not _can_manage_client(session, resolved):
+                return JSONResponse(
+                    {
+                        "error": "Not allowed to issue tokens for this client.",
+                        "status": 403,
+                    },
+                    status_code=403,
+                )
+            try:
+                body = await request.json()
+            except Exception:
+                body = None
+            name = "Default"
+            if isinstance(body, dict):
+                name_raw = str(body.get("name", "") or "").strip()
+                if name_raw:
+                    name = name_raw
+            actor = session.username if session is not None else "anonymous"
+            try:
+                token, secret = self.issue_client_token(
+                    resolved.client_id, name=name, created_by=actor
+                )
+            except (ClientStoreError, ValueError) as exc:
+                return JSONResponse(
+                    {"error": str(exc), "status": 400},
+                    status_code=400,
+                )
+            self._account_activity.append(
+                username=actor,
+                event_kind="client_token_issued",
+                title=f"Token issued for {resolved.slug}",
+                detail=(
+                    f"{actor} issued token {name!r} "
+                    f"(prefix {token.secret_prefix}) for client "
+                    f"{resolved.slug!r}."
+                ),
+                metadata={
+                    "client_id": resolved.client_id,
+                    "slug": resolved.slug,
+                    "token_id": token.token_id,
+                },
+            )
+            return JSONResponse(
+                {"token": token.to_dict(), "secret": secret},
+                status_code=201,
+            )
+
+        @self.custom_route(
+            f"{prefix}/clients/{{client_id}}/tokens/{{token_id}}",
+            methods=["DELETE"],
+        )
+        async def registry_clients_revoke_token(
+            request: Request,
+        ) -> JSONResponse:
+            session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            client_id = request.path_params.get("client_id", "")
+            token_id = request.path_params.get("token_id", "")
+            resolved = _resolve_client_or_404(client_id)
+            if isinstance(resolved, JSONResponse):
+                return resolved
+            if not _can_manage_client(session, resolved):
+                return JSONResponse(
+                    {
+                        "error": "Not allowed to revoke tokens for this client.",
+                        "status": 403,
+                    },
+                    status_code=403,
+                )
+            revoked = self.revoke_client_token(token_id)
+            if revoked is None:
+                return JSONResponse(
+                    {"error": f"Token {token_id!r} not found.", "status": 404},
+                    status_code=404,
+                )
+            actor = session.username if session is not None else "anonymous"
+            self._account_activity.append(
+                username=actor,
+                event_kind="client_token_revoked",
+                title=f"Token revoked for {resolved.slug}",
+                detail=(
+                    f"{actor} revoked token {revoked.name!r} "
+                    f"(prefix {revoked.secret_prefix}) for client "
+                    f"{resolved.slug!r}."
+                ),
+                metadata={
+                    "client_id": resolved.client_id,
+                    "slug": resolved.slug,
+                    "token_id": revoked.token_id,
+                },
+            )
+            return JSONResponse({"token": revoked.to_dict()})
+
+        @self.custom_route(
+            f"{prefix}/clients/{{client_id}}/governance",
+            methods=["GET"],
+        )
+        async def registry_clients_governance(
+            request: Request,
+        ) -> JSONResponse:
+            """Return the per-client governance + observability rollup.
+
+            Owner-or-admin gated under auth (mirrors the per-client
+            detail route). Sanitization is automatic for callers
+            without management rights so a public-facing variant of
+            the page can show *that* the client has activity without
+            leaking *who* they're talking to.
+            """
+            session = self._session_from_request(request)
+            client_id = request.path_params.get("client_id", "")
+            resolved = _resolve_client_or_404(client_id)
+            if isinstance(resolved, JSONResponse):
+                return resolved
+            sanitize = not _can_manage_client(session, resolved)
+            payload = self.get_client_governance(
+                resolved.client_id, sanitize_for_public=sanitize
+            )
+            return JSONResponse(
+                payload, status_code=_status_code_from_payload(payload)
+            )
 
         self._registry_api_mounted = True
         self._registry_prefix = prefix

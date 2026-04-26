@@ -1,7 +1,38 @@
 """Sandbox enforcement engine.
 
 Converts SecurityManifests into ExecutionPolicies, tracks execution
-context, and blocks operations that violate declared permissions.
+context, and rejects operations that violate declared permissions.
+
+.. warning::
+
+    This sandbox is **cooperative**, not OS-enforced. There is no
+    seccomp, no process isolation, no Python ``RestrictedPython``,
+    and no kernel-level boundary. Tools must opt in to enforcement
+    by calling :meth:`SandboxedRunner.check` (or the equivalent
+    ``ManifestEnforcer.check_permission`` /
+    ``ManifestEnforcer.check_resource``) before they perform a
+    privileged operation.
+
+    A tool that does not call ``check`` bypasses every policy here.
+    The sandbox provides:
+
+    - **Declarative permission tracking** — operators can see what a
+      tool *says* it needs and detect drift over time.
+    - **Pre/post execution hooks** — record violations, block on CRL
+      revocation, emit alerts.
+    - **Audit trail** — violations are recorded for forensics.
+
+    What it does **NOT** provide:
+
+    - Mandatory enforcement on uncooperative tool code.
+    - Protection against compromised or malicious tools.
+    - System-call interception.
+
+    For workloads that require true isolation, run tools in a
+    separate process under an OS sandbox (Linux seccomp+namespaces,
+    macOS Seatbelt, Windows AppContainer) or in a container with a
+    restrictive profile, and use this module's checks as a
+    second-layer policy on top.
 """
 
 from __future__ import annotations
@@ -155,10 +186,18 @@ _PERMISSION_TO_POLICY: dict[PermissionScope, str] = {
 
 
 class ManifestEnforcer:
-    """Converts SecurityManifests into enforceable policies.
+    """Cooperative permission checker driven by a SecurityManifest.
 
-    Translates declared permissions into an ExecutionPolicy and
-    provides permission-check methods for runtime enforcement.
+    Translates declared permissions into an :class:`ExecutionPolicy`
+    and exposes ``check_permission`` / ``check_resource`` for tools to
+    consult before performing privileged operations.
+
+    .. warning::
+
+        Enforcement is cooperative — tools must call ``check`` to
+        participate. See the module-level warning in
+        :mod:`fastmcp.server.security.sandbox.enforcer` for the full
+        context.
 
     Example::
 
@@ -167,7 +206,7 @@ class ManifestEnforcer:
         # Create policy from manifest
         policy = enforcer.policy_from_manifest(manifest)
 
-        # Check individual operations
+        # Check individual operations (caller must opt in)
         enforcer.check_permission(context, "network_access")
         enforcer.check_resource(context, "file:///data/input.csv")
     """
@@ -349,10 +388,21 @@ class ManifestEnforcer:
 
 
 class SandboxedRunner:
-    """Runs tools in a sandboxed execution context.
+    """Hooks-based runner for tools governed by a SecurityManifest.
 
-    Creates an execution context from a manifest, checks CRL for
-    revocations, and provides pre/post execution hooks.
+    Creates an :class:`ExecutionContext` from the manifest, checks the
+    CRL for revocations before execution, and exposes ``check`` /
+    ``check_resource`` for cooperative pre-operation gating.
+
+    .. warning::
+
+        This is **not an OS sandbox**. The runner does not interpose
+        on system calls, fork into a restricted process, or use
+        seccomp/namespaces. Enforcement happens only when the running
+        tool calls back into ``runner.check(...)`` before performing a
+        privileged operation. Tools that do not call ``check`` execute
+        unconstrained. See the module-level warning in
+        :mod:`fastmcp.server.security.sandbox.enforcer`.
 
     Example::
 
@@ -361,10 +411,10 @@ class SandboxedRunner:
             crl=my_crl,
         )
 
-        # Start sandboxed execution
+        # Start a logical execution scope
         context = runner.start(manifest, actor_id="user-1")
 
-        # Check operations during execution
+        # Tool code must opt in to checks at sensitive call sites:
         runner.check(context, "network_access")
         runner.check_resource(context, "file:///data/input.csv")
 

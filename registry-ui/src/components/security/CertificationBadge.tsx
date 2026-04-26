@@ -21,9 +21,9 @@ function info(level?: string): Info {
     return {
       raw,
       label: "Unrated",
-      bgcolor: "rgba(113, 113, 122, 0.18)",
-      color: "rgb(212, 212, 216)",
-      borderColor: "rgba(212, 212, 216, 0.24)",
+      bgcolor: "rgba(100, 116, 139, 0.12)",
+      color: "var(--app-muted)",
+      borderColor: "var(--app-control-border)",
     };
   }
 
@@ -41,9 +41,9 @@ function info(level?: string): Info {
     return {
       raw,
       label: raw,
-      bgcolor: "rgba(14, 165, 233, 0.18)",
-      color: "rgb(186, 230, 253)",
-      borderColor: "rgba(186, 230, 253, 0.24)",
+      bgcolor: "rgba(14, 165, 233, 0.12)",
+      color: "#0369a1",
+      borderColor: "rgba(14, 165, 233, 0.22)",
     };
   }
 
@@ -66,16 +66,16 @@ export function CertificationBadge({ level, size = "sm" }: Props) {
       size="small"
       label={badge.label}
       sx={{
-        borderRadius: 999,
+        borderRadius: 2,
         height,
         bgcolor: badge.bgcolor,
         color: badge.color,
         border: "1px solid",
         borderColor: badge.borderColor,
-        fontSize: 10,
-        fontWeight: 800,
-        textTransform: "uppercase",
-        letterSpacing: "0.16em",
+        fontSize: 11,
+        fontWeight: 700,
+        textTransform: "none",
+        letterSpacing: "0.01em",
         "& .MuiChip-label": {
           px: size === "md" ? 1.25 : 1,
         },

@@ -164,7 +164,14 @@ def _looks_placeholder(value: str) -> bool:
     if not lowered:
         return True
     return any(
-        marker in lowered for marker in ("your-team", "example", "todo", "change-me")
+        marker in lowered
+        for marker in (
+            "your-team",
+            "your-service-domain",
+            "example",
+            "todo",
+            "change-me",
+        )
     )
 
 

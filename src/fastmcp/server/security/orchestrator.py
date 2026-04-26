@@ -188,7 +188,7 @@ class SecurityOrchestrator:
                 version_manager=version_manager,
             )
             if bus_for_components is not None:
-                engine._event_bus = bus_for_components
+                engine.attach_event_bus(bus_for_components)
             ctx.policy_engine = engine
 
             # Validator
@@ -262,7 +262,7 @@ class SecurityOrchestrator:
             assert config.provenance is not None
             ledger = config.provenance.get_ledger()
             if bus_for_components is not None:
-                ledger._event_bus = bus_for_components
+                ledger.attach_event_bus(bus_for_components)
             ctx.provenance_ledger = ledger
 
             from fastmcp.server.security.middleware.provenance_recording import (
@@ -284,8 +284,8 @@ class SecurityOrchestrator:
             analyzer = config.reflexive.get_analyzer()
             escalation_engine = config.reflexive.get_escalation_engine()
             if bus_for_components is not None:
-                analyzer._event_bus = bus_for_components
-                escalation_engine._event_bus = bus_for_components
+                analyzer.attach_event_bus(bus_for_components)
+                escalation_engine.attach_event_bus(bus_for_components)
             ctx.behavioral_analyzer = analyzer
             ctx.escalation_engine = escalation_engine
 
@@ -307,7 +307,7 @@ class SecurityOrchestrator:
             assert config.consent is not None
             graph = config.consent.get_graph()
             if bus_for_components is not None:
-                graph._event_bus = bus_for_components
+                graph.attach_event_bus(bus_for_components)
             ctx.consent_graph = graph
 
             from fastmcp.server.security.middleware.consent_enforcement import (
@@ -393,7 +393,7 @@ class SecurityOrchestrator:
             assert config.gateway is not None
             marketplace = config.gateway.get_marketplace()
             if bus_for_components is not None:
-                marketplace._event_bus = bus_for_components
+                marketplace.attach_event_bus(bus_for_components)
             ctx.marketplace = marketplace
 
             audit_api = config.gateway.audit_api or AuditAPI(

@@ -80,6 +80,13 @@ class CertificationPipeline:
         event_bus: Optional event bus for certification alerts.
         min_level_for_signing: Minimum certification level to produce
             a signed attestation. Below this, attestation is PENDING.
+        require_crypto_for_valid: If True (default), an attestation can
+            only be marked ``VALID`` when a ``crypto_handler`` is
+            configured to actually sign it. With no handler the
+            attestation is marked ``UNSIGNED``, which fails
+            ``is_valid()`` and does not update marketplace trust. Set to
+            False only for development environments where unsigned
+            attestations are an acceptable shortcut.
     """
 
     def __init__(
@@ -92,6 +99,7 @@ class CertificationPipeline:
         marketplace: Marketplace | None = None,
         event_bus: SecurityEventBus | None = None,
         min_level_for_signing: CertificationLevel = CertificationLevel.BASIC,
+        require_crypto_for_valid: bool = True,
     ) -> None:
         self._issuer_id = issuer_id
         self._crypto = crypto_handler
@@ -100,6 +108,18 @@ class CertificationPipeline:
         self._marketplace = marketplace
         self._event_bus = event_bus
         self._min_level_for_signing = min_level_for_signing
+        self._require_crypto_for_valid = require_crypto_for_valid
+
+        if (
+            crypto_handler is None
+            and not require_crypto_for_valid
+        ):
+            logger.warning(
+                "CertificationPipeline configured with require_crypto_for_valid="
+                "False and no crypto handler — attestations will be marked VALID "
+                "without a real signature. This is suitable only for development "
+                "or test environments."
+            )
 
         # Internal registries
         self._attestations: dict[str, ToolAttestation] = {}
@@ -169,8 +189,15 @@ class CertificationPipeline:
             attestation.signature = sig_info.signature
             attestation.status = AttestationStatus.VALID
         elif meets_min and self._crypto is None:
-            # No crypto handler, but level meets minimum — mark valid unsigned
-            attestation.status = AttestationStatus.VALID
+            # No crypto handler. By default this is UNSIGNED (not VALID),
+            # so ``is_valid()`` returns False and downstream consumers do
+            # not treat the attestation as certified. Operators who
+            # explicitly opt out of crypto via require_crypto_for_valid=False
+            # still get the legacy unsigned-but-VALID behaviour.
+            if self._require_crypto_for_valid:
+                attestation.status = AttestationStatus.UNSIGNED
+            else:
+                attestation.status = AttestationStatus.VALID
         else:
             attestation.status = AttestationStatus.PENDING
 

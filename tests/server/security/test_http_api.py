@@ -392,7 +392,9 @@ class TestMountRoutes:
         from fastmcp.server.security.http.api import SecurityAPI, mount_security_routes
 
         server = FastMCP("test-server")
-        api = mount_security_routes(server, api=SecurityAPI())
+        api = mount_security_routes(
+            server, api=SecurityAPI(), bearer_token="t"
+        )
         assert isinstance(api, SecurityAPI)
 
     def test_mount_with_custom_prefix(self):
@@ -400,7 +402,9 @@ class TestMountRoutes:
         from fastmcp.server.security.http.api import SecurityAPI, mount_security_routes
 
         server = FastMCP("test-server")
-        api = mount_security_routes(server, api=SecurityAPI(), prefix="/api/v1")
+        api = mount_security_routes(
+            server, api=SecurityAPI(), prefix="/api/v1", bearer_token="t"
+        )
         assert isinstance(api, SecurityAPI)
 
     def test_mount_auto_build(self):
@@ -408,7 +412,7 @@ class TestMountRoutes:
         from fastmcp.server.security.http.api import mount_security_routes
 
         server = FastMCP("test-server")
-        api = mount_security_routes(server)
+        api = mount_security_routes(server, bearer_token="t")
         assert api is not None
 
     def test_mount_auto_build_uses_attached_context(self):
@@ -417,9 +421,207 @@ class TestMountRoutes:
         server = FastMCP("test-server")
         attach_security(server, SecurityConfig(registry=RegistryConfig()))
 
-        api = mount_security_routes(server)
+        api = mount_security_routes(server, bearer_token="t")
 
         assert api.registry is not None
+
+
+# ── Auth tests ─────────────────────────────────────────────────────
+
+
+class TestMountSecurityRoutesAuth:
+    """Regression tests for #1: the security HTTP API must enforce auth.
+
+    Pre-fix all 50+ routes were openly callable. The test set below
+    locks in: (a) mounting without auth is rejected by default, (b) the
+    bearer-token path 401s on missing/invalid tokens and 200s on valid,
+    (c) custom verifiers are supported, (d) opting out via
+    require_auth=False is loud but possible.
+    """
+
+    def _make_server(self):
+        from fastmcp import FastMCP
+
+        return FastMCP("auth-test")
+
+    def _client(self, server):
+        from starlette.testclient import TestClient
+
+        return TestClient(server.http_app(transport="streamable-http"))
+
+    def test_mount_without_auth_args_raises(self):
+        from fastmcp.server.security.http.api import mount_security_routes
+
+        server = self._make_server()
+        with pytest.raises(RuntimeError, match="bearer_token or auth_verifier"):
+            mount_security_routes(server)
+
+    def test_mount_require_auth_false_explicit_opt_out(self, caplog):
+        import logging
+
+        from fastmcp.server.security.http.api import mount_security_routes
+
+        server = self._make_server()
+        with caplog.at_level(logging.WARNING):
+            mount_security_routes(server, require_auth=False)
+
+        assert any(
+            "without authentication" in r.message for r in caplog.records
+        )
+
+    def test_get_endpoint_requires_bearer_token(self):
+        from fastmcp.server.security.http.api import mount_security_routes
+
+        server = self._make_server()
+        mount_security_routes(server, bearer_token="secret-token")
+
+        client = self._client(server)
+        # No header → 401.
+        r = client.get("/security/dashboard")
+        assert r.status_code == 401
+        assert "Authorization" in r.json().get("error", "")
+
+        # Wrong token → 401.
+        r = client.get(
+            "/security/dashboard",
+            headers={"Authorization": "Bearer not-the-secret"},
+        )
+        assert r.status_code == 401
+
+        # Right token → 200.
+        r = client.get(
+            "/security/dashboard",
+            headers={"Authorization": "Bearer secret-token"},
+        )
+        assert r.status_code == 200
+
+    def test_post_endpoint_requires_auth(self):
+        """Destructive endpoints must also be auth-gated, not just GETs."""
+        from fastmcp.server.security.http.api import mount_security_routes
+
+        server = self._make_server()
+        attach_security(server, SecurityConfig(registry=RegistryConfig()))
+        mount_security_routes(server, bearer_token="ops-token")
+
+        client = self._client(server)
+        # POST /security/policy/import without token → 401.
+        r = client.post("/security/policy/import", json={"policy": {}})
+        assert r.status_code == 401
+
+        # POST with valid token doesn't 401 — it may 4xx/5xx for other
+        # reasons (no policy engine attached, bad payload, etc.) but
+        # not because of missing auth.
+        r = client.post(
+            "/security/policy/import",
+            json={"policy": {}},
+            headers={"Authorization": "Bearer ops-token"},
+        )
+        assert r.status_code != 401
+
+    def test_custom_auth_verifier(self):
+        from fastmcp.server.security.http.api import mount_security_routes
+
+        seen_tokens: list[str] = []
+
+        def verify(_request, token):
+            seen_tokens.append(token)
+            if token == "good":
+                return {"actor": "alice"}
+            return None
+
+        server = self._make_server()
+        mount_security_routes(server, auth_verifier=verify)
+
+        client = self._client(server)
+        r = client.get(
+            "/security/dashboard",
+            headers={"Authorization": "Bearer good"},
+        )
+        assert r.status_code == 200
+        assert seen_tokens == ["good"]
+
+        r = client.get(
+            "/security/dashboard",
+            headers={"Authorization": "Bearer bad"},
+        )
+        assert r.status_code == 401
+
+    def test_async_auth_verifier(self):
+        from fastmcp.server.security.http.api import mount_security_routes
+
+        async def verify(_request, token):
+            if token == "ok":
+                return {"actor": "async-actor"}
+            return None
+
+        server = self._make_server()
+        mount_security_routes(server, auth_verifier=verify)
+
+        client = self._client(server)
+        r = client.get(
+            "/security/dashboard",
+            headers={"Authorization": "Bearer ok"},
+        )
+        assert r.status_code == 200
+
+    def test_empty_bearer_token_rejected(self):
+        from fastmcp.server.security.http.api import mount_security_routes
+
+        server = self._make_server()
+        mount_security_routes(server, bearer_token="real")
+
+        client = self._client(server)
+        r = client.get(
+            "/security/dashboard",
+            headers={"Authorization": "Bearer "},
+        )
+        assert r.status_code == 401
+
+    def test_non_bearer_scheme_rejected(self):
+        from fastmcp.server.security.http.api import mount_security_routes
+
+        server = self._make_server()
+        mount_security_routes(server, bearer_token="x")
+
+        client = self._client(server)
+        r = client.get(
+            "/security/dashboard",
+            headers={"Authorization": "Basic dXNlcjpwYXNz"},
+        )
+        assert r.status_code == 401
+
+    def test_require_auth_false_serves_unauthenticated(self):
+        from fastmcp.server.security.http.api import mount_security_routes
+
+        server = self._make_server()
+        mount_security_routes(server, require_auth=False)
+
+        client = self._client(server)
+        r = client.get("/security/dashboard")
+        assert r.status_code == 200
+
+    def test_bearer_token_compare_is_constant_time(self):
+        """Smoke test for the constant-time compare path: a correct
+        token of the same length passes; a wrong token of equal length
+        fails. We don't try to time it — that's flaky — but we verify
+        both paths exercise the hmac.compare_digest call."""
+        from fastmcp.server.security.http.api import mount_security_routes
+
+        server = self._make_server()
+        mount_security_routes(server, bearer_token="abc123def")
+
+        client = self._client(server)
+        r = client.get(
+            "/security/dashboard",
+            headers={"Authorization": "Bearer abc123def"},
+        )
+        assert r.status_code == 200
+
+        r = client.get(
+            "/security/dashboard",
+            headers={"Authorization": "Bearer xyz999wru"},
+        )
+        assert r.status_code == 401
 
 
 # ── from_context tests ──────────────────────────────────────

@@ -26,14 +26,17 @@ async def hosted_lifespan(app: Starlette) -> AsyncGenerator[None, None]:
 
     children = getattr(app.state, "children", [])
     contexts = [child.router.lifespan_context(child) for child in children]
-    router = getattr(app.state, "toolset_router", None)
+    toolset_router = getattr(app.state, "toolset_router", None)
+    curator_proxy_router = getattr(app.state, "curator_proxy_router", None)
     try:
         for ctx in contexts:
             await ctx.__aenter__()
         yield
     finally:
-        if router is not None:
-            await router.aclose()
+        if curator_proxy_router is not None:
+            await curator_proxy_router.aclose()
+        if toolset_router is not None:
+            await toolset_router.aclose()
         for ctx in reversed(contexts):
             await ctx.__aexit__(None, None, None)
 
@@ -217,7 +220,17 @@ def build_hosted_registry_app(
     persistence_path: str | None,
     upstream_default_base_url: str | None = None,
 ) -> Starlette:
-    """Build a Starlette app hosting the registry plus toolset gateways."""
+    """Build a Starlette app hosting the registry plus toolset gateways
+    and curator-mode proxies.
+
+    Routes are mounted in priority order:
+
+    1. ``/mcp/toolsets/{id}``  → OpenAPI-toolset gateway (existing).
+    2. ``/runtime/proxy/{id}/mcp/...`` → curator-mode SecureMCP proxy
+       (this iteration). Listings published with
+       ``hosting_mode: "proxy"`` get an enforced gateway here.
+    3. ``/`` → the registry control plane.
+    """
 
     registry_app = registry.http_app(path="/mcp", transport="streamable-http")
     routes: list[Any] = []
@@ -232,11 +245,39 @@ def build_hosted_registry_app(
         # Mount toolsets first so they take precedence over registry /mcp.
         routes.append(Mount("/mcp/toolsets", app=toolset_router))
 
+    # Curator-mode proxy router: lazy-mounts a SecureMCP-enforced
+    # proxy per ``hosting_mode: "proxy"`` listing. Bound to the
+    # registry's marketplace via a closure so the router doesn't need
+    # to import the registry class directly.
+    from purecipher.curation.proxy_runtime import CuratorProxyRouter
+
+    def _lookup_listing(listing_id: str) -> Any:
+        marketplace = getattr(registry, "_marketplace", None)
+        if marketplace is None:
+            return None
+        # The registry's _marketplace() helper builds/returns the
+        # ToolMarketplace lazily; call it as a method when callable,
+        # use the attribute directly otherwise (test seam).
+        try:
+            mp = marketplace() if callable(marketplace) else marketplace
+        except Exception:
+            return None
+        if mp is None:
+            return None
+        return mp.get(listing_id) if hasattr(mp, "get") else None
+
+    curator_proxy_router = CuratorProxyRouter(
+        listing_lookup=_lookup_listing,
+        auth_settings=getattr(registry, "_auth_settings", None),
+    )
+    routes.append(Mount("/runtime/proxy", app=curator_proxy_router))
+
     routes.append(Mount("/", app=registry_app))
 
     app = Starlette(routes=routes, lifespan=hosted_lifespan)
     app.state.children = children
     app.state.toolset_router = toolset_router
+    app.state.curator_proxy_router = curator_proxy_router
     return app
 
 

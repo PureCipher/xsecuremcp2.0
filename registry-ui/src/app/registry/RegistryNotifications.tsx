@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Box, ButtonBase, Typography } from "@mui/material";
 
 import { NavIcon } from "@/components/security";
+import { useRegistryUserPreferences } from "@/hooks/useRegistryUserPreferences";
 
 type FeedItem = {
   id: number;
@@ -15,6 +17,7 @@ type FeedItem = {
 };
 
 export function RegistryNotifications() {
+  const { prefs } = useRegistryUserPreferences();
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<FeedItem[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -56,12 +59,17 @@ export function RegistryNotifications() {
     return () => window.clearInterval(id);
   }, [load]);
 
+  const visibleItems = useMemo(
+    () => items.filter((item) => notificationEnabled(item.event_kind, prefs.notifications)),
+    [items, prefs.notifications],
+  );
+
   const hasUnread = (() => {
-    if (!items.length) return false;
+    if (!visibleItems.length) return false;
     if (!lastSeenIso) return true;
     const lastSeen = Date.parse(lastSeenIso);
     if (Number.isNaN(lastSeen)) return true;
-    return items.some((i) => {
+    return visibleItems.some((i) => {
       const ts = Date.parse(i.created_at);
       return !Number.isNaN(ts) && ts > lastSeen;
     });
@@ -91,90 +99,158 @@ export function RegistryNotifications() {
   }, [open, load]);
 
   return (
-    <div className="relative" ref={rootRef}>
-      <button
+    <Box ref={rootRef} sx={{ position: "relative" }}>
+      <ButtonBase
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className={`relative inline-flex items-center justify-center rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] transition ${
-          open
-            ? "border-[--app-accent] bg-[--app-control-active-bg] text-[--app-fg]"
-            : "border-[--app-control-border] bg-[--app-control-bg] text-[--app-muted] hover:bg-[--app-hover-bg]"
-        }`}
+        sx={{
+          position: "relative",
+          width: 36,
+          height: 36,
+          p: 0,
+          border: "1px solid",
+          borderColor: open ? "var(--app-accent)" : "var(--app-control-border)",
+          borderRadius: 2.5,
+          bgcolor: open ? "var(--app-control-active-bg)" : "var(--app-control-bg)",
+          color: open ? "var(--app-fg)" : "var(--app-muted)",
+          boxShadow: "0 8px 20px rgba(15, 23, 42, 0.06)",
+          transition: "background-color 160ms ease, border-color 160ms ease, color 160ms ease",
+          "&:hover": { bgcolor: "var(--app-hover-bg)" },
+        }}
         aria-label="Notifications"
         aria-expanded={open}
         title="Notifications"
       >
         <NavIcon name="notify" className="h-4 w-4" />
         {hasUnread ? (
-          <span
-            className="absolute right-0.5 top-0.5 h-2 w-2 rounded-full bg-[--app-accent]"
+          <Box
+            component="span"
+            sx={{
+              position: "absolute",
+              top: 4,
+              right: 4,
+              width: 8,
+              height: 8,
+              borderRadius: "50%",
+              bgcolor: "var(--app-accent)",
+            }}
             aria-hidden
           />
         ) : null}
-      </button>
+      </ButtonBase>
 
       {open ? (
-        <div
-          className="absolute right-0 z-[60] mt-2 w-[min(100vw-2rem,22rem)] rounded-2xl border border-[--app-border] bg-[--app-chrome-bg] py-2 shadow-lg ring-1 ring-[--app-surface-ring]"
+        <Box
           role="dialog"
           aria-label="Notification list"
+          sx={{
+            position: "fixed",
+            top: 52,
+            right: { xs: 12, sm: 24 },
+            zIndex: (theme) => theme.zIndex.modal,
+            width: "min(calc(100vw - 2rem), 22rem)",
+            py: 1,
+            border: "1px solid var(--app-border)",
+            borderRadius: 3,
+            bgcolor: "var(--app-surface)",
+            color: "var(--app-fg)",
+            backgroundImage: "none",
+            boxShadow: "0 22px 60px rgba(15, 23, 42, 0.18)",
+            outline: "1px solid var(--app-surface-ring)",
+            overflow: "hidden",
+          }}
         >
-          <div className="border-b border-[--app-border] px-3 pb-2">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
+          <Box sx={{ px: 1.5, pb: 1, borderBottom: "1px solid var(--app-border)" }}>
+            <Typography
+              sx={{
+                fontSize: 10,
+                fontWeight: 800,
+                letterSpacing: "0.16em",
+                textTransform: "uppercase",
+                color: "var(--app-muted)",
+              }}
+            >
               Registry activity
-            </p>
-            <p className="text-[10px] text-[--app-muted]">
+            </Typography>
+            <Typography sx={{ mt: 0.25, fontSize: 10, color: "var(--app-muted)" }}>
               Major listing and policy events for your role.
-            </p>
-          </div>
-          <div className="max-h-[min(70vh,20rem)] overflow-y-auto px-1 py-1">
-            {loading && items.length === 0 ? (
-              <p className="px-3 py-4 text-[11px] text-[--app-muted]">Loading…</p>
+            </Typography>
+          </Box>
+          <Box sx={{ maxHeight: "min(70vh, 20rem)", overflowY: "auto", px: 0.5, py: 0.5 }}>
+            {loading && visibleItems.length === 0 ? (
+              <Typography sx={{ px: 1.5, py: 2, fontSize: 11, color: "var(--app-muted)" }}>Loading...</Typography>
             ) : null}
             {error ? (
-              <p className="px-3 py-3 text-[11px] text-red-600 dark:text-red-400">{error}</p>
+              <Typography sx={{ px: 1.5, py: 1.5, fontSize: 11, color: "#b91c1c" }}>{error}</Typography>
             ) : null}
-            {!loading && !error && items.length === 0 ? (
-              <p className="px-3 py-4 text-[11px] text-[--app-muted]">No notifications yet.</p>
+            {!loading && !error && visibleItems.length === 0 ? (
+              <Typography sx={{ px: 1.5, py: 2, fontSize: 11, color: "var(--app-muted)" }}>No enabled notifications yet.</Typography>
             ) : null}
-            <ul className="grid gap-1">
-              {items.map((item) => (
+            <Box component="ul" sx={{ display: "grid", gap: 0.5, m: 0, p: 0, listStyle: "none" }}>
+              {visibleItems.map((item) => (
                 <li key={`${item.id}-${item.created_at}`}>
                   {item.link_path ? (
                     <Link
                       href={item.link_path}
                       onClick={() => setOpen(false)}
-                      className="block rounded-xl px-3 py-2 text-left transition hover:bg-[--app-hover-bg]"
+                      style={{ display: "block", textDecoration: "none", color: "inherit" }}
                     >
-                      <NotificationRow item={item} />
+                      <Box sx={{ borderRadius: 2, px: 1.5, py: 1, textAlign: "left", "&:hover": { bgcolor: "var(--app-hover-bg)" } }}>
+                        <NotificationRow item={item} />
+                      </Box>
                     </Link>
                   ) : (
-                    <div className="rounded-xl px-3 py-2">
+                    <Box sx={{ borderRadius: 2, px: 1.5, py: 1 }}>
                       <NotificationRow item={item} />
-                    </div>
+                    </Box>
                   )}
                 </li>
               ))}
-            </ul>
-          </div>
-        </div>
+            </Box>
+          </Box>
+        </Box>
       ) : null}
-    </div>
+    </Box>
   );
+}
+
+function notificationEnabled(
+  eventKind: string,
+  prefs: {
+    publishUpdates: boolean;
+    reviewQueue: boolean;
+    policyChanges: boolean;
+    securityAlerts: boolean;
+  },
+): boolean {
+  const kind = eventKind.toLowerCase();
+  if (kind.includes("policy") || kind.includes("proposal") || kind.includes("promotion")) {
+    return prefs.policyChanges;
+  }
+  if (kind.includes("security") || kind.includes("health") || kind.includes("revocation") || kind.includes("alert")) {
+    return prefs.securityAlerts;
+  }
+  if (kind.includes("pending_review") || kind.includes("review_queue")) {
+    return prefs.reviewQueue;
+  }
+  if (kind.includes("listing") || kind.includes("moderation") || kind.includes("publish")) {
+    return prefs.publishUpdates;
+  }
+  return true;
 }
 
 function NotificationRow({ item }: { item: FeedItem }) {
   const when = formatShortTime(item.created_at);
   return (
-    <div>
-      <p className="text-[11px] font-semibold text-[--app-fg]">{item.title}</p>
-      <p className="mt-0.5 line-clamp-3 text-[10px] leading-relaxed text-[--app-muted]">
+    <Box>
+      <Typography sx={{ fontSize: 11, fontWeight: 700, color: "var(--app-fg)" }}>{item.title}</Typography>
+      <Typography sx={{ mt: 0.25, fontSize: 10, lineHeight: 1.55, color: "var(--app-muted)" }}>
         {item.body}
-      </p>
-      <p className="mt-1 text-[9px] uppercase tracking-[0.14em] text-[--app-muted]">
-        {when} · {item.event_kind.replace(/_/g, " ")}
-      </p>
-    </div>
+      </Typography>
+      <Typography sx={{ mt: 0.75, fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+        {when} / {item.event_kind.replace(/_/g, " ")}
+      </Typography>
+    </Box>
   );
 }
 

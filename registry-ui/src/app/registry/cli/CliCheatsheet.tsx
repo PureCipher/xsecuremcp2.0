@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { Box, Typography } from "@mui/material";
 
 type Props = {
@@ -18,27 +17,30 @@ export function CliCheatsheet({ defaultMcpUrl, allowedOrigin, className = "" }: 
         maxHeight: "min(720px, calc(100vh - 10rem))",
         overflowY: "auto",
         border: "1px solid var(--app-border)",
+        borderRadius: 0,
         bgcolor: "var(--app-surface)",
-        p: 2,
-        boxShadow: "none",
+        p: 0,
+        boxShadow: "0 24px 70px rgba(15, 23, 42, 0.08)",
       }}
     >
-      <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
-        Cheatsheet
-      </Typography>
-      <Typography variant="caption" sx={{ mt: 1, display: "block", color: "var(--app-muted)", lineHeight: 1.6 }}>
-        Shortcuts use your{" "}
-        <Box component="span" sx={{ fontFamily: "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", color: "var(--app-fg)" }}>
-          REGISTRY_BACKEND_URL
-        </Box>{" "}
-        MCP endpoint automatically. Only{" "}
-        <Box component="span" sx={{ fontFamily: "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", color: "var(--app-fg)" }}>
-          {allowedOrigin}
-        </Box>{" "}
-        is allowed.
-      </Typography>
+      <Box sx={{ p: 2.25, borderBottom: "1px solid var(--app-border)", bgcolor: "var(--app-control-bg)" }}>
+        <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
+          Command palette
+        </Typography>
+        <Typography sx={{ mt: 0.75, fontSize: 13, fontWeight: 750, color: "var(--app-fg)" }}>
+          Quick MCP actions
+        </Typography>
+        <Typography variant="caption" sx={{ mt: 0.75, display: "block", color: "var(--app-muted)", lineHeight: 1.6 }}>
+          Shortcuts use your registry MCP endpoint automatically. Only{" "}
+          <Box component="span" sx={{ fontFamily: "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", color: "var(--app-fg)" }}>
+            {allowedOrigin}
+          </Box>{" "}
+          is allowed.
+        </Typography>
+      </Box>
 
-      <Typography variant="overline" sx={{ mt: 2, color: "var(--app-muted)", letterSpacing: "0.16em" }}>
+      <Box sx={{ p: 2.25 }}>
+      <Typography variant="overline" sx={{ color: "var(--app-muted)", letterSpacing: "0.16em" }}>
         First commands
       </Typography>
       <Box
@@ -59,7 +61,32 @@ export function CliCheatsheet({ defaultMcpUrl, allowedOrigin, className = "" }: 
         <CheatsheetRow comment="Tools + prompts" cmd="list --prompts" />
         <CheatsheetRow comment="Machine-readable" cmd="list --prompts --json" />
         <CheatsheetRow comment="Invoke tool" cmd="call registry_status" />
+        <CheatsheetRow comment="Admin only" cmd="admin status" />
         <CheatsheetRow comment="Prompt" cmd='call my_prompt --prompt topic=SecureMCP' />
+      </Box>
+
+      <Typography variant="overline" sx={{ mt: 2, color: "var(--app-muted)", letterSpacing: "0.16em" }}>
+        Admin commands
+      </Typography>
+      <Box
+        component="ul"
+        sx={{
+          mt: 1,
+          display: "grid",
+          gap: 1,
+          listStyle: "none",
+          p: 0,
+          m: 0,
+          fontFamily: "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+          color: "var(--app-fg)",
+          fontSize: 11,
+        }}
+      >
+        <CheatsheetRow comment="Session + health" cmd="admin status" />
+        <CheatsheetRow comment="Health JSON" cmd="admin health" />
+        <CheatsheetRow comment="Review counts" cmd="admin queue" />
+        <CheatsheetRow comment="Policy snapshot" cmd="admin policy" />
+        <CheatsheetRow comment="Account events" cmd="admin activity" />
       </Box>
 
       <Typography variant="overline" sx={{ mt: 2, color: "var(--app-muted)", letterSpacing: "0.16em" }}>
@@ -91,30 +118,27 @@ export function CliCheatsheet({ defaultMcpUrl, allowedOrigin, className = "" }: 
         <Box component="span" sx={{ fontFamily: "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", color: "var(--app-fg)" }}>
           commands
         </Box>{" "}
-        — full reference
+        - full reference
       </Typography>
 
       <Typography variant="overline" sx={{ mt: 2, color: "var(--app-muted)", letterSpacing: "0.16em" }}>
         Keys
       </Typography>
       <Box component="ul" sx={{ mt: 0.5, pl: 2, color: "var(--app-muted)", fontSize: 12 }}>
-        <li>↑ / ↓ — command history</li>
-        <li>Ctrl+C — cancel current line</li>
+        <li>Up / Down - command history</li>
+        <li>Ctrl+C - cancel current line</li>
         <li>
           <Box component="span" sx={{ fontFamily: "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}>
             clear
           </Box>{" "}
-          — wipe screen & banner
+          - wipe screen and banner
         </li>
       </Box>
+      </Box>
 
-      <Box sx={{ mt: "auto", borderTop: "1px solid var(--app-border)", pt: 2 }}>
+      <Box sx={{ mt: "auto", borderTop: "1px solid var(--app-border)", p: 2.25, bgcolor: "var(--app-control-bg)" }}>
         <Typography variant="caption" sx={{ color: "var(--app-muted)" }}>
-          Theme & font size persist in{" "}
-          <Link href="/registry/settings#browser-cli-terminal" className="underline decoration-[--app-accent]">
-            Settings
-          </Link>
-          .
+          Theme and font size persist in this browser.
         </Typography>
       </Box>
     </Box>
@@ -128,6 +152,7 @@ function CheatsheetRow({ comment, cmd }: { comment: string; cmd: string }) {
       sx={{
         border: "1px solid var(--app-border)",
         bgcolor: "var(--app-control-bg)",
+        borderRadius: 0,
         px: 1.5,
         py: 1.25,
       }}

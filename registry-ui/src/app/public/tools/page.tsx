@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { Box, Button, Card, CardContent, Typography } from "@mui/material";
+import { Box, Button, Typography } from "@mui/material";
 
 import { listVerifiedTools, type RegistryToolListing } from "@/lib/registryClient";
 import { ToolsCatalog } from "@/app/registry/app/ToolsCatalog";
@@ -40,17 +40,7 @@ export default async function PublicToolsPage() {
         </Link>
       </Box>
 
-      <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
-        <CardContent sx={{ p: 2.5 }}>
-          {tools.length === 0 ? (
-            <Typography sx={{ color: "var(--app-muted)" }}>
-              No verified tools are published yet. Once tools are in the registry they&apos;ll appear here.
-            </Typography>
-          ) : (
-            <ToolsCatalog tools={tools} basePath="/public/listings" />
-          )}
-        </CardContent>
-      </Card>
+      <ToolsCatalog tools={tools} basePath="/public/listings" publishersHref="/public/publishers" publicView />
     </Box>
   );
 }

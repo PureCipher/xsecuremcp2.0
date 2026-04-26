@@ -98,8 +98,10 @@ export function SecureCliTerminal({
     const term = new Terminal({
       cursorBlink: true,
       fontFamily:
-        fontFamily === "ui-monospace"
-          ? "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+        fontFamily === "SF Mono"
+          ? "SF Mono, SFMono-Regular, ui-monospace, Menlo, Monaco, Consolas, monospace"
+          : fontFamily === "ui-monospace"
+            ? "SFMono-Regular, ui-monospace, Menlo, Monaco, Consolas, monospace"
           : fontFamily === "JetBrains Mono"
             ? "var(--cli-font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
             : fontFamily === "Fira Code"
@@ -240,8 +242,11 @@ export function SecureCliTerminal({
   return (
     <div
       ref={containerRef}
-      className={`h-full min-h-[320px] w-full overflow-hidden ring-1 ${theme.ringClass}`}
-      style={{ backgroundColor: theme.xterm.background }}
+      className={`h-full min-h-[480px] w-full overflow-hidden ${theme.ringClass}`}
+      style={{
+        backgroundColor: theme.xterm.background,
+        padding: "14px 16px",
+      }}
       aria-label="SecureMCP CLI terminal"
     />
   );

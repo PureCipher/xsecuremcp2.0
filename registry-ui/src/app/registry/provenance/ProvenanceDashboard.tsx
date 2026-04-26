@@ -6,11 +6,12 @@ import type {
   ProvenanceChainStatus,
   ProvenanceProofResponse,
 } from "@/lib/registryClient";
-import { Box, Button, Stack, Typography } from "@mui/material";
+import { Box, Button, Card, CardContent, Chip, Divider, Stack, Typography } from "@mui/material";
 import { ProvenanceTimeline } from "./components/ProvenanceTimeline";
 import { ChainIntegrityPanel } from "./components/ChainIntegrityPanel";
 import { MerkleProofViewer } from "./components/MerkleProofViewer";
 import { ProvenanceStats } from "./components/ProvenanceStats";
+import { RegistryPageHeader } from "@/components/security";
 
 type Tab = "timeline" | "integrity" | "proof";
 
@@ -52,104 +53,146 @@ export function ProvenanceDashboard({ records, chainStatus }: Props) {
     { key: "proof", label: "Merkle Proof" },
   ];
 
+  const totalRecords = chainStatus?.record_count ?? records.length;
+  const chainHealthy = Boolean(chainStatus?.chain_valid && chainStatus?.tree_valid);
+  const selectedRecordLabel = selectedRecord
+    ? `${selectedRecord.action} / ${selectedRecord.record_id.slice(0, 10)}`
+    : "No record selected";
+
   return (
-    <Stack spacing={3}>
-      <Box>
-        <Typography
-          variant="overline"
-          sx={{ mb: 0.5, color: "var(--app-accent)", opacity: 0.85 }}
-        >
-          Provenance ledger
-        </Typography>
-        <Typography variant="h5" sx={{ color: "var(--app-fg)" }}>
-          Smart provenance & immutable ledgers
-        </Typography>
-        <Typography variant="body2" sx={{ mt: 0.5, color: "var(--app-muted)", maxWidth: 720 }}>
-          Every model call, dataset usage, and outcome is hashed and chain-linked to prior events. Tamper-evident audit
-          trail with Merkle tree verification.
-        </Typography>
-      </Box>
+    <Stack spacing={2.5}>
+      <RegistryPageHeader
+        eyebrow="Provenance ledger"
+        title="Smart provenance & immutable ledgers"
+        description="Every model call, dataset usage, and outcome is hashed and chain-linked to prior events. Tamper-evident audit trail with Merkle tree verification."
+      />
 
-      <ProvenanceStats records={records} chainStatus={chainStatus} />
+      <Card variant="outlined" sx={{ overflow: "hidden" }}>
+        <CardContent sx={{ p: 0 }}>
+          <Box
+            sx={{
+              p: { xs: 2.5, md: 3 },
+              display: "flex",
+              flexDirection: { xs: "column", lg: "row" },
+              alignItems: { xs: "flex-start", lg: "center" },
+              justifyContent: "space-between",
+              gap: 2.5,
+            }}
+          >
+            <Box sx={{ display: "grid", gap: 0.75, maxWidth: 760 }}>
+              <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
+                Ledger workspace
+              </Typography>
+              <Typography variant="h6" sx={{ color: "var(--app-fg)" }}>
+                Verify events from timeline to proof
+              </Typography>
+              <Typography variant="body2" sx={{ color: "var(--app-muted)" }}>
+                Review recorded events, inspect chain health, and open a Merkle proof for any selected record.
+              </Typography>
+            </Box>
 
-      <Stack
-        direction="row"
-        spacing={0.5}
-        sx={{
-          flexWrap: "wrap",
-          p: 0.5,
-          borderRadius: 3,
-          bgcolor: "color-mix(in srgb, var(--app-fg) 4%, transparent)",
-          border: "1px solid var(--app-border)",
-        }}
-      >
-        {tabs.map((tab) => {
-          const selected = activeTab === tab.key;
-          return (
-            <Button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              sx={{
-                borderRadius: 2.5,
-                px: 2,
-                py: 0.75,
-                textTransform: "none",
-                fontSize: 12,
-                fontWeight: 600,
-                color: selected ? "var(--app-accent-contrast)" : "var(--app-muted)",
-                bgcolor: selected ? "var(--app-accent)" : "transparent",
-                "&:hover": {
-                  bgcolor: selected ? "var(--app-accent)" : "color-mix(in srgb, var(--app-fg) 6%, transparent)",
-                  color: selected ? "var(--app-accent-contrast)" : "var(--app-fg)",
-                },
-              }}
-            >
-              <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 0.75 }}>
-                {tab.label}
-                {tab.key === "proof" && selectedRecord ? (
-                  <Box
-                    component="span"
+            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+              <Chip
+                label={`${totalRecords.toLocaleString()} records`}
+                sx={{ bgcolor: "var(--app-control-bg)", color: "var(--app-muted)", fontWeight: 700 }}
+              />
+              <Chip
+                label={chainStatus ? (chainHealthy ? "Chain intact" : "Chain broken") : "Chain unavailable"}
+                sx={{
+                  bgcolor: chainHealthy ? "var(--app-control-active-bg)" : "rgba(239, 68, 68, 0.12)",
+                  color: chainHealthy ? "var(--app-fg)" : "#b91c1c",
+                  fontWeight: 700,
+                }}
+              />
+              <Chip
+                label={selectedRecordLabel}
+                sx={{ bgcolor: "var(--app-control-bg)", color: "var(--app-muted)", fontWeight: 700 }}
+              />
+            </Box>
+          </Box>
+
+          <Box sx={{ px: { xs: 2.5, md: 3 }, pb: { xs: 2.5, md: 3 } }}>
+            <ProvenanceStats records={records} chainStatus={chainStatus} />
+          </Box>
+
+          <Divider />
+
+          <Box sx={{ px: { xs: 1.5, md: 2 }, bgcolor: "var(--app-control-bg)" }}>
+            <Stack direction="row" spacing={0.75} sx={{ flexWrap: "wrap", py: 1 }}>
+              {tabs.map((tab) => {
+                const selected = activeTab === tab.key;
+                return (
+                  <Button
+                    key={tab.key}
+                    onClick={() => setActiveTab(tab.key)}
+                    variant={selected ? "contained" : "text"}
                     sx={{
-                      width: 6,
-                      height: 6,
-                      borderRadius: "50%",
-                      bgcolor: "currentColor",
-                      opacity: 0.55,
+                      px: 1.5,
+                      py: 0.75,
+                      textTransform: "none",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: selected ? "var(--app-accent-contrast)" : "var(--app-muted)",
+                      bgcolor: selected ? "var(--app-accent)" : "transparent",
+                      "&:hover": {
+                        bgcolor: selected ? "var(--app-accent)" : "var(--app-hover-bg)",
+                        color: selected ? "var(--app-accent-contrast)" : "var(--app-fg)",
+                      },
                     }}
-                  />
-                ) : null}
+                  >
+                    <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 0.75 }}>
+                      {tab.label}
+                      {tab.key === "proof" && selectedRecord ? (
+                        <Box
+                          component="span"
+                          sx={{
+                            width: 6,
+                            height: 6,
+                            borderRadius: "50%",
+                            bgcolor: "currentColor",
+                            opacity: 0.6,
+                          }}
+                        />
+                      ) : null}
+                    </Box>
+                  </Button>
+                );
+              })}
+            </Stack>
+          </Box>
+
+          <Divider />
+
+          <Box sx={{ p: { xs: 2, md: 2.5 } }}>
+            {activeTab === "timeline" ? (
+              <ProvenanceTimeline
+                records={records}
+                onSelectRecord={handleSelectRecord}
+                selectedRecordId={selectedRecord?.record_id}
+              />
+            ) : null}
+
+            {activeTab === "integrity" && chainStatus ? <ChainIntegrityPanel status={chainStatus} /> : null}
+            {activeTab === "integrity" && !chainStatus ? (
+              <Box
+                sx={{
+                  borderRadius: 3,
+                  border: "1px solid var(--app-border)",
+                  bgcolor: "var(--app-control-bg)",
+                  p: 4,
+                  textAlign: "center",
+                }}
+              >
+                <Typography sx={{ fontSize: 14, color: "var(--app-muted)" }}>Chain status not available</Typography>
               </Box>
-            </Button>
-          );
-        })}
-      </Stack>
+            ) : null}
 
-      {activeTab === "timeline" ? (
-        <ProvenanceTimeline
-          records={records}
-          onSelectRecord={handleSelectRecord}
-          selectedRecordId={selectedRecord?.record_id}
-        />
-      ) : null}
-
-      {activeTab === "integrity" && chainStatus ? <ChainIntegrityPanel status={chainStatus} /> : null}
-      {activeTab === "integrity" && !chainStatus ? (
-        <Box
-          sx={{
-            borderRadius: 3,
-            border: "1px solid var(--app-border)",
-            bgcolor: "var(--app-control-bg)",
-            p: 4,
-            textAlign: "center",
-          }}
-        >
-          <Typography sx={{ fontSize: 14, color: "var(--app-muted)" }}>Chain status not available</Typography>
-        </Box>
-      ) : null}
-
-      {activeTab === "proof" ? (
-        <MerkleProofViewer record={selectedRecord} proof={proof} loading={proofLoading} />
-      ) : null}
+            {activeTab === "proof" ? (
+              <MerkleProofViewer record={selectedRecord} proof={proof} loading={proofLoading} />
+            ) : null}
+          </Box>
+        </CardContent>
+      </Card>
     </Stack>
   );
 }

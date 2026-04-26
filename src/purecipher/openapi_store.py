@@ -120,6 +120,7 @@ class OpenAPIStore:
     """Persists OpenAPI sources + toolset selections."""
 
     db_path: str | None = None
+    ensure_schema: bool = True
 
     def __post_init__(self) -> None:
         self._memory_sources: dict[str, OpenAPISourceRecord] = {}
@@ -129,7 +130,8 @@ class OpenAPIStore:
             if self.db_path == ":memory:":
                 # Keep a single connection so tables persist.
                 self._shared_conn = sqlite3.connect(self.db_path, check_same_thread=False)
-            self._ensure_tables()
+            if self.ensure_schema:
+                self._ensure_tables()
 
     def _connect(self) -> sqlite3.Connection:
         if not self.db_path:

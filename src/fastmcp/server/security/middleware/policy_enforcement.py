@@ -166,7 +166,13 @@ class PolicyEnforcementMiddleware(Middleware):
 
         # Enforce constraints from policy result
         if result.constraints:
-            self._enforce_constraints(result.constraints, tool_name, context)
+            tool_tags = frozenset(tool.tags) if tool is not None else frozenset()
+            self._enforce_constraints(
+                result.constraints,
+                tool_name,
+                context,
+                tool_tags=tool_tags,
+            )
 
         return await call_next(context)
 
@@ -371,6 +377,8 @@ class PolicyEnforcementMiddleware(Middleware):
         constraints: list[str],
         resource_id: str,
         context: Any,
+        *,
+        tool_tags: frozenset[str] = frozenset(),
     ) -> None:
         """Enforce policy constraints.
 
@@ -393,14 +401,29 @@ class PolicyEnforcementMiddleware(Middleware):
             constraint_lower = constraint.lower().strip()
 
             if constraint_lower == "read_only":
-                # For tool calls, read_only means deny
-                if hasattr(context, "message") and hasattr(context.message, "name"):
-                    logger.info(
-                        "Constraint 'read_only' active for %s — write operations blocked",
+                # ``read_only`` means: this caller may only invoke tools
+                # that the server has declared to be side-effect-free.
+                # The declaration is made via the tool's tags — any of
+                # ``read_only``, ``readonly``, or ``safe`` qualifies a
+                # tool as read-only. Tool authors who actually mutate
+                # state must NOT carry these tags; doing so is a server
+                # operator's mis-tagging that the engine cannot detect.
+                if _tool_is_readonly(tool_tags):
+                    logger.debug(
+                        "Constraint 'read_only' satisfied for %s "
+                        "(tool tags: %s)",
                         resource_id,
+                        sorted(tool_tags),
                     )
-                    # We allow the operation but log the constraint; actual enforcement
-                    # depends on the tool's semantics
+                else:
+                    raise PolicyViolationError(
+                        _deny_result(
+                            f"Constraint violation: read_only sessions cannot "
+                            f"invoke '{resource_id}' (tool not tagged as "
+                            f"read-only). Tag the tool with 'read_only' "
+                            f"if it has no side effects."
+                        )
+                    )
                 continue
 
             if constraint_lower.startswith("max_args:"):
@@ -456,3 +479,17 @@ def _deny_result(reason: str) -> PolicyResult:
         reason=reason,
         policy_id="policy-enforcement-middleware",
     )
+
+
+# Tags that opt a tool in to ``read_only`` policy constraints. Tools
+# tagged with any of these are considered side-effect-free and may be
+# invoked from sessions that policy has marked read-only.
+_READ_ONLY_TAGS: frozenset[str] = frozenset({"read_only", "readonly", "safe"})
+
+
+def _tool_is_readonly(tool_tags: frozenset[str]) -> bool:
+    """Return True if any of the tool's tags declares it side-effect-free."""
+    if not tool_tags:
+        return False
+    lowered = {t.lower() for t in tool_tags}
+    return bool(lowered & _READ_ONLY_TAGS)

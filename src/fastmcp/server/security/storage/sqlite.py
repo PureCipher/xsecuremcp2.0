@@ -3,14 +3,29 @@
 Provides durable, single-file persistence for all security layers.
 Zero-config: just provide a file path (defaults to ``securemcp.db``).
 Uses Python's built-in ``sqlite3`` module — no external dependencies.
+
+Thread safety: ``sqlite3.Connection`` objects are not safe to share
+across threads, so the backend keeps a per-thread connection in
+:class:`threading.local` storage. Concurrent writers are serialized at
+the file level by SQLite's own locking; ``PRAGMA busy_timeout`` is set
+on every connection so contended writers wait briefly instead of
+raising ``OperationalError: database is locked``. WAL mode permits
+multiple concurrent readers alongside a writer.
 """
 
 from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 import time
 from typing import Any
+
+# Default per-statement wait when another writer holds the SQLite write lock.
+# 5 seconds is generous for the kinds of small INSERT/UPDATE/DELETE statements
+# this backend issues; it keeps async event loops from raising under burst
+# contention while still surfacing real deadlocks within a reasonable window.
+_DEFAULT_BUSY_TIMEOUT_MS = 5_000
 
 
 class SQLiteBackend:
@@ -19,6 +34,13 @@ class SQLiteBackend:
     All data is stored in a single SQLite database file. Tables are
     auto-created on first use. Each security layer's data is namespaced
     by its component ID (ledger_id, graph_id, etc.).
+
+    Each calling thread receives its own ``sqlite3.Connection``. The
+    backend tracks every open connection so :meth:`close` can shut them
+    all down deterministically (e.g. on test teardown). After
+    :meth:`close`, any thread calling a backend method again receives a
+    freshly-opened connection — close is non-destructive to the backend
+    object itself.
 
     Example::
 
@@ -29,20 +51,62 @@ class SQLiteBackend:
     Args:
         path: Path to the SQLite database file. Defaults to
             ``securemcp.db`` in the current directory.
+        busy_timeout_ms: Per-connection ``PRAGMA busy_timeout`` value.
+            Controls how long a write blocks waiting for a contended
+            file lock before raising. Default 5000ms.
     """
 
-    def __init__(self, path: str = "securemcp.db") -> None:
+    def __init__(
+        self,
+        path: str = "securemcp.db",
+        *,
+        busy_timeout_ms: int = _DEFAULT_BUSY_TIMEOUT_MS,
+    ) -> None:
         self._path = str(path)
-        self._conn: sqlite3.Connection | None = None
+        self._busy_timeout_ms = int(busy_timeout_ms)
+        # Per-thread connection storage. ``threading.local`` guarantees
+        # each thread sees its own ``conn`` attribute.
+        self._local = threading.local()
+        # All connections we've ever opened, regardless of thread, so
+        # ``close()`` can close them all without iterating thread state.
+        self._connections: list[sqlite3.Connection] = []
+        self._tracking_lock = threading.Lock()
+        # Bumped on each ``close()``. Threads compare their cached
+        # generation to this; if stale, they reopen.
+        self._generation = 0
         self._ensure_schema()
 
+    def _new_connection(self) -> sqlite3.Connection:
+        """Open a fresh SQLite connection with the right pragmas applied."""
+        # check_same_thread=True (default) is correct here: each thread owns
+        # its own connection, so the safety check stays useful.
+        conn = sqlite3.connect(self._path)
+        # PRAGMA journal_mode=WAL is persisted on the database file itself,
+        # but we still issue it on every connection so that a freshly-created
+        # database file is set to WAL on first use.
+        conn.execute("PRAGMA journal_mode=WAL")
+        # foreign_keys is per-connection, not persisted.
+        conn.execute("PRAGMA foreign_keys=ON")
+        # busy_timeout is per-connection. Without it, two threads issuing
+        # writes simultaneously will hit "database is locked" instead of
+        # waiting briefly.
+        conn.execute(f"PRAGMA busy_timeout={self._busy_timeout_ms}")
+        with self._tracking_lock:
+            self._connections.append(conn)
+        return conn
+
     def _get_conn(self) -> sqlite3.Connection:
-        """Get or create a database connection."""
-        if self._conn is None:
-            self._conn = sqlite3.connect(self._path)
-            self._conn.execute("PRAGMA journal_mode=WAL")
-            self._conn.execute("PRAGMA foreign_keys=ON")
-        return self._conn
+        """Return this thread's connection, opening it on first use.
+
+        If the backend has been closed since this thread last connected
+        the cached connection is stale; open a new one and update the
+        thread-local generation marker.
+        """
+        cached_gen = getattr(self._local, "generation", None)
+        if cached_gen != self._generation or not hasattr(self._local, "conn"):
+            self._local.conn = self._new_connection()
+            self._local.generation = self._generation
+        return self._local.conn
 
     def _ensure_schema(self) -> None:
         """Create tables if they don't exist."""
@@ -207,10 +271,33 @@ class SQLiteBackend:
         conn.commit()
 
     def close(self) -> None:
-        """Close the database connection."""
-        if self._conn is not None:
-            self._conn.close()
-            self._conn = None
+        """Close every per-thread connection opened by this backend.
+
+        After ``close()``, the backend object is still usable: subsequent
+        method calls from any thread will transparently open a fresh
+        connection. This is intentional so test teardown patterns
+        (``backend.close()`` followed by re-instantiation against the
+        same path) keep working unchanged.
+        """
+        with self._tracking_lock:
+            connections = self._connections
+            self._connections = []
+            self._generation += 1
+        for conn in connections:
+            try:
+                conn.close()
+            except sqlite3.Error:
+                # An already-closed connection or a connection the OS
+                # has lost (e.g. file removed) shouldn't prevent us from
+                # closing the others.
+                pass
+        # Drop the calling thread's cached connection so the next call
+        # on this thread doesn't briefly observe a stale handle before
+        # the generation check kicks in.
+        if hasattr(self._local, "conn"):
+            del self._local.conn
+        if hasattr(self._local, "generation"):
+            del self._local.generation
 
     # ── Provenance ────────────────────────────────────────────────
 

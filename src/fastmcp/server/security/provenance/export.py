@@ -158,12 +158,19 @@ def verify_bundle(bundle_data: dict[str, Any]) -> dict[str, Any]:
 def export_chain_dump(
     records: list[ProvenanceRecord],
     root_hash: str,
+    *,
+    genesis_hash: str | None = None,
 ) -> dict[str, Any]:
     """Export a complete chain dump for external audit.
 
     Args:
         records: All records from the ledger.
         root_hash: Current Merkle root hash.
+        genesis_hash: The ledger's genesis nonce. Recorded in the dump so
+            the verifier can confirm the first record's chain link
+            without external knowledge. If omitted and ``records`` is
+            non-empty, the first record's ``previous_hash`` is used as
+            the declared genesis hash.
 
     Returns:
         A JSON-safe dict containing the full chain with
@@ -187,12 +194,19 @@ def export_chain_dump(
         )
         chain_digest = hashlib.sha256(digest_payload.encode("utf-8")).hexdigest()
 
+    declared_genesis = (
+        genesis_hash
+        if genesis_hash is not None
+        else (records[0].previous_hash if records else "")
+    )
+
     return {
         "format": "securemcp-provenance-export-v1",
         "exported_at": datetime.now(timezone.utc).isoformat(),
         "record_count": len(records),
         "merkle_root": root_hash,
         "chain_digest": chain_digest,
+        "genesis_hash": declared_genesis,
         "records": chain_records,
     }
 
@@ -219,8 +233,14 @@ def verify_chain_dump(dump: dict[str, Any]) -> dict[str, Any]:
 
     broken_links: list[int] = []
 
-    # Verify genesis
-    if records[0].get("previous_hash") != "genesis":
+    # Verify genesis. New dumps carry an explicit ``genesis_hash`` field;
+    # the first record's ``previous_hash`` must match. Legacy dumps
+    # without that field used the literal ``"genesis"`` sentinel.
+    declared_genesis = dump.get("genesis_hash")
+    expected_genesis = (
+        declared_genesis if declared_genesis else "genesis"
+    )
+    if records[0].get("previous_hash") != expected_genesis:
         broken_links.append(0)
 
     # Verify sequential links

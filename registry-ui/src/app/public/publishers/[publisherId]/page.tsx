@@ -60,7 +60,19 @@ export default async function PublicPublisherProfilePage(props: {
     );
   }
 
-  const summary: PublisherSummary = profile.summary ?? { publisher_id: decodedId };
+  // Backend emits the summary fields flat at the top level (see
+  // PublisherProfile.to_dict in src/purecipher/models.py). Read them
+  // directly; the `decodedId` fallback covers the rare case where
+  // the response shape is incomplete.
+  const summary: PublisherSummary = {
+    publisher_id: profile.publisher_id ?? decodedId,
+    display_name: profile.display_name,
+    description: profile.description,
+    listing_count: profile.listing_count,
+    tool_count: profile.tool_count,
+    verified_tool_count: profile.verified_tool_count,
+    trust_score: profile.trust_score,
+  };
   const listings: RegistryToolListing[] = profile.listings ?? [];
 
   return (
@@ -74,7 +86,9 @@ export default async function PublicPublisherProfilePage(props: {
             {summary.display_name ?? summary.publisher_id}
           </Typography>
           <Typography sx={{ mt: 0.5, fontSize: 12, color: "var(--app-muted)" }}>
-            {summary.publisher_id} · {summary.tool_count ?? 0} tool{(summary.tool_count ?? 0) === 1 ? "" : "s"} in this registry
+            {summary.publisher_id} ·{" "}
+            {summary.tool_count ?? summary.listing_count ?? 0} tool
+            {(summary.tool_count ?? summary.listing_count ?? 0) === 1 ? "" : "s"} in this registry
           </Typography>
         </Box>
         {summary.trust_score?.overall != null ? (
@@ -104,7 +118,8 @@ export default async function PublicPublisherProfilePage(props: {
             </Typography>
             <Box component="ul" sx={{ mt: 1.5, pl: 2, color: "var(--app-muted)", fontSize: 12 }}>
               <li>
-                <Box component="span" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>Tools:</Box> {summary.tool_count ?? listings.length}
+                <Box component="span" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>Tools:</Box>{" "}
+                {summary.tool_count ?? summary.listing_count ?? listings.length}
               </li>
               {summary.verified_tool_count != null ? (
                 <li>

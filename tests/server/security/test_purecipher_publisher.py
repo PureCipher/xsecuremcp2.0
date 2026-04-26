@@ -20,6 +20,28 @@ from purecipher.publisher.cli import build_parser, init_project, main
 
 TEST_SIGNING_SECRET = "purecipher-registry-signing-secret-for-tests"
 TEST_JWT_SECRET = "purecipher-registry-jwt-secret-for-tests"
+TEST_USERS_JSON = json.dumps(
+    [
+        {
+            "username": "admin",
+            "password": "admin123",
+            "role": "admin",
+            "display_name": "Registry Admin",
+        },
+        {
+            "username": "reviewer",
+            "password": "reviewer123",
+            "role": "reviewer",
+            "display_name": "Registry Reviewer",
+        },
+        {
+            "username": "publisher",
+            "password": "publisher123",
+            "role": "publisher",
+            "display_name": "Registry Publisher",
+        },
+    ]
+)
 
 
 class TestPureCipherPublisherCLI:
@@ -41,7 +63,7 @@ class TestPureCipherPublisherCLI:
             enabled=True,
             issuer="purecipher-registry",
             jwt_secret=TEST_JWT_SECRET,
-            users_json="",
+            users_json=TEST_USERS_JSON,
         )
 
     def test_templates_command_lists_supported_templates(self, capsys):
@@ -420,6 +442,7 @@ class TestPureCipherPublisherCLI:
                 base_url="http://testserver",
                 username="reviewer",
                 password="reviewer123",
+                auth_file=tmp_path / "reviewer-auth.json",
                 client=client,
             )
             queue = client.get(
@@ -475,6 +498,7 @@ class TestPureCipherPublisherCLI:
                 base_url="http://testserver",
                 username="reviewer",
                 password="reviewer123",
+                auth_file=tmp_path / "reviewer-auth.json",
                 client=client,
             )
             listing_id = first.response_payload["listing"]["listing_id"]

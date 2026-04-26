@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import secrets
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -17,6 +18,12 @@ from typing import Any
 from fastmcp.server.security.storage.backend import StorageBackend
 
 logger = logging.getLogger(__name__)
+
+# Legacy logs wrote the literal string ``"genesis"`` as the first
+# entry's ``previous_hash`` per session. New chains use a per-session
+# random nonce to prevent forgery of fresh chains rooted at a guessable
+# sentinel. Both forms are accepted by ``verify_chain`` for back-compat.
+_LEGACY_EXCHANGE_GENESIS_SENTINEL = "genesis"
 
 
 class ExchangeEventType(Enum):
@@ -107,11 +114,32 @@ class ExchangeLog:
         self._backend = backend
         self._entries: list[ExchangeLogEntry] = []
         self._session_chains: dict[str, list[ExchangeLogEntry]] = {}
+        # Per-session genesis nonce. Mixed with random entropy so an
+        # attacker can't forge a fresh chain rooted at a known sentinel.
+        # On reload from backend, recovered from the first entry's
+        # ``previous_hash`` (which may be the legacy literal ``"genesis"``
+        # for older logs).
+        self._session_genesis: dict[str, str] = {}
         self._entry_counter = 0
 
         # Load persisted entries and rebuild session chains
         if self._backend is not None:
             self._load_from_backend()
+
+    def _get_or_create_session_genesis(self, session_id: str) -> str:
+        """Return this session's genesis nonce, generating one on first use."""
+        existing = self._session_genesis.get(session_id)
+        if existing is not None:
+            return existing
+        nonce = (
+            f"genesis-{self.log_id}-{session_id}-{secrets.token_hex(32)}"
+        )
+        self._session_genesis[session_id] = nonce
+        return nonce
+
+    def get_session_genesis(self, session_id: str) -> str | None:
+        """Return the per-session genesis nonce (or ``None`` if unused)."""
+        return self._session_genesis.get(session_id)
 
     def _load_from_backend(self) -> None:
         """Load entries from backend and rebuild session chains."""
@@ -129,6 +157,9 @@ class ExchangeLog:
             sid = entry.session_id
             if sid not in self._session_chains:
                 self._session_chains[sid] = []
+                # Recover this session's genesis nonce from the first
+                # persisted entry so verify_chain matches what was written.
+                self._session_genesis[sid] = entry.previous_hash
             self._session_chains[sid].append(entry)
 
     def record(
@@ -156,9 +187,14 @@ class ExchangeLog:
         data_canonical = json.dumps(data, sort_keys=True, separators=(",", ":"))
         data_hash = hashlib.sha256(data_canonical.encode("utf-8")).hexdigest()
 
-        # Get previous hash in this session's chain
+        # Get previous hash in this session's chain (or this session's
+        # randomized genesis nonce for the very first entry).
         session_chain = self._session_chains.get(session_id, [])
-        previous_hash = session_chain[-1].compute_hash() if session_chain else "genesis"
+        previous_hash = (
+            session_chain[-1].compute_hash()
+            if session_chain
+            else self._get_or_create_session_genesis(session_id)
+        )
 
         entry = ExchangeLogEntry(
             entry_id=f"exlog-{self._entry_counter:06d}",
@@ -212,10 +248,17 @@ class ExchangeLog:
         if not chain:
             return True  # Empty chain is valid
 
-        # Verify first entry links to genesis
-        if chain[0].previous_hash != "genesis":
-            logger.warning("Chain for session %s: invalid genesis link", session_id)
-            return False
+        # Verify first entry links to this session's genesis nonce, or
+        # to the legacy ``"genesis"`` literal for chains persisted before
+        # the per-session nonce was introduced.
+        first_link = chain[0].previous_hash
+        expected_genesis = self._session_genesis.get(session_id)
+        if expected_genesis is None or first_link != expected_genesis:
+            if first_link != _LEGACY_EXCHANGE_GENESIS_SENTINEL:
+                logger.warning(
+                    "Chain for session %s: invalid genesis link", session_id
+                )
+                return False
 
         # Verify each subsequent entry links to the previous
         for i in range(1, len(chain)):

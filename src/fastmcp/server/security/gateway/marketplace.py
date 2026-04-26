@@ -70,6 +70,14 @@ class Marketplace:
         if self._backend is not None:
             self._load_from_backend()
 
+    def attach_event_bus(self, event_bus: SecurityEventBus | None) -> None:
+        """Wire an event bus into this marketplace after construction.
+
+        Public alternative to mutating the private ``_event_bus``
+        attribute from outside the class.
+        """
+        self._event_bus = event_bus
+
     def _load_from_backend(self) -> None:
         """Load marketplace state from backend."""
         if self._backend is None:

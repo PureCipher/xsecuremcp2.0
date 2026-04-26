@@ -14,4 +14,6 @@ export { ExportButton } from "./ExportButton";
 export { useAutoRefresh, AutoRefreshToggle } from "./AutoRefresh";
 export { CopyButton } from "./CopyButton";
 export { CertificationBadge } from "./CertificationBadge";
+export { AttestationBadge } from "./AttestationBadge";
 export { NavIcon } from "./NavIcons";
+export { RegistryPageHeader } from "./RegistryPageHeader";

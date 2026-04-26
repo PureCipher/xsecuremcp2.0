@@ -24,7 +24,7 @@ export function TabBar({
         "& .MuiTab-root": {
           minHeight: 44,
           textTransform: "none",
-          fontSize: 12,
+          fontSize: 13,
           fontWeight: 700,
           color: "var(--app-muted)",
         },

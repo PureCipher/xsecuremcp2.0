@@ -1,6 +1,6 @@
-import { EmptyState } from "@/components/security";
+import { ClientsDirectory } from "@/app/registry/clients/ClientsDirectory";
 
-import { Box, Card, CardContent, Typography } from "@mui/material";
+import { Box, Typography } from "@mui/material";
 
 export default function PublicClientsPage() {
   return (
@@ -13,18 +13,11 @@ export default function PublicClientsPage() {
           Client directory
         </Typography>
         <Typography sx={{ mt: 0.5, maxWidth: 900, fontSize: 12, color: "var(--app-muted)" }}>
-          Public view of MCP clients (stub). This will list public client identities and compatibility metadata once backend integration is wired.
+          Public client directory is in development. When live, this page will list MCP client identities and their compatibility profile against the registry catalog.
         </Typography>
       </Box>
 
-      <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
-        <CardContent sx={{ p: 2.5 }}>
-          <EmptyState
-            title="No public clients listed yet"
-            message="Client onboarding is part of the console experience. This page becomes a public directory once client metadata is published."
-          />
-        </CardContent>
-      </Card>
+      <ClientsDirectory serversHref="/public/servers" publicView />
     </Box>
   );
 }

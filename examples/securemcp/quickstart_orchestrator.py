@@ -58,6 +58,10 @@ server = SecureMCP(
     "securemcp-demo",
     security=config,
     mount_security_api=True,
+    # Quickstart demo runs locally with no auth in front of the API.
+    # Production deployments should pass `security_api_bearer_token=...`
+    # or a custom `security_api_auth_verifier=...`.
+    security_api_require_auth=False,
 )
 ctx = server.security_context
 assert ctx is not None

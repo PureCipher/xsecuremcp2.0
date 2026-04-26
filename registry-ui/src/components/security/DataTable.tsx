@@ -69,7 +69,7 @@ export function DataTable<T extends Record<string, unknown>>({
 
   if (data.length === 0) {
     return (
-      <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}>
+      <Card variant="outlined">
         <CardContent sx={{ py: 6 }}>
           <Typography sx={{ textAlign: "center", fontSize: 12, color: "var(--app-muted)" }}>{emptyMessage}</Typography>
         </CardContent>
@@ -78,11 +78,11 @@ export function DataTable<T extends Record<string, unknown>>({
   }
 
   return (
-    <Card variant="outlined" sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}>
+    <Card variant="outlined" sx={{ overflow: "hidden" }}>
       <TableContainer>
         <Table size="small">
           <TableHead>
-            <TableRow sx={{ bgcolor: "var(--app-hover-bg)" }}>
+            <TableRow sx={{ bgcolor: "var(--app-control-bg)" }}>
               {columns.map((col) => {
                 const sortable = col.sortable !== false;
                 const active = sortKey === col.key;
@@ -92,10 +92,10 @@ export function DataTable<T extends Record<string, unknown>>({
                     onClick={sortable ? () => handleSort(col.key) : undefined}
                     sx={{
                       color: "var(--app-muted)",
-                      fontSize: 11,
-                      fontWeight: 800,
-                      textTransform: "uppercase",
-                      letterSpacing: "0.14em",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      textTransform: "none",
+                      letterSpacing: "0.01em",
                       cursor: sortable ? "pointer" : "default",
                       userSelect: sortable ? "none" : "auto",
                       borderBottom: "1px solid var(--app-border)",
@@ -128,7 +128,8 @@ export function DataTable<T extends Record<string, unknown>>({
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
                 sx={{
                   cursor: onRowClick ? "pointer" : "default",
-                  "& td": { borderBottom: "1px solid var(--app-border)", color: "var(--app-muted)", fontSize: 12 },
+                  "& td": { borderBottom: "1px solid var(--app-border)", color: "var(--app-muted)", fontSize: 13 },
+                  "&:last-child td": { borderBottom: 0 },
                 }}
               >
                 {columns.map((col) => (
@@ -142,7 +143,7 @@ export function DataTable<T extends Record<string, unknown>>({
         </Table>
       </TableContainer>
 
-      <Box sx={{ borderTop: "1px solid var(--app-border)", bgcolor: "var(--app-hover-bg)" }}>
+      <Box sx={{ borderTop: "1px solid var(--app-border)", bgcolor: "var(--app-control-bg)" }}>
         <TablePagination
           component="div"
           count={sorted.length}

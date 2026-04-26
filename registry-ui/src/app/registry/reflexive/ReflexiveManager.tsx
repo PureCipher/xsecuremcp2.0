@@ -8,6 +8,7 @@ import {
   Card,
   CardContent,
   Chip,
+  Divider,
   FormControl,
   InputLabel,
   MenuItem,
@@ -17,7 +18,6 @@ import {
 } from "@mui/material";
 import {
   StatusBadge,
-  MetricCard,
   KeyValuePanel,
   JsonViewer,
   TabBar,
@@ -66,43 +66,37 @@ interface AccountabilityEntry {
   [key: string]: unknown;
 }
 
-interface HealthComponent {
-  name: string;
-  status: "ok" | "not_configured";
-  [key: string]: unknown;
-}
-
-interface HealthResult {
-  overall_status: "ok" | "not_configured" | "degraded";
-  component_count: number;
-  components?: HealthComponent[];
-  timestamp?: string;
-}
-
 interface ReflexiveManagerProps {
   initialAccountability?: AccountabilityEntry[];
-  initialHealth?: HealthResult;
 }
 
 const SEVERITY_COLORS = {
   info: { bgcolor: "var(--app-accent)", color: "var(--app-accent-contrast)" },
-  low: { bgcolor: "rgba(2, 132, 199, 0.55)", color: "#E0F2FE" },
-  medium: { bgcolor: "rgba(217, 119, 6, 0.60)", color: "#FFFBEB" },
-  high: { bgcolor: "rgba(234, 88, 12, 0.65)", color: "#FFF7ED" },
-  critical: { bgcolor: "rgba(220, 38, 38, 0.70)", color: "#FEF2F2" },
+  low: { bgcolor: "rgba(14, 165, 233, 0.12)", color: "#0369a1" },
+  medium: { bgcolor: "rgba(245, 158, 11, 0.12)", color: "#92400e" },
+  high: { bgcolor: "rgba(249, 115, 22, 0.12)", color: "#c2410c" },
+  critical: { bgcolor: "rgba(239, 68, 68, 0.12)", color: "#b91c1c" },
 };
 
 const SEVERITY_BAR_COLORS = {
   info: "var(--app-accent)",
-  low: "rgb(14, 165, 233)",
-  medium: "rgb(245, 158, 11)",
-  high: "rgb(249, 115, 22)",
-  critical: "rgb(239, 68, 68)",
+  low: "#0284c7",
+  medium: "#d97706",
+  high: "#ea580c",
+  critical: "#ef4444",
+};
+
+const sectionTitleSx = {
+  mb: 1.5,
+  fontSize: 12,
+  fontWeight: 700,
+  letterSpacing: "0.04em",
+  textTransform: "uppercase",
+  color: "var(--app-muted)",
 };
 
 export function ReflexiveManager({
   initialAccountability = [],
-  initialHealth,
 }: ReflexiveManagerProps) {
   const [activeTab, setActiveTab] = useState("introspection");
 
@@ -266,7 +260,7 @@ export function ReflexiveManager({
                 sx={{
                   flex: 1,
                   height: 12,
-                  borderRadius: 999,
+                  borderRadius: 1,
                   bgcolor: "var(--app-control-bg)",
                   border: "1px solid var(--app-border)",
                   overflow: "hidden",
@@ -317,7 +311,6 @@ export function ReflexiveManager({
         label={labels[constraint] || constraint}
         size="small"
         sx={{
-          borderRadius: 999,
           bgcolor: "var(--app-control-bg)",
           border: "1px solid var(--app-border)",
           color: "var(--app-muted)",
@@ -346,7 +339,6 @@ export function ReflexiveManager({
           disabled={introspectionLoading}
           variant="contained"
           sx={{
-            borderRadius: 999,
             bgcolor: "var(--app-accent)",
             color: "var(--app-accent-contrast)",
             px: 3,
@@ -363,7 +355,7 @@ export function ReflexiveManager({
 
       {introspectionResult && (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+          <Card variant="outlined">
             <CardContent sx={{ p: 2.5 }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
               <ThreatGauge
@@ -393,9 +385,9 @@ export function ReflexiveManager({
           />
 
           {introspectionResult.drift_summary && (
-            <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+            <Card variant="outlined">
               <CardContent sx={{ p: 2.5 }}>
-              <Typography sx={{ mb: 1.5, fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+              <Typography sx={sectionTitleSx}>
                 Drift Summary
               </Typography>
               {renderDriftSummary(introspectionResult.drift_summary)}
@@ -405,9 +397,9 @@ export function ReflexiveManager({
 
           {introspectionResult.active_escalations &&
             introspectionResult.active_escalations.length > 0 && (
-              <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+              <Card variant="outlined">
                 <CardContent sx={{ p: 2.5 }}>
-                <Typography sx={{ mb: 1.5, fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                <Typography sx={sectionTitleSx}>
                   Active Escalations
                 </Typography>
                 <Box sx={{ display: "grid", gap: 1 }}>
@@ -421,9 +413,9 @@ export function ReflexiveManager({
 
           {introspectionResult.active_constraints &&
             introspectionResult.active_constraints.length > 0 && (
-              <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+              <Card variant="outlined">
                 <CardContent sx={{ p: 2.5 }}>
-                <Typography sx={{ mb: 1.5, fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                <Typography sx={sectionTitleSx}>
                   Active Constraints
                 </Typography>
                 <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
@@ -451,9 +443,9 @@ export function ReflexiveManager({
   // Verdicts tab content
   const renderVerdictsTab = () => (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-      <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+      <Card variant="outlined">
         <CardContent sx={{ p: 2.5 }}>
-          <Typography sx={{ mb: 1.5, fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+          <Typography sx={sectionTitleSx}>
             Check Execution Verdict
           </Typography>
 
@@ -493,7 +485,6 @@ export function ReflexiveManager({
               disabled={verdictLoading}
               variant="contained"
               sx={{
-                borderRadius: 999,
                 bgcolor: "var(--app-accent)",
                 color: "var(--app-accent-contrast)",
                 "&:hover": { bgcolor: "var(--app-accent)" },
@@ -511,15 +502,14 @@ export function ReflexiveManager({
 
       {verdictResult && (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+          <Card variant="outlined">
             <CardContent sx={{ p: 3, textAlign: "center" }}>
-              <Typography sx={{ mb: 2, fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+              <Typography sx={{ ...sectionTitleSx, mb: 2 }}>
                 Verdict
               </Typography>
               <Chip
                 label={verdictResult.verdict}
                 sx={{
-                  borderRadius: 999,
                   px: 1,
                   py: 2,
                   fontWeight: 900,
@@ -627,7 +617,7 @@ export function ReflexiveManager({
       )}
 
       {expandedAccountabilityRow !== null && filteredAccountability[expandedAccountabilityRow] ? (
-        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}>
+        <Card variant="outlined" sx={{ bgcolor: "var(--app-control-bg)" }}>
           <CardContent sx={{ p: 2.5 }}>
             <JsonViewer title="Full Entry" data={filteredAccountability[expandedAccountabilityRow]} />
           </CardContent>
@@ -636,99 +626,61 @@ export function ReflexiveManager({
     </Box>
   );
 
-  // Health tab content
-  const renderHealthTab = () => {
-    if (!initialHealth) {
-      return <EmptyState title="No Health Data" message="No health data available." />;
-    }
-
-    const components = initialHealth.components || [];
-    const overallStatus = initialHealth.overall_status;
-
-    return (
-      <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-        <Card
-          variant="outlined"
-          sx={{
-            borderRadius: 4,
-            borderColor: "var(--app-border)",
-            bgcolor: "var(--app-surface)",
-            boxShadow: "none",
-          }}
-        >
-          <CardContent sx={{ p: 2.5, display: "grid", gap: 2 }}>
-            <Box>
-              <Typography sx={{ fontSize: 12, fontWeight: 700, color: "var(--app-muted)" }}>
-                Overall Status
-              </Typography>
-              <Box sx={{ mt: 0.75 }}>
-                <StatusBadge status={overallStatus} />
-              </Box>
-            </Box>
-
-            <Box>
-              <Typography sx={{ fontSize: 12, fontWeight: 700, color: "var(--app-muted)" }}>
-                Components Configured
-              </Typography>
-              <Typography sx={{ mt: 0.75, fontSize: 13, color: "var(--app-muted)" }}>
-                {initialHealth.component_count}
-              </Typography>
-            </Box>
-
-            {initialHealth.timestamp ? (
-              <Box>
-                <Typography sx={{ fontSize: 12, fontWeight: 700, color: "var(--app-muted)" }}>
-                  Last Updated
-                </Typography>
-                <Typography sx={{ mt: 0.75, fontSize: 13, color: "var(--app-muted)" }}>
-                  {new Date(initialHealth.timestamp).toLocaleString()}
-                </Typography>
-              </Box>
-            ) : null}
-          </CardContent>
-        </Card>
-
-        {components.length === 0 ? (
-          <EmptyState title="No Components" message="No health components available." />
-        ) : (
-          <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" } }}>
-            {components.map((component, idx) => (
-              <MetricCard
-                key={idx}
-                label={component.name}
-                value={component.status === "ok" ? "✓ Operational" : "⚠ Not Configured"}
-                accent={component.status === "ok"}
-              />
-            ))}
-          </Box>
-        )}
-      </Box>
-    );
-  };
-
   const tabs = [
     { key: "introspection", label: "Introspection" },
     { key: "verdicts", label: "Verdicts" },
     { key: "accountability", label: "Accountability" },
-    { key: "health", label: "Health" },
   ];
 
-  return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-      <TabBar
-        tabs={tabs}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-      />
+  const accountabilityCount = initialAccountability.length;
 
-      <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
-        <CardContent sx={{ p: 3 }}>
-        {activeTab === "introspection" && renderIntrospectionTab()}
-        {activeTab === "verdicts" && renderVerdictsTab()}
-        {activeTab === "accountability" && renderAccountabilityTab()}
-        {activeTab === "health" && renderHealthTab()}
+  return (
+    <Card variant="outlined" sx={{ overflow: "hidden" }}>
+      <CardContent sx={{ p: 0 }}>
+        <Box
+          sx={{
+            p: { xs: 2.5, md: 3 },
+            display: "flex",
+            flexDirection: { xs: "column", md: "row" },
+            alignItems: { xs: "flex-start", md: "center" },
+            justifyContent: "space-between",
+            gap: 2,
+          }}
+        >
+          <Box sx={{ display: "grid", gap: 0.75, maxWidth: 720 }}>
+            <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
+              Reflexive workspace
+            </Typography>
+            <Typography variant="h6" sx={{ color: "var(--app-fg)" }}>
+              Inspect actors before execution
+            </Typography>
+            <Typography variant="body2" sx={{ color: "var(--app-muted)" }}>
+              Check drift, execution verdicts, and accountability records without leaving the guardrail flow.
+            </Typography>
+          </Box>
+
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+            <Chip label={`${accountabilityCount} log entries`} sx={{ bgcolor: "var(--app-control-bg)", color: "var(--app-muted)", fontWeight: 700 }} />
+            <Chip label={activeTab} sx={{ bgcolor: "var(--app-control-active-bg)", color: "var(--app-fg)", fontWeight: 700 }} />
+          </Box>
+        </Box>
+
+        <Divider />
+        <Box sx={{ px: { xs: 1.5, md: 2 }, bgcolor: "var(--app-control-bg)" }}>
+          <TabBar
+            tabs={tabs}
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+          />
+        </Box>
+        <Divider />
+
+        <Box sx={{ p: { xs: 2, md: 2.5 } }}>
+          {activeTab === "introspection" && renderIntrospectionTab()}
+          {activeTab === "verdicts" && renderVerdictsTab()}
+          {activeTab === "accountability" && renderAccountabilityTab()}
+        </Box>
         </CardContent>
-      </Card>
-    </Box>
+    </Card>
   );
 }

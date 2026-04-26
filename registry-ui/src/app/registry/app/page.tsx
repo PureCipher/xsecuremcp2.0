@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Box, Button, Card, CardContent, Typography } from "@mui/material";
+import { Box, Button } from "@mui/material";
 import {
   getReviewQueue,
   getRegistrySession,
@@ -8,6 +8,7 @@ import {
   sessionMayUsePublishConsole,
   type RegistryToolListing,
 } from "@/lib/registryClient";
+import { RegistryPageHeader } from "@/components/security";
 import { ToolsCatalog } from "./ToolsCatalog";
 
 export default async function RegistryAppPage() {
@@ -33,161 +34,42 @@ export default async function RegistryAppPage() {
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
-      <Box
-        component="header"
-        sx={{
-          display: "flex",
-          flexDirection: { xs: "column", sm: "row" },
-          gap: 2,
-          alignItems: { sm: "flex-end" },
-          justifyContent: "space-between",
-        }}
-      >
-        <Box>
-          <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
-            PureCipher Secured MCP Registry
-          </Typography>
-          <Typography variant="h4" sx={{ mt: 0.5, color: "var(--app-fg)" }}>
-            Trusted tool directory
-          </Typography>
-          <Typography variant="body2" sx={{ mt: 1, maxWidth: 720, color: "var(--app-muted)" }}>
-            Search trusted MCP tools, review certification levels, and open listings for install recipes.
-          </Typography>
-        </Box>
-
-        <Box sx={{ display: "grid", gap: 0.5, alignItems: "end", justifyItems: { xs: "start", sm: "end" } }}>
+      <RegistryPageHeader
+        eyebrow="PureCipher Secured MCP Registry"
+        title="Trusted tool directory"
+        description="Search trusted MCP tools, review certification levels, and open listings for install recipes."
+        actions={
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
           {canPublishConsole || (!canReview && !authEnabled) ? (
             <Link href="/registry/publish/get-started" legacyBehavior passHref>
               <Button
                 component="a"
-                variant="text"
-                sx={{ color: "var(--app-muted)", justifySelf: { xs: "start", sm: "end" } }}
+                variant="outlined"
+                sx={{ borderColor: "var(--app-control-border)", color: "var(--app-muted)" }}
               >
-                Publisher onboarding →
+                Publisher onboarding
               </Button>
             </Link>
           ) : null}
           <Link href="/registry/publishers" legacyBehavior passHref>
             <Button
               component="a"
-              variant="text"
-              sx={{ color: "var(--app-muted)", justifySelf: { xs: "start", sm: "end" } }}
+              variant="contained"
             >
-              Browse publishers →
+              Browse publishers
             </Button>
           </Link>
-        </Box>
-      </Box>
+          </Box>
+        }
+      />
 
-      {canPublishConsole || canReview ? (
-        <Card
-          variant="outlined"
-          sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}
-        >
-          <CardContent
-            sx={{
-              p: 2.5,
-              display: "flex",
-              flexDirection: { xs: "column", sm: "row" },
-              gap: 2,
-              alignItems: { sm: "center" },
-              justifyContent: "space-between",
-            }}
-          >
-            <Box>
-              <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
-                Quick actions
-              </Typography>
-              <Typography variant="body2" sx={{ mt: 0.5, maxWidth: 720, color: "var(--app-muted)" }}>
-                Shortcuts based on your role: publish submissions or moderate the queue.
-              </Typography>
-            </Box>
-
-            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
-              {canPublishConsole ? (
-                <Link href="/registry/publish/mine" legacyBehavior passHref>
-                  <Button
-                    component="a"
-                    variant="outlined"
-                    sx={{
-                      borderRadius: 999,
-                      borderColor: "var(--app-control-border)",
-                      color: "var(--app-muted)",
-                      bgcolor: "var(--app-control-bg)",
-                      "&:hover": { bgcolor: "var(--app-hover-bg)", borderColor: "var(--app-control-border)" },
-                    }}
-                  >
-                    My listings
-                  </Button>
-                </Link>
-              ) : null}
-              {canPublishConsole ? (
-                <Link href="/registry/publish" legacyBehavior passHref>
-                  <Button
-                    component="a"
-                    variant="contained"
-                    sx={{
-                      borderRadius: 999,
-                      bgcolor: "var(--app-accent)",
-                      color: "var(--app-accent-contrast)",
-                      "&:hover": { bgcolor: "var(--app-accent)" },
-                    }}
-                  >
-                    Publish a tool
-                  </Button>
-                </Link>
-              ) : null}
-              {canPublishConsole ? (
-                <Link href="/registry/publish/get-started" legacyBehavior passHref>
-                  <Button
-                    component="a"
-                    variant="outlined"
-                    sx={{
-                      borderRadius: 999,
-                      borderColor: "var(--app-accent)",
-                      color: "var(--app-muted)",
-                      "&:hover": { bgcolor: "var(--app-control-active-bg)", borderColor: "var(--app-accent)" },
-                    }}
-                  >
-                    Get started
-                  </Button>
-                </Link>
-              ) : null}
-              {canReview ? (
-                <Link href="/registry/review" legacyBehavior passHref>
-                  <Button
-                    component="a"
-                    variant="outlined"
-                    sx={{
-                      borderRadius: 999,
-                      borderColor: "var(--app-accent)",
-                      color: "var(--app-muted)",
-                      "&:hover": { bgcolor: "var(--app-control-active-bg)", borderColor: "var(--app-accent)" },
-                    }}
-                  >
-                    Review queue{pendingCount ? ` (${pendingCount} pending)` : ""}
-                  </Button>
-                </Link>
-              ) : null}
-            </Box>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      <Card
-        variant="outlined"
-        sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}
-      >
-        <CardContent sx={{ p: 2.5 }}>
-          {tools.length === 0 ? (
-            <Typography sx={{ color: "var(--app-muted)" }}>
-              No verified tools are published yet. Once tools are in the registry they&apos;ll appear here.
-            </Typography>
-          ) : (
-            <ToolsCatalog tools={tools} />
-          )}
-        </CardContent>
-      </Card>
+      <ToolsCatalog
+        tools={tools}
+        publishHref={canPublishConsole ? "/registry/publish" : undefined}
+        reviewHref={canReview ? "/registry/review" : undefined}
+        publishersHref="/registry/publishers"
+        pendingCount={pendingCount}
+      />
     </Box>
   );
 }

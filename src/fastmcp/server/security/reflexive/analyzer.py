@@ -361,6 +361,14 @@ class BehavioralAnalyzer:
 
     # ── Detector management ───────────────────────────────────────────
 
+    def attach_event_bus(self, event_bus: SecurityEventBus | None) -> None:
+        """Wire an event bus into this analyzer after construction.
+
+        Public alternative to mutating the private ``_event_bus``
+        attribute from outside the class.
+        """
+        self._event_bus = event_bus
+
     def add_detector(self, detector: Any) -> None:
         """Register a pluggable anomaly detector.
 
@@ -533,6 +541,14 @@ class EscalationEngine:
             )
 
         return triggered
+
+    def attach_event_bus(self, event_bus: SecurityEventBus | None) -> None:
+        """Wire an event bus into this escalation engine after construction.
+
+        Public alternative to mutating the private ``_event_bus``
+        attribute from outside the class.
+        """
+        self._event_bus = event_bus
 
     def add_rule(self, rule: EscalationRule) -> None:
         """Add an escalation rule."""

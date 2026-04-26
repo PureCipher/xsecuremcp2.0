@@ -414,15 +414,7 @@ export function OpenApiPublishWizard() {
   const readyForPreflight = Boolean(openapiToolsetId);
 
   return (
-    <Card
-      variant="outlined"
-      sx={{
-        borderRadius: 4,
-        borderColor: "var(--app-border)",
-        bgcolor: "var(--app-surface)",
-        boxShadow: "none",
-      }}
-    >
+    <Card variant="outlined">
       <CardContent sx={{ p: 2.5 }}>
         <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
           OpenAPI hosted publish flow
@@ -513,7 +505,7 @@ export function OpenApiPublishWizard() {
               label="OpenAPI URL"
               value={openapiUrl}
               onChange={(e) => setOpenapiUrl(e.target.value)}
-              placeholder="https://api.example.com/openapi.json"
+              placeholder="https://your-service-domain.tld/openapi.json"
               size="small"
               fullWidth
             />
@@ -523,7 +515,7 @@ export function OpenApiPublishWizard() {
                 variant="contained"
                 disabled={openapiLoading}
                 onClick={() => void fetchAndIngestOpenAPI()}
-                sx={{ borderRadius: 999, textTransform: "none" }}
+                sx={{ textTransform: "none" }}
               >
                 {openapiLoading ? "Loading…" : "Fetch + ingest"}
               </Button>
@@ -545,7 +537,7 @@ export function OpenApiPublishWizard() {
             <Typography variant="body2" sx={{ color: "var(--app-muted)" }}>
               Select the OpenAPI operations you want to expose as tools.
             </Typography>
-            <Card variant="outlined" sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}>
+            <Card variant="outlined" sx={{ bgcolor: "var(--app-control-bg)" }}>
               <CardContent sx={{ p: 2 }}>
                 <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
                   Operations
@@ -578,7 +570,7 @@ export function OpenApiPublishWizard() {
                     variant="contained"
                     disabled={!readyForToolset || openapiLoading}
                     onClick={() => void createToolset()}
-                    sx={{ borderRadius: 999, textTransform: "none" }}
+                    sx={{ textTransform: "none" }}
                   >
                     Create toolset ({selectedKeys.length})
                   </Button>
@@ -590,7 +582,7 @@ export function OpenApiPublishWizard() {
                   >
                     Clear selection
                   </Button>
-                  <Chip size="small" label={`Selected: ${selectedKeys.length}`} sx={{ borderRadius: 999 }} />
+                  <Chip size="small" label={`Selected: ${selectedKeys.length}`} />
                 </Box>
               </CardContent>
             </Card>
@@ -638,7 +630,7 @@ export function OpenApiPublishWizard() {
                 variant="contained"
                 disabled={!readyForPreflight || submitting}
                 onClick={() => void runPreflight()}
-                sx={{ borderRadius: 999, textTransform: "none" }}
+                sx={{ textTransform: "none" }}
               >
                 Run preflight
               </Button>
@@ -665,7 +657,7 @@ export function OpenApiPublishWizard() {
               </Box>
             </Typography>
             {preflight?.report?.findings?.length ? (
-              <Card variant="outlined" sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}>
+              <Card variant="outlined" sx={{ bgcolor: "var(--app-control-bg)" }}>
                 <CardContent sx={{ p: 2 }}>
                   <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
                     Findings
@@ -691,7 +683,7 @@ export function OpenApiPublishWizard() {
                 variant="contained"
                 disabled={submitting || !preflight?.ready_for_publish}
                 onClick={() => void submitPublish()}
-                sx={{ borderRadius: 999, textTransform: "none" }}
+                sx={{ textTransform: "none" }}
               >
                 Publish
               </Button>
@@ -700,7 +692,7 @@ export function OpenApiPublishWizard() {
                 variant="outlined"
                 disabled={submitting}
                 onClick={() => setActiveStep(3)}
-                sx={{ borderRadius: 999, textTransform: "none" }}
+                sx={{ textTransform: "none" }}
               >
                 Edit manifest/runtime
               </Button>

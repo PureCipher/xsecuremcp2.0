@@ -21,11 +21,14 @@ export function ReviewActions({ listingId, availableActions }: Props) {
     setBusyAction(action);
     setError(null);
     try {
+      // moderator_id is intentionally NOT sent from the client. The
+      // registry derives it from the authenticated session so the audit
+      // trail can't be spoofed. Pre-fix this hard-coded the literal
+      // "registry-ui" string for every action, breaking attribution.
       const response = await fetch(`/api/review/${encodeURIComponent(listingId)}/${encodeURIComponent(action)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          moderator_id: "registry-ui",
           reason:
             reasonOverride ??
             (action === "approve" ? "Approved from registry UI." : "Updated from registry review queue."),
@@ -69,32 +72,22 @@ export function ReviewActions({ listingId, availableActions }: Props) {
               }
             }}
             sx={{
-              borderRadius: 999,
               borderColor: "var(--app-accent)",
               color: "var(--app-muted)",
               "&:hover": { bgcolor: "var(--app-control-active-bg)", borderColor: "var(--app-accent)" },
-              textTransform: "uppercase",
-              letterSpacing: "0.12em",
-              fontWeight: 800,
-              fontSize: 10,
+              textTransform: "none",
+              letterSpacing: "0.01em",
+              fontWeight: 700,
+              fontSize: 12,
             }}
           >
-            {busyAction === action ? "Working…" : action.replace("-", " ").toUpperCase()}
+            {busyAction === action ? "Working…" : action.replace("-", " ")}
           </Button>
         ))}
       </Box>
 
       <Collapse in={!!expandedAction} unmountOnExit>
-        <Card
-          variant="outlined"
-          sx={{
-            mt: 1,
-            borderRadius: 3,
-            borderColor: "var(--app-border)",
-            bgcolor: "var(--app-control-bg)",
-            boxShadow: "none",
-          }}
-        >
+        <Card variant="outlined" sx={{ mt: 1, bgcolor: "var(--app-control-bg)" }}>
           <CardContent sx={{ p: 1.5, display: "grid", gap: 1 }}>
             <TextField
               value={reasonText}
@@ -130,7 +123,6 @@ export function ReviewActions({ listingId, availableActions }: Props) {
                   setReasonText("");
                 }}
                 sx={{
-                  borderRadius: 999,
                   bgcolor: "var(--app-accent)",
                   color: "var(--app-accent-contrast)",
                   "&:hover": { bgcolor: "var(--app-accent)" },

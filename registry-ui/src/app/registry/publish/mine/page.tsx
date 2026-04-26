@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { Box, Button, Card, CardActions, CardContent, Chip, Typography } from "@mui/material";
 
+import { RegistryPageHeader } from "@/components/security";
 import { getMyListings, getRegistrySession, requirePublisherRole } from "@/lib/registryClient";
 
 type Listing = {
@@ -48,43 +49,17 @@ export default async function MyListingsPage() {
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
-      <Box
-        component="header"
-        sx={{
-          display: "flex",
-          flexDirection: { xs: "column", sm: "row" },
-          gap: 2,
-          alignItems: { sm: "flex-end" },
-          justifyContent: "space-between",
-        }}
-      >
-        <Box>
-          <Typography
-            sx={{
-              fontSize: 11,
-              fontWeight: 700,
-              letterSpacing: "0.18em",
-              textTransform: "uppercase",
-              color: "var(--app-muted)",
-            }}
-          >
-            Publisher console
-          </Typography>
-          <Typography variant="h4" sx={{ fontWeight: 700, color: "var(--app-fg)", mt: 0.5 }}>
-            My listings
-          </Typography>
-          <Typography sx={{ mt: 1, maxWidth: 640, fontSize: 12, color: "var(--app-muted)" }}>
-            Track your submissions across draft, pending review, and published states.
-          </Typography>
-        </Box>
-
-        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+      <RegistryPageHeader
+        eyebrow="Publisher console"
+        title="My listings"
+        description="Track your submissions across draft, pending review, and published states."
+        actions={
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
           <Link href="/registry/publish" legacyBehavior passHref>
             <Button
               component="a"
               variant="contained"
               sx={{
-                borderRadius: 999,
                 bgcolor: "var(--app-accent)",
                 color: "var(--app-accent-contrast)",
                 "&:hover": { bgcolor: "var(--app-accent)" },
@@ -98,7 +73,6 @@ export default async function MyListingsPage() {
               component="a"
               variant="outlined"
               sx={{
-                borderRadius: 999,
                 borderColor: "var(--app-control-border)",
                 color: "var(--app-muted)",
                 bgcolor: "var(--app-control-bg)",
@@ -108,18 +82,11 @@ export default async function MyListingsPage() {
               Get started
             </Button>
           </Link>
-        </Box>
-      </Box>
+          </Box>
+        }
+      />
 
-      <Card
-        variant="outlined"
-        sx={{
-          borderRadius: 4,
-          bgcolor: "var(--app-surface)",
-          borderColor: "var(--app-border)",
-          boxShadow: "none",
-        }}
-      >
+      <Card variant="outlined">
         <CardContent sx={{ p: 2.5 }}>
           {sorted.length === 0 ? (
             <Box sx={{ display: "grid", gap: 1 }}>
@@ -131,16 +98,7 @@ export default async function MyListingsPage() {
           ) : (
             <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1.5 }}>
               {sorted.map((item) => (
-                <Card
-                  key={item.listing_id ?? `${item.tool_name}-${item.version}`}
-                  variant="outlined"
-                  sx={{
-                    borderRadius: 3,
-                    bgcolor: "var(--app-control-bg)",
-                    borderColor: "var(--app-border)",
-                    boxShadow: "none",
-                  }}
-                >
+                <Card key={item.listing_id ?? `${item.tool_name}-${item.version}`} variant="outlined" sx={{ bgcolor: "var(--app-control-bg)" }}>
                   <CardContent sx={{ pb: 1.5 }}>
                     <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 1.5 }}>
                       <Box sx={{ minWidth: 0 }}>
@@ -182,7 +140,6 @@ export default async function MyListingsPage() {
                           size="small"
                           variant="outlined"
                           sx={{
-                            borderRadius: 999,
                             borderColor: "var(--app-control-border)",
                             color: "var(--app-muted)",
                             bgcolor: "var(--app-control-bg)",
@@ -202,7 +159,6 @@ export default async function MyListingsPage() {
                           size="small"
                           variant="outlined"
                           sx={{
-                            borderRadius: 999,
                             borderColor: "var(--app-accent)",
                             color: "var(--app-muted)",
                             "&:hover": { bgcolor: "var(--app-control-active-bg)", borderColor: "var(--app-accent)" },
@@ -235,13 +191,13 @@ function StatusChip({ status }: { status?: string }) {
 
   const sx =
     s === "pending_review"
-      ? { bgcolor: "rgba(245, 158, 11, 0.18)", color: "rgb(253, 230, 138)" }
+      ? { bgcolor: "rgba(245, 158, 11, 0.12)", color: "#92400e" }
       : s === "published"
         ? { bgcolor: "var(--app-control-active-bg)", color: "var(--app-muted)" }
         : s === "rejected"
-          ? { bgcolor: "rgba(244, 63, 94, 0.18)", color: "rgb(254, 205, 211)" }
+          ? { bgcolor: "rgba(239, 68, 68, 0.12)", color: "#b91c1c" }
           : s === "suspended"
-            ? { bgcolor: "rgba(249, 115, 22, 0.18)", color: "rgb(254, 215, 170)" }
+            ? { bgcolor: "rgba(249, 115, 22, 0.12)", color: "#c2410c" }
             : { bgcolor: "var(--app-active-bg)", color: "var(--app-muted)" };
 
   return (
@@ -250,12 +206,10 @@ function StatusChip({ status }: { status?: string }) {
       size="small"
       sx={{
         ...sx,
-        height: 22,
-        borderRadius: 999,
-        fontSize: 10,
-        fontWeight: 800,
-        textTransform: "uppercase",
-        letterSpacing: "0.12em",
+        height: 24,
+        fontSize: 11,
+        fontWeight: 700,
+        letterSpacing: "0.01em",
       }}
     />
   );

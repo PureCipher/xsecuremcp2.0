@@ -18,15 +18,15 @@ type OverviewTabProps = {
 function riskLevelSx(level: string | undefined): Record<string, unknown> {
   switch (level?.toLowerCase()) {
     case "critical":
-      return { bgcolor: "rgba(239, 68, 68, 0.12)", color: "rgb(254, 202, 202)", border: "1px solid rgba(248, 113, 113, 0.45)" };
+      return { bgcolor: "rgba(239, 68, 68, 0.12)", color: "#b91c1c", border: "1px solid rgba(248, 113, 113, 0.28)" };
     case "high":
-      return { bgcolor: "rgba(244, 63, 94, 0.12)", color: "rgb(254, 205, 211)", border: "1px solid rgba(251, 113, 133, 0.45)" };
+      return { bgcolor: "rgba(244, 63, 94, 0.12)", color: "#be123c", border: "1px solid rgba(251, 113, 133, 0.28)" };
     case "medium":
-      return { bgcolor: "rgba(245, 158, 11, 0.12)", color: "rgb(253, 230, 138)", border: "1px solid rgba(251, 191, 36, 0.45)" };
+      return { bgcolor: "rgba(245, 158, 11, 0.12)", color: "#92400e", border: "1px solid rgba(251, 191, 36, 0.28)" };
     case "low":
       return { bgcolor: "var(--app-control-active-bg)", color: "var(--app-muted)", border: "1px solid var(--app-accent)" };
     default:
-      return { bgcolor: "rgba(113, 113, 122, 0.12)", color: "rgb(228, 228, 231)", border: "1px solid rgba(161, 161, 170, 0.35)" };
+      return { bgcolor: "rgba(100, 116, 139, 0.12)", color: "var(--app-muted)", border: "1px solid var(--app-border)" };
   }
 }
 
@@ -59,7 +59,7 @@ function TrendIndicator({ value, invertColor }: { value: number | undefined; inv
         gap: 1,
         fontSize: 11,
         fontWeight: 700,
-        color: isGood ? "var(--app-muted)" : "rgb(253, 164, 175)",
+        color: isGood ? "var(--app-muted)" : "#be123c",
       }}
     >
       <Box
@@ -95,7 +95,7 @@ export function OverviewTab({
     <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
       {/* ── Analytics ─────────────────────────────────────────────── */}
       <Box component="section" sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", xl: "minmax(0,1.1fr) minmax(0,0.9fr)" } }}>
-        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+        <Card variant="outlined">
           <CardContent sx={{ p: 2.5 }}>
             <Box sx={{ display: "grid", gap: 0.5 }}>
               <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
@@ -139,9 +139,9 @@ export function OverviewTab({
 
           {/* Most blocked + version changes */}
           <Box sx={{ mt: 2, display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" } }}>
-            <Card variant="outlined" sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}>
+            <Card variant="outlined" sx={{ bgcolor: "var(--app-control-bg)" }}>
               <CardContent sx={{ p: 2 }}>
-                <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                <Typography sx={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--app-muted)" }}>
                   Most blocked resources
                 </Typography>
                 <Box component="ul" sx={{ listStyle: "none", p: 0, m: 0, mt: 1.5, display: "grid", gap: 1 }}>
@@ -150,7 +150,7 @@ export function OverviewTab({
                       key={`top-denied-${index}`}
                       component="li"
                       variant="outlined"
-                      sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}
+                      sx={{ bgcolor: "var(--app-surface)" }}
                     >
                       <CardContent sx={{ p: 1.5 }}>
                         <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
@@ -168,9 +168,9 @@ export function OverviewTab({
               </CardContent>
             </Card>
 
-            <Card variant="outlined" sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}>
+            <Card variant="outlined" sx={{ bgcolor: "var(--app-control-bg)" }}>
               <CardContent sx={{ p: 2 }}>
-                <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                <Typography sx={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--app-muted)" }}>
                   Recent version change
                 </Typography>
                 {analytics.changes?.latest_version_summary ? (
@@ -193,7 +193,7 @@ export function OverviewTab({
                   <Card
                     key={`risk-${index}`}
                     variant="outlined"
-                    sx={{ mt: 1.5, borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}
+                    sx={{ mt: 1.5, bgcolor: "var(--app-surface)" }}
                   >
                     <CardContent sx={{ p: 1.5 }}>
                       <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, alignItems: "center" }}>
@@ -204,11 +204,9 @@ export function OverviewTab({
                           size="small"
                           label={risk.level}
                           sx={{
-                            borderRadius: 999,
                             fontSize: 10,
-                            fontWeight: 800,
-                            textTransform: "uppercase",
-                            letterSpacing: "0.12em",
+                            fontWeight: 700,
+                            letterSpacing: "0.01em",
                             height: 22,
                             ...riskLevelSx(risk.level),
                           }}
@@ -225,11 +223,11 @@ export function OverviewTab({
           </Box>
 
           {/* Trend history */}
-          <Card variant="outlined" sx={{ mt: 2, borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}>
+          <Card variant="outlined" sx={{ mt: 2, bgcolor: "var(--app-control-bg)" }}>
             <CardContent sx={{ p: 2 }}>
               <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
                 <Box sx={{ minWidth: 240 }}>
-                  <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                  <Typography sx={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--app-muted)" }}>
                     Trend history
                   </Typography>
                   <Typography sx={{ mt: 0.5, fontSize: 12, color: "var(--app-muted)" }}>
@@ -239,7 +237,7 @@ export function OverviewTab({
                 <Chip
                   size="small"
                   label={`${String(analytics.history?.sample_count ?? 0)} samples`}
-                  sx={{ borderRadius: 999, bgcolor: "var(--app-surface)", color: "var(--app-muted)", fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.12em" }}
+                  sx={{ bgcolor: "var(--app-surface)", color: "var(--app-muted)", fontSize: 11, fontWeight: 700, letterSpacing: "0.01em" }}
                 />
               </Box>
 
@@ -250,9 +248,9 @@ export function OverviewTab({
                   { label: "Queue trend", value: analytics.history?.deltas?.pending_proposals, invertColor: false },
                   { label: "Risk trend", value: analytics.history?.deltas?.risk_count, invertColor: false },
                 ].map((item) => (
-                  <Card key={item.label} variant="outlined" sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+                  <Card key={item.label} variant="outlined" sx={{ bgcolor: "var(--app-surface)" }}>
                     <CardContent sx={{ p: 1.5 }}>
-                      <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                      <Typography sx={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--app-muted)" }}>
                         {item.label}
                       </Typography>
                       <Box sx={{ mt: 1 }}>
@@ -264,9 +262,9 @@ export function OverviewTab({
               </Box>
 
               <Box sx={{ mt: 2, display: "grid", gap: 1.5, gridTemplateColumns: { xs: "1fr", lg: "minmax(0,1.2fr) minmax(0,0.8fr)" } }}>
-                <Card variant="outlined" sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+                <Card variant="outlined" sx={{ bgcolor: "var(--app-surface)" }}>
                   <CardContent sx={{ p: 1.5 }}>
-                    <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                    <Typography sx={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--app-muted)" }}>
                       Recent snapshots
                     </Typography>
                     <Box sx={{ mt: 1.5, display: "grid", gap: 1 }}>
@@ -276,7 +274,7 @@ export function OverviewTab({
                           <Card
                             key={`analytics-snapshot-${index}`}
                             variant="outlined"
-                            sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}
+                            sx={{ bgcolor: "var(--app-control-bg)" }}
                           >
                             <CardContent sx={{ p: 1.5 }}>
                               <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
@@ -303,9 +301,9 @@ export function OverviewTab({
                   </CardContent>
                 </Card>
 
-                <Card variant="outlined" sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+                <Card variant="outlined" sx={{ bgcolor: "var(--app-surface)" }}>
                   <CardContent sx={{ p: 1.5 }}>
-                    <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                    <Typography sx={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--app-muted)" }}>
                       Recent promotions
                     </Typography>
                     <Box sx={{ mt: 1.5, display: "grid", gap: 1 }}>
@@ -313,17 +311,17 @@ export function OverviewTab({
                         <Card
                           key={`analytics-promotion-${promotion.promotion_id ?? index}`}
                           variant="outlined"
-                          sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}
+                          sx={{ bgcolor: "var(--app-control-bg)" }}
                         >
                           <CardContent sx={{ p: 1.5 }}>
                             <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
                               <Typography sx={{ fontSize: 12, fontWeight: 800, color: "var(--app-fg)" }}>
-                                {promotion.source_environment ?? "source"} → {promotion.target_environment ?? "target"}
+                                {promotion.source_environment ?? "source"} -&gt; {promotion.target_environment ?? "target"}
                               </Typography>
                               <Chip
                                 size="small"
                                 label={promotion.status ?? "staged"}
-                                sx={{ borderRadius: 999, bgcolor: "var(--app-surface)", color: "var(--app-muted)", fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.12em" }}
+                                sx={{ bgcolor: "var(--app-surface)", color: "var(--app-muted)", fontSize: 11, fontWeight: 700, letterSpacing: "0.01em" }}
                               />
                             </Box>
                             <Typography sx={{ mt: 1, fontSize: 12, color: "var(--app-muted)" }}>
@@ -347,10 +345,10 @@ export function OverviewTab({
       </Card>
 
         {/* ── Bundles ──────────────────────────────────────────────── */}
-        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+        <Card variant="outlined">
           <CardContent sx={{ p: 2.5 }}>
             <Box sx={{ display: "grid", gap: 0.5 }}>
-              <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+              <Typography sx={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--app-muted)" }}>
                 Reusable bundles
               </Typography>
               <Typography variant="h5" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
@@ -363,7 +361,7 @@ export function OverviewTab({
 
             <Box sx={{ mt: 2, display: "grid", gap: 1.5 }}>
               {bundles.length === 0 ? (
-                <Card variant="outlined" sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}>
+                <Card variant="outlined" sx={{ bgcolor: "var(--app-control-bg)" }}>
                   <CardContent sx={{ p: 2 }}>
                     <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
                       No reusable bundles are available yet.
@@ -375,7 +373,7 @@ export function OverviewTab({
                   <Card
                     key={bundle.bundle_id}
                     variant="outlined"
-                    sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}
+                    sx={{ bgcolor: "var(--app-control-bg)" }}
                   >
                     <CardContent sx={{ p: 2 }}>
                       <Box sx={{ display: "flex", flexWrap: "wrap", gap: 2, justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -387,7 +385,7 @@ export function OverviewTab({
                             <Chip
                               size="small"
                               label={bundle.risk_posture ?? "bundle"}
-                              sx={{ borderRadius: 999, bgcolor: "var(--app-surface)", color: "var(--app-muted)", fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.12em" }}
+                              sx={{ bgcolor: "var(--app-surface)", color: "var(--app-muted)", fontSize: 11, fontWeight: 700, letterSpacing: "0.01em" }}
                             />
                           </Box>
                           <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
@@ -402,7 +400,7 @@ export function OverviewTab({
                           variant="contained"
                           onClick={() => void onStageBundle(bundle.bundle_id, bundle.title ?? bundle.bundle_id)}
                           disabled={busyKey === `bundle-${bundle.bundle_id}`}
-                          sx={{ borderRadius: 999 }}
+                          sx={{ textTransform: "none" }}
                         >
                           {busyKey === `bundle-${bundle.bundle_id}` ? "Staging…" : "Stage bundle"}
                         </Button>
@@ -436,9 +434,9 @@ function MetricCard({
   subtitle: string;
 }) {
   return (
-    <Card variant="outlined" sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}>
+    <Card variant="outlined" sx={{ bgcolor: "var(--app-control-bg)" }}>
       <CardContent sx={{ p: 2 }}>
-        <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+        <Typography sx={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--app-muted)" }}>
           {label}
         </Typography>
         <Typography sx={{ mt: 1, fontSize: 24, fontWeight: 800, color: "var(--app-fg)" }}>

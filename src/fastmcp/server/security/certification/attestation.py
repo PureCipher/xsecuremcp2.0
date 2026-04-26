@@ -33,6 +33,7 @@ class AttestationStatus(Enum):
 
     PENDING = "pending"
     VALID = "valid"
+    UNSIGNED = "unsigned"  # Validated but no crypto handler — not certified.
     EXPIRED = "expired"
     REVOKED = "revoked"
     SUPERSEDED = "superseded"

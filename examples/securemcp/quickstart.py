@@ -103,7 +103,7 @@ api = SecurityAPI(
     crl=crl,
     event_bus=event_bus,
 )
-server.mount_security_api(api=api)
+server.mount_security_api(api=api, require_auth=False)
 
 
 # ── 7. Add a regular MCP tool ───────────────────────────────────

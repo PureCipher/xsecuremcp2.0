@@ -5,7 +5,7 @@ import {
   type PublisherSummary,
   type RegistryToolListing,
 } from "@/lib/registryClient";
-import { CertificationBadge } from "@/components/security";
+import { CertificationBadge, RegistryPageHeader } from "@/components/security";
 
 export default async function PublisherProfilePage(props: { params: Promise<{ publisherId: string }> }) {
   const { publisherId } = await props.params;
@@ -14,8 +14,8 @@ export default async function PublisherProfilePage(props: { params: Promise<{ pu
 
   if (!profile) {
     return (
-      <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
-        <CardContent sx={{ p: 2.5 }}>
+      <Card variant="outlined">
+        <CardContent>
           <Typography variant="h6" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
             Publisher not found
           </Typography>
@@ -50,8 +50,8 @@ export default async function PublisherProfilePage(props: { params: Promise<{ pu
 
   if (profile.error) {
     return (
-      <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
-        <CardContent sx={{ p: 2.5 }}>
+      <Card variant="outlined">
+        <CardContent>
           <Typography variant="h6" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
             Unable to load publisher
           </Typography>
@@ -78,31 +78,37 @@ export default async function PublisherProfilePage(props: { params: Promise<{ pu
     );
   }
 
-  const summary: PublisherSummary = profile.summary ?? { publisher_id: decodedId };
+  // Backend emits the summary fields flat at the top level (see
+  // PublisherProfile.to_dict). Read them directly; fall back to a
+  // minimal stub keyed by the URL slug when the response carries
+  // no publisher_id (e.g., on certain edge errors).
+  const summary: PublisherSummary = {
+    publisher_id: profile.publisher_id ?? decodedId,
+    display_name: profile.display_name,
+    description: profile.description,
+    listing_count: profile.listing_count,
+    tool_count: profile.tool_count,
+    verified_tool_count: profile.verified_tool_count,
+    trust_score: profile.trust_score,
+  };
   const listings: RegistryToolListing[] = profile.listings ?? [];
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
-      <Box component="header" sx={{ display: "flex", flexDirection: { xs: "column", sm: "row" }, gap: 2, alignItems: { sm: "flex-end" }, justifyContent: "space-between" }}>
-        <Box>
-          <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
-            Publisher profile
-          </Typography>
-          <Typography variant="h4" sx={{ mt: 0.5, fontWeight: 700, color: "var(--app-fg)" }}>
-            {summary.display_name ?? summary.publisher_id}
-          </Typography>
-          <Typography sx={{ mt: 0.5, fontSize: 12, color: "var(--app-muted)" }}>
-            {summary.publisher_id} · {summary.tool_count ?? 0} tool{(summary.tool_count ?? 0) === 1 ? "" : "s"} in this registry
-          </Typography>
-        </Box>
-        {summary.trust_score?.overall != null ? (
-          <Chip
-            size="small"
-            label={`Trust score ${summary.trust_score.overall.toFixed(1)}`}
-            sx={{ borderRadius: 999, bgcolor: "var(--app-surface)", color: "var(--app-muted)", fontWeight: 700, fontSize: 11, alignSelf: { xs: "flex-start", sm: "auto" } }}
-          />
-        ) : null}
-      </Box>
+      <RegistryPageHeader
+        eyebrow="Publisher profile"
+        title={summary.display_name ?? summary.publisher_id}
+        description={`${summary.publisher_id} · ${
+          summary.tool_count ?? summary.listing_count ?? 0
+        } tool${
+          (summary.tool_count ?? summary.listing_count ?? 0) === 1 ? "" : "s"
+        } in this registry`}
+        actions={
+          summary.trust_score?.overall != null ? (
+            <Chip size="small" label={`Trust score ${summary.trust_score.overall.toFixed(1)}`} />
+          ) : null
+        }
+      />
 
       <Box component="section" sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "minmax(0,1.2fr) minmax(0,1fr)" } }}>
         <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
@@ -122,7 +128,8 @@ export default async function PublisherProfilePage(props: { params: Promise<{ pu
             </Typography>
             <Box component="ul" sx={{ mt: 1.5, pl: 2, color: "var(--app-muted)", fontSize: 12 }}>
               <li>
-                <Box component="span" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>Tools:</Box> {summary.tool_count ?? listings.length}
+                <Box component="span" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>Tools:</Box>{" "}
+                {summary.tool_count ?? summary.listing_count ?? listings.length}
               </li>
               {summary.verified_tool_count != null ? (
                 <li>

@@ -4,25 +4,24 @@ import { useState, useMemo } from "react";
 import type { ProvenanceRecord } from "@/lib/registryClient";
 import { Box, ButtonBase, Chip, MenuItem, Select, TextField, Typography } from "@mui/material";
 
-/* ── action → color map ─────────────────────────────────────── */
 const ACTION_COLORS: Record<string, { dot: string; bg: string; text: string }> = {
-  tool_called:       { dot: "bg-[--app-accent]", bg: "bg-[--app-control-active-bg]", text: "text-[--app-muted]" },
-  tool_result:       { dot: "bg-[--app-accent]", bg: "bg-[--app-control-active-bg]", text: "text-[--app-muted]" },
-  resource_read:     { dot: "bg-sky-400",     bg: "bg-sky-500/10",     text: "text-sky-300" },
-  resource_listed:   { dot: "bg-sky-400",     bg: "bg-sky-500/10",     text: "text-sky-300" },
-  prompt_rendered:   { dot: "bg-violet-400",  bg: "bg-violet-500/10",  text: "text-violet-300" },
-  prompt_listed:     { dot: "bg-violet-400",  bg: "bg-violet-500/10",  text: "text-violet-300" },
-  policy_evaluated:  { dot: "bg-amber-400",   bg: "bg-amber-500/10",   text: "text-amber-300" },
-  contract_created:  { dot: "bg-teal-400",    bg: "bg-teal-500/10",    text: "text-teal-300" },
-  contract_revoked:  { dot: "bg-rose-400",    bg: "bg-rose-500/10",    text: "text-rose-300" },
-  access_denied:     { dot: "bg-rose-400",    bg: "bg-rose-500/10",    text: "text-rose-300" },
-  error:             { dot: "bg-red-400",     bg: "bg-red-500/10",     text: "text-red-300" },
-  model_invoked:     { dot: "bg-cyan-400",    bg: "bg-cyan-500/10",    text: "text-cyan-300" },
-  dataset_accessed:  { dot: "bg-indigo-400",  bg: "bg-indigo-500/10",  text: "text-indigo-300" },
-  outcome_recorded:  { dot: "bg-lime-400",    bg: "bg-lime-500/10",    text: "text-lime-300" },
-  chain_anchored:    { dot: "bg-yellow-400",  bg: "bg-yellow-500/10",  text: "text-yellow-300" },
-  ledger_verified:   { dot: "bg-green-400",   bg: "bg-green-500/10",   text: "text-green-300" },
-  custom:            { dot: "bg-zinc-400",    bg: "bg-zinc-500/10",    text: "text-zinc-300" },
+  tool_called: { dot: "var(--app-accent)", bg: "var(--app-control-active-bg)", text: "var(--app-fg)" },
+  tool_result: { dot: "var(--app-accent)", bg: "var(--app-control-active-bg)", text: "var(--app-fg)" },
+  resource_read: { dot: "#0284c7", bg: "rgba(14, 165, 233, 0.1)", text: "#0369a1" },
+  resource_listed: { dot: "#0284c7", bg: "rgba(14, 165, 233, 0.1)", text: "#0369a1" },
+  prompt_rendered: { dot: "#7c3aed", bg: "rgba(124, 58, 237, 0.1)", text: "#6d28d9" },
+  prompt_listed: { dot: "#7c3aed", bg: "rgba(124, 58, 237, 0.1)", text: "#6d28d9" },
+  policy_evaluated: { dot: "#d97706", bg: "rgba(245, 158, 11, 0.12)", text: "#92400e" },
+  contract_created: { dot: "#0d9488", bg: "rgba(13, 148, 136, 0.1)", text: "#0f766e" },
+  contract_revoked: { dot: "#e11d48", bg: "rgba(225, 29, 72, 0.1)", text: "#be123c" },
+  access_denied: { dot: "#e11d48", bg: "rgba(225, 29, 72, 0.1)", text: "#be123c" },
+  error: { dot: "#ef4444", bg: "rgba(239, 68, 68, 0.1)", text: "#b91c1c" },
+  model_invoked: { dot: "#0891b2", bg: "rgba(8, 145, 178, 0.1)", text: "#0e7490" },
+  dataset_accessed: { dot: "#4f46e5", bg: "rgba(79, 70, 229, 0.1)", text: "#4338ca" },
+  outcome_recorded: { dot: "#65a30d", bg: "rgba(101, 163, 13, 0.1)", text: "#4d7c0f" },
+  chain_anchored: { dot: "#ca8a04", bg: "rgba(202, 138, 4, 0.1)", text: "#a16207" },
+  ledger_verified: { dot: "#16a34a", bg: "rgba(22, 163, 74, 0.1)", text: "#15803d" },
+  custom: { dot: "var(--app-muted)", bg: "rgba(100, 116, 139, 0.1)", text: "var(--app-muted)" },
 };
 
 function actionColor(action: string) {
@@ -117,13 +116,13 @@ export function ProvenanceTimeline({ records, onSelectRecord, selectedRecordId }
             minWidth: 220,
             "& .MuiOutlinedInput-root": {
               borderRadius: 3,
-              bgcolor: "rgba(255,255,255,0.05)",
-              color: "rgb(228, 228, 231)",
-              "& fieldset": { borderColor: "rgba(255,255,255,0.10)" },
-              "&:hover fieldset": { borderColor: "rgba(6, 182, 212, 0.50)" },
-              "&.Mui-focused fieldset": { borderColor: "rgba(6, 182, 212, 0.50)" },
+              bgcolor: "var(--app-control-bg)",
+              color: "var(--app-fg)",
+              "& fieldset": { borderColor: "var(--app-control-border)" },
+              "&:hover fieldset": { borderColor: "var(--app-accent)" },
+              "&.Mui-focused fieldset": { borderColor: "var(--app-accent)" },
             },
-            "& input::placeholder": { color: "rgb(113, 113, 122)", opacity: 1 },
+            "& input::placeholder": { color: "var(--app-muted)", opacity: 1 },
           }}
         />
         <Select
@@ -133,11 +132,11 @@ export function ProvenanceTimeline({ records, onSelectRecord, selectedRecordId }
           displayEmpty
           sx={{
             borderRadius: 3,
-            bgcolor: "rgba(255,255,255,0.05)",
-            color: "rgb(212, 212, 216)",
-            "& fieldset": { borderColor: "rgba(255,255,255,0.10)" },
-            "&:hover fieldset": { borderColor: "rgba(6, 182, 212, 0.50)" },
-            "&.Mui-focused fieldset": { borderColor: "rgba(6, 182, 212, 0.50)" },
+            bgcolor: "var(--app-control-bg)",
+            color: "var(--app-fg)",
+            "& fieldset": { borderColor: "var(--app-control-border)" },
+            "&:hover fieldset": { borderColor: "var(--app-accent)" },
+            "&.Mui-focused fieldset": { borderColor: "var(--app-accent)" },
             minWidth: 160,
           }}
         >
@@ -155,11 +154,11 @@ export function ProvenanceTimeline({ records, onSelectRecord, selectedRecordId }
           displayEmpty
           sx={{
             borderRadius: 3,
-            bgcolor: "rgba(255,255,255,0.05)",
-            color: "rgb(212, 212, 216)",
-            "& fieldset": { borderColor: "rgba(255,255,255,0.10)" },
-            "&:hover fieldset": { borderColor: "rgba(6, 182, 212, 0.50)" },
-            "&.Mui-focused fieldset": { borderColor: "rgba(6, 182, 212, 0.50)" },
+            bgcolor: "var(--app-control-bg)",
+            color: "var(--app-fg)",
+            "& fieldset": { borderColor: "var(--app-control-border)" },
+            "&:hover fieldset": { borderColor: "var(--app-accent)" },
+            "&.Mui-focused fieldset": { borderColor: "var(--app-accent)" },
             minWidth: 160,
           }}
         >
@@ -170,26 +169,31 @@ export function ProvenanceTimeline({ records, onSelectRecord, selectedRecordId }
             </MenuItem>
           ))}
         </Select>
-        <Typography variant="caption" sx={{ ml: "auto", color: "rgb(113, 113, 122)" }}>
+        <Typography variant="caption" sx={{ ml: "auto", color: "var(--app-muted)" }}>
           {filtered.length} of {records.length} records
         </Typography>
       </Box>
 
       {/* ── Timeline ────────────────────────────────────── */}
       {filtered.length === 0 ? (
-        <Box sx={{ borderRadius: 3, border: "1px solid rgba(255,255,255,0.05)", bgcolor: "rgba(255,255,255,0.02)", p: 4, textAlign: "center" }}>
-          <Typography variant="body2" sx={{ color: "rgb(113, 113, 122)" }}>
-            No provenance records{records.length > 0 ? " match your filters" : " recorded yet"}
+        <Box sx={{ borderRadius: 3, border: "1px solid var(--app-border)", bgcolor: "var(--app-control-bg)", p: 4, textAlign: "center" }}>
+          <Typography sx={{ fontSize: 15, fontWeight: 700, color: "var(--app-fg)" }}>
+            {records.length > 0 ? "No matching provenance records" : "No provenance records yet"}
+          </Typography>
+          <Typography variant="body2" sx={{ mt: 0.75, color: "var(--app-muted)" }}>
+            {records.length > 0
+              ? "Try clearing filters or searching by a shorter id, actor, resource, or action."
+              : "Ledger events will appear here after approved tools, policies, contracts, or clients write auditable activity."}
           </Typography>
         </Box>
       ) : (
         <Box sx={{ position: "relative" }}>
           {Array.from(grouped.entries()).map(([date, recs]) => (
             <Box key={date} sx={{ mb: 3 }}>
-              <Typography variant="overline" sx={{ mb: 1, color: "rgba(103, 232, 249, 0.80)" }}>
+              <Typography variant="overline" sx={{ mb: 1, color: "var(--app-muted)" }}>
                 {date}
               </Typography>
-              <Box sx={{ position: "relative", ml: 1.5, borderLeft: "1px solid rgba(255,255,255,0.10)", pl: 3, display: "flex", flexDirection: "column", gap: 1 }}>
+              <Box sx={{ position: "relative", ml: 1.5, borderLeft: "1px solid var(--app-border)", pl: 3, display: "flex", flexDirection: "column", gap: 1 }}>
                 {recs.map((rec) => {
                   const c = actionColor(rec.action);
                   const isSelected = rec.record_id === selectedRecordId;
@@ -207,14 +211,24 @@ export function ProvenanceTimeline({ records, onSelectRecord, selectedRecordId }
                         px: 2,
                         py: 1.5,
                         textAlign: "left",
-                        bgcolor: isSelected ? "rgba(6, 182, 212, 0.15)" : "transparent",
-                        border: isSelected ? "1px solid rgba(6, 182, 212, 0.30)" : "1px solid transparent",
-                        "&:hover": { bgcolor: isSelected ? "rgba(6, 182, 212, 0.15)" : "rgba(255,255,255,0.04)" },
+                        bgcolor: isSelected ? "var(--app-control-active-bg)" : "transparent",
+                        border: isSelected ? "1px solid var(--app-accent)" : "1px solid transparent",
+                        "&:hover": { bgcolor: isSelected ? "var(--app-control-active-bg)" : "var(--app-hover-bg)" },
                       }}
                     >
                       {/* Dot on the line */}
-                      <span
-                        className={`absolute -left-[31px] top-3 h-2.5 w-2.5 rounded-full ring-2 ring-zinc-900 ${c.dot}`}
+                      <Box
+                        aria-hidden
+                        sx={{
+                          position: "absolute",
+                          left: -31,
+                          top: 12,
+                          width: 10,
+                          height: 10,
+                          borderRadius: "50%",
+                          bgcolor: c.dot,
+                          border: "2px solid var(--app-bg)",
+                        }}
                       />
 
                       {/* Time */}
@@ -223,7 +237,7 @@ export function ProvenanceTimeline({ records, onSelectRecord, selectedRecordId }
                         sx={{
                           mt: 0.25,
                           minWidth: 74,
-                          color: "rgb(113, 113, 122)",
+                          color: "var(--app-muted)",
                           fontFamily:
                             "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
                         }}
@@ -235,39 +249,38 @@ export function ProvenanceTimeline({ records, onSelectRecord, selectedRecordId }
                       <Chip
                         size="small"
                         label={rec.action}
-                        className={`${c.bg} ${c.text}`}
-                        sx={{ mt: 0.25, height: 22, borderRadius: 999, fontSize: 10, fontWeight: 700 }}
+                        sx={{ mt: 0.25, height: 24, bgcolor: c.bg, color: c.text, fontSize: 11, fontWeight: 700 }}
                       />
 
                       {/* Details */}
                       <Box sx={{ minWidth: 0, flex: 1 }}>
                         <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, minWidth: 0 }}>
-                          <Typography variant="body2" sx={{ minWidth: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "rgb(228, 228, 231)" }}>
+                          <Typography variant="body2" sx={{ minWidth: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--app-fg)" }}>
                             {rec.resource_id || "—"}
                           </Typography>
                           {rec.actor_id ? (
-                            <Typography variant="caption" sx={{ color: "rgb(113, 113, 122)" }}>
+                            <Typography variant="caption" sx={{ color: "var(--app-muted)" }}>
                               by {rec.actor_id}
                             </Typography>
                           ) : null}
                         </Box>
                         <Box sx={{ display: "flex", gap: 1.5, mt: 0.5, flexWrap: "wrap" }}>
-                          <Typography variant="caption" sx={{ color: "rgb(82, 82, 91)" }} title="Input hash">
+                          <Typography variant="caption" sx={{ color: "var(--app-muted)" }} title="Input hash">
                             in:{truncHash(rec.input_hash, 8)}
                           </Typography>
-                          <Typography variant="caption" sx={{ color: "rgb(82, 82, 91)" }} title="Output hash">
+                          <Typography variant="caption" sx={{ color: "var(--app-muted)" }} title="Output hash">
                             out:{truncHash(rec.output_hash, 8)}
                           </Typography>
                           <Typography
                             variant="caption"
                             sx={{
-                              color: "rgb(82, 82, 91)",
+                              color: "var(--app-muted)",
                               fontFamily:
                                 "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
                             }}
                             title="Chain link"
                           >
-                            ←{truncHash(rec.previous_hash, 8)}
+                            prev:{truncHash(rec.previous_hash, 8)}
                           </Typography>
                         </Box>
                       </Box>

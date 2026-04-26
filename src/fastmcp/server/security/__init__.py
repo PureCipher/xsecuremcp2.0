@@ -133,6 +133,8 @@ from fastmcp.server.security.gateway.models import (
 )
 from fastmcp.server.security.gateway.marketplace_bridge import MarketplaceDataBridge
 from fastmcp.server.security.gateway.tool_marketplace import (
+    AttestationKind,
+    HostingMode,
     InstallRecord,
     PublishStatus,
     ReviewRating,
@@ -141,6 +143,8 @@ from fastmcp.server.security.gateway.tool_marketplace import (
     ToolListing,
     ToolMarketplace,
     ToolReview,
+    UpstreamChannel,
+    UpstreamRef,
 )
 from fastmcp.server.security.policy.engine import (
     PolicyDecision,
@@ -225,6 +229,7 @@ __all__ = [
     "AlertConfig",
     "AlertSeverity",
     "AnomalyDetector",
+    "AttestationKind",
     "AttestationStatus",
     "AuditAPI",
     "AuditQuery",
@@ -290,6 +295,7 @@ __all__ = [
     "GatewayConfig",
     "HealthLevel",
     "HealthStatus",
+    "HostingMode",
     "InspectResult",
     "InstallRecord",
     "IntrospectionConfig",
@@ -378,6 +384,8 @@ __all__ = [
     "TrustRecord",
     "TrustRegistry",
     "TrustScore",
+    "UpstreamChannel",
+    "UpstreamRef",
     "ValidationFinding",
     "ValidationReport",
     "ValidationSeverity",

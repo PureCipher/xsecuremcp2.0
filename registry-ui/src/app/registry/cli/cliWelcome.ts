@@ -13,6 +13,7 @@ export function cliWelcomeLines(defaultMcpUrl: string, ansi: CliTerminalAnsi): s
     `${welcomeMuted}Try first:${R}  list          ${welcomeMuted}→ tools${R}`,
     `${welcomeMuted}          ${R}  list --prompts ${welcomeMuted}→ tools + prompts${R}`,
     `${welcomeMuted}          ${R}  call <tool>   ${welcomeMuted}→ invoke (same URL)${R}`,
+    `${welcomeMuted}          ${R}  admin status   ${welcomeMuted}→ admin-only registry summary${R}`,
     `${welcomeMuted}          ${R}  help          ${welcomeMuted}→ full reference${R}`,
     "",
     `${welcomeMuted}Keys:${R} ↑/↓ history · Ctrl+C clear line · ${welcomeMuted}clear${R} wipes screen`,

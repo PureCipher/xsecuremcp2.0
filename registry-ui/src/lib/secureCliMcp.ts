@@ -1,7 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
-import { assertMcpUrlAllowed } from "@/lib/secureCliOrigin";
+import { assertMcpUrlAllowed, registryBackendBase } from "@/lib/secureCliOrigin";
 import { shellSplit } from "@/lib/shellSplit";
 
 export type CliExecResult = { ok: true; output: string } | { ok: false; error: string };
@@ -29,6 +29,13 @@ function helpText(defaultMcp: string): string {
     "  • If you skip <mcp-url>, this UI uses the default below.",
     "  • If the first arg after `call` is http(s), it is treated as the MCP URL.",
     "",
+    "── Admin only (requires admin session) ──",
+    "  admin status                 → session + registry health summary",
+    "  admin health                 → registry health JSON",
+    "  admin queue                  → moderation queue counts",
+    "  admin policy                 → policy management snapshot",
+    "  admin activity               → recent account activity for the admin",
+    "",
     `Default MCP URL: ${defaultMcp}`,
     "",
     "── Help & aliases ──",
@@ -43,6 +50,7 @@ function helpText(defaultMcp: string): string {
     "",
     "── Examples ──",
     "  list --json",
+    "  admin status",
     `  securemcp list ${defaultMcp} --prompts`,
     "  call registry_status",
     "  call my_prompt --prompt topic=SecureMCP",
@@ -50,11 +58,134 @@ function helpText(defaultMcp: string): string {
     "── Security & session ──",
     "  • Only http(s) on this registry’s origin (SSRF-safe).",
     "  • Your login cookie is forwarded to MCP when the host matches.",
+    "  • Admin commands are served by the registry REST API and require role=admin.",
     "",
     "── Not available here ──",
     "  stdio (`server.py`), `run`, `install`, OAuth browser flows → use local `securemcp` CLI.",
     "",
   ].join("\n");
+}
+
+function backendHeaders(cookieHeader: string | null): Headers {
+  const headers = new Headers({ Accept: "application/json" });
+  if (cookieHeader) headers.set("cookie", cookieHeader);
+  return headers;
+}
+
+async function fetchRegistryJson(path: string, cookieHeader: string | null): Promise<unknown> {
+  const response = await fetch(`${registryBackendBase()}${path}`, {
+    headers: backendHeaders(cookieHeader),
+    cache: "no-store",
+  });
+  const payload = (await response.json().catch(() => null)) as unknown;
+  if (!response.ok) {
+    const error =
+      payload && typeof payload === "object" && "error" in payload
+        ? String((payload as { error?: unknown }).error)
+        : `Registry request failed with ${response.status}`;
+    throw new Error(error);
+  }
+  return payload;
+}
+
+async function requireAdminSession(cookieHeader: string | null): Promise<Record<string, unknown>> {
+  const payload = await fetchRegistryJson("/registry/session", cookieHeader);
+  if (!payload || typeof payload !== "object") {
+    throw new Error("Unable to read registry session.");
+  }
+  const session = (payload as { session?: unknown }).session;
+  if (!session || typeof session !== "object") {
+    throw new Error("Admin command requires sign-in.");
+  }
+  const role = (session as { role?: unknown }).role;
+  if (role !== "admin") {
+    throw new Error("Admin command requires role=admin.");
+  }
+  return session as Record<string, unknown>;
+}
+
+function formatJson(payload: unknown): string {
+  return `${JSON.stringify(payload, null, 2)}\n`;
+}
+
+function formatStatus(session: Record<string, unknown>, health: unknown): string {
+  const h = health && typeof health === "object" ? (health as Record<string, unknown>) : {};
+  return [
+    "Admin session",
+    `  user: ${String(session.username ?? "unknown")}`,
+    `  role: ${String(session.role ?? "unknown")}`,
+    `  display: ${String(session.display_name ?? session.username ?? "unknown")}`,
+    "",
+    "Registry health",
+    `  status: ${String(h.status ?? "unknown")}`,
+    `  auth: ${String(h.auth_enabled ?? "unknown")}`,
+    `  bootstrap_required: ${String(h.bootstrap_required ?? "unknown")}`,
+    `  verified_tools: ${String(h.verified_tools ?? "unknown")}`,
+    `  pending_review: ${String(h.pending_review ?? "unknown")}`,
+    `  minimum_certification: ${String(h.minimum_certification ?? "unknown")}`,
+    "",
+  ].join("\n");
+}
+
+function formatQueue(payload: unknown): string {
+  const queue = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+  const counts = queue.counts && typeof queue.counts === "object" ? (queue.counts as Record<string, unknown>) : {};
+  return [
+    "Moderation queue",
+    `  pending_review: ${String(counts.pending_review ?? 0)}`,
+    `  approved: ${String(counts.approved ?? 0)}`,
+    `  rejected: ${String(counts.rejected ?? 0)}`,
+    `  suspended: ${String(counts.suspended ?? 0)}`,
+    "",
+  ].join("\n");
+}
+
+function formatPolicy(payload: unknown): string {
+  const policy = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+  const status = policy.status && typeof policy.status === "object" ? (policy.status as Record<string, unknown>) : {};
+  const versions = Array.isArray(policy.versions) ? policy.versions : [];
+  const proposals = Array.isArray(policy.proposals) ? policy.proposals : [];
+  return [
+    "Policy snapshot",
+    `  enabled: ${String(status.enabled ?? policy.enabled ?? "unknown")}`,
+    `  mode: ${String(status.mode ?? policy.mode ?? "unknown")}`,
+    `  versions: ${String(versions.length)}`,
+    `  proposals: ${String(proposals.length)}`,
+    "",
+  ].join("\n");
+}
+
+async function runAdmin(subcommand: string | undefined, cookieHeader: string | null): Promise<string> {
+  if (!subcommand || subcommand === "help") {
+    return [
+      "Admin commands",
+      "  admin status     session + registry health summary",
+      "  admin health     registry health JSON",
+      "  admin queue      moderation queue counts",
+      "  admin policy     policy management snapshot",
+      "  admin activity   recent account activity for the admin",
+      "",
+    ].join("\n");
+  }
+
+  const session = await requireAdminSession(cookieHeader);
+  if (subcommand === "status") {
+    const health = await fetchRegistryJson("/registry/health", cookieHeader);
+    return formatStatus(session, health);
+  }
+  if (subcommand === "health") {
+    return formatJson(await fetchRegistryJson("/registry/health", cookieHeader));
+  }
+  if (subcommand === "queue") {
+    return formatQueue(await fetchRegistryJson("/registry/review/submissions", cookieHeader));
+  }
+  if (subcommand === "policy") {
+    return formatPolicy(await fetchRegistryJson("/registry/policy", cookieHeader));
+  }
+  if (subcommand === "activity") {
+    return formatJson(await fetchRegistryJson("/registry/me/activity?limit=12", cookieHeader));
+  }
+  throw new Error(`Unsupported admin command "${subcommand}". Try \`admin help\`.`);
 }
 
 /** Parse tokens after `list`: either [url?, ...flags] or [...flags] only. */
@@ -363,6 +494,16 @@ export async function executeSecureCliLine(
     tokens[0] === "list" || tokens[0] === "call" ? (["securemcp", ...tokens] as string[]) : tokens;
 
   const cmd = effective[0];
+  if (cmd === "admin") {
+    try {
+      const out = await runAdmin(effective[1]?.toLowerCase(), options.cookieHeader);
+      return { ok: true, output: out };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return { ok: false, error: msg };
+    }
+  }
+
   if (cmd !== "securemcp" && cmd !== "fastmcp") {
     return {
       ok: false,
@@ -370,6 +511,7 @@ export async function executeSecureCliLine(
         "Unknown input. This terminal understands:",
         "  list [--prompts] [--resources] [--json]     (shortcut — default MCP URL)",
         "  call <tool|uri> [--prompt] [k=v …]          (shortcut)",
+        "  admin status | health | queue | policy      (admin-only registry commands)",
         "  securemcp list | call …                     (same as above, optional explicit URL)",
         "  help | commands                              full reference",
       ].join("\n"),
@@ -392,6 +534,7 @@ export async function executeSecureCliLine(
         "Missing subcommand. Quick options:",
         "  list                    → tools on the default registry MCP endpoint",
         "  call <tool_name>        → invoke a tool",
+        "  admin status            → admin-only registry status",
         "  securemcp help         → full command reference",
       ].join("\n"),
     };

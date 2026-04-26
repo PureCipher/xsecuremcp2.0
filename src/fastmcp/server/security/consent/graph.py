@@ -140,6 +140,14 @@ class ConsentGraph:
         # Load audit log
         self._audit_log = list(data.get("audit_log", []))
 
+    def attach_event_bus(self, event_bus: SecurityEventBus | None) -> None:
+        """Wire an event bus into this consent graph after construction.
+
+        Public alternative to mutating the private ``_event_bus``
+        attribute from outside the class.
+        """
+        self._event_bus = event_bus
+
     # ── Node management ──────────────────────────────────────────────
 
     def add_node(self, node: ConsentNode) -> None:

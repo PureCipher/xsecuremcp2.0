@@ -169,7 +169,7 @@ export const CLI_TERMINAL_THEMES: CliTerminalTheme[] = [
   },
 ];
 
-export const DEFAULT_CLI_THEME_ID = CLI_TERMINAL_THEMES[0]!.id;
+export const DEFAULT_CLI_THEME_ID = "homebrew";
 
 export function getCliTerminalTheme(id: string | undefined): CliTerminalTheme {
   const found = CLI_TERMINAL_THEMES.find((t) => t.id === id);

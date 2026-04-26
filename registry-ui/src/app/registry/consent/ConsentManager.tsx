@@ -8,6 +8,8 @@ import {
   Card,
   CardContent,
   Checkbox,
+  Chip,
+  Divider,
   FormControlLabel,
   TextField,
   Typography,
@@ -29,6 +31,15 @@ import {
 import type { Column } from "@/components/security";
 
 type TabKey = "evaluate" | "access-rights" | "jurisdictions" | "graph";
+
+const sectionTitleSx = {
+  mb: 1.5,
+  fontSize: 12,
+  fontWeight: 700,
+  letterSpacing: "0.04em",
+  textTransform: "uppercase",
+  color: "var(--app-muted)",
+};
 
 export function ConsentManager({
   initialJurisdictions,
@@ -151,62 +162,94 @@ export function ConsentManager({
   ];
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
-      <TabBar tabs={tabs} activeTab={activeTab} onTabChange={(key) => setActiveTab(key as TabKey)} />
+    <Card variant="outlined" sx={{ overflow: "hidden" }}>
+      <CardContent sx={{ p: 0 }}>
+        <Box
+          sx={{
+            p: { xs: 2.5, md: 3 },
+            display: "flex",
+            flexDirection: { xs: "column", md: "row" },
+            alignItems: { xs: "flex-start", md: "center" },
+            justifyContent: "space-between",
+            gap: 2,
+          }}
+        >
+          <Box sx={{ display: "grid", gap: 0.75, maxWidth: 720 }}>
+            <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
+              Consent workspace
+            </Typography>
+            <Typography variant="h6" sx={{ color: "var(--app-fg)" }}>
+              Evaluate consent across jurisdictions
+            </Typography>
+            <Typography variant="body2" sx={{ color: "var(--app-muted)" }}>
+              Test access decisions, inspect rights, and review jurisdiction policy data in one graph workflow.
+            </Typography>
+          </Box>
 
-      {error ? <Alert severity="error">{error}</Alert> : null}
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+            <Chip label={`${jurisdictionsList.length} jurisdictions`} sx={{ bgcolor: "var(--app-control-bg)", color: "var(--app-muted)", fontWeight: 700 }} />
+            <Chip label={`${institutionsList.length} institutions`} sx={{ bgcolor: "var(--app-control-bg)", color: "var(--app-muted)", fontWeight: 700 }} />
+          </Box>
+        </Box>
 
-      {/* Evaluate Tab */}
-      {activeTab === "evaluate" && (
-        <EvaluateTab
-          sourceId={evaluateSourceId}
-          setSourceId={setEvaluateSourceId}
-          targetId={evaluateTargetId}
-          setTargetId={setEvaluateTargetId}
-          scope={evaluateScope}
-          setScope={setEvaluateScope}
-          sourceJurisdiction={evaluateSourceJurisdiction}
-          setSourceJurisdiction={setEvaluateSourceJurisdiction}
-          targetJurisdiction={evaluateTargetJurisdiction}
-          setTargetJurisdiction={setEvaluateTargetJurisdiction}
-          jurisdictions={evaluateJurisdictions}
-          setJurisdictions={setEvaluateJurisdictions}
-          requireAll={evaluateRequireAll}
-          setRequireAll={setEvaluateRequireAll}
-          onSubmit={handleEvaluate}
-          loading={loading}
-          result={evaluationResult}
-        />
-      )}
+        <Divider />
+        <Box sx={{ px: { xs: 1.5, md: 2 }, bgcolor: "var(--app-control-bg)" }}>
+          <TabBar tabs={tabs} activeTab={activeTab} onTabChange={(key) => setActiveTab(key as TabKey)} />
+        </Box>
+        <Divider />
 
-      {/* Access Rights Tab */}
-      {activeTab === "access-rights" && (
-        <AccessRightsTab
-          agentId={accessRightsAgentId}
-          setAgentId={setAccessRightsAgentId}
-          resourceId={accessRightsResourceId}
-          setResourceId={setAccessRightsResourceId}
-          onSubmit={handleAccessRightsLookup}
-          loading={loading}
-          result={accessRightsResult}
-        />
-      )}
+        <Box sx={{ p: { xs: 2, md: 2.5 } }}>
+          {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
 
-      {/* Jurisdictions Tab */}
-      {activeTab === "jurisdictions" && (
-        <JurisdictionsTab
-          jurisdictions={jurisdictionsList}
-          institutions={institutionsList}
-          expandedJurisdiction={expandedJurisdiction}
-          setExpandedJurisdiction={setExpandedJurisdiction}
-        />
-      )}
+          {activeTab === "evaluate" && (
+            <EvaluateTab
+              sourceId={evaluateSourceId}
+              setSourceId={setEvaluateSourceId}
+              targetId={evaluateTargetId}
+              setTargetId={setEvaluateTargetId}
+              scope={evaluateScope}
+              setScope={setEvaluateScope}
+              sourceJurisdiction={evaluateSourceJurisdiction}
+              setSourceJurisdiction={setEvaluateSourceJurisdiction}
+              targetJurisdiction={evaluateTargetJurisdiction}
+              setTargetJurisdiction={setEvaluateTargetJurisdiction}
+              jurisdictions={evaluateJurisdictions}
+              setJurisdictions={setEvaluateJurisdictions}
+              requireAll={evaluateRequireAll}
+              setRequireAll={setEvaluateRequireAll}
+              onSubmit={handleEvaluate}
+              loading={loading}
+              result={evaluationResult}
+            />
+          )}
 
-      {/* Graph Explorer Tab */}
-      {activeTab === "graph" && (
-        <GraphExplorerTab jurisdictionCount={jurisdictionsList.length} institutionCount={institutionsList.length} />
-      )}
-    </Box>
+          {activeTab === "access-rights" && (
+            <AccessRightsTab
+              agentId={accessRightsAgentId}
+              setAgentId={setAccessRightsAgentId}
+              resourceId={accessRightsResourceId}
+              setResourceId={setAccessRightsResourceId}
+              onSubmit={handleAccessRightsLookup}
+              loading={loading}
+              result={accessRightsResult}
+            />
+          )}
+
+          {activeTab === "jurisdictions" && (
+            <JurisdictionsTab
+              jurisdictions={jurisdictionsList}
+              institutions={institutionsList}
+              expandedJurisdiction={expandedJurisdiction}
+              setExpandedJurisdiction={setExpandedJurisdiction}
+            />
+          )}
+
+          {activeTab === "graph" && (
+            <GraphExplorerTab jurisdictionCount={jurisdictionsList.length} institutionCount={institutionsList.length} />
+          )}
+        </Box>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -254,9 +297,9 @@ function EvaluateTab({
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
       {/* Form */}
-      <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+      <Card variant="outlined">
         <CardContent sx={{ p: 3 }}>
-          <Typography sx={{ mb: 2, fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+          <Typography sx={{ ...sectionTitleSx, mb: 2 }}>
             Query parameters
           </Typography>
 
@@ -316,7 +359,7 @@ function EvaluateTab({
             onClick={onSubmit}
             disabled={loading}
             variant="contained"
-            sx={{ mt: 3, borderRadius: 999, bgcolor: "var(--app-accent)", color: "var(--app-accent-contrast)", "&:hover": { bgcolor: "var(--app-accent)" } }}
+            sx={{ mt: 3, bgcolor: "var(--app-accent)", color: "var(--app-accent-contrast)", "&:hover": { bgcolor: "var(--app-accent)" } }}
           >
             {loading ? "Evaluating..." : "Evaluate Consent"}
           </Button>
@@ -336,9 +379,9 @@ function EvaluationResultDisplay({ result }: { result: ConsentEvaluationResponse
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
       {/* Decision Badge */}
-      <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+      <Card variant="outlined">
         <CardContent sx={{ p: 3 }}>
-          <Typography sx={{ mb: 2, fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+          <Typography sx={{ ...sectionTitleSx, mb: 2 }}>
             Decision
           </Typography>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
@@ -364,9 +407,9 @@ function EvaluationResultDisplay({ result }: { result: ConsentEvaluationResponse
 
       {/* Jurisdiction Results */}
       {Object.keys(jurisdictionResults).length > 0 && (
-        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+        <Card variant="outlined">
           <CardContent sx={{ p: 2.5 }}>
-            <Typography sx={{ mb: 2, fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+            <Typography sx={{ ...sectionTitleSx, mb: 2 }}>
               Jurisdiction Results
             </Typography>
             <Box sx={{ display: "grid", gap: 1.5 }}>
@@ -374,12 +417,7 @@ function EvaluationResultDisplay({ result }: { result: ConsentEvaluationResponse
               <Card
                 key={code}
                 variant="outlined"
-                sx={{
-                  borderRadius: 2,
-                  borderColor: "var(--app-border)",
-                  bgcolor: "var(--app-control-bg)",
-                  boxShadow: "none",
-                }}
+                sx={{ bgcolor: "var(--app-control-bg)" }}
               >
                 <CardContent sx={{ p: 2 }}>
                   <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2 }}>
@@ -441,9 +479,9 @@ function EvaluationResultDisplay({ result }: { result: ConsentEvaluationResponse
 
       {/* Peer Decisions */}
       {Object.keys(peerDecisions).length > 0 && (
-        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+        <Card variant="outlined">
           <CardContent sx={{ p: 2.5 }}>
-            <Typography sx={{ mb: 2, fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+            <Typography sx={{ ...sectionTitleSx, mb: 2 }}>
               Peer Decisions
             </Typography>
             <Box sx={{ display: "grid", gap: 1 }}>
@@ -451,12 +489,7 @@ function EvaluationResultDisplay({ result }: { result: ConsentEvaluationResponse
               <Card
                 key={peer}
                 variant="outlined"
-                sx={{
-                  borderRadius: 2,
-                  borderColor: "var(--app-border)",
-                  bgcolor: "var(--app-control-bg)",
-                  boxShadow: "none",
-                }}
+                sx={{ bgcolor: "var(--app-control-bg)" }}
               >
                 <CardContent sx={{ p: 1.75, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2 }}>
                   <Typography sx={{ fontSize: 13, fontWeight: 700, color: "var(--app-fg)" }}>
@@ -512,9 +545,9 @@ function AccessRightsTab({
 }) {
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
-      <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+      <Card variant="outlined">
         <CardContent sx={{ p: 3 }}>
-          <Typography sx={{ mb: 2, fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+          <Typography sx={{ ...sectionTitleSx, mb: 2 }}>
             Lookup
           </Typography>
 
@@ -539,7 +572,7 @@ function AccessRightsTab({
             onClick={onSubmit}
             disabled={loading}
             variant="contained"
-            sx={{ mt: 3, borderRadius: 999, bgcolor: "var(--app-accent)", color: "var(--app-accent-contrast)", "&:hover": { bgcolor: "var(--app-accent)" } }}
+            sx={{ mt: 3, bgcolor: "var(--app-accent)", color: "var(--app-accent-contrast)", "&:hover": { bgcolor: "var(--app-accent)" } }}
           >
             {loading ? "Loading..." : "Lookup Access Rights"}
           </Button>
@@ -570,9 +603,9 @@ function AccessRightsDisplay({ rights }: { rights: ConsentAccessRights }) {
 
       {/* Allowed Scopes */}
       {rights.allowed_scopes && rights.allowed_scopes.length > 0 && (
-        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+        <Card variant="outlined">
           <CardContent sx={{ p: 2.5 }}>
-            <Typography sx={{ mb: 1.5, fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+            <Typography sx={sectionTitleSx}>
               Allowed Scopes
             </Typography>
             <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
@@ -586,9 +619,9 @@ function AccessRightsDisplay({ rights }: { rights: ConsentAccessRights }) {
 
       {/* Jurisdiction Constraints */}
       {Object.keys(jurisdictionConstraints).length > 0 && (
-        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+        <Card variant="outlined">
           <CardContent sx={{ p: 2.5 }}>
-            <Typography sx={{ mb: 1.5, fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+            <Typography sx={sectionTitleSx}>
               Jurisdiction Constraints
             </Typography>
             <Box sx={{ display: "grid", gap: 1 }}>
@@ -596,12 +629,7 @@ function AccessRightsDisplay({ rights }: { rights: ConsentAccessRights }) {
               <Card
                 key={jurisdiction}
                 variant="outlined"
-                sx={{
-                  borderRadius: 2,
-                  borderColor: "var(--app-border)",
-                  bgcolor: "var(--app-control-bg)",
-                  boxShadow: "none",
-                }}
+                sx={{ bgcolor: "var(--app-control-bg)" }}
               >
                 <CardContent sx={{ py: 1.25, px: 1.5 }}>
                   <Typography sx={{ fontSize: 12, fontWeight: 700, color: "var(--app-fg)" }}>
@@ -620,9 +648,9 @@ function AccessRightsDisplay({ rights }: { rights: ConsentAccessRights }) {
 
       {/* Conditions */}
       {rights.conditions && rights.conditions.length > 0 && (
-        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+        <Card variant="outlined">
           <CardContent sx={{ p: 2.5 }}>
-            <Typography sx={{ mb: 1.5, fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+            <Typography sx={sectionTitleSx}>
               Conditions
             </Typography>
             <Box component="ul" sx={{ m: 0, pl: 2, display: "grid", gap: 0.5 }}>
@@ -638,9 +666,9 @@ function AccessRightsDisplay({ rights }: { rights: ConsentAccessRights }) {
 
       {/* Grant Sources */}
       {rights.grant_sources && rights.grant_sources.length > 0 && (
-        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+        <Card variant="outlined">
           <CardContent sx={{ p: 2.5 }}>
-            <Typography sx={{ mb: 1.5, fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+            <Typography sx={sectionTitleSx}>
               Grant Sources
             </Typography>
             <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
@@ -723,7 +751,7 @@ function JurisdictionsTab({
     <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
       {/* Jurisdictions Table */}
       <Box>
-        <Typography sx={{ mb: 1.5, fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+        <Typography sx={sectionTitleSx}>
           Jurisdictions
         </Typography>
         <DataTable
@@ -740,9 +768,9 @@ function JurisdictionsTab({
           const jurisdiction = jurisdictions.find((j) => j.id === expandedJurisdiction);
           if (!jurisdiction) return null;
           return (
-            <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+            <Card variant="outlined">
               <CardContent sx={{ p: 2.5 }}>
-                <Typography sx={{ mb: 1.5, fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                <Typography sx={sectionTitleSx}>
                   {jurisdiction.jurisdiction_code} Details
                 </Typography>
                 <Box component="dl" sx={{ display: "grid", gap: 1 }}>
@@ -783,7 +811,7 @@ function JurisdictionsTab({
 
       {/* Institutions Table */}
       <Box>
-        <Typography sx={{ mb: 1.5, fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+        <Typography sx={sectionTitleSx}>
           Institutions
         </Typography>
         <DataTable
@@ -816,7 +844,7 @@ function GraphExplorerTab({
       </Box>
 
       {/* Placeholder */}
-      <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
+      <Card variant="outlined">
         <CardContent sx={{ p: 4 }}>
           <Typography sx={{ textAlign: "center", fontSize: 14, fontWeight: 700, color: "var(--app-muted)" }}>
             Consent graph visualization

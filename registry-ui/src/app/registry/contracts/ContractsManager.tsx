@@ -349,6 +349,7 @@ export function ContractsManager({
     { key: "negotiate" as const, label: "Negotiate" },
     { key: "exchange-log" as const, label: "Exchange Log" },
   ];
+  const signedCount = contracts.filter((contract) => contract.status === "signed").length;
 
   // Render tabs
   function renderTabContent() {
@@ -373,22 +374,14 @@ export function ContractsManager({
                   pageSize={5}
                 />
                 {expandedContractId && (
-                  <Card
-                    variant="outlined"
-                    sx={{
-                      borderRadius: 4,
-                      borderColor: "var(--app-border)",
-                      bgcolor: "var(--app-surface)",
-                      boxShadow: "none",
-                    }}
-                  >
+                  <Card variant="outlined">
                     {contracts.map((contract) => {
                       if (contract.contract_id !== expandedContractId)
                         return null;
                       return (
                         <CardContent key={contract.contract_id} sx={{ p: 2.5, display: "grid", gap: 2 }}>
                           <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2 }}>
-                            <Typography sx={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                            <Typography sx={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.02em", color: "var(--app-fg)" }}>
                               Contract Details
                             </Typography>
                             <Button size="small" variant="text" onClick={() => setExpandedContractId(null)} sx={{ color: "var(--app-muted)" }}>
@@ -422,7 +415,7 @@ export function ContractsManager({
                           <Divider sx={{ borderColor: "var(--app-border)" }} />
 
                           <Box>
-                            <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                            <Typography sx={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--app-muted)" }}>
                               Terms ({contract.terms?.length ?? 0})
                             </Typography>
                             {contract.terms && contract.terms.length > 0 ? (
@@ -431,7 +424,7 @@ export function ContractsManager({
                                   <Card
                                     key={idx}
                                     variant="outlined"
-                                    sx={{ borderRadius: 2, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}
+                                    sx={{ bgcolor: "var(--app-control-bg)" }}
                                   >
                                     <CardContent sx={{ p: 1.5 }}>
                                       <Typography sx={{ fontSize: 12, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", color: "var(--app-muted)" }}>
@@ -441,7 +434,7 @@ export function ContractsManager({
                                         {term.description}
                                       </Typography>
                                       {term.required ? (
-                                        <Chip size="small" label="Required" sx={{ mt: 1, borderRadius: 999, bgcolor: "rgba(245, 158, 11, 0.18)", color: "rgb(253, 230, 138)", fontWeight: 800, fontSize: 10 }} />
+                                        <Chip size="small" label="Required" sx={{ mt: 1, bgcolor: "rgba(245, 158, 11, 0.12)", color: "#92400e", fontWeight: 700, fontSize: 11 }} />
                                       ) : null}
                                     </CardContent>
                                   </Card>
@@ -456,7 +449,7 @@ export function ContractsManager({
                             <>
                               <Divider sx={{ borderColor: "var(--app-border)" }} />
                               <Box>
-                                <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                                <Typography sx={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--app-muted)" }}>
                                   Signatures
                                 </Typography>
                                 <Box sx={{ mt: 1 }}>
@@ -478,7 +471,7 @@ export function ContractsManager({
                                   setShowSignModal(true);
                                 }}
                                 disabled={loading}
-                                sx={{ borderRadius: 999, bgcolor: "var(--app-accent)", color: "var(--app-accent-contrast)", "&:hover": { bgcolor: "var(--app-accent)" } }}
+                                sx={{ bgcolor: "var(--app-accent)", color: "var(--app-accent-contrast)", "&:hover": { bgcolor: "var(--app-accent)" } }}
                               >
                                 Sign
                               </Button>
@@ -492,7 +485,7 @@ export function ContractsManager({
                                   setShowRevokeModal(true);
                                 }}
                                 disabled={loading}
-                                sx={{ borderRadius: 999, borderColor: "rgba(239, 68, 68, 0.6)", color: "rgb(254, 202, 202)", "&:hover": { bgcolor: "rgba(127, 29, 29, 0.35)", borderColor: "rgba(239, 68, 68, 0.8)" } }}
+                                sx={{ borderColor: "rgba(239, 68, 68, 0.45)", color: "#b91c1c", "&:hover": { bgcolor: "rgba(239, 68, 68, 0.08)", borderColor: "#ef4444" } }}
                               >
                                 Revoke
                               </Button>
@@ -510,18 +503,10 @@ export function ContractsManager({
 
       case "negotiate":
         return (
-          <Card
-            variant="outlined"
-            sx={{
-              borderRadius: 4,
-              borderColor: "var(--app-border)",
-              bgcolor: "var(--app-surface)",
-              boxShadow: "none",
-            }}
-          >
+          <Card variant="outlined">
             <CardContent sx={{ p: 3, display: "grid", gap: 2.5 }}>
               <Box>
-                <Typography sx={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                <Typography sx={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--app-muted)" }}>
                   Agent ID
                 </Typography>
                 <Box sx={{ mt: 1.25 }}>
@@ -535,14 +520,14 @@ export function ContractsManager({
                     sx={{
                       width: "100%",
                       borderRadius: 2,
-                      bgcolor: "var(--app-chrome-bg)",
+                      bgcolor: "var(--app-control-bg)",
                       px: 1.5,
                       py: 1.25,
                       fontSize: 14,
                       color: "var(--app-fg)",
                       border: "1px solid var(--app-border)",
                       outline: "none",
-                      "&:focus": { borderColor: "var(--app-accent)", boxShadow: "0 0 0 2px rgba(99, 102, 241, 0.35)" },
+                      "&:focus": { borderColor: "var(--app-accent)", boxShadow: "0 0 0 3px var(--app-control-active-bg)" },
                       "&:disabled": { opacity: 0.6 },
                     }}
                   />
@@ -551,7 +536,7 @@ export function ContractsManager({
 
               <Box>
                 <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2 }}>
-                  <Typography sx={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                  <Typography sx={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--app-muted)" }}>
                     Terms
                   </Typography>
                   <Button size="small" variant="text" onClick={addTermRow} disabled={loading} sx={{ color: "var(--app-muted)" }}>
@@ -561,16 +546,7 @@ export function ContractsManager({
 
                 <Box sx={{ mt: 1.5, display: "grid", gap: 1.5 }}>
                   {negotiationTerms.map((term, idx) => (
-                    <Card
-                      key={idx}
-                      variant="outlined"
-                      sx={{
-                        borderRadius: 3,
-                        borderColor: "var(--app-border)",
-                        bgcolor: "var(--app-control-bg)",
-                        boxShadow: "none",
-                      }}
-                    >
+                    <Card key={idx} variant="outlined" sx={{ bgcolor: "var(--app-control-bg)" }}>
                       <CardContent sx={{ p: 2, display: "grid", gap: 1.5 }}>
                         <Box sx={{ display: "flex", gap: 1.5, alignItems: "flex-end" }}>
                           <Box sx={{ flex: 1 }}>
@@ -587,14 +563,14 @@ export function ContractsManager({
                                 mt: 1,
                                 width: "100%",
                                 borderRadius: 2,
-                                bgcolor: "var(--app-chrome-bg)",
+                                bgcolor: "var(--app-control-bg)",
                                 px: 1.25,
                                 py: 1,
                                 fontSize: 13,
                                 color: "var(--app-fg)",
                                 border: "1px solid var(--app-border)",
                                 outline: "none",
-                                "&:focus": { borderColor: "var(--app-accent)", boxShadow: "0 0 0 2px rgba(99, 102, 241, 0.35)" },
+                                "&:focus": { borderColor: "var(--app-accent)", boxShadow: "0 0 0 3px var(--app-control-active-bg)" },
                                 "&:disabled": { opacity: 0.6 },
                               }}
                             />
@@ -609,8 +585,8 @@ export function ContractsManager({
                               sx={{
                                 borderRadius: 2,
                                 borderColor: "rgba(239, 68, 68, 0.4)",
-                                color: "rgba(252, 165, 165, 0.9)",
-                                "&:hover": { bgcolor: "rgba(127, 29, 29, 0.20)", borderColor: "rgba(239, 68, 68, 0.6)" },
+                                color: "#b91c1c",
+                                "&:hover": { bgcolor: "rgba(239, 68, 68, 0.08)", borderColor: "#ef4444" },
                               }}
                             >
                               Remove
@@ -632,14 +608,14 @@ export function ContractsManager({
                               mt: 1,
                               width: "100%",
                               borderRadius: 2,
-                              bgcolor: "var(--app-chrome-bg)",
+                              bgcolor: "var(--app-control-bg)",
                               px: 1.25,
                               py: 1,
                               fontSize: 13,
                               color: "var(--app-fg)",
                               border: "1px solid var(--app-border)",
                               outline: "none",
-                              "&:focus": { borderColor: "var(--app-accent)", boxShadow: "0 0 0 2px rgba(99, 102, 241, 0.35)" },
+                              "&:focus": { borderColor: "var(--app-accent)", boxShadow: "0 0 0 3px var(--app-control-active-bg)" },
                               "&:disabled": { opacity: 0.6 },
                             }}
                           />
@@ -681,7 +657,7 @@ export function ContractsManager({
                   }}
                 >
                   <CardContent sx={{ py: 1.25, px: 1.5 }}>
-                    <Typography sx={{ fontSize: 13, color: "rgb(252, 165, 165)" }}>
+                    <Typography sx={{ fontSize: 13, color: "#b91c1c" }}>
                       {error}
                     </Typography>
                   </CardContent>
@@ -693,7 +669,6 @@ export function ContractsManager({
                 disabled={loading || !negotiationAgentId.trim()}
                 variant="contained"
                 sx={{
-                  borderRadius: 999,
                   bgcolor: "var(--app-accent)",
                   color: "var(--app-accent-contrast)",
                   py: 1.25,
@@ -790,7 +765,7 @@ export function ContractsManager({
   }
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 2.5 }}>
       {error && activeTab !== "negotiate" ? (
         <Card
           variant="outlined"
@@ -811,9 +786,82 @@ export function ContractsManager({
         </Card>
       ) : null}
 
-      <TabBar tabs={tabs} activeTab={activeTab} onTabChange={(key) => setActiveTab(key as ActiveTab)} />
+      <Card variant="outlined" sx={{ overflow: "hidden" }}>
+        <CardContent sx={{ p: 0 }}>
+          <Box
+            sx={{
+              p: { xs: 2.5, md: 3 },
+              display: "flex",
+              flexDirection: { xs: "column", md: "row" },
+              alignItems: { xs: "flex-start", md: "center" },
+              justifyContent: "space-between",
+              gap: 2,
+            }}
+          >
+            <Box sx={{ display: "grid", gap: 0.75, maxWidth: 720 }}>
+              <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
+                Contract workspace
+              </Typography>
+              <Typography variant="h6" sx={{ color: "var(--app-fg)" }}>
+                Negotiate and verify agent agreements
+              </Typography>
+              <Typography variant="body2" sx={{ color: "var(--app-muted)" }}>
+                Manage active contracts, negotiate terms, and verify exchange logs from one broker workflow.
+              </Typography>
+            </Box>
 
-      {renderTabContent()}
+            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+              <Chip label={`${contracts.length} contracts`} sx={{ bgcolor: "var(--app-control-bg)", color: "var(--app-muted)", fontWeight: 700 }} />
+              <Chip label={`${signedCount} signed`} sx={{ bgcolor: "var(--app-control-active-bg)", color: "var(--app-fg)", fontWeight: 700 }} />
+              <Chip label={`${exchangeLog.length} log entries`} sx={{ bgcolor: "var(--app-control-bg)", color: "var(--app-muted)", fontWeight: 700 }} />
+            </Box>
+          </Box>
+
+          <Divider />
+          <Box sx={{ px: { xs: 1.5, md: 2 }, bgcolor: "var(--app-control-bg)" }}>
+            <TabBar tabs={tabs} activeTab={activeTab} onTabChange={(key) => setActiveTab(key as ActiveTab)} />
+          </Box>
+          <Divider />
+
+          <Box sx={{ p: { xs: 2, md: 2.5 } }}>
+            {contracts.length === 0 && activeTab === "contracts" ? (
+              <Box
+                sx={{
+                  p: { xs: 2.5, md: 3 },
+                  borderRadius: 3,
+                  border: "1px solid var(--app-border)",
+                  bgcolor: "var(--app-control-bg)",
+                  display: "grid",
+                  gap: 1.5,
+                }}
+              >
+                <Chip
+                  label="Contract negotiation ready"
+                  size="small"
+                  sx={{ justifySelf: "start", bgcolor: "var(--app-control-active-bg)", color: "var(--app-fg)" }}
+                />
+                <Typography sx={{ fontSize: 15, fontWeight: 700, color: "var(--app-fg)" }}>
+                  Start by negotiating a real contract.
+                </Typography>
+                <Typography sx={{ maxWidth: 700, fontSize: 13, color: "var(--app-muted)" }}>
+                  Contracts will appear here after you negotiate terms with an agent and sign the agreement.
+                  Signed and revoked states remain available for audit.
+                </Typography>
+                <Button
+                  type="button"
+                  variant="contained"
+                  onClick={() => setActiveTab("negotiate")}
+                  sx={{ justifySelf: "start" }}
+                >
+                  Negotiate contract
+                </Button>
+              </Box>
+            ) : (
+              renderTabContent()
+            )}
+          </Box>
+        </CardContent>
+      </Card>
 
       {showSignModal && selectedContract && (
         <ConfirmationModal
@@ -881,7 +929,6 @@ export function ContractsManager({
               variant="outlined"
               disabled={loading}
               sx={{
-                borderRadius: 999,
                 borderColor: "var(--app-border)",
                 color: "var(--app-muted)",
                 "&:hover": { bgcolor: "var(--app-hover-bg)", borderColor: "var(--app-border)" },
@@ -894,7 +941,6 @@ export function ContractsManager({
               variant="contained"
               disabled={loading}
               sx={{
-                borderRadius: 999,
                 bgcolor: "rgba(239, 68, 68, 0.85)",
                 color: "#fff",
                 "&:hover": { bgcolor: "rgb(220, 38, 38)" },

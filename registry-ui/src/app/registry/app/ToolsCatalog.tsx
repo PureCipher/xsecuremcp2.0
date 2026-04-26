@@ -3,8 +3,23 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
-import { Box, Button, Card, CardActionArea, CardContent, Chip, FormControl, InputLabel, MenuItem, Select, TextField, Typography } from "@mui/material";
+import {
+  Box,
+  Button,
+  Card,
+  CardActionArea,
+  CardContent,
+  Chip,
+  Divider,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
+  TextField,
+  Typography,
+} from "@mui/material";
 
+import { AttestationBadge } from "@/components/security";
 import type { RegistryToolListing } from "@/lib/registryClient";
 
 type SortMode = "certification_desc" | "name_asc";
@@ -12,6 +27,11 @@ type SortMode = "certification_desc" | "name_asc";
 type Props = {
   tools: RegistryToolListing[];
   basePath?: string;
+  publishHref?: string;
+  reviewHref?: string;
+  publishersHref?: string;
+  pendingCount?: number;
+  publicView?: boolean;
 };
 
 type CertificationInfo = {
@@ -38,7 +58,7 @@ function certificationInfo(level?: string): CertificationInfo {
       raw,
       label: "Unrated",
       tier: 0,
-      sx: { bgcolor: "rgba(113, 113, 122, 0.12)", color: "rgb(228, 228, 231)" },
+      sx: { bgcolor: "rgba(100, 116, 139, 0.12)", color: "var(--app-muted)" },
     };
   }
 
@@ -58,7 +78,7 @@ function certificationInfo(level?: string): CertificationInfo {
       raw,
       label: raw,
       tier: 2,
-      sx: { bgcolor: "rgba(14, 165, 233, 0.12)", color: "rgb(224, 242, 254)" },
+      sx: { bgcolor: "rgba(14, 165, 233, 0.12)", color: "#0369a1" },
     };
   }
 
@@ -82,10 +102,25 @@ function toolSearchHaystack(tool: RegistryToolListing): string {
   return normalizeText(parts.join(" "));
 }
 
-export function ToolsCatalog({ tools, basePath = "/registry/listings" }: Props) {
+export function ToolsCatalog({
+  tools,
+  basePath = "/registry/listings",
+  publishHref,
+  reviewHref,
+  publishersHref,
+  pendingCount = 0,
+  publicView = false,
+}: Props) {
   const [query, setQuery] = useState("");
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [sortMode, setSortMode] = useState<SortMode>("certification_desc");
+  // Attestation-kind filter: "all" / "author" / "curator". The control
+  // only renders if the catalog actually contains both kinds — when a
+  // catalog has no curated listings, the chip group would be visual
+  // noise, so we hide it.
+  const [attestationFilter, setAttestationFilter] = useState<
+    "all" | "author" | "curator"
+  >("all");
 
   const allCategories = useMemo(() => {
     const bag = new Set<string>();
@@ -100,6 +135,22 @@ export function ToolsCatalog({ tools, basePath = "/registry/listings" }: Props) 
   }, [tools]);
 
   const normalizedQuery = useMemo(() => normalizeText(query), [query]);
+
+  // Whether the catalog is mixed (has both author + curator listings).
+  // Used to decide whether to show the attestation-kind filter at all.
+  const hasCuratedListings = useMemo(
+    () => tools.some((t) => t.attestation_kind === "curator"),
+    [tools],
+  );
+  const hasAuthorListings = useMemo(
+    () =>
+      tools.some(
+        (t) =>
+          !t.attestation_kind || t.attestation_kind === "author",
+      ),
+    [tools],
+  );
+  const showAttestationFilter = hasCuratedListings && hasAuthorListings;
 
   const filtered = useMemo(() => {
     const activeCategories = new Set(selectedCategories);
@@ -116,6 +167,14 @@ export function ToolsCatalog({ tools, basePath = "/registry/listings" }: Props) 
       if (hasQuery) {
         const hay = toolSearchHaystack(tool);
         if (!hay.includes(normalizedQuery)) continue;
+      }
+      // Attestation-kind filter. Listings without an explicit
+      // ``attestation_kind`` field are treated as author-attested
+      // (back-compat with pre-curator-iteration data).
+      if (attestationFilter !== "all") {
+        const kind =
+          tool.attestation_kind === "curator" ? "curator" : "author";
+        if (kind !== attestationFilter) continue;
       }
       results.push(tool);
     }
@@ -137,195 +196,325 @@ export function ToolsCatalog({ tools, basePath = "/registry/listings" }: Props) 
     });
 
     return results;
-  }, [tools, normalizedQuery, selectedCategories, sortMode]);
+  }, [tools, normalizedQuery, selectedCategories, sortMode, attestationFilter]);
 
-  const hasActiveFilters = normalizedQuery.length > 0 || selectedCategories.length > 0;
+  const hasActiveFilters =
+    normalizedQuery.length > 0 ||
+    selectedCategories.length > 0 ||
+    attestationFilter !== "all";
 
   return (
-    <Box sx={{ display: "grid", gap: 2 }}>
-      <Card
-        variant="outlined"
-        sx={{
-          borderRadius: 4,
-          borderColor: "var(--app-border)",
-          bgcolor: "var(--app-control-bg)",
-          boxShadow: "none",
-        }}
-      >
-        <CardContent sx={{ p: 2, display: "grid", gap: 2 }}>
-          <Box sx={{ display: "flex", flexDirection: { xs: "column", md: "row" }, gap: 1.5, alignItems: { md: "center" } }}>
-            <Box sx={{ flex: 1 }}>
-              <TextField
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search tools by name, description, category, publisher…"
-                size="small"
-                fullWidth
-              />
-            </Box>
-
-            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, alignItems: "center" }}>
-              <FormControl size="small" sx={{ minWidth: 200 }}>
-                <InputLabel id="tool-sort">Sort</InputLabel>
-                <Select
-                  labelId="tool-sort"
-                  label="Sort"
-                  value={sortMode}
-                  onChange={(e) => setSortMode(e.target.value as SortMode)}
-                >
-                  <MenuItem value="certification_desc">Certification</MenuItem>
-                  <MenuItem value="name_asc">Name A→Z</MenuItem>
-                </Select>
-              </FormControl>
-
-              {hasActiveFilters ? (
-                <Button
-                  type="button"
-                  variant="outlined"
-                  onClick={() => {
-                    setQuery("");
-                    setSelectedCategories([]);
-                  }}
-                  sx={{
-                    borderRadius: 999,
-                    borderColor: "var(--app-border)",
-                    color: "var(--app-muted)",
-                    bgcolor: "var(--app-control-bg)",
-                    "&:hover": { bgcolor: "var(--app-hover-bg)", borderColor: "var(--app-border)" },
-                  }}
-                >
-                  Clear
-                </Button>
-              ) : null}
-
-              <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
-                {filtered.length} result{filtered.length === 1 ? "" : "s"}
-              </Typography>
-            </Box>
+    <Card variant="outlined" sx={{ overflow: "hidden" }}>
+      <CardContent sx={{ p: 0 }}>
+        <Box
+          sx={{
+            p: { xs: 2.5, md: 3 },
+            display: "flex",
+            flexDirection: { xs: "column", md: "row" },
+            alignItems: { xs: "flex-start", md: "center" },
+            justifyContent: "space-between",
+            gap: 2,
+          }}
+        >
+          <Box sx={{ display: "grid", gap: 0.75, maxWidth: 720 }}>
+            <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
+              Directory
+            </Typography>
+            <Typography variant="h6" sx={{ color: "var(--app-fg)" }}>
+              {tools.length ? `${tools.length} trusted ${tools.length === 1 ? "tool" : "tools"}` : "No trusted tools yet"}
+            </Typography>
+            <Typography variant="body2" sx={{ color: "var(--app-muted)" }}>
+              {tools.length
+                ? "Browse approved tools that passed certification and review."
+                : publicView
+                  ? "Approved tools will appear here once publishers submit them and reviewers approve them."
+                  : "Publish a real tool, run preflight, and send it to review. Approved listings appear here automatically."}
+            </Typography>
           </Box>
 
-          {allCategories.length > 0 ? (
-            <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1 }}>
-              <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
-                Categories
-              </Typography>
-              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
-                {allCategories.map((cat) => {
-                  const selected = selectedCategories.includes(cat);
-                  return (
-                    <Chip
-                      key={cat}
-                      label={cat}
-                      clickable
-                      onClick={() => {
-                        setSelectedCategories((current) => {
-                          if (current.includes(cat)) return current.filter((c) => c !== cat);
-                          return [...current, cat];
-                        });
-                      }}
-                      sx={{
-                        borderRadius: 999,
-                        bgcolor: selected ? "var(--app-control-active-bg)" : "var(--app-control-bg)",
-                        color: selected ? "var(--app-fg)" : "var(--app-muted)",
-                        border: "1px solid",
-                        borderColor: selected ? "var(--app-accent)" : "var(--app-border)",
-                      }}
-                    />
-                  );
-                })}
-              </Box>
-            </Box>
-          ) : null}
-        </CardContent>
-      </Card>
-
-      {filtered.length === 0 ? (
-        <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none" }}>
-          <CardContent sx={{ p: 2.5 }}>
-            <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>No tools match your filters.</Typography>
-            {hasActiveFilters ? (
-              <Typography sx={{ mt: 1, fontSize: 12, color: "var(--app-muted)" }}>
-                Try clearing filters or searching by a shorter term.
-              </Typography>
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+            {publishHref ? (
+              <Link href={publishHref} legacyBehavior passHref>
+                <Button component="a" variant="contained">
+                  Publish a tool
+                </Button>
+              </Link>
             ) : null}
-          </CardContent>
-        </Card>
-      ) : (
-        <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", lg: "1fr 1fr 1fr" } }}>
-          {filtered.map((tool) => {
-            const cert = certificationInfo(tool.certification_level);
-            return (
-              <Card
-                key={tool.tool_name}
-                variant="outlined"
-                sx={{
-                  borderRadius: 3,
-                  borderColor: "var(--app-border)",
-                  bgcolor: "var(--app-control-bg)",
-                  boxShadow: "none",
-                  "&:hover": { borderColor: "var(--app-accent)" },
-                  display: "flex",
-                  flexDirection: "column",
-                }}
-              >
-                <Link href={`${basePath}/${encodeURIComponent(tool.tool_name)}`} legacyBehavior passHref>
-                  <CardActionArea component="a" sx={{ borderRadius: 3, height: "100%" }}>
-                    <CardContent sx={{ p: 2, display: "flex", flexDirection: "column", gap: 1.25, flex: 1 }}>
-                      <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 1 }}>
-                        <Box sx={{ minWidth: 0 }}>
-                          <Typography noWrap sx={{ fontSize: 14, fontWeight: 700, color: "var(--app-fg)" }}>
-                            {tool.display_name ?? tool.tool_name}
-                          </Typography>
-                          <Typography noWrap sx={{ fontSize: 11, color: "var(--app-muted)" }}>
-                            {tool.tool_name}
-                          </Typography>
-                        </Box>
-                        <Chip
-                          size="small"
-                          label={cert.label}
-                          title={cert.raw ?? "Unrated"}
-                          sx={{
-                            ...cert.sx,
-                            borderRadius: 999,
-                            fontSize: 10,
-                            fontWeight: 800,
-                            textTransform: "uppercase",
-                            letterSpacing: "0.12em",
-                            height: 22,
-                          }}
-                        />
-                      </Box>
-
-                      <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
-                        {tool.description ?? "No description provided."}
-                      </Typography>
-
-                      {Array.isArray(tool.categories) && tool.categories.length > 0 ? (
-                        <Box sx={{ mt: "auto", pt: 1, display: "flex", flexWrap: "wrap", gap: 1, alignItems: "center" }}>
-                          {tool.categories.slice(0, 4).map((cat: string) => (
-                            <Chip
-                              key={cat}
-                              size="small"
-                              label={cat}
-                              sx={{ borderRadius: 999, bgcolor: "var(--app-surface)", color: "var(--app-fg)", fontSize: 11 }}
-                            />
-                          ))}
-                          {tool.categories.length > 4 ? (
-                            <Typography sx={{ fontSize: 11, color: "var(--app-muted)" }}>+{tool.categories.length - 4}</Typography>
-                          ) : null}
-                        </Box>
-                      ) : (
-                        <Typography sx={{ mt: "auto", pt: 1, fontSize: 11, color: "var(--app-muted)" }}>No categories</Typography>
-                      )}
-                    </CardContent>
-                  </CardActionArea>
-                </Link>
-              </Card>
-            );
-          })}
+            {reviewHref ? (
+              <Link href={reviewHref} legacyBehavior passHref>
+                <Button component="a" variant="outlined" sx={{ borderColor: "var(--app-accent)", color: "var(--app-muted)" }}>
+                  Review queue{pendingCount ? ` (${pendingCount})` : ""}
+                </Button>
+              </Link>
+            ) : null}
+            {publishersHref ? (
+              <Link href={publishersHref} legacyBehavior passHref>
+                <Button component="a" variant={publishHref || reviewHref ? "outlined" : "contained"}>
+                  Browse publishers
+                </Button>
+              </Link>
+            ) : null}
+          </Box>
         </Box>
-      )}
-    </Box>
+
+        {tools.length === 0 ? (
+          <Box sx={{ px: { xs: 2.5, md: 3 }, pb: { xs: 2.5, md: 3 } }}>
+            <Box
+              sx={{
+                p: { xs: 2.5, md: 3 },
+                borderRadius: 3,
+                border: "1px solid var(--app-border)",
+                bgcolor: "var(--app-control-bg)",
+                display: "grid",
+                gap: 2,
+              }}
+            >
+              <Box sx={{ display: "grid", gap: 0.75 }}>
+                <Chip
+                  label="Approval pipeline ready"
+                  size="small"
+                  sx={{ justifySelf: "start", bgcolor: "var(--app-control-active-bg)", color: "var(--app-fg)" }}
+                />
+                <Typography sx={{ fontSize: 15, fontWeight: 700, color: "var(--app-fg)" }}>
+                  Start with a real publisher submission.
+                </Typography>
+                <Typography sx={{ maxWidth: 680, fontSize: 13, color: "var(--app-muted)" }}>
+                  The directory is intentionally empty now. Tools should enter through publisher preflight, reviewer approval,
+                  and then publication into this trusted catalog.
+                </Typography>
+              </Box>
+
+              {!publicView ? (
+                <Box sx={{ display: "grid", gap: 1.25, gridTemplateColumns: { xs: "1fr", md: "repeat(3, 1fr)" } }}>
+                  {["Submit from Publisher", "Review and approve", "Publish to directory"].map((label, index) => (
+                    <Box
+                      key={label}
+                      sx={{
+                        p: 1.5,
+                        borderRadius: 2,
+                        border: "1px solid var(--app-border)",
+                        bgcolor: "var(--app-surface)",
+                      }}
+                    >
+                      <Typography sx={{ fontSize: 11, fontWeight: 700, color: "var(--app-muted)" }}>
+                        Step {index + 1}
+                      </Typography>
+                      <Typography sx={{ mt: 0.25, fontSize: 13, fontWeight: 700, color: "var(--app-fg)" }}>
+                        {label}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Box>
+              ) : null}
+            </Box>
+          </Box>
+        ) : (
+          <>
+            <Divider />
+            <Box sx={{ p: { xs: 2, md: 2.5 }, display: "grid", gap: 1.5, bgcolor: "var(--app-control-bg)" }}>
+              <Box sx={{ display: "flex", flexDirection: { xs: "column", md: "row" }, gap: 1.25, alignItems: { md: "center" } }}>
+                <TextField
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search by name, category, publisher..."
+                  size="small"
+                  fullWidth
+                />
+
+                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, alignItems: "center" }}>
+                  <FormControl size="small" sx={{ minWidth: 180 }}>
+                    <InputLabel id="tool-sort">Sort</InputLabel>
+                    <Select
+                      labelId="tool-sort"
+                      label="Sort"
+                      value={sortMode}
+                      onChange={(e) => setSortMode(e.target.value as SortMode)}
+                    >
+                      <MenuItem value="certification_desc">Certification</MenuItem>
+                      <MenuItem value="name_asc">Name A-Z</MenuItem>
+                    </Select>
+                  </FormControl>
+
+                  {hasActiveFilters ? (
+                    <Button
+                      type="button"
+                      variant="outlined"
+                      onClick={() => {
+                        setQuery("");
+                        setSelectedCategories([]);
+                        setAttestationFilter("all");
+                      }}
+                      sx={{ borderColor: "var(--app-border)", color: "var(--app-muted)" }}
+                    >
+                      Clear
+                    </Button>
+                  ) : null}
+
+                  <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                    {filtered.length} result{filtered.length === 1 ? "" : "s"}
+                  </Typography>
+                </Box>
+              </Box>
+
+              {allCategories.length > 0 ? (
+                <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1 }}>
+                  <Typography sx={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                    Categories
+                  </Typography>
+                  {allCategories.map((cat) => {
+                    const selected = selectedCategories.includes(cat);
+                    return (
+                      <Chip
+                        key={cat}
+                        label={cat}
+                        clickable
+                        onClick={() => {
+                          setSelectedCategories((current) => {
+                            if (current.includes(cat)) return current.filter((c) => c !== cat);
+                            return [...current, cat];
+                          });
+                        }}
+                        sx={{
+                          bgcolor: selected ? "var(--app-control-active-bg)" : "var(--app-surface)",
+                          color: selected ? "var(--app-fg)" : "var(--app-muted)",
+                          border: "1px solid",
+                          borderColor: selected ? "var(--app-accent)" : "var(--app-border)",
+                        }}
+                      />
+                    );
+                  })}
+                </Box>
+              ) : null}
+
+              {/*
+               * Attestation-kind filter — only rendered when the catalog
+               * actually contains both author-attested and curator-vouched
+               * listings, so we don't surface a single-state toggle.
+               */}
+              {showAttestationFilter ? (
+                <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1 }}>
+                  <Typography sx={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                    Attestation
+                  </Typography>
+                  {(["all", "author", "curator"] as const).map((value) => {
+                    const selected = attestationFilter === value;
+                    const labels = {
+                      all: "All",
+                      author: "Author-attested",
+                      curator: "Curator-vouched",
+                    };
+                    return (
+                      <Chip
+                        key={value}
+                        label={labels[value]}
+                        clickable
+                        onClick={() => setAttestationFilter(value)}
+                        sx={{
+                          bgcolor: selected ? "var(--app-control-active-bg)" : "var(--app-surface)",
+                          color: selected ? "var(--app-fg)" : "var(--app-muted)",
+                          border: "1px solid",
+                          borderColor: selected ? "var(--app-accent)" : "var(--app-border)",
+                        }}
+                      />
+                    );
+                  })}
+                </Box>
+              ) : null}
+            </Box>
+
+            <Divider />
+            <Box sx={{ p: { xs: 2, md: 2.5 } }}>
+              {filtered.length === 0 ? (
+                <Box sx={{ p: 3, borderRadius: 3, border: "1px dashed var(--app-border)", textAlign: "center" }}>
+                  <Typography sx={{ fontSize: 14, fontWeight: 700, color: "var(--app-fg)" }}>No matching tools</Typography>
+                  <Typography sx={{ mt: 0.5, fontSize: 13, color: "var(--app-muted)" }}>
+                    Try clearing filters or searching by a shorter term.
+                  </Typography>
+                </Box>
+              ) : (
+                <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" } }}>
+                  {filtered.map((tool) => {
+                    const cert = certificationInfo(tool.certification_level);
+                    return (
+                      <Card
+                        key={tool.tool_name}
+                        variant="outlined"
+                        sx={{
+                          bgcolor: "var(--app-control-bg)",
+                          "&:hover": { borderColor: "var(--app-accent)" },
+                          display: "flex",
+                          flexDirection: "column",
+                        }}
+                      >
+                        <Link href={`${basePath}/${encodeURIComponent(tool.tool_name)}`} legacyBehavior passHref>
+                          <CardActionArea component="a" sx={{ height: "100%" }}>
+                            <CardContent sx={{ p: 2, display: "flex", flexDirection: "column", gap: 1.25, minHeight: 154 }}>
+                              <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 1 }}>
+                                <Box sx={{ minWidth: 0 }}>
+                                  <Typography noWrap sx={{ fontSize: 14, fontWeight: 700, color: "var(--app-fg)" }}>
+                                    {tool.display_name ?? tool.tool_name}
+                                  </Typography>
+                                  <Typography noWrap sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                                    {tool.tool_name}
+                                  </Typography>
+                                </Box>
+                                <Chip
+                                  size="small"
+                                  label={cert.label}
+                                  title={cert.raw ?? "Unrated"}
+                                  sx={{
+                                    ...cert.sx,
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    letterSpacing: "0.01em",
+                                    height: 24,
+                                  }}
+                                />
+                              </Box>
+
+                              {tool.attestation_kind === "curator" ? (
+                                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                                  <AttestationBadge
+                                    kind="curator"
+                                    curatorId={tool.curator_id}
+                                  />
+                                </Box>
+                              ) : null}
+
+                              <Typography sx={{ fontSize: 13, color: "var(--app-muted)" }}>
+                                {tool.description ?? "No description provided."}
+                              </Typography>
+
+                              {Array.isArray(tool.categories) && tool.categories.length > 0 ? (
+                                <Box sx={{ mt: "auto", pt: 1, display: "flex", flexWrap: "wrap", gap: 0.75 }}>
+                                  {tool.categories.slice(0, 4).map((cat: string) => (
+                                    <Chip
+                                      key={cat}
+                                      size="small"
+                                      label={cat}
+                                      sx={{ bgcolor: "var(--app-surface)", color: "var(--app-fg)", fontSize: 11 }}
+                                    />
+                                  ))}
+                                  {tool.categories.length > 4 ? (
+                                    <Typography sx={{ alignSelf: "center", fontSize: 11, color: "var(--app-muted)" }}>
+                                      +{tool.categories.length - 4}
+                                    </Typography>
+                                  ) : null}
+                                </Box>
+                              ) : null}
+                            </CardContent>
+                          </CardActionArea>
+                        </Link>
+                      </Card>
+                    );
+                  })}
+                </Box>
+              )}
+            </Box>
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
