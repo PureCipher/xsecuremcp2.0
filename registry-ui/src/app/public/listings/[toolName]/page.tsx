@@ -65,19 +65,15 @@ export default async function PublicListingDetailPage(props: {
       <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 2 }}>
         <Box sx={{ minWidth: 0 }}>
           <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1, color: "var(--app-muted)", fontSize: 12 }}>
-            <Link href="/public/tools" legacyBehavior passHref>
-              <Box component="a" sx={{ textDecoration: "none", color: "var(--app-muted)", "&:hover": { color: "var(--app-fg)" } }}>
+            <Link href="/public/tools"><Box sx={{ textDecoration: "none", color: "var(--app-muted)", "&:hover": { color: "var(--app-fg)" } }}>
                 Tools
-              </Box>
-            </Link>
+              </Box></Link>
             <span>/</span>
             {tool.publisher_id ? (
               <>
-                <Link href={`/public/publishers/${encodeURIComponent(tool.publisher_id)}`} legacyBehavior passHref>
-                  <Box component="a" sx={{ textDecoration: "none", color: "var(--app-muted)", "&:hover": { color: "var(--app-fg)" } }}>
+                <Link href={`/public/publishers/${encodeURIComponent(tool.publisher_id)}`}><Box sx={{ textDecoration: "none", color: "var(--app-muted)", "&:hover": { color: "var(--app-fg)" } }}>
                     {tool.publisher_id}
-                  </Box>
-                </Link>
+                  </Box></Link>
                 <span>/</span>
               </>
             ) : null}
@@ -322,11 +318,9 @@ export default async function PublicListingDetailPage(props: {
       ) : null}
 
       <Box sx={{ pt: 1 }}>
-        <Link href="/public/tools" legacyBehavior passHref>
-          <Box component="a" sx={{ fontSize: 12, fontWeight: 700, color: "var(--app-muted)", textDecoration: "none", "&:hover": { color: "var(--app-fg)" } }}>
+        <Link href="/public/tools"><Box sx={{ fontSize: 12, fontWeight: 700, color: "var(--app-muted)", textDecoration: "none", "&:hover": { color: "var(--app-fg)" } }}>
             ← Back to all tools
-          </Box>
-        </Link>
+          </Box></Link>
       </Box>
     </Box>
   );

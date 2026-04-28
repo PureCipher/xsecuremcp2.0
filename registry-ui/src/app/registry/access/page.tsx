@@ -99,11 +99,9 @@ export default async function AccessStudioPage({
             <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
               <Chip label={`${publishers.length} servers`} sx={{ bgcolor: "var(--app-control-bg)", color: "var(--app-muted)", fontWeight: 700 }} />
               <Chip label={serverId ? "server selected" : "select a server"} sx={{ bgcolor: serverId ? "var(--app-control-active-bg)" : "var(--app-control-bg)", color: serverId ? "var(--app-fg)" : "var(--app-muted)", fontWeight: 700 }} />
-              <Link href="/registry/clients" legacyBehavior passHref>
-                <Button component="a" variant="outlined" size="small">
+              <Link href="/registry/clients"><Button variant="outlined" size="small">
                   Clients
-                </Button>
-              </Link>
+                </Button></Link>
             </Box>
           </Box>
 

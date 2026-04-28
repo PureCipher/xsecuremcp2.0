@@ -9,6 +9,7 @@ import {
   Card,
   CardContent,
   Chip,
+  MenuItem,
   Stack,
   Step,
   StepLabel,
@@ -21,6 +22,47 @@ import { useRegistryUserPreferences } from "@/hooks/useRegistryUserPreferences";
 
 type PublishManifest = Record<string, unknown>;
 type PublishMetadata = Record<string, unknown>;
+
+// Iter 14.3: enum members exactly as defined on the backend
+// (fastmcp.server.security.gateway.tool_marketplace.ToolCategory and
+// fastmcp.server.security.certification.manifest.PermissionScope).
+// Free-text inputs let typos slip through to submit-time failures;
+// constrained pickers backed by these arrays keep the wizard honest.
+const TOOL_CATEGORIES = [
+  "data_access",
+  "file_system",
+  "network",
+  "code_execution",
+  "ai_ml",
+  "communication",
+  "search",
+  "database",
+  "authentication",
+  "monitoring",
+  "utility",
+  "other",
+] as const;
+
+const PERMISSION_SCOPES = [
+  "read_resource",
+  "write_resource",
+  "call_tool",
+  "network_access",
+  "file_system_read",
+  "file_system_write",
+  "environment_read",
+  "subprocess_exec",
+  "sensitive_data",
+  "cross_origin",
+] as const;
+
+const MCP_TRANSPORTS = [
+  "stdio",
+  "streamable-http",
+  "sse",
+  "http",
+] as const;
+
 
 type PublishRequestBody = {
   display_name: string;
@@ -280,7 +322,9 @@ export function PublisherForm({
   const [mcpWizardToolName, setMcpWizardToolName] = useState("");
   const [mcpWizardAuthor, setMcpWizardAuthor] = useState("");
   const [mcpWizardDescription, setMcpWizardDescription] = useState("");
-  const [mcpWizardCategories, setMcpWizardCategories] = useState("");
+  // Iter 14.3: was comma-string; now array-backed multi-select to
+  // prevent submit-time failures from typo'd category names.
+  const [mcpWizardCategories, setMcpWizardCategories] = useState<string[]>([]);
   const [mcpWizardTags, setMcpWizardTags] = useState("");
   const [mcpWizardPackage, setMcpWizardPackage] = useState("");
   const [mcpWizardInstall, setMcpWizardInstall] = useState("");
@@ -288,8 +332,139 @@ export function PublisherForm({
   const [mcpWizardArgs, setMcpWizardArgs] = useState("");
   const [mcpWizardTransport, setMcpWizardTransport] = useState("stdio");
   const [mcpWizardTools, setMcpWizardTools] = useState("");
-  const [mcpWizardPermissions, setMcpWizardPermissions] = useState("read_resource,network_access");
+  // Iter 14.3: was comma-string; now array-backed multi-select.
+  const [mcpWizardPermissions, setMcpWizardPermissions] = useState<string[]>([
+    "read_resource",
+    "network_access",
+  ]);
   const [mcpWizardResourcePatterns, setMcpWizardResourcePatterns] = useState("");
+  // Iter 14.3: surfaced in the wizard so publishers don't have to
+  // expand the Advanced JSON disclosure to set them.
+  const [mcpWizardVersion, setMcpWizardVersion] = useState("0.1.0");
+  const [mcpWizardLicense, setMcpWizardLicense] = useState("");
+  const [mcpWizardSourceUrl, setMcpWizardSourceUrl] = useState("");
+  // Iter 14.3: pre-slugify the tool name when the user blurs the
+  // field so they see exactly what will be saved instead of finding
+  // out at submit time.
+  const [mcpWizardToolNameSlug, setMcpWizardToolNameSlug] = useState("");
+  // Iter 14.1: distribution channel — http / pypi (default) / npm /
+  // docker / github. Picking one pre-fills Install/Run command
+  // templates if those fields are still empty, and the chosen value
+  // rides through into runtime metadata as ``upstream_channel`` so
+  // the curator/proxy runtime can dispatch on it.
+  // Iter 14.3 default ``"pypi"`` matches the page-level
+  // ``startingPoint`` default below so both chip groups agree on
+  // first render.
+  const [mcpWizardChannel, setMcpWizardChannel] = useState<
+    "http" | "pypi" | "npm" | "docker" | "github"
+  >("pypi");
+
+  // Iter 14.4: per-field auto-fill state. The "don't clobber user
+  // input" guard from Iter 14.1 used `if (!field.trim())` which
+  // can't tell *"the user typed this"* apart from *"I auto-filled
+  // this last time."* — so once any template lands in a field, every
+  // subsequent chip click is silently skipped. Track whether the
+  // current value came from a template; user typing flips it false.
+  const [installAutoFilled, setInstallAutoFilled] = useState(true);
+  const [commandAutoFilled, setCommandAutoFilled] = useState(true);
+  const [permissionsAutoFilled, setPermissionsAutoFilled] = useState(true);
+
+  // Iter 14.2: page-level "what are you shipping?" picker. Six
+  // options drive which form section is visible — five package
+  // channels (HTTP/PyPI/npm/Docker/GitHub) feed the Guided Wizard;
+  // ``openapi`` swaps the wizard out for the OpenAPI helper as the
+  // primary form. Manifest Builder demotes to an Advanced disclosure
+  // regardless. Default ``pypi`` is the most common publishing path.
+  type StartingPoint =
+    | "http"
+    | "pypi"
+    | "npm"
+    | "docker"
+    | "github"
+    | "openapi";
+  const [startingPoint, setStartingPoint] = useState<StartingPoint>("pypi");
+  const [advancedJsonOpen, setAdvancedJsonOpen] = useState(false);
+  const isOpenAPIStartingPoint = startingPoint === "openapi";
+
+  function pickStartingPoint(next: StartingPoint) {
+    setStartingPoint(next);
+    if (next !== "openapi") {
+      // Sync the wizard's internal channel state so its templates +
+      // placeholders match the page-level choice.
+      applyChannelTemplate(next);
+    }
+  }
+
+  function applyChannelTemplate(
+    channel: "http" | "pypi" | "npm" | "docker" | "github",
+  ) {
+    setMcpWizardChannel(channel);
+    // Default transport: HTTP-channel servers run as streamable-http;
+    // language-package servers default to stdio.
+    if (channel === "http") {
+      if (!mcpWizardTransport.trim() || mcpWizardTransport === "stdio") {
+        setMcpWizardTransport("streamable-http");
+      }
+    } else if (mcpWizardTransport === "streamable-http") {
+      setMcpWizardTransport("stdio");
+    }
+    // Iter 14.4: re-template the install/run/permissions fields
+    // whenever the user picks a channel chip — but only if those
+    // fields are still in their auto-filled state. As soon as the
+    // user types into a field, its flag flips false and that
+    // particular field stops being re-templated. Net result:
+    // chip clicks always update untouched fields; explicit edits
+    // are preserved.
+    const pkg = mcpWizardPackage.trim();
+    let nextInstall = "";
+    let nextCommand = "";
+    if (channel === "pypi") {
+      nextInstall = pkg ? `pip install ${pkg}` : "pip install <package>";
+      nextCommand = pkg ? `python -m ${pkg}` : "python -m <package>";
+    } else if (channel === "npm") {
+      nextInstall = pkg ? `npm install -g ${pkg}` : "npm install -g <package>";
+      nextCommand = pkg ? `npx ${pkg}` : "npx <package>";
+    } else if (channel === "docker") {
+      nextInstall = pkg ? `docker pull ${pkg}` : "docker pull <image>";
+      nextCommand = pkg
+        ? `docker run --rm -i ${pkg}`
+        : "docker run --rm -i <image>";
+    } else if (channel === "github") {
+      nextInstall = pkg
+        ? `git clone ${pkg}`
+        : "git clone https://github.com/<owner>/<repo>";
+      // GitHub has no canonical run command — clear so the publisher
+      // fills it in (rather than carrying the previous channel's
+      // template forward).
+      nextCommand = "";
+    } else if (channel === "http") {
+      // HTTP endpoints don't have an install step; the run command
+      // is the endpoint URL itself.
+      nextInstall = "";
+      nextCommand = "https://server.example.com/mcp";
+    }
+    if (installAutoFilled) {
+      setMcpWizardInstall(nextInstall);
+    }
+    if (commandAutoFilled) {
+      setMcpWizardCommand(nextCommand);
+    }
+    // Channel-aware permission defaults. Only when the publisher
+    // hasn't typed/edited the permission set themselves.
+    if (permissionsAutoFilled) {
+      if (channel === "docker") {
+        setMcpWizardPermissions([
+          "network_access",
+          "subprocess_exec",
+          "read_resource",
+        ]);
+      } else {
+        // pypi / npm / http / github all default to the standard
+        // read + network combo.
+        setMcpWizardPermissions(["read_resource", "network_access"]);
+      }
+    }
+  }
 
   function loadBuilderFromManifest(nextManifestText: string) {
     const formatted = tryFormatJson(nextManifestText, "Manifest");
@@ -407,11 +582,10 @@ export function PublisherForm({
       return;
     }
 
+    // Iter 14.3: categories + permissions are now array-backed
+    // (constrained pickers), so just dedupe + sanity-trim.
     const nextCategories = uniqStrings(
-      mcpWizardCategories
-        .split(",")
-        .map((category) => category.trim())
-        .filter(Boolean),
+      mcpWizardCategories.map((c) => c.trim()).filter(Boolean),
     );
     const nextTags = uniqStrings(
       mcpWizardTags
@@ -420,10 +594,7 @@ export function PublisherForm({
         .filter(Boolean),
     );
     const nextPermissions = uniqStrings(
-      mcpWizardPermissions
-        .split(",")
-        .map((permission) => permission.trim())
-        .filter(Boolean),
+      mcpWizardPermissions.map((p) => p.trim()).filter(Boolean),
     );
     const nextResourcePatterns = mcpWizardResourcePatterns
       .split("\n")
@@ -440,7 +611,7 @@ export function PublisherForm({
 
     const manifest = {
       tool_name: nextToolName,
-      version: "1.0.0",
+      version: mcpWizardVersion.trim() || "0.1.0",
       author: nextAuthor,
       description: nextDescription,
       permissions: nextPermissions.length ? nextPermissions : ["read_resource"],
@@ -468,6 +639,18 @@ export function PublisherForm({
       command: nextCommand,
       args: runtimeArgs,
       tools: runtimeTools,
+      // Iter 14.1: distribution channel. Drives downstream dispatch
+      // (curator pinning, proxy runtime client factory, install
+      // recipe rendering).
+      upstream_channel: mcpWizardChannel,
+      // Iter 14.3: surfaced license + source URL travel in runtime
+      // metadata so the public detail page can link them.
+      ...(mcpWizardLicense.trim()
+        ? { tool_license: mcpWizardLicense.trim() }
+        : {}),
+      ...(mcpWizardSourceUrl.trim()
+        ? { source_url: mcpWizardSourceUrl.trim() }
+        : {}),
     };
 
     const manifestTextNext = JSON.stringify(manifest, null, 2);
@@ -477,7 +660,7 @@ export function PublisherForm({
     setRuntimeText(JSON.stringify(runtime, null, 2));
     setPreflight(null);
     setBuilderToolName(nextToolName);
-    setBuilderVersion("1.0.0");
+    setBuilderVersion(mcpWizardVersion.trim() || "0.1.0");
     setBuilderAuthor(nextAuthor);
     setBuilderDescription(nextDescription);
     setBuilderTags(nextTags.join(","));
@@ -865,6 +1048,92 @@ export function PublisherForm({
                 Step 1 — Listing identity plus the SecureMCP manifest others will verify against.
               </Typography>
 
+              {/* Iter 14.2: page-level "what are you shipping?" picker
+                  that drives which form section is primary below.
+                  Replaces the previous wall of three coequal panels
+                  with a linear flow that adapts to the publisher's
+                  starting point. */}
+              <Card
+                variant="outlined"
+                sx={{
+                  bgcolor: "var(--app-control-bg)",
+                  borderColor: "var(--app-control-border)",
+                }}
+              >
+                <CardContent sx={{ p: 2.25 }}>
+                  <Typography
+                    sx={{
+                      fontSize: 11,
+                      fontWeight: 800,
+                      letterSpacing: "0.18em",
+                      textTransform: "uppercase",
+                      color: "var(--app-muted)",
+                    }}
+                  >
+                    What are you shipping?
+                  </Typography>
+                  <Typography
+                    sx={{
+                      mt: 0.5,
+                      fontSize: 13,
+                      color: "var(--app-muted)",
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    Pick the starting point that matches what you have. The form
+                    below adapts: package channels feed the Guided Wizard;
+                    OpenAPI swaps in the REST helper as the primary form.
+                  </Typography>
+                  <Box
+                    sx={{
+                      mt: 1.25,
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: 0.75,
+                    }}
+                  >
+                    {(
+                      [
+                        { value: "http", label: "HTTP / SSE", hint: "https endpoint" },
+                        { value: "pypi", label: "PyPI", hint: "pip package" },
+                        { value: "npm", label: "npm", hint: "node package" },
+                        { value: "docker", label: "Docker", hint: "container image" },
+                        { value: "github", label: "GitHub", hint: "git source" },
+                        { value: "openapi", label: "OpenAPI / REST", hint: "openapi.json" },
+                      ] as const
+                    ).map((opt) => {
+                      const selected = startingPoint === opt.value;
+                      return (
+                        <Chip
+                          key={opt.value}
+                          size="medium"
+                          label={`${opt.label} · ${opt.hint}`}
+                          clickable
+                          onClick={() => pickStartingPoint(opt.value)}
+                          variant={selected ? "filled" : "outlined"}
+                          sx={{
+                            fontWeight: 800,
+                            bgcolor: selected
+                              ? "var(--app-accent)"
+                              : "var(--app-surface)",
+                            color: selected
+                              ? "var(--app-accent-contrast)"
+                              : "var(--app-fg)",
+                            borderColor: "var(--app-control-border)",
+                            "&:hover": {
+                              bgcolor: selected
+                                ? "var(--app-accent)"
+                                : "var(--app-hover-bg)",
+                            },
+                          }}
+                        />
+                      );
+                    })}
+                  </Box>
+                </CardContent>
+              </Card>
+
+              {!isOpenAPIStartingPoint ? (
               <Card
                 variant="outlined"
                 sx={{
@@ -902,9 +1171,30 @@ export function PublisherForm({
                         label="Tool name"
                         value={mcpWizardToolName}
                         onChange={(e) => setMcpWizardToolName(e.target.value)}
+                        onBlur={() => {
+                          // Iter 14.3: pre-slugify on blur so the
+                          // user sees the validated form before
+                          // hitting Generate.
+                          const raw = mcpWizardToolName.trim();
+                          if (!raw) {
+                            setMcpWizardToolNameSlug("");
+                            return;
+                          }
+                          const slug = slugifyToolName(raw);
+                          setMcpWizardToolNameSlug(slug);
+                          if (slug && slug !== raw) {
+                            setMcpWizardToolName(slug);
+                          }
+                        }}
                         placeholder="markitdown"
                         size="small"
                         fullWidth
+                        helperText={
+                          mcpWizardToolNameSlug &&
+                          mcpWizardToolNameSlug !== mcpWizardToolName
+                            ? `Will save as: ${mcpWizardToolNameSlug}`
+                            : "Lowercase letters, digits, hyphens."
+                        }
                       />
                     </Stack>
                     <TextField
@@ -920,33 +1210,171 @@ export function PublisherForm({
                         label="Author / publisher"
                         value={mcpWizardAuthor}
                         onChange={(e) => setMcpWizardAuthor(e.target.value)}
-                        placeholder="microsoft"
+                        placeholder={publisherUsername || "your-username"}
                         size="small"
                         fullWidth
                       />
                       <TextField
                         label="Categories"
+                        select
                         value={mcpWizardCategories}
-                        onChange={(e) => setMcpWizardCategories(e.target.value)}
-                        placeholder="utility,file_system,data_access"
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setMcpWizardCategories(
+                            typeof v === "string" ? v.split(",") : (v as string[]),
+                          );
+                        }}
+                        slotProps={{
+                          select: {
+                            multiple: true,
+                            renderValue: (selected: unknown) =>
+                              (selected as string[]).join(", "),
+                          },
+                        }}
+                        helperText={
+                          mcpWizardCategories.length === 0
+                            ? "Pick one or more (defaults to utility on submit)."
+                            : `${mcpWizardCategories.length} selected`
+                        }
+                        size="small"
+                        fullWidth
+                      >
+                        {TOOL_CATEGORIES.map((cat) => (
+                          <MenuItem key={cat} value={cat}>
+                            {cat}
+                          </MenuItem>
+                        ))}
+                      </TextField>
+                    </Stack>
+                    {/* Iter 14.3: surfaced version + license + source
+                        URL — used to be hidden in the Manifest
+                        Builder Advanced disclosure. */}
+                    <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
+                      <TextField
+                        label="Version"
+                        value={mcpWizardVersion}
+                        onChange={(e) => setMcpWizardVersion(e.target.value)}
+                        placeholder="0.1.0"
+                        helperText="SemVer. 0.x.y is fine for early publishes."
+                        size="small"
+                        fullWidth
+                      />
+                      <TextField
+                        label="License (SPDX)"
+                        value={mcpWizardLicense}
+                        onChange={(e) => setMcpWizardLicense(e.target.value)}
+                        placeholder="Apache-2.0"
+                        helperText="Optional. e.g. MIT, Apache-2.0, BSD-3-Clause."
+                        size="small"
+                        fullWidth
+                      />
+                      <TextField
+                        label="Source URL"
+                        value={mcpWizardSourceUrl}
+                        onChange={(e) => setMcpWizardSourceUrl(e.target.value)}
+                        placeholder="https://github.com/owner/repo"
+                        helperText="Optional. Linked from the public detail page."
                         size="small"
                         fullWidth
                       />
                     </Stack>
+                    <Box>
+                      <Typography
+                        sx={{
+                          fontSize: 11,
+                          fontWeight: 800,
+                          letterSpacing: "0.16em",
+                          textTransform: "uppercase",
+                          color: "var(--app-muted)",
+                          mb: 0.75,
+                        }}
+                      >
+                        Distribution channel
+                      </Typography>
+                      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75 }}>
+                        {(
+                          [
+                            { value: "http", label: "HTTP / SSE", hint: "https endpoint" },
+                            { value: "pypi", label: "PyPI", hint: "pip package" },
+                            { value: "npm", label: "npm", hint: "node package" },
+                            { value: "docker", label: "Docker", hint: "container image" },
+                            { value: "github", label: "GitHub", hint: "git source" },
+                          ] as const
+                        ).map((opt) => {
+                          const selected = mcpWizardChannel === opt.value;
+                          return (
+                            <Chip
+                              key={opt.value}
+                              size="small"
+                              label={opt.label}
+                              clickable
+                              onClick={() => applyChannelTemplate(opt.value)}
+                              variant={selected ? "filled" : "outlined"}
+                              sx={{
+                                fontWeight: 800,
+                                bgcolor: selected
+                                  ? "var(--app-accent)"
+                                  : "var(--app-control-bg)",
+                                color: selected
+                                  ? "var(--app-accent-contrast)"
+                                  : "var(--app-fg)",
+                                borderColor: "var(--app-control-border)",
+                                "&:hover": {
+                                  bgcolor: selected
+                                    ? "var(--app-accent)"
+                                    : "var(--app-hover-bg)",
+                                },
+                              }}
+                            />
+                          );
+                        })}
+                      </Box>
+                      <Typography
+                        sx={{ fontSize: 11, color: "var(--app-muted)", mt: 0.5 }}
+                      >
+                        Picking a channel pre-fills the install / run command
+                        templates below. Edit them freely afterwards.
+                      </Typography>
+                    </Box>
                     <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
                       <TextField
                         label="Package"
                         value={mcpWizardPackage}
                         onChange={(e) => setMcpWizardPackage(e.target.value)}
-                        placeholder="markitdown-mcp"
+                        placeholder={
+                          mcpWizardChannel === "docker"
+                            ? "ghcr.io/example/mcp:1.2.3"
+                            : mcpWizardChannel === "npm"
+                              ? "@modelcontextprotocol/server-everything"
+                              : mcpWizardChannel === "github"
+                                ? "https://github.com/owner/repo"
+                                : mcpWizardChannel === "http"
+                                  ? "(no package — HTTP endpoint)"
+                                  : "markitdown-mcp"
+                        }
                         size="small"
                         fullWidth
                       />
                       <TextField
                         label="Install command"
                         value={mcpWizardInstall}
-                        onChange={(e) => setMcpWizardInstall(e.target.value)}
-                        placeholder="pip install markitdown-mcp"
+                        onChange={(e) => {
+                          setMcpWizardInstall(e.target.value);
+                          // Iter 14.4: the user is now editing —
+                          // future chip clicks won't overwrite this.
+                          setInstallAutoFilled(false);
+                        }}
+                        placeholder={
+                          mcpWizardChannel === "docker"
+                            ? "docker pull ghcr.io/example/mcp:1.2.3"
+                            : mcpWizardChannel === "npm"
+                              ? "npm install -g <package>"
+                              : mcpWizardChannel === "github"
+                                ? "git clone https://github.com/owner/repo"
+                                : mcpWizardChannel === "http"
+                                  ? "(none — connect directly)"
+                                  : "pip install markitdown-mcp"
+                        }
                         size="small"
                         fullWidth
                       />
@@ -955,7 +1383,12 @@ export function PublisherForm({
                       <TextField
                         label="Run command"
                         value={mcpWizardCommand}
-                        onChange={(e) => setMcpWizardCommand(e.target.value)}
+                        onChange={(e) => {
+                          setMcpWizardCommand(e.target.value);
+                          // Iter 14.4: explicit edit — stop
+                          // re-templating this field on chip clicks.
+                          setCommandAutoFilled(false);
+                        }}
                         placeholder="markitdown-mcp"
                         size="small"
                         fullWidth
@@ -972,29 +1405,63 @@ export function PublisherForm({
                     <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
                       <TextField
                         label="Transport"
+                        select
                         value={mcpWizardTransport}
                         onChange={(e) => setMcpWizardTransport(e.target.value)}
-                        placeholder="stdio"
+                        helperText="MCP transport the server speaks."
                         size="small"
                         fullWidth
-                      />
+                      >
+                        {MCP_TRANSPORTS.map((t) => (
+                          <MenuItem key={t} value={t}>
+                            {t}
+                          </MenuItem>
+                        ))}
+                      </TextField>
                       <TextField
                         label="Tools"
                         value={mcpWizardTools}
                         onChange={(e) => setMcpWizardTools(e.target.value)}
                         placeholder="convert_to_markdown"
+                        helperText="Comma-separated MCP tool names the server exposes."
                         size="small"
                         fullWidth
                       />
                     </Stack>
                     <TextField
                       label="Permissions"
+                      select
                       value={mcpWizardPermissions}
-                      onChange={(e) => setMcpWizardPermissions(e.target.value)}
-                      placeholder="read_resource,network_access"
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setMcpWizardPermissions(
+                          typeof v === "string" ? v.split(",") : (v as string[]),
+                        );
+                        // Iter 14.4: explicit edit — chip clicks
+                        // won't re-template permissions after this.
+                        setPermissionsAutoFilled(false);
+                      }}
+                      slotProps={{
+                        select: {
+                          multiple: true,
+                          renderValue: (selected: unknown) =>
+                            (selected as string[]).join(", "),
+                        },
+                      }}
+                      helperText={
+                        mcpWizardPermissions.length === 0
+                          ? "Pick the permission scopes the server needs."
+                          : `${mcpWizardPermissions.length} selected`
+                      }
                       size="small"
                       fullWidth
-                    />
+                    >
+                      {PERMISSION_SCOPES.map((scope) => (
+                        <MenuItem key={scope} value={scope}>
+                          {scope}
+                        </MenuItem>
+                      ))}
+                    </TextField>
                     <TextField
                       label="Resource access patterns"
                       value={mcpWizardResourcePatterns}
@@ -1021,20 +1488,55 @@ export function PublisherForm({
                         Generate manifest + runtime
                       </Button>
                       <Typography sx={{ fontSize: 11, color: "var(--app-muted)" }}>
-                        MarkItDown category: utility, file_system, data_access
+                        Produces the manifest + runtime metadata for Steps 2–4.
                       </Typography>
                     </Box>
                   </Stack>
                 </CardContent>
               </Card>
+              ) : null}
 
+              {/* Iter 14.2: Manifest Builder demoted to an Advanced
+                  disclosure — most publishers don't need to hand-edit
+                  JSON, the Wizard above produces it for them. */}
               <Card variant="outlined" sx={{ bgcolor: "var(--app-control-bg)" }}>
                 <CardContent sx={{ p: 2 }}>
-                  <Typography sx={{ fontWeight: 700, color: "var(--app-fg)" }}>Manifest Builder</Typography>
-                  <Typography sx={{ mt: 0.5, fontSize: 12, color: "var(--app-muted)" }}>
-                    Use friendly fields, then apply into the JSON manifest. This is the recommended path for publishers.
+                  <Box
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 1,
+                    }}
+                  >
+                    <Box>
+                      <Typography sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
+                        Advanced: edit manifest JSON directly
+                      </Typography>
+                      <Typography
+                        sx={{ mt: 0.25, fontSize: 12, color: "var(--app-muted)" }}
+                      >
+                        Most publishers don't need this — the form above produces
+                        the manifest. Open if you want fine-grained control.
+                      </Typography>
+                    </Box>
+                    <Button
+                      type="button"
+                      variant="outlined"
+                      size="small"
+                      onClick={() => setAdvancedJsonOpen((v) => !v)}
+                      sx={{ textTransform: "none", whiteSpace: "nowrap" }}
+                    >
+                      {advancedJsonOpen ? "Collapse" : "Expand"}
+                    </Button>
+                  </Box>
+                  {advancedJsonOpen ? (
+                  <Typography sx={{ mt: 1, fontSize: 12, color: "var(--app-muted)" }}>
+                    Use friendly fields, then apply into the JSON manifest.
                   </Typography>
+                  ) : null}
 
+                  {advancedJsonOpen ? (
                   <Stack spacing={1.5} sx={{ mt: 1.5 }}>
                     <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
                       <TextField
@@ -1128,12 +1630,41 @@ export function PublisherForm({
                       </Button>
                     </Stack>
                   </Stack>
+                  ) : null}
                 </CardContent>
               </Card>
 
-              <Card variant="outlined" sx={{ bgcolor: "var(--app-control-bg)" }}>
-                <CardContent sx={{ p: 2 }}>
-                  <Typography sx={{ fontWeight: 700, color: "var(--app-fg)" }}>REST/OpenAPI helper (MVP)</Typography>
+              {isOpenAPIStartingPoint ? (
+              <Card
+                variant="outlined"
+                sx={{
+                  bgcolor: "var(--app-surface)",
+                  borderColor: "var(--app-accent)",
+                  boxShadow: "0 20px 60px rgba(37, 99, 235, 0.08)",
+                }}
+              >
+                <CardContent sx={{ p: 2.25 }}>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: 1,
+                      alignItems: "center",
+                    }}
+                  >
+                    <Typography sx={{ fontWeight: 850, color: "var(--app-fg)" }}>
+                      REST / OpenAPI helper
+                    </Typography>
+                    <Chip
+                      size="small"
+                      label="Primary form for OpenAPI"
+                      sx={{
+                        bgcolor: "var(--app-control-active-bg)",
+                        color: "var(--app-muted)",
+                        fontWeight: 800,
+                      }}
+                    />
+                  </Box>
                   <Typography sx={{ mt: 0.5, fontSize: 12, color: "var(--app-muted)" }}>
                     Fetch an <Box component="code">openapi.json</Box>, inspect operations, and create a server-side toolset record.
                     This does not yet publish a listing or host the gateway automatically.
@@ -1242,6 +1773,7 @@ export function PublisherForm({
                   ) : null}
                 </CardContent>
               </Card>
+              ) : null}
 
               <TextField
                 label="Display name"

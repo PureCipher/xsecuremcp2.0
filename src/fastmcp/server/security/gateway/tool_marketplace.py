@@ -68,6 +68,12 @@ class PublishStatus(Enum):
     SUSPENDED = "suspended"
     DEPRECATED = "deprecated"
     REJECTED = "rejected"
+    # Iter 14.11 — admin-driven permanent removal. Distinct from
+    # SUSPENDED (which is reversible via UNSUSPEND) and from
+    # DEPRECATED (which keeps the listing visible with an obsolete
+    # marker). A DEREGISTERED listing is filtered out of the public
+    # catalog and any proxy hosting refuses to forward calls to it.
+    DEREGISTERED = "deregistered"
 
 
 class ReviewRating(Enum):
@@ -89,6 +95,11 @@ class ModerationAction(Enum):
     UNSUSPEND = "unsuspend"
     DEPRECATE = "deprecate"
     REQUEST_CHANGES = "request_changes"
+    # Iter 14.11 — admin-only terminal removal. Maps to
+    # PublishStatus.DEREGISTERED. Triggered when a registry admin
+    # withdraws a listing from the platform (policy violation,
+    # security incident, abandonment by author, etc.).
+    DEREGISTER = "deregister"
 
 
 @dataclass
@@ -238,10 +249,17 @@ class AttestationKind(Enum):
       and version. Curator-attested listings cap at the ``BASIC``
       certification level — strict-tier guarantees require source
       access the registry does not have.
+    - ``OPENAPI``: the listing was synthesised from an ingested
+      OpenAPI document via the registry's REST/OpenAPI helper. The
+      manifest's ``metadata`` carries the originating ``source_id``,
+      ``operation_key``, and ``spec_sha256`` so the runtime can
+      reconstruct the operation surface from the stored spec without
+      re-parsing the manifest.
     """
 
     AUTHOR = "author"
     CURATOR = "curator"
+    OPENAPI = "openapi"
 
 
 class HostingMode(Enum):
@@ -1579,6 +1597,7 @@ class ToolMarketplace:
             ModerationAction.UNSUSPEND: PublishStatus.PUBLISHED,
             ModerationAction.DEPRECATE: PublishStatus.DEPRECATED,
             ModerationAction.REQUEST_CHANGES: PublishStatus.DRAFT,
+            ModerationAction.DEREGISTER: PublishStatus.DEREGISTERED,
         }
 
         new_status = status_map.get(action)

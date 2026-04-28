@@ -59,21 +59,9 @@ function NotFoundCard({ slug }: { slug: string }) {
           .
         </Typography>
         <Box sx={{ mt: 2 }}>
-          <Link href="/registry/clients" legacyBehavior passHref>
-            <Box
-              component="a"
-              sx={{
-                display: "inline-flex",
-                fontSize: 11,
-                fontWeight: 700,
-                color: "var(--app-muted)",
-                textDecoration: "none",
-                "&:hover": { color: "var(--app-fg)" },
-              }}
-            >
+          <Link href="/registry/clients"><Box sx={{ display: "inline-flex", fontSize: 11, fontWeight: 700, color: "var(--app-muted)", textDecoration: "none", "&:hover": { color: "var(--app-fg)" }, }}>
               ← Back to clients
-            </Box>
-          </Link>
+            </Box></Link>
         </Box>
       </CardContent>
     </Card>
@@ -100,21 +88,9 @@ function ErrorCard({
           {message ?? `Failed to load registered client ${slug}.`}
         </Typography>
         <Box sx={{ mt: 2 }}>
-          <Link href="/registry/clients" legacyBehavior passHref>
-            <Box
-              component="a"
-              sx={{
-                display: "inline-flex",
-                fontSize: 11,
-                fontWeight: 700,
-                color: "var(--app-muted)",
-                textDecoration: "none",
-                "&:hover": { color: "var(--app-fg)" },
-              }}
-            >
+          <Link href="/registry/clients"><Box sx={{ display: "inline-flex", fontSize: 11, fontWeight: 700, color: "var(--app-muted)", textDecoration: "none", "&:hover": { color: "var(--app-fg)" }, }}>
               ← Back to clients
-            </Box>
-          </Link>
+            </Box></Link>
         </Box>
       </CardContent>
     </Card>

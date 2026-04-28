@@ -32,6 +32,8 @@ type Props = {
   publishersHref?: string;
   pendingCount?: number;
   publicView?: boolean;
+  initialQuery?: string;
+  hideSummary?: boolean;
 };
 
 type CertificationInfo = {
@@ -62,8 +64,6 @@ function certificationInfo(level?: string): CertificationInfo {
     };
   }
 
-  // We don't have a fixed enum here; prefer a stable ordering heuristic that still
-  // sorts "more certified" above "less certified" for common names.
   if (upper.includes("CERTIFIED") || upper.includes("VERIFIED") || upper.includes("TRUSTED")) {
     return {
       raw,
@@ -110,14 +110,12 @@ export function ToolsCatalog({
   publishersHref,
   pendingCount = 0,
   publicView = false,
+  initialQuery = "",
+  hideSummary = false,
 }: Props) {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [sortMode, setSortMode] = useState<SortMode>("certification_desc");
-  // Attestation-kind filter: "all" / "author" / "curator". The control
-  // only renders if the catalog actually contains both kinds — when a
-  // catalog has no curated listings, the chip group would be visual
-  // noise, so we hide it.
   const [attestationFilter, setAttestationFilter] = useState<
     "all" | "author" | "curator"
   >("all");
@@ -136,8 +134,6 @@ export function ToolsCatalog({
 
   const normalizedQuery = useMemo(() => normalizeText(query), [query]);
 
-  // Whether the catalog is mixed (has both author + curator listings).
-  // Used to decide whether to show the attestation-kind filter at all.
   const hasCuratedListings = useMemo(
     () => tools.some((t) => t.attestation_kind === "curator"),
     [tools],
@@ -168,9 +164,6 @@ export function ToolsCatalog({
         const hay = toolSearchHaystack(tool);
         if (!hay.includes(normalizedQuery)) continue;
       }
-      // Attestation-kind filter. Listings without an explicit
-      // ``attestation_kind`` field are treated as author-attested
-      // (back-compat with pre-curator-iteration data).
       if (attestationFilter !== "all") {
         const kind =
           tool.attestation_kind === "curator" ? "curator" : "author";
@@ -206,59 +199,61 @@ export function ToolsCatalog({
   return (
     <Card variant="outlined" sx={{ overflow: "hidden" }}>
       <CardContent sx={{ p: 0 }}>
-        <Box
-          sx={{
-            p: { xs: 2.5, md: 3 },
-            display: "flex",
-            flexDirection: { xs: "column", md: "row" },
-            alignItems: { xs: "flex-start", md: "center" },
-            justifyContent: "space-between",
-            gap: 2,
-          }}
-        >
-          <Box sx={{ display: "grid", gap: 0.75, maxWidth: 720 }}>
-            <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
-              Directory
-            </Typography>
-            <Typography variant="h6" sx={{ color: "var(--app-fg)" }}>
-              {tools.length ? `${tools.length} trusted ${tools.length === 1 ? "tool" : "tools"}` : "No trusted tools yet"}
-            </Typography>
-            <Typography variant="body2" sx={{ color: "var(--app-muted)" }}>
-              {tools.length
-                ? "Browse approved tools that passed certification and review."
-                : publicView
-                  ? "Approved tools will appear here once publishers submit them and reviewers approve them."
-                  : "Publish a real tool, run preflight, and send it to review. Approved listings appear here automatically."}
-            </Typography>
-          </Box>
+        {!hideSummary ? (
+          <Box
+            sx={{
+              p: { xs: 2.5, md: 3 },
+              display: "flex",
+              flexDirection: { xs: "column", md: "row" },
+              alignItems: { xs: "flex-start", md: "center" },
+              justifyContent: "space-between",
+              gap: 2,
+            }}
+          >
+            <Box sx={{ display: "grid", gap: 0.75, maxWidth: 720 }}>
+              <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
+                Directory
+              </Typography>
+              <Typography variant="h6" sx={{ color: "var(--app-fg)" }}>
+                {tools.length ? `${tools.length} trusted ${tools.length === 1 ? "tool" : "tools"}` : "No trusted tools yet"}
+              </Typography>
+              <Typography variant="body2" sx={{ color: "var(--app-muted)" }}>
+                {tools.length
+                  ? "Browse approved tools that passed certification and review."
+                  : publicView
+                    ? "Approved tools will appear here once publishers submit them and reviewers approve them."
+                    : "Publish a real tool, run preflight, and send it to review. Approved listings appear here automatically."}
+              </Typography>
+            </Box>
 
-          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
-            {publishHref ? (
-              <Link href={publishHref} legacyBehavior passHref>
-                <Button component="a" variant="contained">
+            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+              {publishHref ? (
+                <Button component={Link} href={publishHref} variant="contained">
                   Publish a tool
                 </Button>
-              </Link>
-            ) : null}
-            {reviewHref ? (
-              <Link href={reviewHref} legacyBehavior passHref>
-                <Button component="a" variant="outlined" sx={{ borderColor: "var(--app-accent)", color: "var(--app-muted)" }}>
+              ) : null}
+              {reviewHref ? (
+                <Button component={Link} href={reviewHref} variant="outlined" sx={{ borderColor: "var(--app-accent)", color: "var(--app-muted)" }}>
                   Review queue{pendingCount ? ` (${pendingCount})` : ""}
                 </Button>
-              </Link>
-            ) : null}
-            {publishersHref ? (
-              <Link href={publishersHref} legacyBehavior passHref>
-                <Button component="a" variant={publishHref || reviewHref ? "outlined" : "contained"}>
+              ) : null}
+              {publishersHref ? (
+                <Button component={Link} href={publishersHref} variant={publishHref || reviewHref ? "outlined" : "contained"}>
                   Browse publishers
                 </Button>
-              </Link>
-            ) : null}
+              ) : null}
+            </Box>
           </Box>
-        </Box>
+        ) : null}
 
         {tools.length === 0 ? (
-          <Box sx={{ px: { xs: 2.5, md: 3 }, pb: { xs: 2.5, md: 3 } }}>
+          <Box
+            sx={{
+              px: { xs: 2.5, md: 3 },
+              pt: hideSummary ? { xs: 2.5, md: 3 } : undefined,
+              pb: { xs: 2.5, md: 3 },
+            }}
+          >
             <Box
               sx={{
                 p: { xs: 2.5, md: 3 },
@@ -310,7 +305,7 @@ export function ToolsCatalog({
           </Box>
         ) : (
           <>
-            <Divider />
+            {!hideSummary ? <Divider /> : null}
             <Box sx={{ p: { xs: 2, md: 2.5 }, display: "grid", gap: 1.5, bgcolor: "var(--app-control-bg)" }}>
               <Box sx={{ display: "flex", flexDirection: { xs: "column", md: "row" }, gap: 1.25, alignItems: { md: "center" } }}>
                 <TextField
@@ -386,11 +381,6 @@ export function ToolsCatalog({
                 </Box>
               ) : null}
 
-              {/*
-               * Attestation-kind filter — only rendered when the catalog
-               * actually contains both author-attested and curator-vouched
-               * listings, so we don't surface a single-state toggle.
-               */}
               {showAttestationFilter ? (
                 <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1 }}>
                   <Typography sx={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--app-muted)" }}>
@@ -446,65 +436,63 @@ export function ToolsCatalog({
                           flexDirection: "column",
                         }}
                       >
-                        <Link href={`${basePath}/${encodeURIComponent(tool.tool_name)}`} legacyBehavior passHref>
-                          <CardActionArea component="a" sx={{ height: "100%" }}>
-                            <CardContent sx={{ p: 2, display: "flex", flexDirection: "column", gap: 1.25, minHeight: 154 }}>
-                              <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 1 }}>
-                                <Box sx={{ minWidth: 0 }}>
-                                  <Typography noWrap sx={{ fontSize: 14, fontWeight: 700, color: "var(--app-fg)" }}>
-                                    {tool.display_name ?? tool.tool_name}
-                                  </Typography>
-                                  <Typography noWrap sx={{ fontSize: 12, color: "var(--app-muted)" }}>
-                                    {tool.tool_name}
-                                  </Typography>
-                                </Box>
-                                <Chip
-                                  size="small"
-                                  label={cert.label}
-                                  title={cert.raw ?? "Unrated"}
-                                  sx={{
-                                    ...cert.sx,
-                                    fontSize: 11,
-                                    fontWeight: 700,
-                                    letterSpacing: "0.01em",
-                                    height: 24,
-                                  }}
+                        <CardActionArea component={Link} href={`${basePath}/${encodeURIComponent(tool.tool_name)}`} sx={{ height: "100%" }}>
+                          <CardContent sx={{ p: 2, display: "flex", flexDirection: "column", gap: 1.25, minHeight: 154 }}>
+                            <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 1 }}>
+                              <Box sx={{ minWidth: 0 }}>
+                                <Typography noWrap sx={{ fontSize: 14, fontWeight: 700, color: "var(--app-fg)" }}>
+                                  {tool.display_name ?? tool.tool_name}
+                                </Typography>
+                                <Typography noWrap sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                                  {tool.tool_name}
+                                </Typography>
+                              </Box>
+                              <Chip
+                                size="small"
+                                label={cert.label}
+                                title={cert.raw ?? "Unrated"}
+                                sx={{
+                                  ...cert.sx,
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  letterSpacing: "0.01em",
+                                  height: 24,
+                                }}
+                              />
+                            </Box>
+
+                            {tool.attestation_kind === "curator" ? (
+                              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                                <AttestationBadge
+                                  kind="curator"
+                                  curatorId={tool.curator_id}
                                 />
                               </Box>
+                            ) : null}
 
-                              {tool.attestation_kind === "curator" ? (
-                                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-                                  <AttestationBadge
-                                    kind="curator"
-                                    curatorId={tool.curator_id}
+                            <Typography sx={{ fontSize: 13, color: "var(--app-muted)" }}>
+                              {tool.description ?? "No description provided."}
+                            </Typography>
+
+                            {Array.isArray(tool.categories) && tool.categories.length > 0 ? (
+                              <Box sx={{ mt: "auto", pt: 1, display: "flex", flexWrap: "wrap", gap: 0.75 }}>
+                                {tool.categories.slice(0, 4).map((cat: string) => (
+                                  <Chip
+                                    key={cat}
+                                    size="small"
+                                    label={cat}
+                                    sx={{ bgcolor: "var(--app-surface)", color: "var(--app-fg)", fontSize: 11 }}
                                   />
-                                </Box>
-                              ) : null}
-
-                              <Typography sx={{ fontSize: 13, color: "var(--app-muted)" }}>
-                                {tool.description ?? "No description provided."}
-                              </Typography>
-
-                              {Array.isArray(tool.categories) && tool.categories.length > 0 ? (
-                                <Box sx={{ mt: "auto", pt: 1, display: "flex", flexWrap: "wrap", gap: 0.75 }}>
-                                  {tool.categories.slice(0, 4).map((cat: string) => (
-                                    <Chip
-                                      key={cat}
-                                      size="small"
-                                      label={cat}
-                                      sx={{ bgcolor: "var(--app-surface)", color: "var(--app-fg)", fontSize: 11 }}
-                                    />
-                                  ))}
-                                  {tool.categories.length > 4 ? (
-                                    <Typography sx={{ alignSelf: "center", fontSize: 11, color: "var(--app-muted)" }}>
-                                      +{tool.categories.length - 4}
-                                    </Typography>
-                                  ) : null}
-                                </Box>
-                              ) : null}
-                            </CardContent>
-                          </CardActionArea>
-                        </Link>
+                                ))}
+                                {tool.categories.length > 4 ? (
+                                  <Typography sx={{ alignSelf: "center", fontSize: 11, color: "var(--app-muted)" }}>
+                                    +{tool.categories.length - 4}
+                                  </Typography>
+                                ) : null}
+                              </Box>
+                            ) : null}
+                          </CardContent>
+                        </CardActionArea>
                       </Card>
                     );
                   })}
@@ -517,4 +505,3 @@ export function ToolsCatalog({
     </Card>
   );
 }
-

@@ -1,7 +1,8 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Typography } from "@mui/material";
 
 import { getRegistrySession, getRegistryUserPreferences } from "@/lib/registryClient";
+import { resolveRegistryLanding } from "@/lib/registryLanding";
 import { LoginFormGate } from "./LoginFormGate";
 
 export default async function LoginPage() {
@@ -13,15 +14,12 @@ export default async function LoginPage() {
 
   if (sessionPayload?.session != null) {
     const preferencesPayload = await getRegistryUserPreferences();
-    const preferredLanding = normalizeRegistryLanding(
-      preferencesPayload?.preferences?.workspace?.defaultLandingPage,
+    redirect(
+      resolveRegistryLanding(
+        preferencesPayload?.preferences?.workspace?.defaultLandingPage,
+        sessionPayload.session.role,
+      ),
     );
-    if (preferredLanding) redirect(preferredLanding);
-
-    const role = sessionPayload.session.role ?? "";
-    if (role === "publisher") redirect("/registry/publish/mine");
-    if (role === "reviewer") redirect("/registry/review");
-    redirect("/registry/app");
   }
 
   const backendUnreachable = sessionPayload == null;
@@ -29,117 +27,141 @@ export default async function LoginPage() {
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[--app-bg] px-4 py-10 text-sm text-[--app-fg]">
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(37,99,235,0.10),transparent_34%),radial-gradient(circle_at_18%_18%,rgba(14,165,233,0.12),transparent_30%),radial-gradient(circle_at_85%_15%,rgba(15,23,42,0.08),transparent_34%)]" />
-      <div className="pointer-events-none absolute left-10 top-10 h-28 w-28 border border-[--app-border] opacity-60" />
-      <div className="pointer-events-none absolute bottom-12 right-12 h-40 w-40 border border-[--app-border] opacity-50" />
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(37,99,235,0.08),transparent_45%),radial-gradient(circle_at_top,rgba(14,165,233,0.10),transparent_42%)]" />
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.3]"
+        style={{
+          backgroundImage:
+            "linear-gradient(to right, var(--app-border) 1px, transparent 1px), linear-gradient(to bottom, var(--app-border) 1px, transparent 1px)",
+          backgroundSize: "40px 40px",
+          maskImage:
+            "radial-gradient(ellipse 75% 60% at 50% 25%, black 30%, transparent 80%)",
+          WebkitMaskImage:
+            "radial-gradient(ellipse 75% 60% at 50% 25%, black 30%, transparent 80%)",
+        }}
+      />
+      <div className="pointer-events-none absolute -top-28 left-1/2 h-[24rem] w-[24rem] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(37,99,235,0.18),transparent_60%)] blur-3xl" />
 
-      <div className="relative grid w-full max-w-6xl overflow-hidden border border-[--app-border] bg-[--app-surface]/95 shadow-[0_28px_90px_rgba(15,23,42,0.12)] ring-1 ring-[--app-surface-ring] backdrop-blur-xl lg:grid-cols-[minmax(0,1.1fr)_440px]">
-        <section className="relative min-h-[560px] overflow-hidden border-b border-[--app-border] p-7 sm:p-10 lg:border-b-0 lg:border-r lg:p-12">
-          <div className="absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,var(--app-accent),rgba(14,165,233,0.45),transparent)]" />
-          <div className="inline-flex items-center gap-2 border border-[--app-border] bg-[--app-control-bg] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.22em] text-[--app-muted] ring-1 ring-[--app-surface-ring]">
-            <span>PureCipher</span>
-            <span className="h-1 w-1 bg-[--app-accent]" />
-            <span>Secured MCP Registry</span>
-          </div>
+      <main className="relative w-full max-w-[30rem]">
+        <section className="overflow-hidden rounded-2xl border border-[--app-border] bg-[--app-surface]/95 shadow-[0_28px_90px_rgba(15,23,42,0.18)] ring-1 ring-[--app-surface-ring] backdrop-blur-xl">
+          <div className="h-[3px] w-full bg-[linear-gradient(90deg,transparent,var(--app-accent),rgba(14,165,233,0.75),transparent)]" />
 
-          <div className="mt-10 max-w-2xl space-y-5">
-            <Typography
-              variant="h3"
-              sx={{
-                color: "var(--app-fg)",
-                fontWeight: 850,
-                letterSpacing: "-0.055em",
-                lineHeight: 0.96,
-              }}
-            >
-              {bootstrapRequired ? "Create your first admin." : "Find a tool you can trust."}
-            </Typography>
-            <Typography variant="body1" sx={{ maxWidth: "42rem", color: "var(--app-muted)", fontSize: 17, lineHeight: 1.75 }}>
-              {bootstrapRequired
-                ? "No registry accounts exist yet. Create the first admin account to finish setup."
-                : "Browse a vetted catalog of MCP tools, understand what each one can access, and share your own listings with clear security context."}
-            </Typography>
-          </div>
+          <div className="space-y-6 p-6 sm:p-8">
+            <header className="space-y-4">
+              <div className="inline-flex items-center gap-3">
+                <Logomark />
+                <div className="flex flex-col leading-tight">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.28em] text-[--app-muted]">
+                    PureCipher
+                  </span>
+                  <span className="text-[13px] font-semibold tracking-[-0.01em] text-[--app-fg]">
+                    Secured MCP Registry
+                  </span>
+                </div>
+              </div>
 
-          <dl className="mt-10 grid gap-3 text-xs text-[--app-muted] sm:grid-cols-3">
-            <div className="border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
-              <Typography component="dt" variant="body2" sx={{ fontWeight: 850, color: "var(--app-fg)" }}>
-                Verified listings
-              </Typography>
-              <Typography component="dd" variant="body2" sx={{ mt: 1, color: "var(--app-muted)", lineHeight: 1.65 }}>
-                Attested manifests and certification levels for every published tool.
-              </Typography>
-            </div>
-            <div className="border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
-              <Typography component="dt" variant="body2" sx={{ fontWeight: 850, color: "var(--app-fg)" }}>
-                Role-aware access
-              </Typography>
-              <Typography component="dd" variant="body2" sx={{ mt: 1, color: "var(--app-muted)", lineHeight: 1.65 }}>
-                Viewer, publisher, reviewer, and admin roles mapped to real workflows.
-              </Typography>
-            </div>
-            <div className="border border-[--app-border] bg-[--app-control-bg] p-4 ring-1 ring-[--app-surface-ring]">
-              <Typography component="dt" variant="body2" sx={{ fontWeight: 850, color: "var(--app-fg)" }}>
-                Copy-ready setup
-              </Typography>
-              <Typography component="dd" variant="body2" sx={{ mt: 1, color: "var(--app-muted)", lineHeight: 1.65 }}>
-                Client, Docker, and CI snippets generated from runtime metadata.
-              </Typography>
-            </div>
-          </dl>
+              <div className="space-y-2">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[--app-muted]">
+                  {bootstrapRequired ? "One-time setup" : "Sign in"}
+                </p>
+                <h1 className="text-3xl font-semibold tracking-[-0.04em] text-[--app-fg]">
+                  {bootstrapRequired ? "Create your first admin" : "Sign in to the registry"}
+                </h1>
+                <p className="text-sm leading-6 text-[--app-muted]">
+                  {bootstrapRequired
+                    ? "Finish setup by creating the first admin account for this registry."
+                    : "Use your registry credentials to continue. If you are only browsing, the public catalog is available without signing in."}
+                </p>
+              </div>
+            </header>
 
-          <div className="mt-10 grid max-w-2xl gap-3 sm:grid-cols-2">
-            <div className="border border-[--app-border] bg-[--app-surface] p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">Access model</p>
-              <p className="mt-2 text-sm font-semibold text-[--app-fg]">
-                {"Viewer -> Publisher -> Reviewer -> Admin"}
-              </p>
-            </div>
-            <div className="border border-[--app-border] bg-[--app-surface] p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[--app-muted]">Security</p>
-              <p className="mt-2 text-sm font-semibold text-[--app-fg]">Hashed passwords, tracked sessions, revocable tokens</p>
+            {backendUnreachable ? (
+              <div
+                role="status"
+                className="flex gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-amber-900"
+              >
+                <WarningIcon />
+                <div className="space-y-1.5 text-[12px] leading-relaxed">
+                  <p className="font-semibold">Registry API unreachable</p>
+                  <p style={{ color: "#92400e" }}>
+                    Cannot reach{" "}
+                    <code className="rounded bg-amber-500/15 px-1 py-0.5 font-mono text-[11px]">
+                      {process.env.REGISTRY_BACKEND_URL ?? "http://localhost:8000"}
+                    </code>
+                    . Start the Python registry (for example{" "}
+                    <code className="rounded bg-amber-500/15 px-1 py-0.5 font-mono text-[11px]">
+                      uv run python examples/securemcp/purecipher_registry.py
+                    </code>
+                    ) then refresh.
+                  </p>
+                </div>
+              </div>
+            ) : null}
+
+            <LoginFormGate bootstrapRequired={bootstrapRequired} />
+
+            <div className="space-y-2 text-center">
+              <Link
+                href="/public"
+                className="text-[12px] font-medium text-[--app-muted] underline decoration-[--app-border] underline-offset-4 transition hover:text-[--app-fg]"
+              >
+                Browse the public registry
+              </Link>
+              {!bootstrapRequired ? (
+                <div className="rounded-xl border border-[--app-border] bg-[--app-control-bg] px-4 py-3 text-left">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[--app-muted]">
+                    Need help signing in?
+                  </p>
+                  <p className="mt-2 text-[11px] leading-relaxed text-[--app-muted]">
+                    Ask a registry admin for a one-time recovery token if you have lost
+                    access to your account.
+                  </p>
+                </div>
+              ) : null}
             </div>
           </div>
         </section>
-
-        <section className="flex flex-col justify-center gap-4 bg-[--app-control-bg] p-6 sm:p-8 lg:p-10">
-          {backendUnreachable ? (
-            <Typography
-              component="p"
-              variant="body2"
-              className="border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-amber-800"
-              role="status"
-              sx={{ color: "#92400e" }}
-            >
-              Cannot reach the registry API at{" "}
-              <Typography
-                component="span"
-                variant="caption"
-                sx={{ fontFamily: "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}
-              >
-                {process.env.REGISTRY_BACKEND_URL ?? "http://localhost:8000"}
-              </Typography>
-              . Start the Python registry (for example{" "}
-              <Typography
-                component="span"
-                variant="caption"
-                sx={{ fontFamily: "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}
-              >
-                uv run python examples/securemcp/purecipher_registry.py
-              </Typography>
-              ) then refresh.
-            </Typography>
-          ) : null}
-          <LoginFormGate bootstrapRequired={bootstrapRequired} />
-        </section>
-      </div>
+      </main>
     </div>
   );
 }
 
-function normalizeRegistryLanding(value: string | undefined): string | null {
-  if (!value?.startsWith("/registry/")) return null;
-  if (value.includes("://") || value.includes("\\")) return null;
-  return value;
+function Logomark() {
+  return (
+    <div className="relative flex h-11 w-11 items-center justify-center rounded-xl border border-[--app-border] bg-[linear-gradient(135deg,var(--app-accent),rgb(14,165,233))] shadow-[0_8px_22px_rgba(37,99,235,0.35)]">
+      <svg
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+        className="h-6 w-6 text-white"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <rect x="4" y="10" width="16" height="10" rx="2" />
+        <path d="M8 10V7a4 4 0 1 1 8 0v3" />
+        <circle cx="12" cy="15" r="1.2" fill="currentColor" />
+      </svg>
+    </div>
+  );
 }
 
+function WarningIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className="mt-0.5 h-5 w-5 shrink-0"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 9v4" />
+      <path d="M12 17h.01" />
+      <path d="M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+    </svg>
+  );
+}

@@ -361,20 +361,19 @@ function TopAction({
 }) {
   return (
     <Box sx={{ display: { xs: "none", sm: "flex" }, flexDirection: "column", alignItems: "center", gap: 0.5 }}>
-      <Link href={href} legacyBehavior passHref>
-        <IconButton
-          component="a"
-          sx={{
-            ...topActionButtonSx,
-            borderColor: active ? "var(--app-accent)" : "var(--app-control-border)",
-            bgcolor: active ? "var(--app-control-active-bg)" : "var(--app-control-bg)",
-            color: active ? "var(--app-fg)" : "var(--app-muted)",
-            "&:hover": { bgcolor: "var(--app-hover-bg)" },
-          }}
-        >
-          {children}
-        </IconButton>
-      </Link>
+      <IconButton
+        component={Link}
+        href={href}
+        sx={{
+          ...topActionButtonSx,
+          borderColor: active ? "var(--app-accent)" : "var(--app-control-border)",
+          bgcolor: active ? "var(--app-control-active-bg)" : "var(--app-control-bg)",
+          color: active ? "var(--app-fg)" : "var(--app-muted)",
+          "&:hover": { bgcolor: "var(--app-hover-bg)" },
+        }}
+      >
+        {children}
+      </IconButton>
       <Typography sx={topActionLabelSx}>
         {label}
       </Typography>

@@ -55,33 +55,12 @@ export default async function MyListingsPage() {
         description="Track your submissions across draft, pending review, and published states."
         actions={
           <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
-          <Link href="/registry/publish" legacyBehavior passHref>
-            <Button
-              component="a"
-              variant="contained"
-              sx={{
-                bgcolor: "var(--app-accent)",
-                color: "var(--app-accent-contrast)",
-                "&:hover": { bgcolor: "var(--app-accent)" },
-              }}
-            >
+          <Link href="/registry/publish"><Button variant="contained" sx={{ bgcolor: "var(--app-accent)", color: "var(--app-accent-contrast)", "&:hover": { bgcolor: "var(--app-accent)" }, }}>
               Publish a tool
-            </Button>
-          </Link>
-          <Link href="/registry/publish/get-started" legacyBehavior passHref>
-            <Button
-              component="a"
-              variant="outlined"
-              sx={{
-                borderColor: "var(--app-control-border)",
-                color: "var(--app-muted)",
-                bgcolor: "var(--app-control-bg)",
-                "&:hover": { bgcolor: "var(--app-hover-bg)", borderColor: "var(--app-control-border)" },
-              }}
-            >
+            </Button></Link>
+          <Link href="/registry/publish/get-started"><Button variant="outlined" sx={{ borderColor: "var(--app-control-border)", color: "var(--app-muted)", bgcolor: "var(--app-control-bg)", "&:hover": { bgcolor: "var(--app-hover-bg)", borderColor: "var(--app-control-border)" }, }}>
               Get started
-            </Button>
-          </Link>
+            </Button></Link>
           </Box>
         }
       />
@@ -130,43 +109,12 @@ export default async function MyListingsPage() {
 
                   {item.tool_name ? (
                     <CardActions sx={{ px: 2, pb: 2, pt: 0, display: "flex", gap: 1, flexWrap: "wrap" }}>
-                      <Link
-                        href={`/registry/listings/${encodeURIComponent(item.tool_name)}`}
-                        legacyBehavior
-                        passHref
-                      >
-                        <Button
-                          component="a"
-                          size="small"
-                          variant="outlined"
-                          sx={{
-                            borderColor: "var(--app-control-border)",
-                            color: "var(--app-muted)",
-                            bgcolor: "var(--app-control-bg)",
-                            "&:hover": { bgcolor: "var(--app-hover-bg)", borderColor: "var(--app-control-border)" },
-                          }}
-                        >
+                      <Link href={`/registry/listings/${encodeURIComponent(item.tool_name)}`}><Button size="small" variant="outlined" sx={{ borderColor: "var(--app-control-border)", color: "var(--app-muted)", bgcolor: "var(--app-control-bg)", "&:hover": { bgcolor: "var(--app-hover-bg)", borderColor: "var(--app-control-border)" }, }}>
                           View listing
-                        </Button>
-                      </Link>
-                      <Link
-                        href={`/registry/publish?from=${encodeURIComponent(item.listing_id ?? "")}`}
-                        legacyBehavior
-                        passHref
-                      >
-                        <Button
-                          component="a"
-                          size="small"
-                          variant="outlined"
-                          sx={{
-                            borderColor: "var(--app-accent)",
-                            color: "var(--app-muted)",
-                            "&:hover": { bgcolor: "var(--app-control-active-bg)", borderColor: "var(--app-accent)" },
-                          }}
-                        >
+                        </Button></Link>
+                      <Link href={`/registry/publish?from=${encodeURIComponent(item.listing_id ?? "")}`}><Button size="small" variant="outlined" sx={{ borderColor: "var(--app-accent)", color: "var(--app-muted)", "&:hover": { bgcolor: "var(--app-control-active-bg)", borderColor: "var(--app-accent)" }, }}>
                           Publish new version
-                        </Button>
-                      </Link>
+                        </Button></Link>
                     </CardActions>
                   ) : null}
                 </Card>

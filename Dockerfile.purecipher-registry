@@ -6,7 +6,51 @@ ENV UV_LINK_MODE=copy
 
 WORKDIR /app
 
+# Iter 14.6 + 14.7: install runtimes the curator's introspector
+# needs to spawn third-party MCP servers across every channel
+# (npm / PyPI / Docker / HTTP). Without these, the Onboard
+# third-party wizard fails at the introspect step with
+# "Command 'npx' not found" (npm), "Command 'uvx' not found"
+# (PyPI), or "Command 'docker' not found" (Docker).
+#
+# - curl + ca-certificates + gnupg: needed to bootstrap NodeSource
+#   and any HTTPS-channel introspection.
+# - Node.js 20.x via NodeSource: provides ``npx`` for npm-channel
+#   MCP servers. The Debian-default Node version is too old for
+#   several modern MCP servers, so we pin to Current LTS.
+# - Docker CLI (Iter 14.7): we drop the official static Docker CLI
+#   binary from download.docker.com. The Debian ``docker.io`` package
+#   pulls in the daemon plus a long containerd / runc / iptables
+#   dependency chain that ``--no-install-recommends`` happily strips —
+#   leaving the apt path a no-op and ``/usr/bin/docker`` missing on
+#   slim images. The static CLI tarball is daemon-free and the only
+#   thing we need (the host's daemon answers via the mounted socket;
+#   security trade-off documented in docker-compose.purecipher-registry
+#   .yml). ``$(uname -m)`` selects the right amd64 / aarch64 build so
+#   the image works on Intel Macs, Apple silicon, and Linux servers
+#   alike.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl ca-certificates gnupg \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && DOCKER_CLI_VERSION=27.3.1 \
+    && curl -fsSL "https://download.docker.com/linux/static/stable/$(uname -m)/docker-${DOCKER_CLI_VERSION}.tgz" \
+        | tar -xzf - -C /tmp \
+    && install -m 0755 /tmp/docker/docker /usr/local/bin/docker \
+    && rm -rf /tmp/docker
+
+# uv ships with ``uvx`` (an alias for ``uv tool run``) — installing
+# uv covers PyPI-channel introspection out of the box.
 RUN pip install --no-cache-dir uv
+
+# Sanity check that all four introspection runtimes actually landed
+# on PATH. Failing here at build time is far cheaper than discovering
+# it at runtime when a publisher tries to onboard. ``docker`` checks
+# only the CLI presence; the daemon connection is verified at
+# runtime when the introspector first tries to pull an image.
+RUN node --version && npx --version && uv --version && uvx --version && docker --version
 
 COPY pyproject.toml uv.lock README.md ./
 COPY src ./src

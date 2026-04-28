@@ -64,6 +64,7 @@ class TestPureCipherCLI:
 
         assert isinstance(registry, PureCipherRegistry)
         assert registry.name == "pc-registry"
+        assert registry._enable_legacy_registry_ui is False
         paths = {
             path
             for route in registry._additional_http_routes
@@ -71,6 +72,21 @@ class TestPureCipherCLI:
         }
         assert "/launchpad" in paths
         assert "/launchpad/tools" in paths
+
+    def test_build_registry_from_args_can_enable_legacy_ui(self):
+        parser = build_parser()
+        args = parser.parse_args(
+            [
+                "--signing-secret",
+                "test-secret",
+                "--enable-legacy-ui",
+            ]
+        )
+
+        registry = build_registry_from_args(args)
+
+        assert isinstance(registry, PureCipherRegistry)
+        assert registry._enable_legacy_registry_ui is True
 
     def test_build_registry_from_args_enables_moderation(self):
         parser = build_parser()

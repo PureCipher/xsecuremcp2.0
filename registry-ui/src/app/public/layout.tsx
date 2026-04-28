@@ -2,7 +2,28 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 
 import { NavIcon } from "@/components/security";
-import { AppBar, Box, Button, Container, Toolbar, Typography } from "@mui/material";
+import { AppBar, Box, Button, Toolbar, Typography } from "@mui/material";
+
+// Iter 14.27 — Edge-to-edge public pages.
+//
+// Previously the public registry wrapped its toolbar and body in
+// MUI ``<Container maxWidth="lg">`` (1200px), which centered
+// content with empty 200-300px gutters on standard 1440 / 1920
+// monitors. The pages felt narrow and over-padded on wide screens
+// while still cramped on mobile.
+//
+// New treatment: a shared responsive padding scale that breathes
+// at every viewport, with a soft ceiling at 1600px so ultra-wide
+// monitors don't stretch line lengths past readability. The
+// ceiling is generous enough that 1440 / 1920 displays render
+// fully edge-aware with comfortable margins, not Container-style
+// chunks of empty space.
+const SHELL_SX = {
+  width: "100%",
+  maxWidth: 1600,
+  mx: "auto",
+  px: { xs: 2, sm: 3, md: 4, xl: 6 },
+} as const;
 
 export default function PublicLayout({ children }: { children: ReactNode }) {
   const consoleUrl = process.env.NEXT_PUBLIC_CONSOLE_URL ?? "/registry/app";
@@ -22,8 +43,7 @@ export default function PublicLayout({ children }: { children: ReactNode }) {
           boxShadow: "0 10px 30px rgba(15, 23, 42, 0.04)",
         }}
       >
-        <Toolbar sx={{ px: 2 }}>
-          <Container maxWidth="lg" disableGutters sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+        <Toolbar disableGutters sx={{ ...SHELL_SX, display: "flex", alignItems: "center", gap: 2 }}>
             <Link href="/public/tools" aria-label="Public registry home" style={{ textDecoration: "none", color: "inherit" }}>
               <Box
                 sx={{
@@ -67,7 +87,12 @@ export default function PublicLayout({ children }: { children: ReactNode }) {
             <Box sx={{ display: { xs: "none", sm: "flex" }, alignItems: "center", gap: 1 }}>
               <PublicNavLink href="/public/tools" icon="tools" label="Tools" />
               <PublicNavLink href="/public/publishers" icon="publishers" label="Publishers" />
-              <PublicNavLink href="/public/servers" icon="servers" label="Servers" />
+              {/* Iter 14.28 — dropped "Servers" pill. The
+                  ``/public/servers`` route was a duplicate of
+                  ``/public/publishers`` (same backend list); the
+                  per-server detail page's PublicServerDetailTabs
+                  now render on the publisher detail page. Old URLs
+                  redirect to ``/public/publishers/*``. */}
               {/* /public/clients is hidden until the backend client
                   directory ships — surfacing a nav link to a dead-end
                   empty state erodes trust. The route still resolves
@@ -108,19 +133,18 @@ export default function PublicLayout({ children }: { children: ReactNode }) {
                 </Button>
               </Link>
             </Box>
-          </Container>
         </Toolbar>
       </AppBar>
 
-      <Container maxWidth="lg" sx={{ py: { xs: 3, sm: 4 } }}>
+      <Box sx={{ ...SHELL_SX, py: { xs: 3, sm: 4 } }}>
         <Box sx={{ mb: 2, display: { xs: "flex", sm: "none" }, flexWrap: "wrap", gap: 1 }}>
           <MobilePill href="/public/tools" icon="tools" label="Tools" />
           <MobilePill href="/public/publishers" icon="publishers" label="Publishers" />
-          <MobilePill href="/public/servers" icon="servers" label="Servers" />
+          {/* Iter 14.28 — Servers pill dropped (consolidated). */}
           {/* Clients pill hidden — see desktop nav comment above. */}
         </Box>
         {children}
-      </Container>
+      </Box>
     </Box>
   );
 }

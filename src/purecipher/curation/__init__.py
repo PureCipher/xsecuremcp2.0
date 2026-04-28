@@ -16,12 +16,14 @@ per-session ``docker run --rm -i``.
 """
 
 from purecipher.curation.introspector import (
+    CredentialValidationError,
     HTTPIntrospector,
     IntrospectionError,
     IntrospectionResult,
     Introspector,
     StdioIntrospector,
     check_introspection_launchers,
+    validate_introspect_env,
 )
 from purecipher.curation.manifest_generator import (
     ManifestDraft,
@@ -50,6 +52,7 @@ from purecipher.curation.upstream import (
 )
 
 __all__ = [
+    "CredentialValidationError",
     "CuratorProxyRouter",
     "DockerUpstreamFetcher",
     "HTTPIntrospector",
@@ -75,4 +78,5 @@ __all__ = [
     "parse_npm_upstream",
     "parse_pypi_upstream",
     "parse_upstream",
+    "validate_introspect_env",
 ]

@@ -32,19 +32,31 @@ from purecipher.curation.introspector import IntrospectionResult
 logger = logging.getLogger(__name__)
 
 
-# Keyword groups → permission scope. Order matters: a tool name might
-# match multiple groups, and we add every scope the matches imply.
+# Iter 14.9 — heuristic redesign.
+#
+# Earlier iterations keyword-matched broad CRUD verbs (``get``,
+# ``create``, ``update``, ``put``, ``run``, ``command``) against tool
+# names + descriptions. That worked for filesystem MCP servers (where
+# names like ``read_file``/``write_file`` cleanly imply scope) but
+# produced absurd false positives on REST-API surfaces:
+#
+# - ``jira_get_issue`` matched ``get`` → FILE_SYSTEM_READ
+# - ``jira_create_issue`` matched ``create`` → FILE_SYSTEM_WRITE
+# - ``jira_batch_get_changelogs`` description matched ``run`` →
+#   SUBPROCESS_EXEC
+#
+# A REST CRUD tool surface should suggest only NETWORK_ACCESS. The
+# fix: filesystem and subprocess scopes now require *structural*
+# evidence — either a schema argument that names a path / file /
+# command, or co-occurrence of a filesystem noun with a fs verb in
+# the same tool's name. NETWORK_ACCESS keeps a permissive keyword
+# list because that scope almost always applies to MCP servers
+# anyway, and over-suggesting it costs nothing (curators leave it
+# on most of the time).
 _KEYWORDS: tuple[tuple[frozenset[str], PermissionScope, str], ...] = (
-    (
-        frozenset({"read", "fetch", "get", "load", "open", "scan"}),
-        PermissionScope.FILE_SYSTEM_READ,
-        "Tool name suggests it reads files",
-    ),
-    (
-        frozenset({"write", "save", "create", "store", "update", "put"}),
-        PermissionScope.FILE_SYSTEM_WRITE,
-        "Tool name suggests it writes files",
-    ),
+    # NETWORK_ACCESS — permissive. These keywords genuinely imply
+    # network behavior for both REST APIs and HTTP scrapers, and
+    # curators rarely uncheck this scope.
     (
         frozenset(
             {
@@ -56,26 +68,101 @@ _KEYWORDS: tuple[tuple[frozenset[str], PermissionScope, str], ...] = (
                 "download",
                 "upload",
                 "search",
+                "webhook",
+                "endpoint",
             }
         ),
         PermissionScope.NETWORK_ACCESS,
         "Tool name suggests it makes network calls",
     ),
+    # SUBPROCESS_EXEC — strict vocabulary only. ``run`` is dropped
+    # entirely because it matches benign descriptions like "run a
+    # query" or "run a batch". ``command`` is dropped from the name
+    # path because Jira / Linear / Slack all use it as a generic
+    # noun ("command palette", "slash command"). The schema-arg
+    # hint below still fires when a tool actually accepts a
+    # ``command`` parameter, which is the case where SUBPROCESS_EXEC
+    # is real.
     (
-        frozenset({"exec", "run", "shell", "command", "spawn", "subprocess"}),
+        frozenset({"exec", "shell", "spawn", "subprocess"}),
         PermissionScope.SUBPROCESS_EXEC,
-        "Tool name suggests it executes subprocesses",
+        "Tool name uses subprocess vocabulary",
     ),
     (
-        frozenset({"env", "environ", "config"}),
+        frozenset({"env", "environ"}),
         PermissionScope.ENVIRONMENT_READ,
         "Tool name suggests it reads environment variables",
     ),
 )
 
+
+# Filesystem inferences are special-cased outside ``_KEYWORDS``
+# because they need co-occurrence logic: a noun (``file``/``directory``)
+# combined with a verb decides whether READ or WRITE applies. A bare
+# verb match (``read``, ``write``) never fires because those words
+# are too ambiguous in REST-API names — ``read_messages`` is Slack,
+# ``write_post`` is a forum API.
+_FS_NOUNS: frozenset[str] = frozenset({"file", "files", "directory", "folder", "path"})
+_FS_READ_VERBS: frozenset[str] = frozenset(
+    {"read", "open", "scan", "list", "stat", "cat"}
+)
+_FS_WRITE_VERBS: frozenset[str] = frozenset(
+    {"write", "save", "delete", "remove", "rm", "mkdir", "rmdir", "create", "append"}
+)
+
+
+def _filesystem_name_match(
+    haystack: str,
+) -> list[tuple[PermissionScope, str]]:
+    """Decide whether a tool name implies filesystem access.
+
+    A filesystem noun (``file``/``directory``/``folder``/``path``)
+    must appear in the name or description for any inference to
+    fire. With a noun present, a write-coded verb upgrades the
+    suggestion to FILE_SYSTEM_WRITE; otherwise a read-coded verb
+    yields FILE_SYSTEM_READ. A noun without any verb still fires
+    READ, since "list_files" might just be ``list_files`` with the
+    verb in the schema.
+
+    Returns the list of (scope, rationale) pairs to add. Empty when
+    no filesystem noun matched.
+    """
+    if not any(_word_in(haystack, n) for n in _FS_NOUNS):
+        return []
+    has_write = any(_word_in(haystack, v) for v in _FS_WRITE_VERBS)
+    has_read = any(_word_in(haystack, v) for v in _FS_READ_VERBS)
+    out: list[tuple[PermissionScope, str]] = []
+    # Always suggest READ when a fs noun appears — opening or
+    # listing implies at least read access.
+    out.append(
+        (
+            PermissionScope.FILE_SYSTEM_READ,
+            "Tool name mentions files / directories",
+        )
+    )
+    if has_write:
+        out.append(
+            (
+                PermissionScope.FILE_SYSTEM_WRITE,
+                "Tool name pairs a filesystem noun with a write verb",
+            )
+        )
+    # ``has_read`` doesn't add anything beyond the implicit READ
+    # above, but expose it via rationale when the verb is explicit
+    # so the curator sees stronger evidence.
+    if has_read and not has_write:
+        out[0] = (
+            PermissionScope.FILE_SYSTEM_READ,
+            "Tool name pairs a filesystem noun with a read verb",
+        )
+    return out
+
+
 # Argument name patterns that strongly imply a particular scope. These
 # inspect the tool's JSON schema rather than its name, so they catch
-# tools whose names don't betray their behavior.
+# tools whose names don't betray their behavior — and, post-Iter
+# 14.9, they're the *primary* signal for filesystem and subprocess
+# scopes (rather than name keywords, which proved too noisy).
 _SCHEMA_ARG_HINTS: dict[str, tuple[PermissionScope, str]] = {
     "path": (
         PermissionScope.FILE_SYSTEM_READ,
@@ -93,6 +180,10 @@ _SCHEMA_ARG_HINTS: dict[str, tuple[PermissionScope, str]] = {
         PermissionScope.FILE_SYSTEM_READ,
         "Tool accepts a 'filename' argument",
     ),
+    "directory": (
+        PermissionScope.FILE_SYSTEM_READ,
+        "Tool accepts a 'directory' argument",
+    ),
     "url": (
         PermissionScope.NETWORK_ACCESS,
         "Tool accepts a 'url' argument",
@@ -104,6 +195,10 @@ _SCHEMA_ARG_HINTS: dict[str, tuple[PermissionScope, str]] = {
     "command": (
         PermissionScope.SUBPROCESS_EXEC,
         "Tool accepts a 'command' argument",
+    ),
+    "args": (
+        PermissionScope.SUBPROCESS_EXEC,
+        "Tool accepts an 'args' argument (subprocess argv)",
     ),
 }
 
@@ -250,11 +345,22 @@ def derive_manifest_draft(
     # Tool-name and tool-description heuristics.
     for tool in introspection.tools:
         haystack = f"{tool.name} {tool.description}".lower()
+        # Generic keyword groups (network, subprocess, env). These
+        # only match unambiguous vocabulary post-Iter 14.9.
         for keywords, scope, rationale in _KEYWORDS:
             if any(_word_in(haystack, kw) for kw in keywords):
                 _add_evidence(scope, rationale, f"tool: {tool.name}")
 
-        # Schema-argument heuristics.
+        # Filesystem inferences need co-occurrence (noun + verb) so
+        # they live in their own helper rather than the keyword
+        # table. Returns zero or more (scope, rationale) pairs.
+        for scope, rationale in _filesystem_name_match(haystack):
+            _add_evidence(scope, rationale, f"tool: {tool.name}")
+
+        # Schema-argument heuristics. These remain the strongest
+        # signal for filesystem and subprocess scopes — a tool
+        # accepting a ``path`` or ``command`` argument is essentially
+        # always touching that resource, regardless of its name.
         properties = (tool.input_schema or {}).get("properties") or {}
         if isinstance(properties, dict):
             for arg_name in properties.keys():

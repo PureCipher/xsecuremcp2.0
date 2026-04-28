@@ -99,18 +99,14 @@ export function ServersDirectory({
 
           <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
             {onboardHref ? (
-              <Link href={onboardHref} legacyBehavior passHref>
-                <Button component="a" variant="contained">
-                  Onboard MCP server
-                </Button>
-              </Link>
+              <Button component={Link} href={onboardHref} variant="contained">
+                Onboard MCP server
+              </Button>
             ) : null}
             {toolsHref ? (
-              <Link href={toolsHref} legacyBehavior passHref>
-                <Button component="a" variant={onboardHref ? "outlined" : "contained"}>
-                  Trusted tools
-                </Button>
-              </Link>
+              <Button component={Link} href={toolsHref} variant={onboardHref ? "outlined" : "contained"}>
+                Trusted tools
+              </Button>
             ) : null}
           </Box>
         </Box>
@@ -190,42 +186,40 @@ export function ServersDirectory({
                       0;
                     return (
                       <Card key={server.publisher_id} variant="outlined" sx={{ bgcolor: "var(--app-control-bg)" }}>
-                        <Link href={`${basePath}/${encodeURIComponent(server.publisher_id)}`} legacyBehavior passHref>
-                          <CardActionArea component="a" sx={{ height: "100%" }}>
-                            <CardContent sx={{ p: 2, display: "grid", gap: 1.25, minHeight: 148 }}>
-                              <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 1 }}>
-                                <Box sx={{ minWidth: 0 }}>
-                                  <Typography noWrap sx={{ fontSize: 14, fontWeight: 700, color: "var(--app-fg)" }}>
-                                    {server.display_name ?? server.publisher_id}
-                                  </Typography>
-                                  <Typography noWrap sx={{ fontSize: 12, color: "var(--app-muted)" }}>
-                                    {server.publisher_id}
-                                  </Typography>
-                                </Box>
-                                {server.trust_score?.overall != null ? (
-                                  <Chip
-                                    size="small"
-                                    label={`Trust ${server.trust_score.overall.toFixed(1)}`}
-                                    sx={{
-                                      bgcolor: "var(--app-surface)",
-                                      color: "var(--app-muted)",
-                                      fontWeight: 700,
-                                      fontSize: 11,
-                                    }}
-                                  />
-                                ) : null}
+                        <CardActionArea component={Link} href={`${basePath}/${encodeURIComponent(server.publisher_id)}`} sx={{ height: "100%" }}>
+                          <CardContent sx={{ p: 2, display: "grid", gap: 1.25, minHeight: 148 }}>
+                            <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 1 }}>
+                              <Box sx={{ minWidth: 0 }}>
+                                <Typography noWrap sx={{ fontSize: 14, fontWeight: 700, color: "var(--app-fg)" }}>
+                                  {server.display_name ?? server.publisher_id}
+                                </Typography>
+                                <Typography noWrap sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                                  {server.publisher_id}
+                                </Typography>
                               </Box>
+                              {server.trust_score?.overall != null ? (
+                                <Chip
+                                  size="small"
+                                  label={`Trust ${server.trust_score.overall.toFixed(1)}`}
+                                  sx={{
+                                    bgcolor: "var(--app-surface)",
+                                    color: "var(--app-muted)",
+                                    fontWeight: 700,
+                                    fontSize: 11,
+                                  }}
+                                />
+                              ) : null}
+                            </Box>
 
-                              <Typography sx={{ fontSize: 13, color: "var(--app-muted)" }}>
-                                {server.summary ?? server.description ?? "No server summary provided."}
-                              </Typography>
+                            <Typography sx={{ fontSize: 13, color: "var(--app-muted)" }}>
+                              {server.summary ?? server.description ?? "No server summary provided."}
+                            </Typography>
 
-                              <Typography sx={{ mt: "auto", fontSize: 12, color: "var(--app-muted)" }}>
-                                {toolCount} approved {toolCount === 1 ? "tool" : "tools"} exposed
-                              </Typography>
-                            </CardContent>
-                          </CardActionArea>
-                        </Link>
+                            <Typography sx={{ mt: "auto", fontSize: 12, color: "var(--app-muted)" }}>
+                              {toolCount} approved {toolCount === 1 ? "tool" : "tools"} exposed
+                            </Typography>
+                          </CardContent>
+                        </CardActionArea>
                       </Card>
                     );
                   })}

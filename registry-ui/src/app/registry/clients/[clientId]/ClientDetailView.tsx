@@ -20,6 +20,15 @@ import type {
   RegistryClientTokenSummary,
 } from "@/lib/registryClient";
 import { RegistryPageHeader } from "@/components/security";
+import { ActivityPanel } from "./ActivityPanel";
+import { AuthorizationNutritionLabel } from "./AuthorizationNutritionLabel";
+import { ClientLifecycleHistory } from "./ClientLifecycleHistory";
+import { ClientOnboardingSnippets } from "./ClientOnboardingSnippets";
+import { SimulationPanel } from "./SimulationPanel";
+import {
+  ActivityStatusExplainer,
+  AdminStatusExplainer,
+} from "./StatusExplainers";
 
 type Props = {
   client: RegistryClientSummary;
@@ -202,11 +211,13 @@ export function ClientDetailView({ client, tokens, governance }: Props) {
                 fontWeight: 700,
               }}
             />
-            <Chip
-              label={isSuspended ? "Suspended" : "Active"}
-              size="small"
-              color={isSuspended ? "warning" : "success"}
-              variant={isSuspended ? "filled" : "outlined"}
+            {/* Iter 14.36 — Admin + activity chips become click-to-
+                explain popovers. The chips themselves still render
+                inline (same visual), wrapped in a button + ? icon
+                that opens the threshold/consequence detail. */}
+            <AdminStatusExplainer status={client.status} />
+            <ActivityStatusExplainer
+              status={governance?.activity?.status_label}
             />
           </Box>
         }
@@ -546,24 +557,47 @@ export function ClientDetailView({ client, tokens, governance }: Props) {
         </CardContent>
       </Card>
 
+      {/* Iter 14.34 — Authorization nutrition label. Sits before the
+          onboarding snippets so the operator sees what the client is
+          allowed to do before they wire it into anything. */}
+      <AuthorizationNutritionLabel client={client} governance={governance} />
+
+      {/* Iter 14.33 — Per-language onboarding snippets. Sits below
+          the API-tokens card because the snippet flow assumes the
+          operator already has a token they can paste in. */}
+      <ClientOnboardingSnippets client={client} tokens={orderedTokens} />
+
+      <ActivityPanel slug={client.slug} initialGovernance={governance} />
+
+      {/* Iter 14.35 — Lifecycle history. Sits between ActivityPanel
+          (which shows the call rhythm) and ClientGovernanceCard
+          (which shows the rolled-up plane counters): "what changed
+          for this client and when, classified by severity?" */}
+      <ClientLifecycleHistory
+        client={client}
+        tokens={orderedTokens}
+        governance={governance}
+      />
+
       <ClientGovernanceCard slug={client.slug} governance={governance} />
 
+      <SimulationPanel slug={client.slug} />
+
       <Box sx={{ pt: 1 }}>
-        <Link href="/registry/clients" legacyBehavior passHref>
-          <Box
-            component="a"
-            sx={{
-              display: "inline-flex",
-              fontSize: 11,
-              fontWeight: 700,
-              color: "var(--app-muted)",
-              textDecoration: "none",
-              "&:hover": { color: "var(--app-fg)" },
-            }}
-          >
-            ← Back to clients
-          </Box>
-        </Link>
+        <Box
+          component={Link}
+          href="/registry/clients"
+          sx={{
+            display: "inline-flex",
+            fontSize: 11,
+            fontWeight: 700,
+            color: "var(--app-muted)",
+            textDecoration: "none",
+            "&:hover": { color: "var(--app-fg)" },
+          }}
+        >
+          ← Back to clients
+        </Box>
       </Box>
     </Box>
   );

@@ -17,6 +17,10 @@ QUEUE_STATUSES = (
     PublishStatus.PENDING_REVIEW,
     PublishStatus.PUBLISHED,
     PublishStatus.SUSPENDED,
+    # Iter 14.11 — show DEREGISTERED listings in the moderation
+    # queue (read-only, no actions) so admins can audit historical
+    # removals without digging through individual listing pages.
+    PublishStatus.DEREGISTERED,
 )
 
 ACTION_BY_NAME = {
@@ -26,12 +30,19 @@ ACTION_BY_NAME = {
     "unsuspend": ModerationAction.UNSUSPEND,
     "request-changes": ModerationAction.REQUEST_CHANGES,
     "request_changes": ModerationAction.REQUEST_CHANGES,
+    "deregister": ModerationAction.DEREGISTER,
 }
 
+# Iter 14.11 — ``deregister`` is offered on every status that
+# represents a live or recoverable listing (PUBLISHED, SUSPENDED,
+# DEPRECATED, PENDING_REVIEW). It's NOT offered on DEREGISTERED itself
+# (terminal) or on DRAFT/REJECTED (never made it to the catalog, so
+# there's nothing to deregister).
 AVAILABLE_ACTIONS = {
-    PublishStatus.PENDING_REVIEW: ("approve", "reject", "request-changes"),
-    PublishStatus.PUBLISHED: ("suspend",),
-    PublishStatus.SUSPENDED: ("unsuspend",),
+    PublishStatus.PENDING_REVIEW: ("approve", "reject", "request-changes", "deregister"),
+    PublishStatus.PUBLISHED: ("suspend", "deregister"),
+    PublishStatus.SUSPENDED: ("unsuspend", "deregister"),
+    PublishStatus.DEPRECATED: ("deregister",),
 }
 
 

@@ -104,18 +104,14 @@ export function PublishersDirectory({
 
           <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
             {publishHref ? (
-              <Link href={publishHref} legacyBehavior passHref>
-                <Button component="a" variant="contained">
-                  Publish a tool
-                </Button>
-              </Link>
+              <Button component={Link} href={publishHref} variant="contained">
+                Publish a tool
+              </Button>
             ) : null}
             {toolsHref ? (
-              <Link href={toolsHref} legacyBehavior passHref>
-                <Button component="a" variant={publishHref ? "outlined" : "contained"}>
-                  Trusted tools
-                </Button>
-              </Link>
+              <Button component={Link} href={toolsHref} variant={publishHref ? "outlined" : "contained"}>
+                Trusted tools
+              </Button>
             ) : null}
           </Box>
         </Box>
@@ -191,43 +187,41 @@ export function PublishersDirectory({
                 <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" } }}>
                   {filtered.map((publisher) => (
                     <Card key={publisher.publisher_id} variant="outlined" sx={{ bgcolor: "var(--app-control-bg)" }}>
-                      <Link href={`${basePath}/${encodeURIComponent(publisher.publisher_id)}`} legacyBehavior passHref>
-                        <CardActionArea component="a" sx={{ height: "100%" }}>
-                          <CardContent sx={{ p: 2, display: "grid", gap: 1.25, minHeight: 148 }}>
-                            <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 1 }}>
-                              <Box sx={{ minWidth: 0 }}>
-                                <Typography noWrap sx={{ fontSize: 14, fontWeight: 700, color: "var(--app-fg)" }}>
-                                  {publisher.display_name ?? publisher.publisher_id}
-                                </Typography>
-                                <Typography noWrap sx={{ fontSize: 12, color: "var(--app-muted)" }}>
-                                  {publisher.publisher_id}
-                                </Typography>
-                              </Box>
-                              {publisher.trust_score?.overall != null ? (
-                                <Chip
-                                  size="small"
-                                  label={`Trust ${publisher.trust_score.overall.toFixed(1)}`}
-                                  sx={{
-                                    bgcolor: "var(--app-surface)",
-                                    color: "var(--app-muted)",
-                                    fontWeight: 700,
-                                    fontSize: 11,
-                                  }}
-                                />
-                              ) : null}
+                      <CardActionArea component={Link} href={`${basePath}/${encodeURIComponent(publisher.publisher_id)}`} sx={{ height: "100%" }}>
+                        <CardContent sx={{ p: 2, display: "grid", gap: 1.25, minHeight: 148 }}>
+                          <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 1 }}>
+                            <Box sx={{ minWidth: 0 }}>
+                              <Typography noWrap sx={{ fontSize: 14, fontWeight: 700, color: "var(--app-fg)" }}>
+                                {publisher.display_name ?? publisher.publisher_id}
+                              </Typography>
+                              <Typography noWrap sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                                {publisher.publisher_id}
+                              </Typography>
                             </Box>
+                            {publisher.trust_score?.overall != null ? (
+                              <Chip
+                                size="small"
+                                label={`Trust ${publisher.trust_score.overall.toFixed(1)}`}
+                                sx={{
+                                  bgcolor: "var(--app-surface)",
+                                  color: "var(--app-muted)",
+                                  fontWeight: 700,
+                                  fontSize: 11,
+                                }}
+                              />
+                            ) : null}
+                          </Box>
 
-                            <Typography sx={{ fontSize: 13, color: "var(--app-muted)" }}>
-                              {publisher.summary ?? publisher.description ?? "No summary provided."}
-                            </Typography>
+                          <Typography sx={{ fontSize: 13, color: "var(--app-muted)" }}>
+                            {publisher.summary ?? publisher.description ?? "No summary provided."}
+                          </Typography>
 
-                            <Typography sx={{ mt: "auto", fontSize: 12, color: "var(--app-muted)" }}>
-                              {publisher.verified_tool_count ?? publisher.tool_count ?? publisher.listing_count ?? 0} approved{" "}
-                              {(publisher.verified_tool_count ?? publisher.tool_count ?? publisher.listing_count ?? 0) === 1 ? "tool" : "tools"}
-                            </Typography>
-                          </CardContent>
-                        </CardActionArea>
-                      </Link>
+                          <Typography sx={{ mt: "auto", fontSize: 12, color: "var(--app-muted)" }}>
+                            {publisher.verified_tool_count ?? publisher.tool_count ?? publisher.listing_count ?? 0} approved{" "}
+                            {(publisher.verified_tool_count ?? publisher.tool_count ?? publisher.listing_count ?? 0) === 1 ? "tool" : "tools"}
+                          </Typography>
+                        </CardContent>
+                      </CardActionArea>
                     </Card>
                   ))}
                 </Box>

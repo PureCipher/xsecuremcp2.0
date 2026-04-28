@@ -1,28 +1,13 @@
-import { listPublishers, type PublisherSummary } from "@/lib/registryClient";
-import { ServersDirectory } from "@/app/registry/servers/ServersDirectory";
+import { redirect } from "next/navigation";
 
-import { Box, Typography } from "@mui/material";
-
-export default async function PublicServersPage() {
-  const payload = (await listPublishers()) ?? { publishers: [], count: 0 };
-  const publishers: PublisherSummary[] = payload.publishers ?? [];
-
-  return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
-      <Box component="header" sx={{ display: "grid", gap: 0.5 }}>
-        <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
-          MCP Servers
-        </Typography>
-        <Typography variant="h4" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
-          Server directory
-        </Typography>
-        <Typography sx={{ mt: 0.5, maxWidth: 900, fontSize: 12, color: "var(--app-muted)" }}>
-          Browse server profiles derived from publishers that have live tools in the registry.
-        </Typography>
-      </Box>
-
-      <ServersDirectory servers={publishers} basePath="/public/servers" toolsHref="/public/tools" publicView />
-    </Box>
-  );
+/**
+ * Iter 14.28 — ``/public/servers`` is a redirect to
+ * ``/public/publishers``. The two pages were rendering the same
+ * publisher list; the only differentiation lived in the per-server
+ * detail page's ``PublicServerDetailTabs``, which now render on the
+ * public publisher detail page directly. Keeping the route alive as
+ * a redirect preserves any external links that point here.
+ */
+export default function PublicServersRedirect() {
+  redirect("/public/publishers");
 }
-

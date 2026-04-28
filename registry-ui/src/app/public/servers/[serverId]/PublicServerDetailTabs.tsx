@@ -84,42 +84,37 @@ export function PublicServerDetailTabs({
             ) : (
               <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" } }}>
                 {listings.map((tool) => (
-                  <Link
+                  <Box
                     key={tool.tool_name}
+                    component={Link}
                     href={`/public/listings/${encodeURIComponent(tool.tool_name)}`}
-                    legacyBehavior
-                    passHref
+                    sx={{
+                      textDecoration: "none",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 1.25,
+                      borderRadius: 3,
+                      border: "1px solid var(--app-border)",
+                      bgcolor: "var(--app-control-bg)",
+                      p: 2,
+                      "&:hover": { borderColor: "var(--app-accent)" },
+                    }}
                   >
-                    <Box
-                      component="a"
-                      sx={{
-                        textDecoration: "none",
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 1.25,
-                        borderRadius: 3,
-                        border: "1px solid var(--app-border)",
-                        bgcolor: "var(--app-control-bg)",
-                        p: 2,
-                        "&:hover": { borderColor: "var(--app-accent)" },
-                      }}
-                    >
-                      <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 2 }}>
-                        <Box sx={{ minWidth: 0 }}>
-                          <Typography sx={{ fontSize: 16, fontWeight: 700, color: "var(--app-fg)" }} noWrap>
-                            {tool.display_name ?? tool.tool_name}
-                          </Typography>
-                          <Typography sx={{ fontSize: 11, color: "var(--app-muted)" }} noWrap>
-                            {tool.tool_name}
-                          </Typography>
-                        </Box>
-                        <CertificationBadge level={tool.certification_level} />
+                    <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 2 }}>
+                      <Box sx={{ minWidth: 0 }}>
+                        <Typography sx={{ fontSize: 16, fontWeight: 700, color: "var(--app-fg)" }} noWrap>
+                          {tool.display_name ?? tool.tool_name}
+                        </Typography>
+                        <Typography sx={{ fontSize: 11, color: "var(--app-muted)" }} noWrap>
+                          {tool.tool_name}
+                        </Typography>
                       </Box>
-                      <Typography sx={{ fontSize: 12, color: "var(--app-muted)", overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical" }}>
-                        {tool.description ?? "No description provided."}
-                      </Typography>
+                      <CertificationBadge level={tool.certification_level} />
                     </Box>
-                  </Link>
+                    <Typography sx={{ fontSize: 12, color: "var(--app-muted)", overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical" }}>
+                      {tool.description ?? "No description provided."}
+                    </Typography>
+                  </Box>
                 ))}
               </Box>
             )}
@@ -131,4 +126,3 @@ export function PublicServerDetailTabs({
     </Box>
   );
 }
-

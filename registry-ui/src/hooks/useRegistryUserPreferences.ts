@@ -17,6 +17,21 @@ export type RegistryUserPreferences = {
   workspace: {
     defaultLandingPage: string;
     density: "comfortable" | "compact";
+    // Iter 14.14 — once dismissed, the Policy Kernel orientation
+    // header doesn't render again for this user. Stored alongside
+    // the rest of the workspace preferences so power users get
+    // their dismissal honored across devices via the server-sync
+    // path (and locally via localStorage when the server is offline).
+    policyKernelIntroDismissed: boolean;
+    // Iter 14.18 — last-clicked Policy Kernel tab. When set,
+    // overrides the role-default landing tab (admin → metrics,
+    // reviewer → proposals, else → catalog). Empty string means
+    // "no preference; use the role default". Stored as a string
+    // (not the PolicyTabKey union) to avoid cross-module imports;
+    // PolicyManager validates against the live union and silently
+    // falls back to the role default when an unknown key is
+    // encountered (e.g., after a tab rename).
+    policyKernelDefaultTab: string;
   };
   publisher: {
     defaultCertification: "basic" | "standard" | "advanced";
@@ -42,6 +57,8 @@ const DEFAULT_PREFERENCES: RegistryUserPreferences = {
   workspace: {
     defaultLandingPage: "/registry/app",
     density: "comfortable",
+    policyKernelIntroDismissed: false,
+    policyKernelDefaultTab: "",
   },
   publisher: {
     defaultCertification: "basic",

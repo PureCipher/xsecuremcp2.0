@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Box, Button, Card, CardContent, TextField, Typography } from "@mui/material";
+import { useCallback, useState } from "react";
+import { Box, Button, Card, CardContent, TextField, Tooltip, Typography } from "@mui/material";
 import type {
   PolicyConfig,
   PolicyProviderItem,
@@ -11,6 +11,281 @@ import { downloadJsonFile } from "../../policyTransfer";
 import { usePolicyContext } from "../../contexts/PolicyContext";
 import { JsonEditor } from "../JsonEditor";
 import { ConfirmModal } from "../ConfirmModal";
+
+/**
+ * Iter 14.20 — Live chain flow visualization.
+ *
+ * Originally the Live Chain panel was a vertical list of provider
+ * cards; the order of providers (and therefore the order in which
+ * a request hits each rule) was implied by card order but never
+ * shown explicitly. For a curator skimming the page, "the chain
+ * is a pipeline" wasn't legible.
+ *
+ * This component renders the same providers as a flow diagram
+ * placed above the detail cards: an entry node ("Request"), one
+ * chip per provider with arrow connectors between, and a terminal
+ * outcome chip. Clicking a chip scrolls the detail card for that
+ * provider into view and briefly highlights it, so the flow viz
+ * acts as both an orientation device and a navigation surface.
+ *
+ * Responsive: horizontal row on wide screens, vertical column on
+ * narrow ones. The detail cards beneath remain the action surface
+ * for editing / removing individual providers.
+ */
+function LiveChainFlow({
+  providers,
+  failClosed,
+}: {
+  providers: PolicyProviderItem[];
+  failClosed?: boolean;
+}) {
+  const handleJump = useCallback((index: number) => {
+    const target = document.getElementById(`live-chain-step-${index}`);
+    if (!target) return;
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+    // Brief highlight so the card the curator just landed on is
+    // visually distinct from its neighbors. Removed after 1.5s so
+    // it doesn't linger as a permanent state.
+    target.dataset.flashHighlight = "true";
+    window.setTimeout(() => {
+      delete target.dataset.flashHighlight;
+    }, 1500);
+  }, []);
+
+  if (providers.length === 0) return null;
+
+  // Chip renders a compact node: step number + provider type + policy_id.
+  // Kept narrow so 4-6 providers fit on one row at common viewport widths.
+  const FlowNode = ({ provider }: { provider: PolicyProviderItem }) => (
+    <Tooltip title={provider.summary || provider.type} placement="top">
+      <Box
+        component="button"
+        type="button"
+        onClick={() => handleJump(provider.index)}
+        aria-label={`Jump to step ${provider.index + 1}: ${provider.type}`}
+        sx={{
+          display: "inline-flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 0.25,
+          minWidth: 110,
+          px: 1.5,
+          py: 1,
+          bgcolor: "var(--app-control-bg)",
+          color: "var(--app-fg)",
+          border: "1px solid var(--app-border)",
+          borderRadius: 2,
+          cursor: "pointer",
+          transition: "border-color 120ms ease, background-color 120ms ease",
+          "&:hover": {
+            borderColor: "var(--app-accent)",
+            bgcolor: "var(--app-control-active-bg)",
+          },
+          "&:focus-visible": {
+            outline: "2px solid var(--app-accent)",
+            outlineOffset: 2,
+          },
+        }}
+      >
+        <Typography
+          sx={{
+            fontSize: 9,
+            fontWeight: 800,
+            letterSpacing: "0.12em",
+            textTransform: "uppercase",
+            color: "var(--app-muted)",
+          }}
+        >
+          Step {provider.index + 1}
+        </Typography>
+        <Typography
+          sx={{
+            fontSize: 12.5,
+            fontWeight: 700,
+            color: "var(--app-fg)",
+            fontFamily:
+              "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+            lineHeight: 1.2,
+            wordBreak: "break-word",
+            textAlign: "center",
+          }}
+        >
+          {provider.type}
+        </Typography>
+        {provider.policy_id ? (
+          <Typography
+            sx={{
+              fontSize: 10,
+              color: "var(--app-muted)",
+              maxWidth: 140,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {provider.policy_id}
+          </Typography>
+        ) : null}
+      </Box>
+    </Tooltip>
+  );
+
+  // Terminal outcome chip. Without per-edge deny stats we can't
+  // highlight the dominant deny path, but we *can* tell the curator
+  // what happens when the chain reaches the end without an explicit
+  // verdict — that's the fail-closed/fail-open default.
+  const outcomeLabel = failClosed ? "Default deny" : "Default allow";
+  const outcomeColors = failClosed
+    ? { bg: "rgba(244, 63, 94, 0.10)", fg: "#b91c1c", border: "rgba(248, 113, 113, 0.4)" }
+    : { bg: "var(--app-control-active-bg)", fg: "var(--app-fg)", border: "var(--app-accent)" };
+
+  return (
+    <Box
+      sx={{
+        mt: 3,
+        p: 2,
+        border: "1px solid var(--app-border)",
+        borderRadius: 3,
+        bgcolor: "var(--app-surface)",
+      }}
+    >
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          mb: 1.5,
+          gap: 1,
+          flexWrap: "wrap",
+        }}
+      >
+        <Typography
+          sx={{
+            fontSize: 11,
+            fontWeight: 700,
+            letterSpacing: "0.18em",
+            textTransform: "uppercase",
+            color: "var(--app-muted)",
+          }}
+        >
+          Pipeline
+        </Typography>
+        <Typography sx={{ fontSize: 11, color: "var(--app-muted)" }}>
+          Request flows top-to-bottom on narrow screens, left-to-right on wide ones.
+        </Typography>
+      </Box>
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: { xs: "column", md: "row" },
+          alignItems: { xs: "stretch", md: "center" },
+          gap: 1,
+          overflowX: { md: "auto" },
+          py: 0.5,
+        }}
+      >
+        {/* Entry node: where the request enters */}
+        <Box
+          sx={{
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            minWidth: 82,
+            px: 1.25,
+            py: 1,
+            bgcolor: "var(--app-control-bg)",
+            border: "1px dashed var(--app-border)",
+            borderRadius: 2,
+            color: "var(--app-muted)",
+            fontSize: 11,
+            fontWeight: 700,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+          }}
+        >
+          Request
+        </Box>
+        <FlowArrow />
+
+        {providers.map((provider, idx) => (
+          <Box
+            key={provider.index}
+            sx={{
+              display: "flex",
+              flexDirection: { xs: "column", md: "row" },
+              alignItems: "center",
+              gap: 1,
+            }}
+          >
+            <FlowNode provider={provider} />
+            {idx < providers.length - 1 ? <FlowArrow /> : <FlowArrow />}
+          </Box>
+        ))}
+
+        {/* Terminal outcome */}
+        <Box
+          sx={{
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            minWidth: 110,
+            px: 1.5,
+            py: 1,
+            bgcolor: outcomeColors.bg,
+            border: `1px solid ${outcomeColors.border}`,
+            borderRadius: 2,
+            color: outcomeColors.fg,
+            fontSize: 11,
+            fontWeight: 800,
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+          }}
+        >
+          {outcomeLabel}
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
+/**
+ * Iter 14.20 — Arrow connector between flow nodes. Rotates between
+ * "right" (horizontal layout, ≥md) and "down" (vertical layout, <md)
+ * via responsive transform.
+ */
+function FlowArrow() {
+  return (
+    <Box
+      aria-hidden
+      sx={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        color: "var(--app-muted)",
+        flexShrink: 0,
+      }}
+    >
+      <Box
+        component="svg"
+        width={20}
+        height={20}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        sx={{
+          transform: { xs: "rotate(90deg)", md: "none" },
+        }}
+      >
+        <line x1={5} y1={12} x2={19} y2={12} />
+        <polyline points="13 6 19 12 13 18" />
+      </Box>
+    </Box>
+  );
+}
 
 type LiveChainTabProps = {
   providers: PolicyProviderItem[];
@@ -95,6 +370,14 @@ export function LiveChainTab({
             </Button>
           </Box>
 
+          {/* Iter 14.20 — Flow visualization band. Rendered above the
+              detail cards so the chain order is the first thing the
+              curator sees. ``failClosed`` would normally come from
+              policy state, but LiveChainTab doesn't receive it; the
+              terminal node defaults to "Default allow" until that
+              prop is plumbed through. */}
+          <LiveChainFlow providers={providers} />
+
           <Box sx={{ mt: 3, display: "flex", flexDirection: "column", gap: 2 }}>
             {providers.length === 0 ? (
               <Card variant="outlined" sx={{ borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none" }}>
@@ -113,12 +396,24 @@ export function LiveChainTab({
                 return (
                   <Card
                     key={provider.index}
+                    id={`live-chain-step-${provider.index}`}
                     variant="outlined"
                     sx={{
                       borderRadius: 3,
                       borderColor: "var(--app-border)",
                       bgcolor: "var(--app-control-bg)",
                       boxShadow: "none",
+                      // Iter 14.20 — flash-highlight when reached via
+                      // the flow chip click. The data-attribute is
+                      // toggled imperatively in handleJump above; CSS
+                      // here drives the visual feedback.
+                      transition:
+                        "border-color 600ms ease, box-shadow 600ms ease",
+                      "&[data-flash-highlight=\"true\"]": {
+                        borderColor: "var(--app-accent)",
+                        boxShadow:
+                          "0 0 0 2px rgba(99, 102, 241, 0.18)",
+                      },
                     }}
                   >
                     <CardContent sx={{ p: 2.5 }}>

@@ -122,21 +122,18 @@ export function ClientsDirectory({
 
           <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
             {onboardHref && !publicView ? (
-              <Link href={onboardHref} legacyBehavior passHref>
-                <Button component="a" variant="contained">
-                  Onboard client
-                </Button>
-              </Link>
+              <Button component={Link} href={onboardHref} variant="contained">
+                Onboard client
+              </Button>
             ) : null}
             {serversHref ? (
-              <Link href={serversHref} legacyBehavior passHref>
-                <Button
-                  component="a"
-                  variant={onboardHref && !publicView ? "outlined" : "contained"}
-                >
-                  MCP servers
-                </Button>
-              </Link>
+              <Button
+                component={Link}
+                href={serversHref}
+                variant={onboardHref && !publicView ? "outlined" : "contained"}
+              >
+                MCP servers
+              </Button>
             ) : null}
           </Box>
         </Box>

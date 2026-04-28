@@ -581,15 +581,11 @@ export function ClientOnboardWizard({ servers }: { servers: OnboardServer[] }) {
                 Access simulation
               </Typography>
               <Typography variant="caption" sx={{ mt: 1, display: "block", color: "var(--app-muted)" }}>
-                Simulation will evaluate selected client bindings against Policy Kernel, Consent Graph, and Contract Broker rules once the binding API is connected.
+                The simulator dry-runs a request through every governance plane — Policy Kernel, Contract Broker, Consent Graph, Provenance Ledger, Reflexive Core — without writing anything. It needs a registered slug to evaluate against, so the simulation surface unlocks on the client&apos;s profile page <strong>after</strong> you finish step 5.
               </Typography>
-              <button
-                type="button"
-                disabled
-                className="mt-4 cursor-not-allowed rounded-full bg-[--app-accent] px-4 py-2 text-xs font-semibold text-[--app-accent-contrast] opacity-60"
-              >
-                Run simulation
-              </button>
+              <Typography variant="caption" sx={{ mt: 1.5, display: "block", color: "var(--app-muted)" }}>
+                What you&apos;ll get: per-plane verdict cards (allow / deny / disabled), the consent path that authorized or denied the call, and the provenance record shape that <em>would</em> have been written.
+              </Typography>
             </div>
           </div>
         ) : null}

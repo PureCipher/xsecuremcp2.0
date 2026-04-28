@@ -16,12 +16,24 @@ Two per-channel introspectors plus a dispatcher:
 
 All three return the same :class:`IntrospectionResult` shape so
 ``manifest_generator.derive_manifest_draft`` works uniformly.
+
+Iter 14.8 — token-on-introspect. Some upstream MCP servers (Stripe,
+Slack, GitHub, Linear, Notion) refuse to start, or return zero tools,
+unless a credential is present in their environment. To unblock those
+during the Onboard wizard, both the stdio and HTTP introspectors
+accept an optional ``env`` dict that's threaded into the spawn (stdio)
+or attached as headers (HTTP). The credentials are passed once for
+introspection and dropped from process memory when ``introspect``
+returns — the registry never persists them. Logging of subprocess
+arguments uses an explicit redactor so token values don't leak into
+operator logs.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import shutil
 from dataclasses import dataclass, field
 from typing import Any
@@ -33,6 +45,131 @@ from fastmcp.server.security.gateway.tool_marketplace import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# ── Iter 14.8 — credential validation ──────────────────────────
+
+# POSIX env var names: leading letter or underscore, followed by
+# letters, digits, or underscores. We additionally upper-case and
+# reject lowercase keys to catch obvious typos like ``Github_Token``.
+_ENV_KEY_RE = re.compile(r"^[A-Z_][A-Z0-9_]*$")
+
+# Hard cap on env value length — keeps logs and request bodies sane,
+# and blocks accidental file-paste of an entire .env. Real tokens are
+# well under this.
+_ENV_VALUE_MAX_LEN = 4096
+
+# Hard cap on number of credentials accepted in a single introspect
+# call. Real-world MCP servers need 1-3; anything more is suspicious.
+_ENV_MAX_KEYS = 32
+
+# Env var names we refuse to override. Letting a curator set ``PATH``
+# or ``LD_PRELOAD`` during introspection would let them re-route the
+# launcher itself; ``HOME`` and ``USER`` are equally load-bearing for
+# uvx / npx caches. Tokens never need these names.
+_ENV_REJECTED_KEYS = frozenset(
+    {
+        "PATH",
+        "LD_PRELOAD",
+        "LD_LIBRARY_PATH",
+        "DYLD_INSERT_LIBRARIES",
+        "DYLD_LIBRARY_PATH",
+        "HOME",
+        "USER",
+        "SHELL",
+        "PYTHONPATH",
+        "PYTHONHOME",
+        "NODE_OPTIONS",
+        "NODE_PATH",
+    }
+)
+
+
+class CredentialValidationError(ValueError):
+    """Raised when a curator-supplied env dict is malformed or unsafe.
+
+    Distinct from :class:`IntrospectionError` so the registry route can
+    return 400 (bad input from the wizard) instead of 502 (upstream
+    couldn't be reached).
+    """
+
+
+def validate_introspect_env(
+    env: dict[str, str] | None,
+) -> dict[str, str] | None:
+    """Validate a curator-supplied env dict for one-shot introspection.
+
+    Iter 14.8. Performs strict input validation:
+
+    - ``None`` or empty dict → returns ``None`` (caller treats as
+      "no credentials, spawn with default environment").
+    - Keys must match POSIX env var naming and must not be in the
+      reserved set above.
+    - Values must be non-empty strings ≤ ``_ENV_VALUE_MAX_LEN``.
+    - Total entries must be ≤ ``_ENV_MAX_KEYS``.
+
+    Raises:
+        CredentialValidationError: With a curator-friendly message if
+            any check fails. Caller surfaces verbatim.
+    """
+    if not env:
+        return None
+    if not isinstance(env, dict):
+        raise CredentialValidationError(
+            "Credentials must be a JSON object of {KEY: value} pairs."
+        )
+    if len(env) > _ENV_MAX_KEYS:
+        raise CredentialValidationError(
+            f"Too many credential entries ({len(env)}); max is "
+            f"{_ENV_MAX_KEYS}. Pass only what the upstream needs."
+        )
+    cleaned: dict[str, str] = {}
+    for raw_key, raw_value in env.items():
+        if not isinstance(raw_key, str):
+            raise CredentialValidationError(
+                "Credential keys must be strings."
+            )
+        key = raw_key.strip()
+        if not _ENV_KEY_RE.match(key):
+            raise CredentialValidationError(
+                f"Invalid credential key {raw_key!r}. Use uppercase env "
+                f"var names like GITHUB_PERSONAL_ACCESS_TOKEN."
+            )
+        if key in _ENV_REJECTED_KEYS:
+            raise CredentialValidationError(
+                f"{key} cannot be set during introspection — it would "
+                "override the launcher's own environment. If your MCP "
+                "server really needs it, contact the registry operator."
+            )
+        if not isinstance(raw_value, str):
+            raise CredentialValidationError(
+                f"Credential value for {key!r} must be a string."
+            )
+        if len(raw_value) == 0:
+            raise CredentialValidationError(
+                f"Credential value for {key!r} is empty. Remove the "
+                "key or fill in a value."
+            )
+        if len(raw_value) > _ENV_VALUE_MAX_LEN:
+            raise CredentialValidationError(
+                f"Credential value for {key!r} is too long "
+                f"({len(raw_value)} chars; max {_ENV_VALUE_MAX_LEN})."
+            )
+        cleaned[key] = raw_value
+    return cleaned or None
+
+
+def _redacted_env_keys(env: dict[str, str] | None) -> str:
+    """Render an env dict for logs without leaking values.
+
+    Returns a comma-joined list of just the keys, e.g.
+    ``"GITHUB_PERSONAL_ACCESS_TOKEN, SLACK_BOT_TOKEN"``. Used inside
+    log messages so operators can see *what* was passed without ever
+    seeing the values themselves.
+    """
+    if not env:
+        return "(none)"
+    return ", ".join(sorted(env.keys()))
 
 
 # Cap how long the registry will wait on a single upstream while
@@ -155,11 +292,23 @@ class HTTPIntrospector:
         self._timeout = float(timeout_seconds)
         self._client_factory = client_factory or (lambda url: Client(url))
 
-    async def introspect(self, upstream_ref: UpstreamRef) -> IntrospectionResult:
+    async def introspect(
+        self,
+        upstream_ref: UpstreamRef,
+        *,
+        env: dict[str, str] | None = None,
+    ) -> IntrospectionResult:
         """Connect to the upstream and capture its capabilities.
 
         Args:
             upstream_ref: Must be an HTTP-channel ref with a valid URL.
+            env: Iter 14.8 — currently not supported for HTTP. HTTP MCP
+                servers expect credentials inline in the URL or via
+                bearer headers; we don't have a robust way to pick the
+                right header name from a generic env dict yet, so the
+                wizard hides the credential editor for HTTP upstreams.
+                Passing a non-empty env raises so a curator can't be
+                misled into thinking it's being sent.
 
         Raises:
             IntrospectionError: On any connect/list failure or timeout.
@@ -169,6 +318,13 @@ class HTTPIntrospector:
             raise IntrospectionError(
                 f"This iteration supports HTTP upstreams only "
                 f"(got {upstream_ref.channel.value})."
+            )
+        if env:
+            raise IntrospectionError(
+                "Credentials at introspect time are only supported for "
+                "PyPI / npm / Docker upstreams. For HTTP MCP servers, "
+                "embed the token in the URL or expose an authenticated "
+                "endpoint."
             )
         url = upstream_ref.identifier
         if not url:
@@ -356,7 +512,22 @@ class StdioIntrospector:
         self._timeout = float(timeout_seconds)
         self._client_factory = client_factory
 
-    async def introspect(self, upstream_ref) -> IntrospectionResult:
+    async def introspect(
+        self,
+        upstream_ref,
+        *,
+        env: dict[str, str] | None = None,
+    ) -> IntrospectionResult:
+        """Spawn the stdio upstream and capture its capabilities.
+
+        Args:
+            upstream_ref: PyPI / npm / Docker channel ref.
+            env: Iter 14.8 — optional one-shot environment. Threaded
+                into the subprocess (uvx / npx) or as ``-e KEY=VALUE``
+                flags on the docker run command. Dropped from process
+                memory when this method returns; never logged with
+                values; never persisted.
+        """
         from fastmcp.server.security.gateway.tool_marketplace import UpstreamChannel
 
         channel = upstream_ref.channel
@@ -372,7 +543,18 @@ class StdioIntrospector:
         if not upstream_ref.identifier:
             raise IntrospectionError("Upstream identifier is empty.")
 
-        client = self._build_client(upstream_ref)
+        if env:
+            # Log keys only — never values. Operators want to see whether
+            # a curator passed credentials (and which ones) for support
+            # debugging, but the values must stay out of logs.
+            logger.info(
+                "Stdio introspect: %s:%s with credential keys: %s",
+                channel.value,
+                upstream_ref.identifier,
+                _redacted_env_keys(env),
+            )
+
+        client = self._build_client(upstream_ref, env=env)
         launcher = _launcher_name_for_channel(channel)
 
         loop = asyncio.get_event_loop()
@@ -435,16 +617,38 @@ class StdioIntrospector:
         result.duration_ms = (loop.time() - start) * 1000.0
         return result
 
-    def _build_client(self, upstream_ref) -> Any:
-        """Construct the MCP client with the right stdio transport."""
+    def _build_client(
+        self,
+        upstream_ref,
+        *,
+        env: dict[str, str] | None = None,
+    ) -> Any:
+        """Construct the MCP client with the right stdio transport.
+
+        Iter 14.8 — accepts an optional ``env`` dict that's passed
+        through to the launcher subprocess so token-required servers
+        (Stripe / Slack / GitHub / Linear / Notion) can return their
+        full tool list during introspection.
+        """
         from fastmcp.server.security.gateway.tool_marketplace import UpstreamChannel
 
         if self._client_factory is not None:
-            return self._client_factory(
-                upstream_ref.channel,
-                upstream_ref.identifier,
-                upstream_ref.version,
-            )
+            # Test factories accept an optional env kwarg. Older test
+            # factories that pre-date Iter 14.8 (3-positional only) keep
+            # working — we fall back to the un-env'd signature.
+            try:
+                return self._client_factory(
+                    upstream_ref.channel,
+                    upstream_ref.identifier,
+                    upstream_ref.version,
+                    env=env,
+                )
+            except TypeError:
+                return self._client_factory(
+                    upstream_ref.channel,
+                    upstream_ref.identifier,
+                    upstream_ref.version,
+                )
 
         from fastmcp import Client
         from fastmcp.client.transports.stdio import (
@@ -459,7 +663,7 @@ class StdioIntrospector:
                 if upstream_ref.version
                 else upstream_ref.identifier
             )
-            transport = UvxStdioTransport(tool_name=spec)
+            transport = UvxStdioTransport(tool_name=spec, env_vars=env)
             return Client(transport)
         if upstream_ref.channel == UpstreamChannel.NPM:
             spec = (
@@ -467,18 +671,38 @@ class StdioIntrospector:
                 if upstream_ref.version
                 else upstream_ref.identifier
             )
-            transport = NpxStdioTransport(package=spec)
+            transport = NpxStdioTransport(package=spec, env_vars=env)
             return Client(transport)
-        # Docker: ``docker run --rm -i [resource flags] <image_ref>``
-        # — generic StdioTransport bridges container stdin/stdout to
-        # the FastMCP client. Resource limits are conservative; the
-        # operator can tune them via daemon-level config if needed.
+        # Docker: ``docker run --rm -i [resource flags] [-e KEY ...]
+        # <image_ref>`` — generic StdioTransport bridges container
+        # stdin/stdout to the FastMCP client. Resource limits are
+        # conservative; the operator can tune them via daemon-level
+        # config if needed.
+        #
+        # Iter 14.8 — credential handling for Docker is two-step:
+        # 1. We pass ``-e KEY`` flags (without the value) on argv so
+        #    Docker knows which vars to forward into the container.
+        # 2. We set the actual KEY=VALUE on the docker CLI's *own*
+        #    environment via the StdioTransport ``env`` parameter.
+        # Docker then forwards the value from its own environ into the
+        # container at startup. This keeps the secret out of the host
+        # process listing (``ps`` only sees ``-e GITHUB_TOKEN``, never
+        # the value), which a curator-supplied ``KEY=VALUE`` argv
+        # form would have exposed.
         from purecipher.curation.upstream import image_ref_for
 
         image_ref = image_ref_for(upstream_ref)
+        docker_args: list[str] = list(_DOCKER_INTROSPECT_FLAGS)
+        docker_env: dict[str, str] | None = None
+        if env:
+            for key in env:
+                docker_args.extend(["-e", key])
+            docker_env = dict(env)
+        docker_args.append(image_ref)
         transport = StdioTransport(
             command="docker",
-            args=[*_DOCKER_INTROSPECT_FLAGS, image_ref],
+            args=docker_args,
+            env=docker_env,
         )
         return Client(transport)
 
@@ -574,17 +798,32 @@ class Introspector:
         self._http = http_introspector or HTTPIntrospector()
         self._stdio = stdio_introspector or StdioIntrospector()
 
-    async def introspect(self, upstream_ref) -> IntrospectionResult:
+    async def introspect(
+        self,
+        upstream_ref,
+        *,
+        env: dict[str, str] | None = None,
+    ) -> IntrospectionResult:
+        """Dispatch to the right per-channel introspector.
+
+        Args:
+            upstream_ref: Resolved upstream reference.
+            env: Iter 14.8 — optional one-shot environment for stdio
+                channels (PyPI / npm / Docker). Forwarded into the
+                spawned subprocess and dropped from memory when this
+                method returns. HTTP rejects non-empty env (see
+                :meth:`HTTPIntrospector.introspect`).
+        """
         from fastmcp.server.security.gateway.tool_marketplace import UpstreamChannel
 
         if upstream_ref.channel == UpstreamChannel.HTTP:
-            return await self._http.introspect(upstream_ref)
+            return await self._http.introspect(upstream_ref, env=env)
         if upstream_ref.channel in (
             UpstreamChannel.PYPI,
             UpstreamChannel.NPM,
             UpstreamChannel.DOCKER,
         ):
-            return await self._stdio.introspect(upstream_ref)
+            return await self._stdio.introspect(upstream_ref, env=env)
         raise IntrospectionError(
             f"Channel {upstream_ref.channel.value} is not supported in "
             "this iteration."

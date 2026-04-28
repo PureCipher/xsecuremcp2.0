@@ -10,13 +10,25 @@ type PolicyTabsProps = {
   versionCount?: number;
 };
 
+// Iter 14.17 — top-level navigation reflects user workflow rather
+// than backend taxonomy:
+//
+//   Catalog       → install bundles
+//   Now Live      → see what's running (live chain + tools)
+//   Proposals     → review staged changes
+//   Lifecycle     → versions + migrations
+//   Metrics       → monitor health
+//
+// The two merged groups (Now Live, Lifecycle) host their original
+// content as sub-tabs via :file:`TabGroup.tsx`. Five top-level
+// tabs total (down from seven post-14.16) — and crucially, the
+// labels read as activities, not as backend planes.
 const TAB_ITEMS: Array<{ key: PolicyTabKey; label: string }> = [
-  { key: "overview", label: "Overview" },
-  { key: "live", label: "Live Chain" },
+  { key: "catalog", label: "Catalog" },
+  { key: "now-live", label: "Now Live" },
   { key: "proposals", label: "Proposals" },
-  { key: "versions", label: "Versions" },
-  { key: "tools", label: "Tools" },
-  { key: "migration", label: "Migration" },
+  { key: "lifecycle", label: "Lifecycle" },
+  { key: "metrics", label: "Metrics" },
 ];
 
 export function PolicyTabs({
@@ -39,10 +51,14 @@ export function PolicyTabs({
         }}
       >
         {TAB_ITEMS.map((item) => {
+          // Iter 14.17 — the version count badge moved to the
+          // Lifecycle tab (which now hosts Versions as a sub-tab),
+          // so the badge surfaces at the top level rather than
+          // hiding inside the inner sub-tab.
           const badge =
             item.key === "proposals" && pendingCount
               ? pendingCount
-              : item.key === "versions" && versionCount
+              : item.key === "lifecycle" && versionCount
                 ? versionCount
                 : null;
 

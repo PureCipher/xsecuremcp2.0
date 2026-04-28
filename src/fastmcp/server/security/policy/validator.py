@@ -118,6 +118,15 @@ _VALID_POLICY_TYPES = {
     "resource_scoped",
     "allow_all",
     "deny_all",
+    # ``compliance_rule`` is registered with the declarative
+    # provider factory (see ``declarative.py``'s
+    # ``type_key="compliance_rule"`` registration) and is the
+    # type emitted by the GDPR / HIPAA / SOC-2 / PCI-DSS / FedRAMP
+    # starter bundles in ``policy/workbench.py``. Without it in
+    # this allow-list the validator rejects every "Stage Bundle"
+    # click in the workbench UI with E_UNKNOWN_TYPE even though
+    # the runtime can build the policy fine.
+    "compliance_rule",
 }
 
 _VALID_COMPOSITIONS = {

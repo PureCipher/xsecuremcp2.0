@@ -7,6 +7,7 @@ import os
 from collections.abc import Sequence
 
 import uvicorn
+
 from fastmcp.server.security.certification.attestation import CertificationLevel
 from purecipher.auth import RegistryAuthSettings
 from purecipher.hosted_runtime import build_hosted_registry_app
@@ -40,6 +41,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--registry-prefix", default="/registry")
+    parser.add_argument(
+        "--enable-legacy-ui",
+        action="store_true",
+        default=_env_flag("PURECIPHER_ENABLE_LEGACY_UI"),
+        help=(
+            "Serve the legacy server-rendered registry UI on the backend. "
+            "Disabled by default; use the separate Next.js registry console instead."
+        ),
+    )
     parser.add_argument(
         "--database-path",
         default=os.getenv("PURECIPHER_REGISTRY_DB"),
@@ -122,6 +132,7 @@ def build_registry_from_args(args: argparse.Namespace) -> PureCipherRegistry:
         issuer_id=args.issuer_id,
         minimum_certification=CertificationLevel(args.minimum_certification),
         registry_prefix=args.registry_prefix,
+        enable_legacy_registry_ui=args.enable_legacy_ui,
         persistence_path=args.database_path,
         mount_security_api=not args.disable_security_api,
         require_moderation=args.require_moderation,

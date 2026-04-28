@@ -261,6 +261,196 @@ class TestDeriveManifestDraft:
         assert sorted(draft.observed_tool_names) == ["alpha", "beta"]
 
 
+class TestIter14_9Heuristics:
+    """Iter 14.9 — tightened permission heuristics.
+
+    The earlier broad keyword sets fired FILE_SYSTEM_*/SUBPROCESS_EXEC
+    on REST CRUD verbs (``get``, ``create``, ``update``, ``run``,
+    ``command``), which produced absurd suggestions for API-shaped
+    MCP servers like Jira / Linear / Slack. Filesystem and subprocess
+    scopes now require *structural* evidence — either a fs-noun + verb
+    co-occurrence in the name, or a schema arg that names the resource.
+    """
+
+    def test_jira_crud_names_do_not_imply_filesystem(self):
+        """A Jira-style CRUD surface must NOT suggest filesystem
+        read/write. Pre-14.9 every ``jira_get_*`` matched ``get`` →
+        FS_READ and every ``jira_create_*`` matched ``create`` →
+        FS_WRITE. Post-14.9 the only suggestion is NETWORK_ACCESS."""
+        intro = IntrospectionResult(
+            upstream_ref=parse_http_upstream("https://x.example/mcp"),
+            tools=[
+                CapabilityTool(
+                    name="jira_get_issue",
+                    description="Get a Jira issue by key",
+                ),
+                CapabilityTool(
+                    name="jira_create_issue",
+                    description="Create a new Jira issue",
+                ),
+                CapabilityTool(
+                    name="jira_update_issue",
+                    description="Update a Jira issue's fields",
+                ),
+                CapabilityTool(
+                    name="jira_search",
+                    description="Search Jira issues using JQL",
+                ),
+            ],
+        )
+        draft = derive_manifest_draft(intro)
+        scopes = {s.scope for s in draft.permission_suggestions}
+        assert PermissionScope.FILE_SYSTEM_READ not in scopes
+        assert PermissionScope.FILE_SYSTEM_WRITE not in scopes
+        assert PermissionScope.SUBPROCESS_EXEC not in scopes
+        # Network access should still fire — Jira's a REST API.
+        assert PermissionScope.NETWORK_ACCESS in scopes
+
+    def test_jira_batch_changelogs_does_not_imply_subprocess(self):
+        """The Jira tool ``jira_batch_get_changelogs`` previously
+        matched ``run`` in its description and fired SUBPROCESS_EXEC.
+        With the strict subprocess vocabulary, no false positive."""
+        intro = IntrospectionResult(
+            upstream_ref=parse_http_upstream("https://x.example/mcp"),
+            tools=[
+                CapabilityTool(
+                    name="jira_batch_get_changelogs",
+                    description=(
+                        "Run a batch operation to retrieve changelogs "
+                        "for multiple issues"
+                    ),
+                ),
+            ],
+        )
+        draft = derive_manifest_draft(intro)
+        scopes = {s.scope for s in draft.permission_suggestions}
+        assert PermissionScope.SUBPROCESS_EXEC not in scopes
+
+    def test_filesystem_mcp_names_still_fire_correctly(self):
+        """Real filesystem-MCP names ``read_file``/``write_file``/
+        ``list_directory`` continue to fire FS_READ/FS_WRITE. The
+        co-occurrence rule (noun + verb) catches them cleanly."""
+        intro = IntrospectionResult(
+            upstream_ref=parse_http_upstream("https://x.example/mcp"),
+            tools=[
+                CapabilityTool(
+                    name="read_file",
+                    description="Read a file's contents",
+                ),
+                CapabilityTool(
+                    name="write_file",
+                    description="Write content to a file",
+                ),
+                CapabilityTool(
+                    name="list_directory",
+                    description="List directory contents",
+                ),
+                CapabilityTool(
+                    name="delete_file",
+                    description="Delete a file",
+                ),
+            ],
+        )
+        draft = derive_manifest_draft(intro)
+        scopes = {s.scope for s in draft.permission_suggestions}
+        assert PermissionScope.FILE_SYSTEM_READ in scopes
+        assert PermissionScope.FILE_SYSTEM_WRITE in scopes
+
+    def test_filesystem_via_schema_arg_still_fires(self):
+        """Even with an opaque tool name, a ``path``/``file_path``
+        schema argument continues to fire FS_READ. This is the
+        primary signal post-Iter 14.9."""
+        intro = IntrospectionResult(
+            upstream_ref=parse_http_upstream("https://x.example/mcp"),
+            tools=[
+                CapabilityTool(
+                    name="opaque_tool",
+                    description="",
+                    input_schema={
+                        "properties": {"path": {"type": "string"}},
+                    },
+                ),
+            ],
+        )
+        draft = derive_manifest_draft(intro)
+        scopes = {s.scope for s in draft.permission_suggestions}
+        assert PermissionScope.FILE_SYSTEM_READ in scopes
+
+    def test_subprocess_via_schema_arg_still_fires(self):
+        """A ``command`` schema arg is the canonical subprocess
+        signal — fires SUBPROCESS_EXEC even when the tool name is
+        innocuous."""
+        intro = IntrospectionResult(
+            upstream_ref=parse_http_upstream("https://x.example/mcp"),
+            tools=[
+                CapabilityTool(
+                    name="run_check",
+                    description="Run a custom diagnostic",
+                    input_schema={
+                        "properties": {
+                            "command": {"type": "string"},
+                            "args": {"type": "array"},
+                        },
+                    },
+                ),
+            ],
+        )
+        draft = derive_manifest_draft(intro)
+        scopes = {s.scope for s in draft.permission_suggestions}
+        assert PermissionScope.SUBPROCESS_EXEC in scopes
+
+    def test_subprocess_strict_vocabulary_fires_via_description(self):
+        """A tool whose description includes ``shell``/``exec``/
+        ``subprocess`` fires SUBPROCESS_EXEC — these are unambiguous
+        terms regardless of the tool name."""
+        intro = IntrospectionResult(
+            upstream_ref=parse_http_upstream("https://x.example/mcp"),
+            tools=[
+                CapabilityTool(
+                    name="run_check",
+                    description="Execute a shell command and return output",
+                ),
+            ],
+        )
+        draft = derive_manifest_draft(intro)
+        scopes = {s.scope for s in draft.permission_suggestions}
+        assert PermissionScope.SUBPROCESS_EXEC in scopes
+
+    def test_run_query_does_not_imply_subprocess(self):
+        """``run_query`` with a SQL-shaped schema is NOT subprocess
+        execution. Generic ``run`` was dropped from the name keyword
+        set in Iter 14.9 precisely to stop this false positive."""
+        intro = IntrospectionResult(
+            upstream_ref=parse_http_upstream("https://x.example/mcp"),
+            tools=[
+                CapabilityTool(
+                    name="run_query",
+                    description="Issue a database query",
+                    input_schema={"properties": {"sql": {"type": "string"}}},
+                ),
+            ],
+        )
+        draft = derive_manifest_draft(intro)
+        scopes = {s.scope for s in draft.permission_suggestions}
+        assert PermissionScope.SUBPROCESS_EXEC not in scopes
+
+    def test_slack_read_messages_does_not_imply_filesystem(self):
+        """A common Slack-shaped name (``read_messages``, ``write_post``)
+        contains a fs-coded verb but no fs noun, so the new helper
+        skips filesystem inference. The previous heuristic fired both."""
+        intro = IntrospectionResult(
+            upstream_ref=parse_http_upstream("https://x.example/mcp"),
+            tools=[
+                CapabilityTool(name="read_messages"),
+                CapabilityTool(name="write_post"),
+            ],
+        )
+        draft = derive_manifest_draft(intro)
+        scopes = {s.scope for s in draft.permission_suggestions}
+        assert PermissionScope.FILE_SYSTEM_READ not in scopes
+        assert PermissionScope.FILE_SYSTEM_WRITE not in scopes
+
+
 class TestReconcileCuratorSelection:
     def _draft(self):
         intro = IntrospectionResult(
@@ -2711,3 +2901,781 @@ class TestEmptyUpstreamRejected:
             )
             assert r.status_code == 422
             assert "zero tools" in r.json()["error"].lower()
+
+
+# ── Iter 14.8 — token-on-introspect ───────────────────────────────
+
+
+class TestValidateIntrospectEnv:
+    """Iter 14.8 — input validation for the curator-supplied env dict."""
+
+    def test_none_returns_none(self):
+        from purecipher.curation import validate_introspect_env
+
+        assert validate_introspect_env(None) is None
+
+    def test_empty_dict_returns_none(self):
+        from purecipher.curation import validate_introspect_env
+
+        assert validate_introspect_env({}) is None
+
+    def test_valid_pair_round_trips(self):
+        from purecipher.curation import validate_introspect_env
+
+        out = validate_introspect_env({"GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_abc"})
+        assert out == {"GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_abc"}
+
+    def test_lowercase_key_rejected(self):
+        from purecipher.curation import (
+            CredentialValidationError,
+            validate_introspect_env,
+        )
+
+        with pytest.raises(CredentialValidationError, match="Invalid credential key"):
+            validate_introspect_env({"github_token": "x"})
+
+    def test_key_with_dash_rejected(self):
+        from purecipher.curation import (
+            CredentialValidationError,
+            validate_introspect_env,
+        )
+
+        with pytest.raises(CredentialValidationError, match="Invalid credential key"):
+            validate_introspect_env({"GITHUB-TOKEN": "x"})
+
+    def test_reserved_key_rejected(self):
+        """Keys that would let a curator hijack the launcher itself
+        (PATH, LD_PRELOAD, etc.) must be refused — even if otherwise
+        well-formed."""
+        from purecipher.curation import (
+            CredentialValidationError,
+            validate_introspect_env,
+        )
+
+        for key in ("PATH", "LD_PRELOAD", "PYTHONPATH", "NODE_OPTIONS", "HOME"):
+            with pytest.raises(CredentialValidationError, match="cannot be set"):
+                validate_introspect_env({key: "anything"})
+
+    def test_empty_value_rejected(self):
+        from purecipher.curation import (
+            CredentialValidationError,
+            validate_introspect_env,
+        )
+
+        with pytest.raises(CredentialValidationError, match="empty"):
+            validate_introspect_env({"GITHUB_PERSONAL_ACCESS_TOKEN": ""})
+
+    def test_oversized_value_rejected(self):
+        from purecipher.curation import (
+            CredentialValidationError,
+            validate_introspect_env,
+        )
+
+        too_long = "x" * 5000
+        with pytest.raises(CredentialValidationError, match="too long"):
+            validate_introspect_env({"GITHUB_PERSONAL_ACCESS_TOKEN": too_long})
+
+    def test_too_many_keys_rejected(self):
+        from purecipher.curation import (
+            CredentialValidationError,
+            validate_introspect_env,
+        )
+
+        big = {f"KEY_{i}": "v" for i in range(64)}
+        with pytest.raises(CredentialValidationError, match="Too many"):
+            validate_introspect_env(big)
+
+    def test_non_string_value_rejected(self):
+        from purecipher.curation import (
+            CredentialValidationError,
+            validate_introspect_env,
+        )
+
+        with pytest.raises(CredentialValidationError, match="must be a string"):
+            validate_introspect_env({"GITHUB_TOKEN": 123})  # type: ignore[dict-item]
+
+    def test_not_a_dict_rejected(self):
+        from purecipher.curation import (
+            CredentialValidationError,
+            validate_introspect_env,
+        )
+
+        with pytest.raises(CredentialValidationError, match="JSON object"):
+            validate_introspect_env(["GITHUB_TOKEN=ghp"])  # type: ignore[arg-type]
+
+
+class TestStdioIntrospectorEnv:
+    """Iter 14.8 — env dict threads into the spawn for stdio channels."""
+
+    def test_factory_receives_env_kwarg_for_pypi(self):
+        """When env is provided, _build_client passes it as a kwarg to
+        the test factory so the spawn can inject it."""
+        import asyncio
+
+        from purecipher.curation import StdioIntrospector
+        from purecipher.curation.upstream import parse_pypi_upstream
+
+        captured: list = []
+
+        def factory(channel, identifier, version, *, env=None):
+            captured.append((channel, identifier, version, env))
+            return _FakeClient(tools=[_FakeTool("ok")])
+
+        introspector = StdioIntrospector(client_factory=factory)
+        ref = parse_pypi_upstream("pypi:markitdown-mcp@1.2.3")
+        result = asyncio.run(
+            introspector.introspect(
+                ref,
+                env={"GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_secret"},
+            )
+        )
+        assert result.tool_count == 1
+        assert len(captured) == 1
+        env_passed = captured[0][3]
+        assert env_passed == {"GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_secret"}
+
+    def test_factory_receives_no_env_when_none_passed(self):
+        """No env kwarg should arrive as ``None`` — preserving the
+        original spawn semantics for upstreams that don't need creds."""
+        import asyncio
+
+        from purecipher.curation import StdioIntrospector
+        from purecipher.curation.upstream import parse_pypi_upstream
+
+        captured: list = []
+
+        def factory(channel, identifier, version, *, env=None):
+            captured.append(env)
+            return _FakeClient(tools=[_FakeTool("ok")])
+
+        introspector = StdioIntrospector(client_factory=factory)
+        ref = parse_pypi_upstream("pypi:markitdown-mcp@1.2.3")
+        asyncio.run(introspector.introspect(ref))
+        assert captured == [None]
+
+    def test_legacy_3arg_factory_still_works(self):
+        """Tests written before Iter 14.8 use a 3-positional factory.
+        The introspector must keep accepting them so existing test
+        suites don't break."""
+        import asyncio
+
+        from purecipher.curation import StdioIntrospector
+        from purecipher.curation.upstream import parse_pypi_upstream
+
+        def factory(channel, identifier, version):
+            return _FakeClient(tools=[_FakeTool("ok")])
+
+        introspector = StdioIntrospector(client_factory=factory)
+        ref = parse_pypi_upstream("pypi:p@1.0")
+        # No env — falls back to 3-arg call.
+        result = asyncio.run(introspector.introspect(ref))
+        assert result.tool_count == 1
+
+    def test_default_pypi_transport_carries_env_vars(self):
+        """Without a factory override, _build_client constructs a real
+        UvxStdioTransport — confirm it carries the env_vars dict."""
+        from purecipher.curation import StdioIntrospector
+        from purecipher.curation.upstream import parse_pypi_upstream
+
+        introspector = StdioIntrospector()
+        ref = parse_pypi_upstream("pypi:markitdown-mcp@1.2.3")
+        client = introspector._build_client(
+            ref, env={"GITHUB_PERSONAL_ACCESS_TOKEN": "ghp"}
+        )
+        # UvxStdioTransport stores env_vars directly; the env dict
+        # ends up on the spawn's ``env`` (after merging defaults).
+        env = getattr(client.transport, "env", None)
+        assert env is not None
+        assert env.get("GITHUB_PERSONAL_ACCESS_TOKEN") == "ghp"
+
+    def test_default_npm_transport_carries_env_vars(self):
+        # NpxStdioTransport.__init__ requires ``npx`` on PATH — skip if
+        # this CI box doesn't have Node installed. The env-passing
+        # behavior is identical to UvxStdioTransport (covered above) so
+        # we don't lose meaningful coverage when this skips.
+        import shutil
+
+        if shutil.which("npx") is None:
+            pytest.skip("npx not on PATH in this environment")
+        from purecipher.curation import StdioIntrospector
+        from purecipher.curation.upstream import parse_npm_upstream
+
+        introspector = StdioIntrospector()
+        ref = parse_npm_upstream("npm:@modelcontextprotocol/server-github@1.0")
+        client = introspector._build_client(
+            ref, env={"GITHUB_PERSONAL_ACCESS_TOKEN": "ghp"}
+        )
+        env = getattr(client.transport, "env", None)
+        assert env is not None
+        assert env.get("GITHUB_PERSONAL_ACCESS_TOKEN") == "ghp"
+
+    def test_default_docker_transport_passes_e_flags_without_values(self):
+        """For Docker, env values must NOT appear in argv (they'd show
+        in ps); only ``-e KEY`` flags (without values). The actual
+        VALUE goes onto the docker CLI's environment, which Docker
+        forwards into the container."""
+        from fastmcp.client.transports.stdio import StdioTransport
+        from purecipher.curation import StdioIntrospector, parse_docker_upstream
+
+        introspector = StdioIntrospector()
+        ref = parse_docker_upstream("docker:ghcr.io/example/mcp:v1")
+        client = introspector._build_client(
+            ref,
+            env={"STRIPE_SECRET_KEY": "sk_test_xxxxxx"},
+        )
+        assert isinstance(client.transport, StdioTransport)
+        args = list(client.transport.args)
+        # ``-e STRIPE_SECRET_KEY`` must be present without a value
+        # bound to it on argv. Specifically the next token after ``-e``
+        # is the bare key.
+        assert "-e" in args
+        e_index = args.index("-e")
+        assert args[e_index + 1] == "STRIPE_SECRET_KEY"
+        # The secret value must NOT appear anywhere in argv.
+        for arg in args:
+            assert "sk_test_xxxxxx" not in arg
+        # But it does land on the CLI's env so Docker can forward it
+        # into the container.
+        env = getattr(client.transport, "env", None)
+        assert env is not None
+        assert env.get("STRIPE_SECRET_KEY") == "sk_test_xxxxxx"
+
+    def test_http_introspector_rejects_env(self):
+        """Iter 14.8 doesn't yet support env on HTTP — passing one
+        must raise IntrospectionError, not silently drop it (which
+        would leave the curator believing the value was sent)."""
+        import asyncio
+
+        from purecipher.curation import HTTPIntrospector
+
+        introspector = HTTPIntrospector(
+            client_factory=lambda url: _FakeClient(tools=[_FakeTool("a")])
+        )
+        ref = parse_http_upstream("https://mcp.example.com/sse")
+        with pytest.raises(IntrospectionError, match="HTTP MCP servers"):
+            asyncio.run(introspector.introspect(ref, env={"X": "y"}))
+
+    def test_introspect_does_not_log_env_values(self, caplog):
+        """When env is provided, the introspector logs the *keys* but
+        never the values. This is the redaction contract that lets
+        operators see what credentials were passed without exposing
+        them in support logs."""
+        import asyncio
+        import logging
+
+        from purecipher.curation import StdioIntrospector
+        from purecipher.curation.upstream import parse_pypi_upstream
+
+        def factory(channel, identifier, version, *, env=None):
+            return _FakeClient(tools=[_FakeTool("ok")])
+
+        introspector = StdioIntrospector(client_factory=factory)
+        ref = parse_pypi_upstream("pypi:p@1.0")
+        secret_value = "ghp_super_secret_value_123"
+        with caplog.at_level(logging.INFO):
+            asyncio.run(
+                introspector.introspect(
+                    ref,
+                    env={"GITHUB_PERSONAL_ACCESS_TOKEN": secret_value},
+                )
+            )
+        joined = "\n".join(rec.getMessage() for rec in caplog.records)
+        # The key is OK to log (operators want to see it).
+        assert "GITHUB_PERSONAL_ACCESS_TOKEN" in joined
+        # The VALUE must never appear.
+        assert secret_value not in joined
+
+
+class TestCurateIntrospectRouteEnv:
+    """Iter 14.8 — the registry route accepts ``env`` and passes it
+    through to the introspector. Validation errors map to 400."""
+
+    def test_route_passes_env_to_introspector(self):
+        """The wizard's POST body's ``env`` field must reach the
+        introspector verbatim. We use a stdio ref because HTTP
+        upstreams don't accept env."""
+        from purecipher import PureCipherRegistry
+        from purecipher.curation import StdioIntrospector
+        from purecipher.curation.introspector import Introspector
+
+        captured: dict = {}
+
+        def factory(channel, identifier, version, *, env=None):
+            captured["env"] = env
+            captured["channel"] = channel
+            return _FakeClient(tools=[_FakeTool("ok")])
+
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
+        registry.set_curation_introspector(
+            Introspector(stdio_introspector=StdioIntrospector(client_factory=factory))
+        )
+        with TestClient(registry.http_app()) as client:
+            r = client.post(
+                "/registry/curate/introspect",
+                json={
+                    "upstream": "pypi:markitdown-mcp@1.2.3",
+                    "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_abc"},
+                },
+            )
+            assert r.status_code == 200, r.text
+        assert captured["channel"].value == "pypi"
+        assert captured["env"] == {"GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_abc"}
+
+    def test_route_omits_env_field_from_response(self):
+        """The introspect response must never echo the env dict back —
+        otherwise we'd be passing tokens through additional layers
+        (browser cache, network logs) needlessly."""
+        from purecipher import PureCipherRegistry
+        from purecipher.curation import StdioIntrospector
+        from purecipher.curation.introspector import Introspector
+
+        def factory(channel, identifier, version, *, env=None):
+            return _FakeClient(tools=[_FakeTool("ok")])
+
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
+        registry.set_curation_introspector(
+            Introspector(stdio_introspector=StdioIntrospector(client_factory=factory))
+        )
+        with TestClient(registry.http_app()) as client:
+            r = client.post(
+                "/registry/curate/introspect",
+                json={
+                    "upstream": "pypi:markitdown-mcp@1.2.3",
+                    "env": {"SECRET_API_KEY": "value-that-must-not-leak"},
+                },
+            )
+            assert r.status_code == 200, r.text
+            body_text = r.text
+            assert "value-that-must-not-leak" not in body_text
+            assert "SECRET_API_KEY" not in body_text
+
+    def test_route_400_on_invalid_env_key(self):
+        """Validation errors come back as 400 (curator's bad input),
+        not 502 (upstream unreachable)."""
+        from purecipher import PureCipherRegistry
+        from purecipher.curation import StdioIntrospector
+        from purecipher.curation.introspector import Introspector
+
+        def factory(channel, identifier, version, *, env=None):
+            return _FakeClient(tools=[_FakeTool("ok")])
+
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
+        registry.set_curation_introspector(
+            Introspector(stdio_introspector=StdioIntrospector(client_factory=factory))
+        )
+        with TestClient(registry.http_app()) as client:
+            r = client.post(
+                "/registry/curate/introspect",
+                json={
+                    "upstream": "pypi:markitdown-mcp@1.2.3",
+                    "env": {"github-token": "ghp_abc"},  # lowercase + dash
+                },
+            )
+            assert r.status_code == 400
+            assert "Invalid credential key" in r.json()["error"]
+
+    def test_route_400_on_reserved_env_key(self):
+        from purecipher import PureCipherRegistry
+        from purecipher.curation import StdioIntrospector
+        from purecipher.curation.introspector import Introspector
+
+        def factory(channel, identifier, version, *, env=None):
+            return _FakeClient(tools=[_FakeTool("ok")])
+
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
+        registry.set_curation_introspector(
+            Introspector(stdio_introspector=StdioIntrospector(client_factory=factory))
+        )
+        with TestClient(registry.http_app()) as client:
+            r = client.post(
+                "/registry/curate/introspect",
+                json={
+                    "upstream": "pypi:markitdown-mcp@1.2.3",
+                    "env": {"PATH": "/tmp/evil"},
+                },
+            )
+            assert r.status_code == 400
+            assert "cannot be set" in r.json()["error"]
+
+    def test_route_no_env_field_works_unchanged(self):
+        """Iter 14.8 must be backward-compatible: omitting ``env``
+        works exactly like before."""
+        from purecipher import PureCipherRegistry
+        from purecipher.curation import StdioIntrospector
+        from purecipher.curation.introspector import Introspector
+
+        captured: dict = {}
+
+        def factory(channel, identifier, version, *, env=None):
+            captured["env"] = env
+            return _FakeClient(tools=[_FakeTool("ok")])
+
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
+        registry.set_curation_introspector(
+            Introspector(stdio_introspector=StdioIntrospector(client_factory=factory))
+        )
+        with TestClient(registry.http_app()) as client:
+            r = client.post(
+                "/registry/curate/introspect",
+                json={"upstream": "pypi:markitdown-mcp@1.2.3"},
+            )
+            assert r.status_code == 200, r.text
+        assert captured["env"] is None
+
+
+class TestCurateSubmitRouteEnv:
+    """Iter 14.8.1 — submit handler accepts ``env`` and threads it
+    into the re-introspect step.
+
+    Without this, token-required upstreams (Atlassian, Stripe, Slack,
+    GitHub) hit the empty-surface 422 at submit time even after a
+    successful introspect at Step 2: the submit-time re-introspect
+    can't see any tools without the same env.
+    """
+
+    def test_submit_accepts_env_and_succeeds_for_token_required(self):
+        """Submit-time re-introspect uses the supplied env and the
+        listing is created with the full observed surface."""
+        from purecipher import PureCipherRegistry
+        from purecipher.curation import StdioIntrospector
+        from purecipher.curation.introspector import Introspector
+
+        envs_seen: list = []
+
+        def factory(channel, identifier, version, *, env=None):
+            envs_seen.append(env)
+            # Same fake client either way — the test asserts on env
+            # capture, not on differential behavior. (In real life,
+            # mcp-atlassian returns 0 tools without env and 49 with;
+            # the fake stand-in just records what arrived.)
+            return _FakeClient(tools=[_FakeTool("jira_get_issue")])
+
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
+        registry.set_curation_introspector(
+            Introspector(stdio_introspector=StdioIntrospector(client_factory=factory))
+        )
+        with TestClient(registry.http_app()) as client:
+            r = client.post(
+                "/registry/curate/submit",
+                json={
+                    "upstream": "pypi:mcp-atlassian",
+                    "tool_name": "atlassian-test",
+                    "version": "1.0.0",
+                    "env": {
+                        "JIRA_URL": "https://x.atlassian.net",
+                        "JIRA_USERNAME": "u@example.com",
+                        "JIRA_API_TOKEN": "token-must-not-leak-anywhere",
+                    },
+                    "selected_permissions": [],
+                },
+            )
+            assert r.status_code == 201, r.text
+        # Submit's re-introspect must have received the env, not None.
+        assert envs_seen, "submit handler did not call introspect"
+        assert envs_seen[-1] == {
+            "JIRA_URL": "https://x.atlassian.net",
+            "JIRA_USERNAME": "u@example.com",
+            "JIRA_API_TOKEN": "token-must-not-leak-anywhere",
+        }
+
+    def test_submit_response_does_not_echo_env_values(self):
+        """The submit response carries the listing summary back to
+        the wizard. Token values must never appear in that payload."""
+        from purecipher import PureCipherRegistry
+        from purecipher.curation import StdioIntrospector
+        from purecipher.curation.introspector import Introspector
+
+        def factory(channel, identifier, version, *, env=None):
+            return _FakeClient(tools=[_FakeTool("ok")])
+
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
+        registry.set_curation_introspector(
+            Introspector(stdio_introspector=StdioIntrospector(client_factory=factory))
+        )
+        SECRET = "ghp_should_never_appear_in_response_xyz"
+        with TestClient(registry.http_app()) as client:
+            r = client.post(
+                "/registry/curate/submit",
+                json={
+                    "upstream": "pypi:pkg@1.0",
+                    "tool_name": "pkg",
+                    "version": "1.0.0",
+                    "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": SECRET},
+                    "selected_permissions": [],
+                },
+            )
+            assert r.status_code == 201, r.text
+            assert SECRET not in r.text
+            assert "GITHUB_PERSONAL_ACCESS_TOKEN" not in r.text
+
+    def test_submit_400_on_invalid_env_key(self):
+        from purecipher import PureCipherRegistry
+        from purecipher.curation import StdioIntrospector
+        from purecipher.curation.introspector import Introspector
+
+        def factory(channel, identifier, version, *, env=None):
+            return _FakeClient(tools=[_FakeTool("ok")])
+
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
+        registry.set_curation_introspector(
+            Introspector(stdio_introspector=StdioIntrospector(client_factory=factory))
+        )
+        with TestClient(registry.http_app()) as client:
+            r = client.post(
+                "/registry/curate/submit",
+                json={
+                    "upstream": "pypi:pkg@1.0",
+                    "tool_name": "pkg",
+                    "version": "1.0.0",
+                    "env": {"github-token": "ghp"},  # lowercase + dash
+                    "selected_permissions": [],
+                },
+            )
+            assert r.status_code == 400
+            assert "Invalid credential key" in r.json()["error"]
+
+    def test_submit_400_on_reserved_env_key(self):
+        from purecipher import PureCipherRegistry
+        from purecipher.curation import StdioIntrospector
+        from purecipher.curation.introspector import Introspector
+
+        def factory(channel, identifier, version, *, env=None):
+            return _FakeClient(tools=[_FakeTool("ok")])
+
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
+        registry.set_curation_introspector(
+            Introspector(stdio_introspector=StdioIntrospector(client_factory=factory))
+        )
+        with TestClient(registry.http_app()) as client:
+            r = client.post(
+                "/registry/curate/submit",
+                json={
+                    "upstream": "pypi:pkg@1.0",
+                    "tool_name": "pkg",
+                    "version": "1.0.0",
+                    "env": {"LD_PRELOAD": "/tmp/evil.so"},
+                    "selected_permissions": [],
+                },
+            )
+            assert r.status_code == 400
+            assert "cannot be set" in r.json()["error"]
+
+    def test_submit_no_env_field_works_unchanged(self):
+        """Backward-compat: submits without ``env`` still work for
+        upstreams that don't need credentials (filesystem, fetch, etc.)."""
+        from purecipher import PureCipherRegistry
+        from purecipher.curation import StdioIntrospector
+        from purecipher.curation.introspector import Introspector
+
+        envs_seen: list = []
+
+        def factory(channel, identifier, version, *, env=None):
+            envs_seen.append(env)
+            return _FakeClient(tools=[_FakeTool("read_file")])
+
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
+        registry.set_curation_introspector(
+            Introspector(stdio_introspector=StdioIntrospector(client_factory=factory))
+        )
+        with TestClient(registry.http_app()) as client:
+            r = client.post(
+                "/registry/curate/submit",
+                json={
+                    "upstream": "pypi:pkg@1.0",
+                    "tool_name": "pkg",
+                    "version": "1.0.0",
+                    "selected_permissions": [],
+                },
+            )
+            assert r.status_code == 201, r.text
+        # Submit's re-introspect was called with env=None (the
+        # backward-compat path), not the empty dict.
+        assert envs_seen[-1] is None
+
+
+class TestCurateSubmitToolSelection:
+    """Iter 14.10 — submit handler honors ``selected_tools``.
+
+    The curator vouches for a subset of the observed tool surface.
+    Same confirm-or-remove contract as ``selected_permissions``:
+    requested names not present in the introspection are dropped
+    rather than smuggled into the manifest.
+    """
+
+    def _registry_with_tools(self, *names: str):
+        from purecipher import PureCipherRegistry
+        from purecipher.curation import StdioIntrospector
+        from purecipher.curation.introspector import Introspector
+
+        def factory(channel, identifier, version, *, env=None):
+            return _FakeClient(tools=[_FakeTool(n) for n in names])
+
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
+        registry.set_curation_introspector(
+            Introspector(stdio_introspector=StdioIntrospector(client_factory=factory))
+        )
+        return registry
+
+    def test_selected_tools_subset_reflected_in_listing(self):
+        """The listing's stored metadata reports the vouched subset
+        as ``tool_names`` (used by the AllowlistPolicy in proxy mode)
+        and the full observed surface separately."""
+        registry = self._registry_with_tools(
+            "jira_get_issue",
+            "jira_create_issue",
+            "jira_delete_issue",
+            "jira_search",
+        )
+        with TestClient(registry.http_app()) as client:
+            r = client.post(
+                "/registry/curate/submit",
+                json={
+                    "upstream": "docker:ghcr.io/example/mcp:v1",
+                    "tool_name": "jira-readonly",
+                    "version": "1.0.0",
+                    "selected_permissions": [],
+                    # Curator vouches only for read-shaped tools —
+                    # explicitly drops ``jira_create_issue`` and
+                    # ``jira_delete_issue`` so the proxy policy
+                    # blocks mutations.
+                    "selected_tools": ["jira_get_issue", "jira_search"],
+                },
+            )
+            assert r.status_code == 201, r.text
+
+        listing = registry._marketplace().get_by_name("jira-readonly")
+        assert listing is not None
+        intro_meta = listing.metadata["introspection"]
+        # ``tool_names`` is the AllowlistPolicy source — must be the
+        # vouched subset.
+        assert sorted(intro_meta["tool_names"]) == sorted(
+            ["jira_get_issue", "jira_search"]
+        )
+        # ``observed_tool_names`` preserves the full pre-filter surface
+        # for transparency (admins can see what got deselected).
+        assert sorted(intro_meta["observed_tool_names"]) == sorted(
+            [
+                "jira_get_issue",
+                "jira_create_issue",
+                "jira_delete_issue",
+                "jira_search",
+            ]
+        )
+        assert intro_meta["vouched_tool_count"] == 2
+
+    def test_unobserved_tool_name_silently_dropped(self):
+        """Same confirm-or-remove contract as permissions: a curator
+        cannot smuggle a tool that wasn't in the introspection
+        result (same defence as ``test_submit_curator_cannot_smuggle_unobserved_scope``)."""
+        registry = self._registry_with_tools("jira_get_issue", "jira_search")
+        with TestClient(registry.http_app()) as client:
+            r = client.post(
+                "/registry/curate/submit",
+                json={
+                    "upstream": "docker:ghcr.io/example/mcp:v1",
+                    "tool_name": "smuggle-test",
+                    "version": "1.0.0",
+                    "selected_permissions": [],
+                    # ``forge_audit_log`` was never observed — must
+                    # not appear in the listing.
+                    "selected_tools": [
+                        "jira_get_issue",
+                        "forge_audit_log",
+                    ],
+                },
+            )
+            assert r.status_code == 201, r.text
+
+        listing = registry._marketplace().get_by_name("smuggle-test")
+        assert listing is not None
+        tool_names = listing.metadata["introspection"]["tool_names"]
+        assert "forge_audit_log" not in tool_names
+        assert tool_names == ["jira_get_issue"]
+
+    def test_selected_tools_omitted_defaults_to_all(self):
+        """Backward-compat: pre-Iter 14.10 wizards don't send
+        ``selected_tools`` at all. The submit handler must default
+        to vouching for every observed tool in that case."""
+        registry = self._registry_with_tools("a", "b", "c")
+        with TestClient(registry.http_app()) as client:
+            r = client.post(
+                "/registry/curate/submit",
+                json={
+                    "upstream": "docker:ghcr.io/example/mcp:v1",
+                    "tool_name": "all-vouched",
+                    "version": "1.0.0",
+                    "selected_permissions": [],
+                },
+            )
+            assert r.status_code == 201, r.text
+
+        listing = registry._marketplace().get_by_name("all-vouched")
+        assert listing is not None
+        intro_meta = listing.metadata["introspection"]
+        assert sorted(intro_meta["tool_names"]) == ["a", "b", "c"]
+        assert intro_meta["vouched_tool_count"] == 3
+
+    def test_zero_selected_tools_returns_422(self):
+        """A curator-attested listing must vouch for at least one
+        tool. Zero selection produces a clear 422 rather than
+        silently minting an empty attestation."""
+        registry = self._registry_with_tools("a", "b")
+        with TestClient(registry.http_app()) as client:
+            r = client.post(
+                "/registry/curate/submit",
+                json={
+                    "upstream": "docker:ghcr.io/example/mcp:v1",
+                    "tool_name": "empty-vouch",
+                    "version": "1.0.0",
+                    "selected_permissions": [],
+                    "selected_tools": [],
+                },
+            )
+            assert r.status_code == 422
+            assert "at least one tool" in r.json()["error"].lower()
+
+    def test_selected_tools_must_be_list(self):
+        """Type-check the submit body so a malformed wizard request
+        fails fast with 400, not 500."""
+        registry = self._registry_with_tools("a", "b")
+        with TestClient(registry.http_app()) as client:
+            r = client.post(
+                "/registry/curate/submit",
+                json={
+                    "upstream": "docker:ghcr.io/example/mcp:v1",
+                    "tool_name": "bad-shape",
+                    "version": "1.0.0",
+                    "selected_permissions": [],
+                    "selected_tools": "a,b",  # string, not list
+                },
+            )
+            assert r.status_code == 400
+            assert "list" in r.json()["error"].lower()
+
+    def test_selected_tools_preserves_observation_order(self):
+        """Tool order in the stored metadata matches the order the
+        upstream returned, not the order the curator clicked. This
+        keeps listings deterministic across re-introspections."""
+        registry = self._registry_with_tools("alpha", "beta", "gamma", "delta")
+        with TestClient(registry.http_app()) as client:
+            r = client.post(
+                "/registry/curate/submit",
+                json={
+                    "upstream": "docker:ghcr.io/example/mcp:v1",
+                    "tool_name": "ordering",
+                    "version": "1.0.0",
+                    "selected_permissions": [],
+                    # Submitted out-of-order.
+                    "selected_tools": ["delta", "alpha", "gamma"],
+                },
+            )
+            assert r.status_code == 201, r.text
+
+        listing = registry._marketplace().get_by_name("ordering")
+        assert listing is not None
+        # Stored order matches introspection order, not submit order.
+        assert listing.metadata["introspection"]["tool_names"] == [
+            "alpha",
+            "gamma",
+            "delta",
+        ]

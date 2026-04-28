@@ -10,10 +10,23 @@ This module keeps higher-level management concepts out of the core engine:
 
 from __future__ import annotations
 
+import json
+import logging
+import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from fastmcp.server.security.policy.serialization import describe_policy_config
+
+logger = logging.getLogger(__name__)
+
+# Iter 14.21 — operators can drop additional ``*.json`` policy
+# bundle files in this directory and they get merged with the
+# built-in bundles at lookup time. Set via env var so deployments
+# (Docker, Kubernetes, bare metal) can configure it without
+# touching code. Empty / unset means "built-ins only".
+_BUNDLES_DIR_ENV = "PURECIPHER_POLICY_BUNDLES_DIR"
 
 
 @dataclass(frozen=True)
@@ -1011,16 +1024,213 @@ _BUNDLES: tuple[PolicyBundle, ...] = (
 )
 
 
+# ── Iter 14.21 — JSON-on-disk bundle loader ──────────────────────
+
+
+class BundleLoadError(ValueError):
+    """A bundle JSON file failed validation.
+
+    Raised by :func:`_validate_bundle_payload` per-file and caught
+    by :func:`load_bundles_from_disk`, which logs each error and
+    skips the bad file rather than aborting the whole load. Custom
+    type so callers (and tests) can distinguish it from generic
+    ``ValueError`` from elsewhere in the loader.
+    """
+
+
+def _validate_bundle_payload(
+    payload: Any, *, source: str
+) -> PolicyBundle:
+    """Validate one decoded JSON payload and build a PolicyBundle.
+
+    Strict on the required fields (``bundle_id``, ``title``,
+    ``summary``, ``providers``); lenient on the optional ones,
+    defaulting to empty strings/tuples so a minimal valid file
+    just needs the four required keys plus a sensible
+    ``description``.
+
+    The ``source`` argument is included in error messages so
+    operators can find the offending file quickly.
+
+    Raises:
+        BundleLoadError: with a curator-friendly message if any
+            required field is missing or has the wrong type.
+    """
+    if not isinstance(payload, dict):
+        raise BundleLoadError(
+            f"{source}: bundle JSON must decode to an object, "
+            f"got {type(payload).__name__}."
+        )
+
+    def _required_str(key: str) -> str:
+        value = payload.get(key)
+        if not isinstance(value, str) or not value.strip():
+            raise BundleLoadError(
+                f"{source}: required field {key!r} is missing or "
+                "not a non-empty string."
+            )
+        return value
+
+    bundle_id = _required_str("bundle_id")
+    title = _required_str("title")
+    summary = _required_str("summary")
+
+    providers_raw = payload.get("providers")
+    if not isinstance(providers_raw, list) or not providers_raw:
+        raise BundleLoadError(
+            f"{source}: required field 'providers' must be a "
+            "non-empty list of provider config objects."
+        )
+    providers: list[dict[str, Any]] = []
+    for idx, entry in enumerate(providers_raw):
+        if not isinstance(entry, dict):
+            raise BundleLoadError(
+                f"{source}: providers[{idx}] must be an object, "
+                f"got {type(entry).__name__}."
+            )
+        providers.append(dict(entry))
+
+    description = payload.get("description") or summary
+    risk_posture = payload.get("risk_posture") or "balanced"
+
+    def _str_tuple(key: str) -> tuple[str, ...]:
+        value = payload.get(key) or []
+        if not isinstance(value, list):
+            raise BundleLoadError(
+                f"{source}: optional field {key!r} must be a list "
+                f"of strings, got {type(value).__name__}."
+            )
+        out: list[str] = []
+        for item in value:
+            if not isinstance(item, str):
+                raise BundleLoadError(
+                    f"{source}: {key!r} entries must be strings."
+                )
+            out.append(item)
+        return tuple(out)
+
+    return PolicyBundle(
+        bundle_id=bundle_id,
+        title=title,
+        summary=summary,
+        description=str(description),
+        risk_posture=str(risk_posture),
+        recommended_environments=_str_tuple("recommended_environments"),
+        tags=_str_tuple("tags"),
+        providers=tuple(providers),
+    )
+
+
+def load_bundles_from_disk(
+    bundles_dir: str | os.PathLike[str] | None,
+) -> tuple[PolicyBundle, ...]:
+    """Scan a directory for ``*.json`` files and return validated bundles.
+
+    Iter 14.21 — Operators can drop new bundles into a
+    well-known directory without forking the framework. Each file
+    is validated independently; a single bad file logs a warning
+    and is skipped, rather than nuking the whole load.
+
+    Bundle IDs are deduplicated within the disk set: if two files
+    declare the same ``bundle_id``, only the first encountered
+    (sorted by filename) wins, with a warning for the loser. The
+    caller (:func:`_effective_bundles`) handles collisions with the
+    built-in set separately.
+
+    Returns an empty tuple when ``bundles_dir`` is ``None``, the
+    empty string, or a path that doesn't exist — never raises in
+    those cases. Real directories are scanned non-recursively;
+    ``*.json`` only.
+    """
+    if bundles_dir is None:
+        return ()
+    path = Path(str(bundles_dir)).expanduser()
+    if not path.is_dir():
+        # An unset / wrong path is a config issue, not an error
+        # that should knock the registry over. Log INFO so it shows
+        # in startup logs without alarming operators.
+        if str(bundles_dir).strip():
+            logger.info(
+                "Policy bundles directory %r is not a directory; "
+                "no on-disk bundles loaded.",
+                str(bundles_dir),
+            )
+        return ()
+
+    loaded: list[PolicyBundle] = []
+    seen_ids: set[str] = set()
+    # Sort by filename so the order is deterministic across runs
+    # — important because dedup picks the first occurrence.
+    for entry in sorted(path.glob("*.json")):
+        try:
+            raw = entry.read_text(encoding="utf-8")
+        except OSError as exc:
+            logger.warning(
+                "Couldn't read policy bundle file %s: %s", entry, exc
+            )
+            continue
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            logger.warning(
+                "Skipping invalid JSON in policy bundle file %s: %s",
+                entry,
+                exc,
+            )
+            continue
+        try:
+            bundle = _validate_bundle_payload(payload, source=str(entry))
+        except BundleLoadError as exc:
+            logger.warning("Skipping malformed policy bundle: %s", exc)
+            continue
+        if bundle.bundle_id in seen_ids:
+            logger.warning(
+                "Duplicate bundle_id %r in %s; keeping the first "
+                "occurrence and dropping this file.",
+                bundle.bundle_id,
+                entry,
+            )
+            continue
+        seen_ids.add(bundle.bundle_id)
+        loaded.append(bundle)
+    return tuple(loaded)
+
+
+def _effective_bundles() -> tuple[PolicyBundle, ...]:
+    """Built-in bundles + on-disk bundles, in that order.
+
+    Built-ins always win on bundle_id collision so an operator
+    can't accidentally shadow a vetted compliance bundle (GDPR,
+    HIPAA, SOC 2, etc.) with a misconfigured local file.
+    """
+    extras = load_bundles_from_disk(os.environ.get(_BUNDLES_DIR_ENV))
+    if not extras:
+        return _BUNDLES
+    builtin_ids = {b.bundle_id for b in _BUNDLES}
+    safe_extras: list[PolicyBundle] = []
+    for bundle in extras:
+        if bundle.bundle_id in builtin_ids:
+            logger.warning(
+                "On-disk bundle %r collides with a built-in bundle; "
+                "the built-in version is being kept and the on-disk "
+                "file is being skipped.",
+                bundle.bundle_id,
+            )
+            continue
+        safe_extras.append(bundle)
+    return _BUNDLES + tuple(safe_extras)
+
+
 def list_policy_bundles() -> list[dict[str, Any]]:
     """Return reusable policy bundles for the management UI."""
 
-    return [bundle.to_dict() for bundle in _BUNDLES]
+    return [bundle.to_dict() for bundle in _effective_bundles()]
 
 
 def get_policy_bundle(bundle_id: str) -> dict[str, Any] | None:
     """Return one bundle by identifier."""
 
-    for bundle in _BUNDLES:
+    for bundle in _effective_bundles():
         if bundle.bundle_id == bundle_id:
             return bundle.to_dict()
     return None

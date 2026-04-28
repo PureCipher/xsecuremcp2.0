@@ -574,7 +574,9 @@ class TestPureCipherRegistry:
                     "/registry/login",
                     json={"username": "admin", "password": "wrong"},
                 )
-                assert bad.status_code == 401, f"attempt {attempt} got {bad.status_code}"
+                assert bad.status_code == 401, (
+                    f"attempt {attempt} got {bad.status_code}"
+                )
 
             # Attempt 3 — the failure that hits the threshold — itself
             # returns 429 with a Retry-After header.
@@ -658,8 +660,11 @@ class TestPureCipherRegistry:
         # class within a context manager.
         from unittest.mock import patch
 
-        with TestClient(app) as client, patch.object(
-            type(registry._auth_settings), "decode_token", return_value=None
+        with (
+            TestClient(app) as client,
+            patch.object(
+                type(registry._auth_settings), "decode_token", return_value=None
+            ),
         ):
             # Two failed attempts under the threshold.
             for _ in range(2):
@@ -1011,6 +1016,29 @@ class TestPureCipherRegistry:
             assert "Overview" in response.text
             assert "Featured Publishers" in response.text
             assert "Share A Tool" in response.text
+
+    def test_http_registry_ui_can_be_disabled(self):
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            enable_legacy_registry_ui=False,
+        )
+        app = registry.http_app()
+
+        with TestClient(app) as client:
+            landing = client.get("/registry", follow_redirects=False)
+            assert landing.status_code == 404
+            assert "Legacy registry UI is disabled" in landing.text
+
+            app_page = client.get("/registry/app")
+            assert app_page.status_code == 404
+            assert "Legacy registry UI is disabled" in app_page.text
+
+            publishers_html = client.get("/registry/publishers?view=html")
+            assert publishers_html.status_code == 404
+            assert "Legacy registry UI is disabled" in publishers_html.text
+
+            publishers_json = client.get("/registry/publishers")
+            assert publishers_json.status_code == 200
 
     def test_http_registry_policy_proposal_lifecycle(self):
         registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
@@ -1612,9 +1640,7 @@ class TestServerPolicyGovernance:
         assert provider["fail_closed"] is True
         assert provider["allowed_count"] == 3
         # Sample is sorted, capped at 10 per spec.
-        assert provider["allowed_sample"] == sorted(
-            ["fetch_url", "save_doc", "lookup"]
-        )
+        assert provider["allowed_sample"] == sorted(["fetch_url", "save_doc", "lookup"])
         # Policy id matches what the proxy gateway would attach.
         assert provider["policy_id"] == f"curator-allowlist-{listing_id}"
 
@@ -1718,9 +1744,7 @@ class TestServerPolicyGovernance:
             )
             assert login.status_code == 200, login.text
 
-            authed = client.get(
-                "/registry/servers/publisher/governance/policy"
-            )
+            authed = client.get("/registry/servers/publisher/governance/policy")
             assert authed.status_code == 200, authed.text
             payload = authed.json()
             assert payload["summary"]["tool_count"] == 1
@@ -1743,9 +1767,7 @@ class TestServerPolicyGovernance:
         with TestClient(registry.http_app()) as client:
             resp = client.get("/registry/servers/alice/governance/policy")
             assert resp.status_code == 200
-            tool_names = [
-                row["tool_name"] for row in resp.json()["per_tool_policies"]
-            ]
+            tool_names = [row["tool_name"] for row in resp.json()["per_tool_policies"]]
             # Newest first.
             assert tool_names == ["newer", "older"]
 
@@ -1894,9 +1916,7 @@ class TestServerContractGovernance:
     def test_returns_404_for_unknown_publisher(self):
         registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/nope/governance/contracts"
-            )
+            resp = client.get("/registry/servers/nope/governance/contracts")
             assert resp.status_code == 404
             assert "not found" in resp.json()["error"].lower()
 
@@ -1912,9 +1932,7 @@ class TestServerContractGovernance:
         self._catalog_listing(registry, tool_name="tool-a")
 
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/alice/governance/contracts"
-            )
+            resp = client.get("/registry/servers/alice/governance/contracts")
             assert resp.status_code == 200, resp.text
             payload = resp.json()
 
@@ -1943,9 +1961,7 @@ class TestServerContractGovernance:
         broker = self._attach_broker(registry)
 
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/alice/governance/contracts"
-            )
+            resp = client.get("/registry/servers/alice/governance/contracts")
             assert resp.status_code == 200
             payload = resp.json()
 
@@ -1982,9 +1998,7 @@ class TestServerContractGovernance:
         )
 
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/alice/governance/contracts"
-            )
+            resp = client.get("/registry/servers/alice/governance/contracts")
             assert resp.status_code == 200
             payload = resp.json()
 
@@ -2014,9 +2028,7 @@ class TestServerContractGovernance:
         )
 
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/alice/governance/contracts"
-            )
+            resp = client.get("/registry/servers/alice/governance/contracts")
             payload = resp.json()
 
         bindings = {
@@ -2042,9 +2054,7 @@ class TestServerContractGovernance:
         )
 
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/alice/governance/contracts"
-            )
+            resp = client.get("/registry/servers/alice/governance/contracts")
             payload = resp.json()
         row = payload["per_tool_contracts"][0]
         assert row["binding_source"] == "agent_contracts"
@@ -2064,9 +2074,7 @@ class TestServerContractGovernance:
             )
 
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/alice/governance/contracts"
-            )
+            resp = client.get("/registry/servers/alice/governance/contracts")
             payload = resp.json()
 
         row = payload["per_tool_contracts"][0]
@@ -2109,9 +2117,7 @@ class TestServerContractGovernance:
         broker._active_contracts[expired.contract_id] = expired
 
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/alice/governance/contracts"
-            )
+            resp = client.get("/registry/servers/alice/governance/contracts")
             row = resp.json()["per_tool_contracts"][0]
         assert row["binding_source"] == "no_contracts"
 
@@ -2124,9 +2130,7 @@ class TestServerContractGovernance:
         self._catalog_listing(registry, tool_name="pending-tool")
 
         with TestClient(registry.http_app()) as client:
-            anon = client.get(
-                "/registry/servers/alice/governance/contracts"
-            )
+            anon = client.get("/registry/servers/alice/governance/contracts")
             assert anon.status_code == 404
 
     def test_authenticated_caller_sees_pending_listings(self):
@@ -2135,9 +2139,7 @@ class TestServerContractGovernance:
             auth_settings=_auth_settings(),
             require_moderation=True,
         )
-        self._catalog_listing(
-            registry, tool_name="curator-tool", author="publisher"
-        )
+        self._catalog_listing(registry, tool_name="curator-tool", author="publisher")
 
         with TestClient(registry.http_app()) as client:
             login = client.post(
@@ -2146,9 +2148,7 @@ class TestServerContractGovernance:
             )
             assert login.status_code == 200, login.text
 
-            authed = client.get(
-                "/registry/servers/publisher/governance/contracts"
-            )
+            authed = client.get("/registry/servers/publisher/governance/contracts")
             assert authed.status_code == 200, authed.text
             payload = authed.json()
             assert payload["summary"]["tool_count"] == 1
@@ -2158,9 +2158,7 @@ class TestServerContractGovernance:
         registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
         self._catalog_listing(registry, tool_name="link-tool")
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/alice/governance/contracts"
-            )
+            resp = client.get("/registry/servers/alice/governance/contracts")
             assert resp.json()["links"]["contract_broker_url"] == "/registry/contracts"
 
     def test_default_terms_are_summarized(self):
@@ -2189,9 +2187,7 @@ class TestServerContractGovernance:
         registry._required_context().broker = broker
 
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/alice/governance/contracts"
-            )
+            resp = client.get("/registry/servers/alice/governance/contracts")
             broker_block = resp.json()["broker"]
         assert broker_block["default_term_count"] == 1
         assert broker_block["default_terms"][0]["term_type"] == "audit"
@@ -2292,9 +2288,7 @@ class TestServerConsentGovernance:
     def test_returns_404_for_unknown_publisher(self):
         registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/nope/governance/consent"
-            )
+            resp = client.get("/registry/servers/nope/governance/consent")
             assert resp.status_code == 404
             assert "not found" in resp.json()["error"].lower()
 
@@ -2310,9 +2304,7 @@ class TestServerConsentGovernance:
         self._catalog_listing(registry, tool_name="tool-a")
 
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/alice/governance/consent"
-            )
+            resp = client.get("/registry/servers/alice/governance/consent")
             assert resp.status_code == 200, resp.text
             payload = resp.json()
 
@@ -2337,9 +2329,7 @@ class TestServerConsentGovernance:
         registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
         self._catalog_listing(registry, tool_name="tool-a")
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/alice/governance/consent"
-            )
+            resp = client.get("/registry/servers/alice/governance/consent")
             payload = resp.json()
         federation = payload["federation"]
         assert federation["available"] is False
@@ -2356,9 +2346,7 @@ class TestServerConsentGovernance:
         )
 
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/alice/governance/consent"
-            )
+            resp = client.get("/registry/servers/alice/governance/consent")
             payload = resp.json()
 
         row = payload["per_tool_consent"][0]
@@ -2376,9 +2364,7 @@ class TestServerConsentGovernance:
         graph = self._attach_graph(registry)
 
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/alice/governance/consent"
-            )
+            resp = client.get("/registry/servers/alice/governance/consent")
             payload = resp.json()
 
         gb = payload["consent_graph"]
@@ -2413,9 +2399,7 @@ class TestServerConsentGovernance:
         )
 
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/alice/governance/consent"
-            )
+            resp = client.get("/registry/servers/alice/governance/consent")
             row = resp.json()["per_tool_consent"][0]
 
         assert row["graph_grant_count"] == 1
@@ -2436,9 +2420,7 @@ class TestServerConsentGovernance:
         )
 
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/alice/governance/consent"
-            )
+            resp = client.get("/registry/servers/alice/governance/consent")
             row = resp.json()["per_tool_consent"][0]
         assert row["graph_grant_count"] == 1
 
@@ -2457,9 +2439,7 @@ class TestServerConsentGovernance:
         )
 
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/alice/governance/consent"
-            )
+            resp = client.get("/registry/servers/alice/governance/consent")
             row = resp.json()["per_tool_consent"][0]
         assert row["graph_grant_count"] == 1
         assert row["grant_sources"] == ["tool:weather-lookup"]
@@ -2487,9 +2467,7 @@ class TestServerConsentGovernance:
         graph._outgoing.setdefault("ghost-owner", []).append(expired)
 
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/alice/governance/consent"
-            )
+            resp = client.get("/registry/servers/alice/governance/consent")
             row = resp.json()["per_tool_consent"][0]
         assert row["graph_grant_count"] == 0
 
@@ -2512,9 +2490,7 @@ class TestServerConsentGovernance:
         graph._edges[revoked.edge_id] = revoked
 
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/alice/governance/consent"
-            )
+            resp = client.get("/registry/servers/alice/governance/consent")
             row = resp.json()["per_tool_consent"][0]
         assert row["graph_grant_count"] == 0
 
@@ -2534,9 +2510,7 @@ class TestServerConsentGovernance:
         graph.add_node(ConsentNode("g1", NodeType.GROUP))
 
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/alice/governance/consent"
-            )
+            resp = client.get("/registry/servers/alice/governance/consent")
             gb = resp.json()["consent_graph"]
         assert gb["node_counts_by_type"]["agent"] == 2
         assert gb["node_counts_by_type"]["resource"] == 1
@@ -2561,9 +2535,7 @@ class TestServerConsentGovernance:
         )
 
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/alice/governance/consent"
-            )
+            resp = client.get("/registry/servers/alice/governance/consent")
             payload = resp.json()
 
         summary = payload["summary"]
@@ -2581,9 +2553,7 @@ class TestServerConsentGovernance:
         self._catalog_listing(registry, tool_name="pending-tool")
         with TestClient(registry.http_app()) as client:
             assert (
-                client.get(
-                    "/registry/servers/alice/governance/consent"
-                ).status_code
+                client.get("/registry/servers/alice/governance/consent").status_code
                 == 404
             )
 
@@ -2607,9 +2577,7 @@ class TestServerConsentGovernance:
             )
             assert login.status_code == 200, login.text
 
-            authed = client.get(
-                "/registry/servers/publisher/governance/consent"
-            )
+            authed = client.get("/registry/servers/publisher/governance/consent")
             assert authed.status_code == 200
             payload = authed.json()
             row = payload["per_tool_consent"][0]
@@ -2620,12 +2588,8 @@ class TestServerConsentGovernance:
         registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
         self._catalog_listing(registry, tool_name="link-tool")
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/alice/governance/consent"
-            )
-            assert (
-                resp.json()["links"]["consent_graph_url"] == "/registry/consent"
-            )
+            resp = client.get("/registry/servers/alice/governance/consent")
+            assert resp.json()["links"]["consent_graph_url"] == "/registry/consent"
 
 
 class TestServerLedgerGovernance:
@@ -2662,9 +2626,7 @@ class TestServerLedgerGovernance:
             HostingMode,
         )
 
-        manifest = _manifest(
-            tool_name=tool_name, author=author, tags={"curated"}
-        )
+        manifest = _manifest(tool_name=tool_name, author=author, tags={"curated"})
         result = registry.submit_tool(
             manifest,
             display_name=tool_name.title(),
@@ -2690,9 +2652,7 @@ class TestServerLedgerGovernance:
             HostingMode,
         )
 
-        manifest = _manifest(
-            tool_name=tool_name, author=author, tags={"curated"}
-        )
+        manifest = _manifest(tool_name=tool_name, author=author, tags={"curated"})
         result = registry.submit_tool(
             manifest,
             display_name=tool_name.title(),
@@ -2721,9 +2681,7 @@ class TestServerLedgerGovernance:
     def test_returns_404_for_unknown_publisher(self):
         registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/nope/governance/ledger"
-            )
+            resp = client.get("/registry/servers/nope/governance/ledger")
             assert resp.status_code == 404
 
     def test_ledger_unavailable_when_not_configured(self):
@@ -2741,9 +2699,7 @@ class TestServerLedgerGovernance:
         self._catalog_listing(registry, tool_name="cat-tool")
 
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/alice/governance/ledger"
-            )
+            resp = client.get("/registry/servers/alice/governance/ledger")
             assert resp.status_code == 200
             payload = resp.json()
 
@@ -2767,9 +2723,7 @@ class TestServerLedgerGovernance:
         ledger = self._attach_ledger(registry)
 
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/alice/governance/ledger"
-            )
+            resp = client.get("/registry/servers/alice/governance/ledger")
             payload = resp.json()
 
         block = payload["ledger"]
@@ -2784,9 +2738,7 @@ class TestServerLedgerGovernance:
         listing_id = self._proxy_listing(registry, tool_name="px-1")
 
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/alice/governance/ledger"
-            )
+            resp = client.get("/registry/servers/alice/governance/ledger")
             row = resp.json()["per_tool_ledger"][0]
         assert row["binding_source"] == "proxy_ledger"
         assert row["expected_ledger_id"] == f"curator-proxy-{listing_id}"
@@ -2796,9 +2748,7 @@ class TestServerLedgerGovernance:
         self._catalog_listing(registry, tool_name="cat-1")
 
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/alice/governance/ledger"
-            )
+            resp = client.get("/registry/servers/alice/governance/ledger")
             row = resp.json()["per_tool_ledger"][0]
         assert row["binding_source"] == "no_ledger"
         assert row["expected_ledger_id"] is None
@@ -2834,9 +2784,7 @@ class TestServerLedgerGovernance:
         )
 
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/alice/governance/ledger"
-            )
+            resp = client.get("/registry/servers/alice/governance/ledger")
             rows = {r["tool_name"]: r for r in resp.json()["per_tool_ledger"]}
         assert rows["px-rec"]["central_record_count"] == 2
         assert rows["px-rec"]["latest_central_record_action"] == "tool_result"
@@ -2863,9 +2811,7 @@ class TestServerLedgerGovernance:
         )
 
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/alice/governance/ledger"
-            )
+            resp = client.get("/registry/servers/alice/governance/ledger")
             payload = resp.json()
         summary = payload["summary"]
         assert summary["tool_count"] == 3
@@ -2883,9 +2829,7 @@ class TestServerLedgerGovernance:
 
         with TestClient(registry.http_app()) as client:
             assert (
-                client.get(
-                    "/registry/servers/alice/governance/ledger"
-                ).status_code
+                client.get("/registry/servers/alice/governance/ledger").status_code
                 == 404
             )
 
@@ -2904,9 +2848,7 @@ class TestServerLedgerGovernance:
             )
             assert login.status_code == 200, login.text
 
-            authed = client.get(
-                "/registry/servers/publisher/governance/ledger"
-            )
+            authed = client.get("/registry/servers/publisher/governance/ledger")
             assert authed.status_code == 200
             row = authed.json()["per_tool_ledger"][0]
             assert row["status"] == "pending_review"
@@ -2916,12 +2858,9 @@ class TestServerLedgerGovernance:
         registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
         self._catalog_listing(registry, tool_name="link-tool")
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/alice/governance/ledger"
-            )
+            resp = client.get("/registry/servers/alice/governance/ledger")
             assert (
-                resp.json()["links"]["provenance_ledger_url"]
-                == "/registry/provenance"
+                resp.json()["links"]["provenance_ledger_url"] == "/registry/provenance"
             )
 
 
@@ -2948,9 +2887,7 @@ class TestServerOverridesGovernance:
             HostingMode,
         )
 
-        manifest = _manifest(
-            tool_name=tool_name, author=author, tags={"curated"}
-        )
+        manifest = _manifest(tool_name=tool_name, author=author, tags={"curated"})
         result = registry.submit_tool(
             manifest,
             display_name=tool_name.title(),
@@ -2977,9 +2914,7 @@ class TestServerOverridesGovernance:
             HostingMode,
         )
 
-        manifest = _manifest(
-            tool_name=tool_name, author=author, tags={"curated"}
-        )
+        manifest = _manifest(tool_name=tool_name, author=author, tags={"curated"})
         result = registry.submit_tool(
             manifest,
             display_name=tool_name.title(),
@@ -2997,9 +2932,7 @@ class TestServerOverridesGovernance:
     def test_returns_404_for_unknown_publisher(self):
         registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/nope/governance/overrides"
-            )
+            resp = client.get("/registry/servers/nope/governance/overrides")
             assert resp.status_code == 404
 
     def test_active_listing_with_no_overrides(self):
@@ -3010,9 +2943,7 @@ class TestServerOverridesGovernance:
         self._catalog_listing(registry, tool_name="clean-tool")
 
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/alice/governance/overrides"
-            )
+            resp = client.get("/registry/servers/alice/governance/overrides")
             assert resp.status_code == 200, resp.text
             payload = resp.json()
 
@@ -3038,9 +2969,7 @@ class TestServerOverridesGovernance:
         assert summary["open_moderation_actions"] == 0
 
         assert payload["recent_moderation_decisions"] == []
-        assert (
-            payload["links"]["moderation_queue_url"] == "/registry/review"
-        )
+        assert payload["links"]["moderation_queue_url"] == "/registry/review"
 
     def test_pending_review_listing_surfaces_moderation_pending(self):
         """A listing with ``status=PENDING_REVIEW`` is the most
@@ -3082,9 +3011,7 @@ class TestServerOverridesGovernance:
         )
         listing_id = self._catalog_listing(registry, tool_name="sus-tool")
         registry.moderate_listing(listing_id, action_name="approve", reason="ok")
-        registry.moderate_listing(
-            listing_id, action_name="suspend", reason="temporary"
-        )
+        registry.moderate_listing(listing_id, action_name="suspend", reason="temporary")
 
         payload = registry.get_server_overrides_governance(
             "alice", include_non_public=True
@@ -3122,9 +3049,7 @@ class TestServerOverridesGovernance:
         )
 
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/alice/governance/overrides"
-            )
+            resp = client.get("/registry/servers/alice/governance/overrides")
             row = resp.json()["per_tool_overrides"][0]
         assert row["policy_override"]["active"] is True
         assert row["policy_override"]["allowed_count"] == 3
@@ -3166,9 +3091,7 @@ class TestServerOverridesGovernance:
         )
 
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/alice/governance/overrides"
-            )
+            resp = client.get("/registry/servers/alice/governance/overrides")
             payload = resp.json()
         row = payload["per_tool_overrides"][0]
         assert len(row["yanked_versions"]) == 1
@@ -3189,9 +3112,7 @@ class TestServerOverridesGovernance:
             require_moderation=True,
         )
         published_id = self._catalog_listing(registry, tool_name="published")
-        registry.moderate_listing(
-            published_id, action_name="approve", reason="ok"
-        )
+        registry.moderate_listing(published_id, action_name="approve", reason="ok")
         # Pending listing — stays in PENDING_REVIEW.
         self._catalog_listing(registry, tool_name="pending-1")
         # Proxy with observed tools (override active) — also lands
@@ -3202,9 +3123,7 @@ class TestServerOverridesGovernance:
         # Suspended listing.
         sus_id = self._catalog_listing(registry, tool_name="suspended-tool")
         registry.moderate_listing(sus_id, action_name="approve", reason="ok")
-        registry.moderate_listing(
-            sus_id, action_name="suspend", reason="bad behavior"
-        )
+        registry.moderate_listing(sus_id, action_name="suspend", reason="bad behavior")
 
         payload = registry.get_server_overrides_governance(
             "alice", include_non_public=True
@@ -3262,9 +3181,7 @@ class TestServerOverridesGovernance:
 
         with TestClient(registry.http_app()) as client:
             assert (
-                client.get(
-                    "/registry/servers/alice/governance/overrides"
-                ).status_code
+                client.get("/registry/servers/alice/governance/overrides").status_code
                 == 404
             )
 
@@ -3274,9 +3191,7 @@ class TestServerOverridesGovernance:
             auth_settings=_auth_settings(),
             require_moderation=True,
         )
-        self._catalog_listing(
-            registry, tool_name="curator-pending", author="publisher"
-        )
+        self._catalog_listing(registry, tool_name="curator-pending", author="publisher")
 
         with TestClient(registry.http_app()) as client:
             login = client.post(
@@ -3285,9 +3200,7 @@ class TestServerOverridesGovernance:
             )
             assert login.status_code == 200, login.text
 
-            authed = client.get(
-                "/registry/servers/publisher/governance/overrides"
-            )
+            authed = client.get("/registry/servers/publisher/governance/overrides")
             assert authed.status_code == 200
             row = authed.json()["per_tool_overrides"][0]
             assert row["status"] == "pending_review"
@@ -3297,13 +3210,8 @@ class TestServerOverridesGovernance:
         registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
         self._catalog_listing(registry, tool_name="link-tool")
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/alice/governance/overrides"
-            )
-            assert (
-                resp.json()["links"]["moderation_queue_url"]
-                == "/registry/review"
-            )
+            resp = client.get("/registry/servers/alice/governance/overrides")
+            assert resp.json()["links"]["moderation_queue_url"] == "/registry/review"
 
 
 class TestServerObservability:
@@ -3335,9 +3243,7 @@ class TestServerObservability:
             HostingMode,
         )
 
-        manifest = _manifest(
-            tool_name=tool_name, author=author, tags={"curated"}
-        )
+        manifest = _manifest(tool_name=tool_name, author=author, tags={"curated"})
         result = registry.submit_tool(
             manifest,
             display_name=tool_name.title(),
@@ -3396,9 +3302,7 @@ class TestServerObservability:
     def test_returns_404_for_unknown_publisher(self):
         registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/nope/observability"
-            )
+            resp = client.get("/registry/servers/nope/observability")
             assert resp.status_code == 404
 
     def test_analyzer_unavailable_when_not_configured(self):
@@ -3413,9 +3317,7 @@ class TestServerObservability:
         self._catalog_listing(registry, tool_name="tool-a")
 
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/alice/observability"
-            )
+            resp = client.get("/registry/servers/alice/observability")
             assert resp.status_code == 200
             payload = resp.json()
 
@@ -3437,9 +3339,7 @@ class TestServerObservability:
         analyzer = self._attach_analyzer(registry)
 
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/alice/observability"
-            )
+            resp = client.get("/registry/servers/alice/observability")
             payload = resp.json()
 
         block = payload["analyzer"]
@@ -3451,7 +3351,11 @@ class TestServerObservability:
         assert block["latest_drift_at"] is None
         # All severity buckets present + zero.
         assert block["severity_distribution"] == {
-            "info": 0, "low": 0, "medium": 0, "high": 0, "critical": 0,
+            "info": 0,
+            "low": 0,
+            "medium": 0,
+            "high": 0,
+            "critical": 0,
         }
 
     def test_drift_event_with_metadata_tool_name_surfaces_per_tool(self):
@@ -3467,9 +3371,7 @@ class TestServerObservability:
         )
 
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/alice/observability"
-            )
+            resp = client.get("/registry/servers/alice/observability")
             payload = resp.json()
 
         row = payload["per_tool_observability"][0]
@@ -3500,9 +3402,7 @@ class TestServerObservability:
         )
 
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/alice/observability"
-            )
+            resp = client.get("/registry/servers/alice/observability")
             row = resp.json()["per_tool_observability"][0]
         assert row["binding_source"] == "monitored"
         assert row["drift_event_count"] == 1
@@ -3573,9 +3473,7 @@ class TestServerObservability:
             # Force timestamps to differ for stable sort.
             time.sleep(0.001)
 
-        result = registry.get_server_observability(
-            "alice", recent_event_limit=5
-        )
+        result = registry.get_server_observability("alice", recent_event_limit=5)
         feed = result["recent_drift_events"]
         assert len(feed) == 5
         # Most-recent first → descriptions come from the LAST 5 added.
@@ -3624,10 +3522,7 @@ class TestServerObservability:
 
         with TestClient(registry.http_app()) as client:
             assert (
-                client.get(
-                    "/registry/servers/alice/observability"
-                ).status_code
-                == 404
+                client.get("/registry/servers/alice/observability").status_code == 404
             )
 
     def test_authenticated_caller_sees_pending_listings(self):
@@ -3649,9 +3544,7 @@ class TestServerObservability:
             )
             assert login.status_code == 200, login.text
 
-            authed = client.get(
-                "/registry/servers/publisher/observability"
-            )
+            authed = client.get("/registry/servers/publisher/observability")
             assert authed.status_code == 200
             row = authed.json()["per_tool_observability"][0]
             assert row["status"] == "pending_review"
@@ -3661,13 +3554,8 @@ class TestServerObservability:
         registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
         self._catalog_listing(registry, tool_name="link-tool")
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/servers/alice/observability"
-            )
-            assert (
-                resp.json()["links"]["reflexive_core_url"]
-                == "/registry/reflexive"
-            )
+            resp = client.get("/registry/servers/alice/observability")
+            assert resp.json()["links"]["reflexive_core_url"] == "/registry/reflexive"
 
 
 class TestListingGovernance:
@@ -3756,9 +3644,7 @@ class TestListingGovernance:
     def test_returns_404_for_unknown_tool(self):
         registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/tools/nope/governance"
-            )
+            resp = client.get("/registry/tools/nope/governance")
             assert resp.status_code == 404
 
     def test_response_carries_all_six_plane_blocks(self):
@@ -3766,9 +3652,7 @@ class TestListingGovernance:
         self._proxy_listing(registry, tool_name="proxy-tool")
 
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/tools/proxy-tool/governance"
-            )
+            resp = client.get("/registry/tools/proxy-tool/governance")
             assert resp.status_code == 200, resp.text
             payload = resp.json()
 
@@ -3813,12 +3697,8 @@ class TestListingGovernance:
         )
 
         with TestClient(registry.http_app()) as client:
-            listing_resp = client.get(
-                "/registry/tools/match-tool/governance"
-            )
-            publisher_resp = client.get(
-                "/registry/servers/alice/governance/policy"
-            )
+            listing_resp = client.get("/registry/tools/match-tool/governance")
+            publisher_resp = client.get("/registry/servers/alice/governance/policy")
         listing_policy = listing_resp.json()["policy"]
         publisher_row = next(
             row
@@ -3834,9 +3714,7 @@ class TestListingGovernance:
         self._catalog_listing(registry, tool_name="cat-tool")
 
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/tools/cat-tool/governance"
-            )
+            resp = client.get("/registry/tools/cat-tool/governance")
             payload = resp.json()
 
         assert payload["policy"]["binding_source"] == "inherited"
@@ -3853,9 +3731,7 @@ class TestListingGovernance:
         )
 
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/tools/needs-consent/governance"
-            )
+            resp = client.get("/registry/tools/needs-consent/governance")
             payload = resp.json()
 
         assert payload["consent"]["requires_consent"] is True
@@ -3866,24 +3742,16 @@ class TestListingGovernance:
         IDs, or agent IDs in the payload."""
         registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
         listing_id = self._catalog_listing(registry, tool_name="moderated-tool")
-        registry.moderate_listing(
-            listing_id, action_name="approve", reason="ok"
-        )
-        registry.moderate_listing(
-            listing_id, action_name="suspend", reason="paused"
-        )
+        registry.moderate_listing(listing_id, action_name="approve", reason="ok")
+        registry.moderate_listing(listing_id, action_name="suspend", reason="paused")
 
         # No auth wired → anonymous + sanitize.
         # But suspending makes the listing non-public; switch off
         # moderation visibility by approving back to PUBLISHED.
-        registry.moderate_listing(
-            listing_id, action_name="unsuspend", reason="resumed"
-        )
+        registry.moderate_listing(listing_id, action_name="unsuspend", reason="resumed")
 
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/tools/moderated-tool/governance"
-            )
+            resp = client.get("/registry/tools/moderated-tool/governance")
             payload = resp.json()
 
         # Moderation log is wiped for public callers; counts are kept.
@@ -3909,9 +3777,7 @@ class TestListingGovernance:
         listing_id = self._catalog_listing(
             registry, tool_name="moderated-tool", author="publisher"
         )
-        registry.moderate_listing(
-            listing_id, action_name="approve", reason="ok"
-        )
+        registry.moderate_listing(listing_id, action_name="approve", reason="ok")
 
         with TestClient(registry.http_app()) as client:
             login = client.post(
@@ -3920,9 +3786,7 @@ class TestListingGovernance:
             )
             assert login.status_code == 200, login.text
 
-            resp = client.get(
-                "/registry/tools/moderated-tool/governance"
-            )
+            resp = client.get("/registry/tools/moderated-tool/governance")
             payload = resp.json()
 
         # Authenticated view keeps the moderation log + IDs.
@@ -3941,14 +3805,10 @@ class TestListingGovernance:
             auth_settings=_auth_settings(),
             require_moderation=True,
         )
-        self._catalog_listing(
-            registry, tool_name="pending-tool", author="publisher"
-        )
+        self._catalog_listing(registry, tool_name="pending-tool", author="publisher")
 
         with TestClient(registry.http_app()) as client:
-            anon = client.get(
-                "/registry/tools/pending-tool/governance"
-            )
+            anon = client.get("/registry/tools/pending-tool/governance")
             assert anon.status_code == 404
 
             login = client.post(
@@ -3957,25 +3817,16 @@ class TestListingGovernance:
             )
             assert login.status_code == 200, login.text
 
-            authed = client.get(
-                "/registry/tools/pending-tool/governance"
-            )
+            authed = client.get("/registry/tools/pending-tool/governance")
             assert authed.status_code == 200
             assert authed.json()["status"] == "pending_review"
 
     def test_links_include_publisher_url(self):
         registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
-        self._catalog_listing(
-            registry, tool_name="link-tool", author="alice"
-        )
+        self._catalog_listing(registry, tool_name="link-tool", author="alice")
         with TestClient(registry.http_app()) as client:
-            resp = client.get(
-                "/registry/tools/link-tool/governance"
-            )
-            assert (
-                resp.json()["links"]["publisher_url"]
-                == "/registry/publishers/alice"
-            )
+            resp = client.get("/registry/tools/link-tool/governance")
+            assert resp.json()["links"]["publisher_url"] == "/registry/publishers/alice"
 
 
 class TestDefaultControlPlanesEnabled:
@@ -3993,15 +3844,9 @@ class TestDefaultControlPlanesEnabled:
         # of the suite — but the four opt-in planes should now also
         # show up by default.
         assert ctx.broker is not None, "Context Broker should default-on"
-        assert (
-            ctx.consent_graph is not None
-        ), "Consent Graph should default-on"
-        assert (
-            ctx.provenance_ledger is not None
-        ), "Provenance Ledger should default-on"
-        assert (
-            ctx.behavioral_analyzer is not None
-        ), "Reflexive Core should default-on"
+        assert ctx.consent_graph is not None, "Consent Graph should default-on"
+        assert ctx.provenance_ledger is not None, "Provenance Ledger should default-on"
+        assert ctx.behavioral_analyzer is not None, "Reflexive Core should default-on"
 
     def test_enable_contracts_false_disables_broker(self):
         registry = PureCipherRegistry(
@@ -4064,9 +3909,7 @@ class TestDefaultControlPlanesEnabled:
         assert ctx.provenance_ledger is None
         assert ctx.behavioral_analyzer is None
 
-    def test_iter9_runtime_toggle_persists_then_reapplies_on_restart(
-        self, tmp_path
-    ):
+    def test_iter9_runtime_toggle_persists_then_reapplies_on_restart(self, tmp_path):
         """The persistence path of the runtime toggle: a registry
         constructed with all planes default-on, then toggled off,
         then *reconstructed* with the same persistence path should
@@ -4131,18 +3974,10 @@ class TestDefaultControlPlanesEnabled:
         assert result.accepted
 
         with TestClient(registry.http_app()) as client:
-            contracts = client.get(
-                "/registry/servers/alice/governance/contracts"
-            )
-            consent = client.get(
-                "/registry/servers/alice/governance/consent"
-            )
-            ledger = client.get(
-                "/registry/servers/alice/governance/ledger"
-            )
-            observability = client.get(
-                "/registry/servers/alice/observability"
-            )
+            contracts = client.get("/registry/servers/alice/governance/contracts")
+            consent = client.get("/registry/servers/alice/governance/consent")
+            ledger = client.get("/registry/servers/alice/governance/ledger")
+            observability = client.get("/registry/servers/alice/observability")
 
         assert contracts.json()["broker"]["available"] is True
         assert consent.json()["consent_graph"]["available"] is True
@@ -4175,9 +4010,7 @@ class TestRuntimeControlPlaneToggles:
 
         # Pre-state: broker attached, middleware in chain.
         assert ctx.broker is not None
-        assert any(
-            isinstance(m, ContractValidationMiddleware) for m in ctx.middleware
-        )
+        assert any(isinstance(m, ContractValidationMiddleware) for m in ctx.middleware)
 
         registry.disable_plane("contracts", actor_id="alice")
 
@@ -4204,9 +4037,7 @@ class TestRuntimeControlPlaneToggles:
 
         registry.enable_plane("consent", actor_id="alice")
         assert ctx.consent_graph is not None
-        assert any(
-            isinstance(m, ConsentEnforcementMiddleware) for m in ctx.middleware
-        )
+        assert any(isinstance(m, ConsentEnforcementMiddleware) for m in ctx.middleware)
 
     def test_disable_then_enable_each_plane_independently(self):
         """All four opt-in planes must round-trip cleanly through
@@ -4214,10 +4045,7 @@ class TestRuntimeControlPlaneToggles:
         registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
         for plane in ("contracts", "consent", "provenance", "reflexive"):
             registry.disable_plane(plane, actor_id="alice")
-            assert (
-                registry.get_control_plane_status()["planes"]
-                != []
-            )
+            assert registry.get_control_plane_status()["planes"] != []
             entry = next(
                 p
                 for p in registry.get_control_plane_status()["planes"]
@@ -4304,9 +4132,7 @@ class TestRuntimeControlPlaneToggles:
             )
             assert disable.status_code == 200, disable.text
             entry = next(
-                p
-                for p in disable.json()["planes"]
-                if p["plane"] == "contracts"
+                p for p in disable.json()["planes"] if p["plane"] == "contracts"
             )
             assert entry["enabled"] is False
             assert entry["persisted"]["updated_by"] == "admin"
@@ -4317,9 +4143,7 @@ class TestRuntimeControlPlaneToggles:
             )
             assert enable.status_code == 200
             entry = next(
-                p
-                for p in enable.json()["planes"]
-                if p["plane"] == "contracts"
+                p for p in enable.json()["planes"] if p["plane"] == "contracts"
             )
             assert entry["enabled"] is True
 
@@ -4393,9 +4217,7 @@ class TestRuntimeControlPlaneToggles:
                 json={"enabled": False},
             )
 
-        events = registry._account_activity.list_recent(
-            username="admin", limit=20
-        )
+        events = registry._account_activity.list_recent(username="admin", limit=20)
         toggle_events = [
             e for e in events if e["event_kind"] == "admin_control_plane_toggle"
         ]
@@ -4435,9 +4257,7 @@ class TestRuntimeControlPlaneToggles:
             assert login.status_code == 200
 
             # Default-on: broker available.
-            before = client.get(
-                "/registry/servers/admin/governance/contracts"
-            )
+            before = client.get("/registry/servers/admin/governance/contracts")
             assert before.status_code == 200
             assert before.json()["broker"]["available"] is True
 
@@ -4446,9 +4266,7 @@ class TestRuntimeControlPlaneToggles:
                 json={"enabled": False},
             )
 
-            after = client.get(
-                "/registry/servers/admin/governance/contracts"
-            )
+            after = client.get("/registry/servers/admin/governance/contracts")
             assert after.status_code == 200
             assert after.json()["broker"]["available"] is False
 
@@ -4668,9 +4486,7 @@ class TestRegistryClientIdentities:
                     "kind": "agent",
                 },
             )
-            resp = client.get(
-                "/registry/clients/governance-client/governance"
-            )
+            resp = client.get("/registry/clients/governance-client/governance")
             assert resp.status_code == 200, resp.text
             data = resp.json()
             assert data["slug"] == "governance-client"
@@ -4701,9 +4517,7 @@ class TestRegistryClientIdentities:
             assert issued.json()["secret"]
 
             # Two tokens visible.
-            listed = client.get(
-                "/registry/clients/token-lifecycle/tokens"
-            )
+            listed = client.get("/registry/clients/token-lifecycle/tokens")
             assert listed.status_code == 200
             assert listed.json()["count"] == 2
 
@@ -4753,9 +4567,7 @@ class TestRegistryClientIdentities:
             # Admin sees it.
             admin_list = client.get("/registry/clients")
             assert admin_list.status_code == 200
-            assert any(
-                c["slug"] == "alice-bot" for c in admin_list.json()["items"]
-            )
+            assert any(c["slug"] == "alice-bot" for c in admin_list.json()["items"])
 
             # Publisher logs in: their derived publisher id is not
             # ``alice``, so they shouldn't see ``alice-bot``.
@@ -4767,9 +4579,7 @@ class TestRegistryClientIdentities:
             assert pub_login.status_code == 200
             pub_list = client.get("/registry/clients")
             assert pub_list.status_code == 200
-            assert all(
-                c["slug"] != "alice-bot" for c in pub_list.json()["items"]
-            )
+            assert all(c["slug"] != "alice-bot" for c in pub_list.json()["items"])
 
     def test_http_clients_anonymous_governance_is_sanitized(self):
         """The governance route is intentionally reachable without
@@ -4799,11 +4609,1136 @@ class TestRegistryClientIdentities:
             )
 
             client.cookies.clear()
-            anon_gov = client.get(
-                "/registry/clients/public-probe/governance"
-            )
+            anon_gov = client.get("/registry/clients/public-probe/governance")
             assert anon_gov.status_code == 200, anon_gov.text
             data = anon_gov.json()
             # Sanitization: tokens.items removed, counts kept.
             assert "items" not in data["tokens"]
             assert "total" in data["tokens"]
+
+
+class TestRegistryClientSimulator:
+    """Iteration 11 — the cross-control-plane request simulator
+    composes the *real* read-only evaluation path of every plane
+    so an operator can preview what running a request would do.
+
+    Tests cover:
+
+    * happy path with a fresh registry (consent denies by default
+      because no edges are seeded — that's the realistic baseline);
+    * suspended-client behavior surfaces as a top-level blocker;
+    * unknown-action provenance preview falls back to ``custom``;
+    * required-fields validation on the HTTP route;
+    * owner-or-admin gating of the route under auth.
+    """
+
+    @staticmethod
+    def _run(coro: Any) -> Any:
+        import asyncio
+
+        return asyncio.run(coro)
+
+    def test_simulate_returns_full_trace(self):
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
+        registry.register_client(
+            display_name="Sim Client",
+            owner_publisher_id="acme",
+            slug="sim-client",
+            kind="agent",
+        )
+        result = self._run(
+            registry.simulate_client_request(
+                "sim-client",
+                action="call_tool",
+                resource_id="delete_user",
+            )
+        )
+        assert result.get("error") is None
+        assert result["client"]["slug"] == "sim-client"
+
+        # All five planes report.
+        assert "policy" in result
+        assert "contracts" in result
+        assert "consent" in result
+        assert "ledger" in result
+        assert "reflexive" in result
+
+        # Provenance preview is shaped correctly and not actually
+        # written.
+        ledger = result["ledger"]
+        assert ledger["would_record"] is True
+        assert ledger["preview"]["action"] == "tool_called"
+        assert ledger["preview"]["actor_id"] == "sim-client"
+        assert ledger["preview"]["resource_id"] == "delete_user"
+
+        # Reflexive plane skipped without a metric.
+        assert result["reflexive"]["evaluated"] is False
+
+    def test_simulate_consent_denies_by_default(self):
+        """Fresh consent graph has no edges, so a request denies.
+        The simulator must surface that as a structured blocker —
+        not a 500.
+        """
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
+        registry.register_client(
+            display_name="No Consent",
+            owner_publisher_id="acme",
+            slug="no-consent",
+            kind="agent",
+        )
+        result = self._run(
+            registry.simulate_client_request(
+                "no-consent",
+                action="call_tool",
+                resource_id="some_tool",
+                consent_scope="execute",
+            )
+        )
+        assert result["consent"]["available"] is True
+        assert result["consent"]["granted"] is False
+        assert result["verdict"] == "deny"
+        blocker_planes = {b["plane"] for b in result["blockers"]}
+        assert "consent" in blocker_planes
+
+    def test_simulate_suspended_client_blocks_at_top_level(self):
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
+        out = registry.register_client(
+            display_name="Suspended",
+            owner_publisher_id="acme",
+            slug="suspended-client",
+            kind="agent",
+        )
+        registry.suspend_client(out["client"]["client_id"], reason="under audit")
+        result = self._run(
+            registry.simulate_client_request(
+                "suspended-client",
+                action="call_tool",
+                resource_id="x",
+            )
+        )
+        assert result["verdict"] == "deny"
+        blocker_planes = {b["plane"] for b in result["blockers"]}
+        assert "client" in blocker_planes
+
+    def test_simulate_unknown_action_falls_back_to_custom(self):
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
+        registry.register_client(
+            display_name="Custom",
+            owner_publisher_id="acme",
+            slug="custom-client",
+            kind="agent",
+        )
+        result = self._run(
+            registry.simulate_client_request(
+                "custom-client",
+                action="totally_made_up_action",
+                resource_id="x",
+            )
+        )
+        assert result["ledger"]["preview"]["action"] == "custom"
+
+    def test_simulate_returns_404_for_unknown_client(self):
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
+        result = self._run(
+            registry.simulate_client_request(
+                "does-not-exist", action="x", resource_id="y"
+            )
+        )
+        assert result.get("status") == 404
+
+    def test_simulate_reflexive_no_baseline(self):
+        """Reflexive baseline is empty until the analyzer has seen
+        ≥5 calls. The simulator must report that gracefully.
+        """
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
+        registry.register_client(
+            display_name="Baseline Probe",
+            owner_publisher_id="acme",
+            slug="baseline-probe",
+            kind="service",
+        )
+        result = self._run(
+            registry.simulate_client_request(
+                "baseline-probe",
+                action="call_tool",
+                resource_id="x",
+                metric_name="call_rate",
+                metric_value=2.0,
+            )
+        )
+        assert result["reflexive"]["available"] is True
+        # No baseline yet → evaluated=False with a reason.
+        assert result["reflexive"]["evaluated"] is False
+        assert "baseline" in result["reflexive"]["reason"].lower()
+
+    def test_http_simulate_route_round_trips(self):
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
+        with TestClient(registry.http_app()) as client:
+            client.post(
+                "/registry/clients",
+                json={
+                    "display_name": "Route Test",
+                    "owner_publisher_id": "acme",
+                    "slug": "route-test",
+                    "kind": "agent",
+                },
+            )
+            resp = client.post(
+                "/registry/clients/route-test/simulate",
+                json={
+                    "action": "call_tool",
+                    "resource_id": "delete_user",
+                    "consent_scope": "execute",
+                },
+            )
+            assert resp.status_code == 200, resp.text
+            data = resp.json()
+            assert data["verdict"] in {"allow", "deny", "review"}
+            assert data["client"]["slug"] == "route-test"
+
+    def test_http_simulate_route_validates_required_fields(self):
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
+        with TestClient(registry.http_app()) as client:
+            client.post(
+                "/registry/clients",
+                json={
+                    "display_name": "Validation",
+                    "owner_publisher_id": "acme",
+                    "slug": "validation",
+                    "kind": "agent",
+                },
+            )
+            # Missing action.
+            resp = client.post(
+                "/registry/clients/validation/simulate",
+                json={"resource_id": "x"},
+            )
+            assert resp.status_code == 400
+            # Missing resource_id.
+            resp = client.post(
+                "/registry/clients/validation/simulate",
+                json={"action": "x"},
+            )
+            assert resp.status_code == 400
+            # Non-numeric metric_value.
+            resp = client.post(
+                "/registry/clients/validation/simulate",
+                json={
+                    "action": "x",
+                    "resource_id": "y",
+                    "metric_value": "not-a-number",
+                },
+            )
+            assert resp.status_code == 400
+
+    def test_http_simulate_route_404_for_unknown_client(self):
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
+        with TestClient(registry.http_app()) as client:
+            resp = client.post(
+                "/registry/clients/missing/simulate",
+                json={"action": "x", "resource_id": "y"},
+            )
+            assert resp.status_code == 404
+
+    def test_http_simulate_route_blocks_unauthorized_callers(self):
+        """With auth on, anonymous → 401, non-owner publisher → 403."""
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            auth_settings=_auth_settings(),
+        )
+        with TestClient(registry.http_app()) as client:
+            # Admin creates a client owned by 'alice'.
+            client.post(
+                "/registry/login",
+                json={"username": "admin", "password": "admin123"},
+            )
+            client.post(
+                "/registry/clients",
+                json={
+                    "display_name": "Alice Bot",
+                    "owner_publisher_id": "alice",
+                    "slug": "alice-bot",
+                    "kind": "agent",
+                },
+            )
+
+            # Anonymous: 401.
+            client.cookies.clear()
+            anon = client.post(
+                "/registry/clients/alice-bot/simulate",
+                json={"action": "x", "resource_id": "y"},
+            )
+            assert anon.status_code == 401
+
+            # Publisher (not the owner): 403.
+            client.post(
+                "/registry/login",
+                json={"username": "publisher", "password": "publisher123"},
+            )
+            forbidden = client.post(
+                "/registry/clients/alice-bot/simulate",
+                json={"action": "x", "resource_id": "y"},
+            )
+            assert forbidden.status_code == 403
+
+
+class TestRegistryClientActivity:
+    """Iteration 12 — the activity projection composes per-actor
+    ledger records + token ``last_used_at`` into the live-status
+    block on the per-client detail page.
+
+    Coverage:
+
+    * never-seen client → ``status_label="never"``;
+    * a synthetic ledger record makes the client ``"live"``;
+    * graduations through ``recent`` / ``idle`` / ``dormant`` as the
+      record's age increases;
+    * ``top_resources`` orders by frequency descending;
+    * ``hourly_buckets`` returns 24 buckets with offset-from-now
+      semantics;
+    * sanitized variant strips ``top_resources`` but keeps volumetric
+      counts.
+    """
+
+    @staticmethod
+    def _summarize(*, ledger_rows: list[Any], tokens: list[Any]) -> dict[str, Any]:
+        # Direct call into the static helper; keeps tests fast and
+        # avoids the orchestrator wiring the full ``get_client_governance``
+        # path needs.
+        return PureCipherRegistry._summarize_client_activity(
+            ledger_rows=ledger_rows, tokens=tokens
+        )
+
+    @staticmethod
+    def _row(timestamp: Any, *, resource_id: str = "tool_x") -> Any:
+        from types import SimpleNamespace
+
+        return SimpleNamespace(timestamp=timestamp, resource_id=resource_id)
+
+    def test_never_seen_yields_never_status(self):
+        out = self._summarize(ledger_rows=[], tokens=[])
+        assert out["status_label"] == "never"
+        assert out["last_seen_at"] is None
+        assert out["idle_seconds"] is None
+        assert out["calls_last_hour"] == 0
+        assert out["calls_last_24h"] == 0
+        assert len(out["hourly_buckets"]) == 24
+        assert all(b["count"] == 0 for b in out["hourly_buckets"])
+        assert out["top_resources"] == []
+
+    def test_recent_ledger_record_yields_live(self):
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc)
+        out = self._summarize(
+            ledger_rows=[self._row(now)],
+            tokens=[],
+        )
+        assert out["status_label"] == "live"
+        assert out["last_seen_source"] == "ledger"
+        assert out["calls_last_hour"] == 1
+        assert out["calls_last_24h"] == 1
+
+    def test_status_graduates_with_age(self):
+        """Walk a single record from 30s old → 30min old → 6h old →
+        2 days old; status should step through live → recent → idle
+        → dormant.
+        """
+        from datetime import datetime, timedelta, timezone
+
+        now = datetime.now(timezone.utc)
+        # Thresholds (mirror _summarize_client_activity):
+        #   live ≤ 60s; recent ≤ 15min; idle ≤ 24h; dormant > 24h.
+        cases = [
+            (timedelta(seconds=30), "live"),
+            (timedelta(minutes=10), "recent"),
+            (timedelta(hours=6), "idle"),
+            (timedelta(days=2), "dormant"),
+        ]
+        for age, expected in cases:
+            row = self._row(now - age)
+            out = self._summarize(ledger_rows=[row], tokens=[])
+            assert out["status_label"] == expected, (
+                f"age={age} expected {expected} got {out['status_label']}"
+            )
+
+    def test_token_last_used_used_when_no_ledger_records(self):
+        """A client whose first call was denied still appears
+        active because its token authenticated. We fall back to
+        the token's ``last_used_at`` to capture that signal.
+        """
+        from datetime import datetime, timezone
+        from types import SimpleNamespace
+
+        now_ts = datetime.now(timezone.utc).timestamp()
+        token = SimpleNamespace(last_used_at=now_ts - 5)
+        out = self._summarize(ledger_rows=[], tokens=[token])
+        assert out["status_label"] == "live"
+        assert out["last_seen_source"] == "token"
+
+    def test_top_resources_orders_by_frequency(self):
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc)
+        rows = (
+            [self._row(now, resource_id="alpha") for _ in range(3)]
+            + [self._row(now, resource_id="beta") for _ in range(5)]
+            + [self._row(now, resource_id="gamma") for _ in range(1)]
+        )
+        out = self._summarize(ledger_rows=rows, tokens=[])
+        ordered = [r["resource_id"] for r in out["top_resources"]]
+        assert ordered == ["beta", "alpha", "gamma"]
+        counts = {r["resource_id"]: r["count"] for r in out["top_resources"]}
+        assert counts == {"beta": 5, "alpha": 3, "gamma": 1}
+
+    def test_hourly_buckets_match_offset_semantics(self):
+        """Bucket at offset 0 = current hour; offset 5 = 5h ago."""
+        from datetime import datetime, timedelta, timezone
+
+        now = datetime.now(timezone.utc)
+        rows = [
+            self._row(now),  # offset 0
+            self._row(now - timedelta(hours=5, minutes=10)),  # offset 5
+            self._row(now - timedelta(hours=23, minutes=30)),  # offset 23
+            self._row(now - timedelta(hours=30)),  # outside window
+        ]
+        out = self._summarize(ledger_rows=rows, tokens=[])
+        buckets_by_offset = {
+            b["hour_offset"]: b["count"] for b in out["hourly_buckets"]
+        }
+        assert buckets_by_offset[0] == 1
+        assert buckets_by_offset[5] == 1
+        assert buckets_by_offset[23] == 1
+        # Records older than 24h must not leak into any bucket.
+        assert sum(b["count"] for b in out["hourly_buckets"]) == 3
+
+    def test_sanitize_strips_top_resources(self):
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
+        registry.register_client(
+            display_name="Public Activity",
+            owner_publisher_id="acme",
+            slug="public-activity",
+            kind="agent",
+        )
+        sanitized = registry.get_client_governance(
+            "public-activity", sanitize_for_public=True
+        )
+        # Activity block survives but resource ids are dropped.
+        assert "activity" in sanitized
+        assert sanitized["activity"]["top_resources"] == []
+        assert len(sanitized["activity"]["hourly_buckets"]) == 24
+        assert "status_label" in sanitized["activity"]
+
+    def test_governance_route_includes_activity(self):
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
+        with TestClient(registry.http_app()) as client:
+            client.post(
+                "/registry/clients",
+                json={
+                    "display_name": "Activity Probe",
+                    "owner_publisher_id": "acme",
+                    "slug": "activity-probe",
+                    "kind": "agent",
+                },
+            )
+            resp = client.get("/registry/clients/activity-probe/governance")
+            assert resp.status_code == 200
+            body = resp.json()
+            assert "activity" in body
+            assert body["activity"]["status_label"] == "never"
+            assert isinstance(body["activity"]["hourly_buckets"], list)
+
+
+class TestRegistryOpenAPICredentials:
+    """Iter 13.2 — HTTP CRUD for OpenAPI credentials.
+
+    The store-level behaviour is covered by
+    ``test_purecipher_openapi_store.py``; this class verifies the route
+    layer: auth gating, role gating, payload validation, and that the
+    sanitised public projection never leaks plaintext.
+    """
+
+    _SPEC_BODY = json.dumps(
+        {
+            "openapi": "3.0.0",
+            "info": {"title": "Cred Demo", "version": "1.0.0"},
+            "components": {
+                "securitySchemes": {
+                    "Bearer": {"type": "http", "scheme": "bearer"},
+                }
+            },
+            "paths": {
+                "/ping": {
+                    "get": {
+                        "operationId": "ping",
+                        "responses": {"200": {"description": "OK"}},
+                    }
+                }
+            },
+        }
+    )
+
+    def _ingest_source(self, client: TestClient) -> str:
+        login = client.post(
+            "/registry/login",
+            json={"username": "publisher", "password": "publisher123"},
+        )
+        assert login.status_code == 200, login.text
+        resp = client.post(
+            "/registry/openapi/ingest",
+            json={"text": self._SPEC_BODY, "title": "Cred Demo"},
+        )
+        assert resp.status_code == 200, resp.text
+        return resp.json()["source"]["source_id"]
+
+    def test_routes_require_auth(self):
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            auth_settings=_auth_settings(),
+        )
+        with TestClient(registry.http_app()) as client:
+            resp = client.get("/registry/openapi/credentials")
+            assert resp.status_code == 401
+
+            resp = client.post(
+                "/registry/openapi/credentials",
+                json={
+                    "source_id": "x",
+                    "scheme_name": "y",
+                    "scheme_kind": "http",
+                    "secret": {"http_scheme": "bearer", "bearer_token": "z"},
+                },
+            )
+            assert resp.status_code == 401
+
+    def test_upsert_returns_sanitised_record(self):
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            auth_settings=_auth_settings(),
+        )
+        with TestClient(registry.http_app()) as client:
+            source_id = self._ingest_source(client)
+            resp = client.post(
+                "/registry/openapi/credentials",
+                json={
+                    "source_id": source_id,
+                    "scheme_name": "Bearer",
+                    "scheme_kind": "http",
+                    "secret": {
+                        "http_scheme": "bearer",
+                        "bearer_token": "secrettoken-XYZQ",
+                    },
+                    "label": "prod",
+                },
+            )
+            assert resp.status_code == 200, resp.text
+            body = resp.json()
+            cred = body["credential"]
+            # Plaintext must NOT appear on the wire.
+            assert "secret" not in cred
+            assert cred["secret_hint"] == "bearer …XYZQ"
+            assert cred["scheme_kind"] == "http"
+            assert cred["label"] == "prod"
+
+    def test_list_returns_sanitised_records(self):
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            auth_settings=_auth_settings(),
+        )
+        with TestClient(registry.http_app()) as client:
+            source_id = self._ingest_source(client)
+            client.post(
+                "/registry/openapi/credentials",
+                json={
+                    "source_id": source_id,
+                    "scheme_name": "Bearer",
+                    "scheme_kind": "http",
+                    "secret": {
+                        "http_scheme": "bearer",
+                        "bearer_token": "tok-AAAA",
+                    },
+                },
+            )
+            resp = client.get("/registry/openapi/credentials")
+            assert resp.status_code == 200
+            creds = resp.json()["credentials"]
+            assert len(creds) == 1
+            assert "secret" not in creds[0]
+            assert creds[0]["secret_hint"] == "bearer …AAAA"
+
+            # source_id filter narrows the list.
+            filtered = client.get(
+                f"/registry/openapi/credentials?source_id={source_id}"
+            )
+            assert filtered.status_code == 200
+            assert len(filtered.json()["credentials"]) == 1
+
+            other = client.get("/registry/openapi/credentials?source_id=does_not_exist")
+            assert other.status_code == 200
+            assert other.json()["credentials"] == []
+
+    def test_delete_round_trip(self):
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            auth_settings=_auth_settings(),
+        )
+        with TestClient(registry.http_app()) as client:
+            source_id = self._ingest_source(client)
+            up = client.post(
+                "/registry/openapi/credentials",
+                json={
+                    "source_id": source_id,
+                    "scheme_name": "Bearer",
+                    "scheme_kind": "http",
+                    "secret": {
+                        "http_scheme": "bearer",
+                        "bearer_token": "tok-AAAA",
+                    },
+                },
+            )
+            cid = up.json()["credential"]["credential_id"]
+
+            # Wrong id → 404.
+            missing = client.delete("/registry/openapi/credentials/cred_does_not_exist")
+            assert missing.status_code == 404
+
+            # Right id → 200 + idempotent (second delete is 404).
+            ok = client.delete(f"/registry/openapi/credentials/{cid}")
+            assert ok.status_code == 200
+            again = client.delete(f"/registry/openapi/credentials/{cid}")
+            assert again.status_code == 404
+
+    def test_upsert_rejects_unknown_source(self):
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            auth_settings=_auth_settings(),
+        )
+        with TestClient(registry.http_app()) as client:
+            login = client.post(
+                "/registry/login",
+                json={"username": "publisher", "password": "publisher123"},
+            )
+            assert login.status_code == 200
+            resp = client.post(
+                "/registry/openapi/credentials",
+                json={
+                    "source_id": "oas_does_not_exist",
+                    "scheme_name": "Bearer",
+                    "scheme_kind": "http",
+                    "secret": {
+                        "http_scheme": "bearer",
+                        "bearer_token": "tok-AAAA",
+                    },
+                },
+            )
+            assert resp.status_code == 404
+
+    def test_upsert_validates_secret_payload(self):
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            auth_settings=_auth_settings(),
+        )
+        with TestClient(registry.http_app()) as client:
+            source_id = self._ingest_source(client)
+            # Missing scheme_kind
+            resp = client.post(
+                "/registry/openapi/credentials",
+                json={
+                    "source_id": source_id,
+                    "scheme_name": "Bearer",
+                    "secret": {"bearer_token": "x"},
+                },
+            )
+            assert resp.status_code == 400
+
+            # Bad scheme_kind
+            resp = client.post(
+                "/registry/openapi/credentials",
+                json={
+                    "source_id": source_id,
+                    "scheme_name": "Bearer",
+                    "scheme_kind": "weirdo",
+                    "secret": {"x": "y"},
+                },
+            )
+            assert resp.status_code == 400
+
+            # Empty secret
+            resp = client.post(
+                "/registry/openapi/credentials",
+                json={
+                    "source_id": source_id,
+                    "scheme_name": "Bearer",
+                    "scheme_kind": "http",
+                    "secret": {},
+                },
+            )
+            assert resp.status_code == 400
+
+            # http requires http_scheme
+            resp = client.post(
+                "/registry/openapi/credentials",
+                json={
+                    "source_id": source_id,
+                    "scheme_name": "Bearer",
+                    "scheme_kind": "http",
+                    "secret": {"bearer_token": "tok"},
+                },
+            )
+            assert resp.status_code == 400
+
+            # apiKey requires api_key
+            resp = client.post(
+                "/registry/openapi/credentials",
+                json={
+                    "source_id": source_id,
+                    "scheme_name": "ApiKey",
+                    "scheme_kind": "apiKey",
+                    "secret": {},
+                },
+            )
+            assert resp.status_code == 400
+
+
+class TestRegistryOpenAPIInvoke:
+    """Iter 13.3 — HTTP /invoke route round-trips through the executor.
+
+    Tests inject a ``MockTransport``-backed ``httpx.AsyncClient`` via
+    ``registry._openapi_invoke_client`` so the route never hits the
+    network. Each test asserts on the captured request to verify URL
+    building, credential application, and tenant isolation all wire
+    through correctly end-to-end.
+    """
+
+    _SPEC_BODY = json.dumps(
+        {
+            "openapi": "3.0.0",
+            "servers": [{"url": "https://api.demo.example/v1"}],
+            "components": {
+                "securitySchemes": {"Bearer": {"type": "http", "scheme": "bearer"}},
+                "schemas": {
+                    "Pet": {
+                        "type": "object",
+                        "required": ["name"],
+                        "properties": {
+                            "id": {"type": "integer"},
+                            "name": {"type": "string"},
+                        },
+                    }
+                },
+            },
+            "security": [{"Bearer": []}],
+            "paths": {
+                "/pets/{petId}": {
+                    "get": {
+                        "operationId": "showPet",
+                        "parameters": [
+                            {
+                                "name": "petId",
+                                "in": "path",
+                                "required": True,
+                                "schema": {"type": "string"},
+                            }
+                        ],
+                        "responses": {
+                            "200": {
+                                "description": "OK",
+                                "content": {
+                                    "application/json": {
+                                        "schema": {"$ref": "#/components/schemas/Pet"}
+                                    }
+                                },
+                            }
+                        },
+                    }
+                }
+            },
+        }
+    )
+
+    def _setup(
+        self, registry: PureCipherRegistry, handler
+    ) -> tuple[TestClient, str, str]:
+        import httpx
+
+        registry._openapi_invoke_client = httpx.AsyncClient(
+            transport=httpx.MockTransport(handler)
+        )
+        client = TestClient(registry.http_app())
+        client.__enter__()
+        login = client.post(
+            "/registry/login",
+            json={"username": "publisher", "password": "publisher123"},
+        )
+        assert login.status_code == 200, login.text
+        ingest = client.post(
+            "/registry/openapi/ingest",
+            json={"text": self._SPEC_BODY, "title": "Demo"},
+        )
+        assert ingest.status_code == 200, ingest.text
+        source_id = ingest.json()["source"]["source_id"]
+
+        toolset = client.post(
+            "/registry/openapi/toolset",
+            json={
+                "source_id": source_id,
+                "title": "Demo Toolset",
+                "selected_operations": ["showPet"],
+            },
+        )
+        assert toolset.status_code == 200, toolset.text
+        toolset_id = toolset.json()["toolset"]["toolset_id"]
+
+        # Register the Bearer credential.
+        cred = client.post(
+            "/registry/openapi/credentials",
+            json={
+                "source_id": source_id,
+                "scheme_name": "Bearer",
+                "scheme_kind": "http",
+                "secret": {
+                    "http_scheme": "bearer",
+                    "bearer_token": "tok-XYZQ",
+                },
+            },
+        )
+        assert cred.status_code == 200, cred.text
+        return client, toolset_id, source_id
+
+    def test_invoke_round_trip_uses_credential(self):
+        import httpx
+
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            auth_settings=_auth_settings(),
+        )
+        captured: list[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured.append(request)
+            return httpx.Response(
+                200,
+                headers={"content-type": "application/json"},
+                json={"id": 7, "name": "Fido"},
+            )
+
+        client, toolset_id, _source_id = self._setup(registry, handler)
+        try:
+            resp = client.post(
+                f"/registry/openapi/toolset/{toolset_id}/invoke",
+                json={
+                    "operation_key": "showPet",
+                    "arguments": {"path": {"petId": "abc"}},
+                },
+            )
+            assert resp.status_code == 200, resp.text
+            body = resp.json()
+            assert body["status_code"] == 200
+            assert body["body"] == {"id": 7, "name": "Fido"}
+            assert body["validation_warnings"] == []
+
+            # Captured upstream request: URL built + Authorization header set.
+            assert len(captured) == 1
+            assert str(captured[0].url) == "https://api.demo.example/v1/pets/abc"
+            assert captured[0].headers.get("authorization") == "Bearer tok-XYZQ"
+        finally:
+            client.__exit__(None, None, None)
+
+    def test_invoke_input_validation_returns_400(self):
+        import httpx
+
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            auth_settings=_auth_settings(),
+        )
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200)
+
+        client, toolset_id, _source_id = self._setup(registry, handler)
+        try:
+            resp = client.post(
+                f"/registry/openapi/toolset/{toolset_id}/invoke",
+                json={
+                    "operation_key": "showPet",
+                    "arguments": {"path": {}},
+                },
+            )
+            assert resp.status_code == 400
+            payload = resp.json()
+            assert "issues" in payload
+            assert any("petId" in m for m in payload["issues"])
+        finally:
+            client.__exit__(None, None, None)
+
+    def test_invoke_unselected_operation_rejected(self):
+        import httpx
+
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            auth_settings=_auth_settings(),
+        )
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200)
+
+        client, toolset_id, _source_id = self._setup(registry, handler)
+        try:
+            resp = client.post(
+                f"/registry/openapi/toolset/{toolset_id}/invoke",
+                json={
+                    "operation_key": "ghostOperation",
+                    "arguments": {},
+                },
+            )
+            assert resp.status_code == 400
+            assert "not part of toolset" in resp.json()["error"]
+        finally:
+            client.__exit__(None, None, None)
+
+    def test_invoke_unknown_toolset_returns_404(self):
+        import httpx
+
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            auth_settings=_auth_settings(),
+        )
+        registry._openapi_invoke_client = httpx.AsyncClient(
+            transport=httpx.MockTransport(lambda r: httpx.Response(200))
+        )
+        with TestClient(registry.http_app()) as client:
+            login = client.post(
+                "/registry/login",
+                json={"username": "publisher", "password": "publisher123"},
+            )
+            assert login.status_code == 200
+            resp = client.post(
+                "/registry/openapi/toolset/toolset_does_not_exist/invoke",
+                json={"operation_key": "x", "arguments": {}},
+            )
+            assert resp.status_code == 404
+
+    def test_invoke_requires_auth(self):
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            auth_settings=_auth_settings(),
+        )
+        with TestClient(registry.http_app()) as client:
+            resp = client.post(
+                "/registry/openapi/toolset/some_id/invoke",
+                json={"operation_key": "x", "arguments": {}},
+            )
+            assert resp.status_code == 401
+
+    def test_invoke_4xx_passthrough(self):
+        import httpx
+
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            auth_settings=_auth_settings(),
+        )
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                404,
+                headers={"content-type": "application/json"},
+                json={"error": "Pet not found"},
+            )
+
+        client, toolset_id, _source_id = self._setup(registry, handler)
+        try:
+            resp = client.post(
+                f"/registry/openapi/toolset/{toolset_id}/invoke",
+                json={
+                    "operation_key": "showPet",
+                    "arguments": {"path": {"petId": "missing"}},
+                },
+            )
+            # Route returns 200 — the upstream's status code is in the body.
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body["status_code"] == 404
+            assert body["body"] == {"error": "Pet not found"}
+        finally:
+            client.__exit__(None, None, None)
+
+
+class TestIter14_11AdminDeregister:
+    """Iter 14.11 — admins can permanently deregister a listing.
+
+    The deregister flow:
+    1. Admin POSTs to /registry/review/{listing_id}/deregister with reason.
+    2. Backend transitions status PUBLISHED → DEREGISTERED, records the
+       decision in the moderation log, and broadcasts a platform-wide
+       notification visible to every role.
+    3. Public catalog filters DEREGISTERED listings out (status check).
+    4. Proxy mode rejects calls to deregistered listings with HTTP 410.
+    """
+
+    def _publish_listing(self, registry, *, tool_name: str = "demo-tool"):
+        """Publish a listing through the moderation queue so it lands
+        at status=PUBLISHED, ready to be deregistered."""
+        result = registry.submit_tool(
+            _manifest(tool_name=tool_name),
+            display_name="Demo Tool",
+            categories={ToolCategory.NETWORK},
+            metadata=_runtime_metadata(),
+            requested_level=CertificationLevel.BASIC,
+        )
+        assert result.accepted is True
+        listing_id = result.listing.listing_id
+        approved = registry.moderate_listing(
+            listing_id, action_name="approve", reason="ready"
+        )
+        assert approved["listing"]["status"] == "published"
+        return listing_id
+
+    def test_admin_deregister_transitions_status_and_logs_reason(self):
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            require_moderation=True,
+        )
+        listing_id = self._publish_listing(registry)
+
+        result = registry.moderate_listing(
+            listing_id,
+            action_name="deregister",
+            reason="Author abandoned the package; security advisory open.",
+        )
+        assert result["listing"]["status"] == "deregistered"
+        assert result["decision"]["action"] == "deregister"
+        assert "abandoned" in result["decision"]["reason"].lower()
+
+    def test_deregistered_listing_filtered_from_public_catalog(self):
+        """The public ``/registry/tools`` listing only includes
+        PUBLISHED entries. After deregister, the listing must
+        disappear from that response."""
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            require_moderation=True,
+        )
+        listing_id = self._publish_listing(registry, tool_name="public-demo")
+
+        with TestClient(registry.http_app()) as client:
+            before = client.get("/registry/tools").json()
+            assert before["count"] == 1
+            assert before["tools"][0]["tool_name"] == "public-demo"
+
+            registry.moderate_listing(
+                listing_id,
+                action_name="deregister",
+                reason="Test removal",
+            )
+
+            after = client.get("/registry/tools").json()
+            assert after["count"] == 0
+
+    def test_deregister_broadcasts_notification_to_every_role(self):
+        """The notification body explicitly tells viewers the server
+        is gone. Audiences include every role so even unauthenticated
+        viewers see it on the notifications panel."""
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            require_moderation=True,
+        )
+        listing_id = self._publish_listing(registry, tool_name="broadcast-test")
+
+        registry.moderate_listing(
+            listing_id,
+            action_name="deregister",
+            reason="Policy violation",
+        )
+
+        # Notifications visible to a viewer (lowest-trust role) — if
+        # the deregister event is in there, every role above viewer
+        # sees it too.
+        feed = registry.get_registry_notifications(auth_enabled=True, role="viewer")
+        items = feed["items"]
+        assert any(it["event_kind"] == "listing_deregistered" for it in items), [
+            it["event_kind"] for it in items
+        ]
+        deregister_item = next(
+            it for it in items if it["event_kind"] == "listing_deregistered"
+        )
+        # Title makes the action obvious and includes the display name.
+        assert "deregistered" in deregister_item["title"].lower()
+        # Body tells curators their integrations need to migrate.
+        assert "remove or migrate" in deregister_item["body"].lower()
+
+    def test_route_requires_admin_role(self):
+        """Non-admin sessions get 403 on the deregister route."""
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            require_moderation=True,
+            auth_settings=_auth_settings(),
+        )
+        listing_id = self._publish_listing(registry, tool_name="auth-test")
+
+        with TestClient(registry.http_app()) as client:
+            # Reviewer (not admin) — must be rejected. Reviewers can
+            # approve/reject but not deregister.
+            login = client.post(
+                "/registry/login",
+                json={"username": "reviewer", "password": "reviewer123"},
+            )
+            assert login.status_code == 200
+            r = client.post(
+                f"/registry/review/{listing_id}/deregister",
+                json={"reason": "I want to deregister"},
+                headers={"Accept": "application/json"},
+            )
+            assert r.status_code == 403, r.text
+
+    def test_admin_route_accepts_deregister(self):
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            require_moderation=True,
+            auth_settings=_auth_settings(),
+        )
+        listing_id = self._publish_listing(registry, tool_name="happy-path")
+
+        with TestClient(registry.http_app()) as client:
+            login = client.post(
+                "/registry/login",
+                json={"username": "admin", "password": "admin123"},
+            )
+            assert login.status_code == 200
+
+            r = client.post(
+                f"/registry/review/{listing_id}/deregister",
+                json={"reason": "End-of-life by author"},
+                headers={"Accept": "application/json"},
+            )
+            assert r.status_code == 200, r.text
+            payload = r.json()
+            assert payload["listing"]["status"] == "deregistered"
+            # Moderator identity comes from the session, not the body.
+            assert payload["decision"]["moderator_id"] == "admin"
+
+    def test_deregistered_listing_serialized_status(self):
+        """The listing detail endpoint returns ``status: 'deregistered'``
+        so the frontend can render the right banner."""
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            require_moderation=True,
+        )
+        self._publish_listing(registry, tool_name="serial-test")
+        listing = registry._marketplace().get_by_name("serial-test")
+        assert listing is not None
+        registry.moderate_listing(
+            listing.listing_id,
+            action_name="deregister",
+            reason="Test",
+        )
+
+        with TestClient(registry.http_app()) as client:
+            r = client.get("/registry/tools/serial-test")
+            # Public catalog filters it out.
+            assert r.status_code == 404
+            # But the moderation queue still shows it (admins audit).
+            queue = client.get("/registry/review/submissions").json()
+            sections = queue["sections"]
+            assert "deregistered" in sections
+            assert any(
+                row["tool_name"] == "serial-test" for row in sections["deregistered"]
+            )

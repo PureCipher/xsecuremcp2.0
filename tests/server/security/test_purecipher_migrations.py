@@ -20,7 +20,7 @@ def test_alembic_migration_creates_registry_tables(tmp_path):
     version = conn.execute("SELECT version_num FROM alembic_version").fetchone()
     conn.close()
 
-    assert version == ("20260427_0003",)
+    assert version == ("20260428_0004",)
     assert "purecipher_registry_accounts" in tables
     assert "purecipher_registry_sessions" in tables
     assert "purecipher_registry_api_tokens" in tables
@@ -34,6 +34,8 @@ def test_alembic_migration_creates_registry_tables(tmp_path):
     # Iter 10: MCP-client identity + token tables.
     assert "purecipher_registry_clients" in tables
     assert "purecipher_registry_client_tokens" in tables
+    # Iter 13.2: encrypted OpenAPI credentials.
+    assert "purecipher_openapi_credentials" in tables
 
 
 def test_alembic_migration_upgrades_legacy_account_table(tmp_path):

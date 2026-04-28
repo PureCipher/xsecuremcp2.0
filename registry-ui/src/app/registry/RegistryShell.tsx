@@ -83,23 +83,25 @@ export function RegistryShell({
         enabled: !publisherOnly,
         active: pathname.startsWith("/registry/publishers"),
       },
-      {
-        href: "/registry/servers",
-        label: "MCP Servers",
-        icon: "servers",
-        enabled: canAdmin || (!canPublishConsole && !canReview),
-        active: pathname.startsWith("/registry/servers"),
-      },
-      // /registry/clients is gated behind NEXT_PUBLIC_REGISTRY_SHOW_CLIENTS
-      // until the onboard wizard's "coming soon" buttons are wired up.
-      // Surfacing the link to a dead-end wizard erodes user trust.
+      // Iter 14.26 — "MCP Servers" was a duplicate of Publishers
+      // with different chrome (same backend data, ``listPublishers``).
+      // The directory was redundant; the only meaningful difference
+      // was the per-server detail page's six governance tabs, which
+      // now live on ``/registry/publishers/{id}`` via the ServerDetailTabs
+      // import there. The /registry/servers/* routes are kept alive
+      // as redirects to /registry/publishers/* so existing notification
+      // links and bookmarks still work.
+      // Iter 14.23 — unhide Clients in the sidebar. Previously
+      // gated behind ``NEXT_PUBLIC_REGISTRY_SHOW_CLIENTS=1`` while
+      // the onboard wizard had "coming soon" buttons; the wizard is
+      // wired now (Iter 10.7 / 10.8) so the directory + per-client
+      // pages are operator-ready. The role gate stays — Clients is
+      // still admin or pure-viewer territory.
       {
         href: "/registry/clients",
         label: "Clients",
         icon: "clients",
-        enabled:
-          (canAdmin || (!canPublishConsole && !canReview)) &&
-          process.env.NEXT_PUBLIC_REGISTRY_SHOW_CLIENTS === "1",
+        enabled: canAdmin || (!canPublishConsole && !canReview),
         active: pathname.startsWith("/registry/clients"),
       },
     ],
@@ -147,15 +149,26 @@ export function RegistryShell({
     [pathname, canPublishConsole, publisherHasListings, prefs.publisher.openMineFirst],
   );
 
-  const reviewerItems: NavItem[] = useMemo(
+  // Iter 14.22 — merged former "Reviewer" + "Admin" sidebar
+  // sections into a single "Governance" section. The previous split
+  // implied two distinct workflows but in practice both groups are
+  // governance surfaces; reviewers and admins navigate between them
+  // routinely. Items keep their existing per-role gates
+  // (``canReview`` for the reviewer-shared items, ``canAdmin`` for
+  // the admin-only governance planes), so role visibility doesn't
+  // change — only the section heading consolidates.
+  //
+  // The standalone "Review" sidebar entry was dropped: the Tools
+  // page header already surfaces the moderation queue via
+  // ``reviewHref`` + a ``pendingCount`` badge, so a separate
+  // sidebar item was duplicate navigation. Reviewers still reach
+  // the queue from the Tools page, where the pending count is
+  // visible at-a-glance.
+  //
+  // Order: reviewer-shared items first (most frequently used by
+  // both reviewers and admins), admin-only planes after.
+  const governanceItems: NavItem[] = useMemo(
     () => [
-      {
-        href: "/registry/review",
-        label: "Review",
-        icon: "review",
-        enabled: canReview,
-        active: pathname.startsWith("/registry/review"),
-      },
       {
         href: "/registry/policy",
         label: "Policy Kernel",
@@ -170,12 +183,6 @@ export function RegistryShell({
         enabled: canReview,
         active: pathname.startsWith("/registry/provenance"),
       },
-    ],
-    [pathname, canReview],
-  );
-
-  const adminItems: NavItem[] = useMemo(
-    () => [
       {
         href: "/registry/access",
         label: "Access Studio",
@@ -205,7 +212,7 @@ export function RegistryShell({
         active: pathname.startsWith("/registry/consent"),
       },
     ],
-    [pathname, canAdmin],
+    [pathname, canReview, canAdmin],
   );
 
   function closeMobileSidebar() {
@@ -336,8 +343,9 @@ export function RegistryShell({
           <Box sx={{ px: 1.25, pt: 1.5, display: "grid", gap: 1.75 }}>
             {renderNavSection("Catalog", catalogItems, { collapsed: sidebarCollapsed })}
             {renderNavSection("Publisher", publisherItems, { collapsed: sidebarCollapsed })}
-            {renderNavSection("Reviewer", reviewerItems, { collapsed: sidebarCollapsed })}
-            {renderNavSection("Admin", adminItems, { collapsed: sidebarCollapsed })}
+            {/* Iter 14.22 — single Governance section in place of the
+                former Reviewer + Admin split. */}
+            {renderNavSection("Governance", governanceItems, { collapsed: sidebarCollapsed })}
           </Box>
         </Drawer>
 
@@ -360,8 +368,7 @@ export function RegistryShell({
           <Box sx={{ px: 1.25, pt: 1.5, display: "grid", gap: 1.75 }}>
             {renderNavSection("Catalog", catalogItems, { onNavigate: closeMobileSidebar })}
             {renderNavSection("Publisher", publisherItems, { onNavigate: closeMobileSidebar })}
-            {renderNavSection("Reviewer", reviewerItems, { onNavigate: closeMobileSidebar })}
-            {renderNavSection("Admin", adminItems, { onNavigate: closeMobileSidebar })}
+            {renderNavSection("Governance", governanceItems, { onNavigate: closeMobileSidebar })}
           </Box>
         </Drawer>
 

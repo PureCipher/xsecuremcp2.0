@@ -9,8 +9,6 @@ from datetime import datetime, timezone
 from typing import Any, Generic, TypedDict
 from urllib.parse import quote, urlencode
 
-logger = logging.getLogger(__name__)
-
 from mcp.server.lowlevel.server import LifespanResultT
 from starlette.requests import Request
 from starlette.responses import JSONResponse, RedirectResponse, Response
@@ -29,6 +27,9 @@ from fastmcp.server.security.contracts.crypto import (
     SigningAlgorithm,
 )
 from fastmcp.server.security.gateway.tool_marketplace import (
+    AttestationKind,
+    HostingMode,
+    ModerationAction,
     PublishStatus,
     ToolCategory,
     ToolListing,
@@ -44,8 +45,25 @@ from purecipher.account_security import (
     RegistryAccountSecurityStore,
 )
 from purecipher.auth import RegistryAuthSettings, RegistryRole, RegistrySession
+from purecipher.clients import (
+    CLIENT_KINDS,
+    ClientStoreError,
+    RegistryClient,
+    RegistryClientStore,
+    RegistryClientToken,
+)
+from purecipher.control_plane_settings import (
+    PLANE_NAMES,
+    RegistryControlPlaneStore,
+)
 from purecipher.db_migrations import migrate_registry_database
 from purecipher.install import build_install_recipes
+from purecipher.middleware.client_actor import (
+    ClientActorResolverMiddleware,
+)
+from purecipher.middleware.client_aware_middleware import (
+    upgrade_middleware_for_client_actor,
+)
 from purecipher.moderation import build_review_queue, moderation_action_from_name
 from purecipher.notification_feed import RegistryNotificationFeed
 from purecipher.openapi_store import OpenAPIStore, extract_openapi_operations
@@ -67,23 +85,6 @@ from purecipher.ui import (
     create_review_queue_html,
     create_setup_html,
 )
-from purecipher.clients import (
-    CLIENT_KINDS,
-    ClientStoreError,
-    RegistryClient,
-    RegistryClientStore,
-    RegistryClientToken,
-)
-from purecipher.control_plane_settings import (
-    PLANE_NAMES,
-    RegistryControlPlaneStore,
-)
-from purecipher.middleware.client_actor import (
-    ClientActorResolverMiddleware,
-)
-from purecipher.middleware.client_aware_middleware import (
-    upgrade_middleware_for_client_actor,
-)
 from purecipher.user_preferences import RegistryUserPreferenceStore
 from securemcp import SecureMCP
 from securemcp.config import (
@@ -99,6 +100,8 @@ from securemcp.config import (
     ToolMarketplaceConfig,
 )
 from securemcp.http import SecurityAPI
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -282,6 +285,32 @@ def _status_code_from_payload(payload: dict[str, Any]) -> int:
     return status if isinstance(status, int) else 200
 
 
+def _provenance_action_for(action: str) -> str:
+    """Map a logical request ``action`` to the
+    :class:`ProvenanceAction` enum string the ledger would record.
+
+    Used by the simulator to emit a "would-record" preview that
+    matches the shape the live ledger would write — without actually
+    writing. Falls back to ``"custom"`` so unknown actions still
+    produce a sensible preview rather than blowing up.
+    """
+    table = {
+        "call_tool": "tool_called",
+        "tool_call": "tool_called",
+        "tools/call": "tool_called",
+        "read_resource": "resource_read",
+        "resource_read": "resource_read",
+        "resources/read": "resource_read",
+        "list_resources": "resource_listed",
+        "render_prompt": "prompt_rendered",
+        "list_prompts": "prompt_listed",
+        "policy_evaluate": "policy_evaluated",
+        "model_invoke": "model_invoked",
+        "dataset_access": "dataset_accessed",
+    }
+    return table.get(action, "custom")
+
+
 def _parse_csv_set(raw_value: str) -> set[str]:
     return {value.strip() for value in raw_value.split(",") if value.strip()}
 
@@ -360,6 +389,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         minimum_certification: CertificationLevel = CertificationLevel.BASIC,
         registry_prefix: str = "/registry",
         mount_registry_api: bool = True,
+        enable_legacy_registry_ui: bool = True,
         mount_security_api: bool = True,
         require_moderation: bool = False,
         persistence_path: str | None = None,
@@ -394,6 +424,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         self._minimum_certification = minimum_certification
         self._require_moderation = require_moderation
         self._registry_prefix = registry_prefix
+        self._enable_legacy_registry_ui = enable_legacy_registry_ui
         # Saved for the Iter 9 runtime toggles. When an admin
         # re-enables a plane after disabling it, the helper rebuilds
         # the plane with default config plus this secret + issuer
@@ -412,7 +443,9 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         self._auth_settings.validate()
 
         self._persistence_path = persistence_path
-        schema_managed_by_migrations = bool(persistence_path) and persistence_path != ":memory:"
+        schema_managed_by_migrations = (
+            bool(persistence_path) and persistence_path != ":memory:"
+        )
         if schema_managed_by_migrations:
             migrate_registry_database(persistence_path)
         self._notification_feed = RegistryNotificationFeed(
@@ -422,7 +455,13 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         self._openapi_store = OpenAPIStore(
             persistence_path,
             ensure_schema=not schema_managed_by_migrations,
+            credential_key=self._signing_secret_bytes,
         )
+        # Iter 13.3: tests can inject an httpx.AsyncClient (typically
+        # backed by ``MockTransport``) so the /invoke route doesn't
+        # have to hit a real network. ``None`` means the executor
+        # opens a one-shot client per call in production.
+        self._openapi_invoke_client: Any = None
         self._user_preferences = RegistryUserPreferenceStore(
             persistence_path,
             ensure_schema=not schema_managed_by_migrations,
@@ -529,6 +568,12 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
         if mount_registry_api:
             self.mount_registry_api(prefix=registry_prefix)
+
+        # Iter 13.5: re-attach OpenAPI proxy tools for any listings
+        # that were published in a previous run. Restarts of a
+        # SQLite-backed registry would otherwise lose the MCP
+        # ``tools/call`` bindings even though the listings persist.
+        self._reattach_openapi_proxy_tools()
 
     @property
     def minimum_certification(self) -> CertificationLevel:
@@ -927,9 +972,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                             "value",
                             str(getattr(edge, "status", "") or ""),
                         ),
-                        "delegatable": bool(
-                            getattr(edge, "delegatable", False)
-                        ),
+                        "delegatable": bool(getattr(edge, "delegatable", False)),
                     }
                 )
             for edge in incoming[:50]:
@@ -943,24 +986,26 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                             "value",
                             str(getattr(edge, "status", "") or ""),
                         ),
-                        "delegatable": bool(
-                            getattr(edge, "delegatable", False)
-                        ),
+                        "delegatable": bool(getattr(edge, "delegatable", False)),
                     }
                 )
 
         # Ledger: ledger-level summary + per-actor record window.
+        # ``ledger_rows`` is kept in scope past this block so the
+        # activity-summary computation downstream can reuse the same
+        # window without paying for a second ``get_records`` round-trip.
         ledger = self._ledger_or_none()
         ledger_block = self._summarize_ledger(ledger)
         recent_records: list[dict[str, Any]] = []
         record_count = 0
+        ledger_rows: list[Any] = []
         if ledger is not None:
             try:
-                rows = list(ledger.get_records(actor_id=slug, limit=1000))
+                ledger_rows = list(ledger.get_records(actor_id=slug, limit=1000))
             except Exception:
-                rows = []
-            record_count = len(rows)
-            for row in rows[:50]:
+                ledger_rows = []
+            record_count = len(ledger_rows)
+            for row in ledger_rows[:50]:
                 recent_records.append(
                     {
                         "record_id": getattr(row, "record_id", ""),
@@ -988,9 +1033,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         baselines: dict[str, Any] = {}
         if analyzer is not None:
             try:
-                drift_history = list(
-                    analyzer.get_drift_history(actor_id=slug)
-                )
+                drift_history = list(analyzer.get_drift_history(actor_id=slug))
             except Exception:
                 drift_history = []
             drift_event_count = len(drift_history)
@@ -1037,6 +1080,16 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         active_tokens = [t for t in tokens if t.is_active()]
         revoked_tokens = [t for t in tokens if not t.is_active()]
 
+        # ── Activity summary ─────────────────────────────────────
+        # Composes the ledger window (provenance records keyed by
+        # actor_id) with the tokens' ``last_used_at`` fingerprints.
+        # The result powers the per-client "is anyone home?" header
+        # chip + the live activity feed on the detail page.
+        activity_summary = self._summarize_client_activity(
+            ledger_rows=ledger_rows,
+            tokens=tokens,
+        )
+
         result: dict[str, Any] = {
             **header,
             "policy": {
@@ -1082,15 +1135,14 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 "revoked": len(revoked_tokens),
                 "items": [t.to_dict() for t in tokens],
             },
+            "activity": activity_summary,
             "links": {
                 "policy_kernel_url": f"{prefix}/policy",
                 "contract_broker_url": f"{prefix}/contracts",
                 "consent_graph_url": f"{prefix}/consent",
                 "provenance_ledger_url": f"{prefix}/provenance",
                 "reflexive_core_url": f"{prefix}/reflexive",
-                "publisher_url": (
-                    f"{prefix}/publishers/{record.owner_publisher_id}"
-                ),
+                "publisher_url": (f"{prefix}/publishers/{record.owner_publisher_id}"),
                 "client_url": f"{prefix}/clients/{slug}",
             },
             "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -1099,6 +1151,264 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         if sanitize_for_public:
             result = self._sanitize_client_governance(result)
         return result
+
+    @staticmethod
+    def _summarize_client_activity(
+        *,
+        ledger_rows: list[Any],
+        tokens: list[Any],
+    ) -> dict[str, Any]:
+        """Project a client's recent provenance window + token usage
+        into the activity-summary block consumed by the per-client
+        detail page (header status chip + live feed).
+
+        Inputs:
+
+        * ``ledger_rows``: the same per-actor records the ledger
+          plane already pulls (capped at 1000 by ``get_records``);
+          we just re-bucket and aggregate them here so we don't pay
+          for a second backend round-trip.
+        * ``tokens``: the client's tokens. The most recent
+          ``last_used_at`` across all of them is folded into
+          ``last_seen_at`` so a client that auths but hasn't yet
+          written a ledger record (e.g. policy denied the very
+          first call) still shows as "active".
+
+        Outputs:
+
+        * ``last_seen_at``: ISO timestamp of most recent activity, or
+          ``None`` if we have no signal at all.
+        * ``last_seen_source``: ``"ledger"`` / ``"token"`` / ``None``.
+        * ``idle_seconds``: gap between now and ``last_seen_at``.
+        * ``status_label``: one of
+          ``"live"`` (≤60s) / ``"recent"`` (≤15min) /
+          ``"idle"`` (≤24h) / ``"dormant"`` (>24h) /
+          ``"never"`` (no signal).
+        * ``calls_last_hour`` / ``calls_last_24h``: ledger record
+          counts in those rolling windows.
+        * ``hourly_buckets``: 24-element array of
+          ``{hour_offset, count}`` records for the last 24 hours
+          (offset 0 = current hour, 23 = 23 hours ago) — drives the
+          UI sparkline.
+        * ``top_resources``: up to 5 ``{resource_id, count}`` records
+          by call frequency in the available window. Stripped under
+          ``sanitize_for_public`` (the resource ids would leak who
+          the client is talking to).
+        """
+        from datetime import datetime, timedelta, timezone
+
+        now = datetime.now(timezone.utc)
+
+        # ── last_seen_at composition (ledger ∨ token last_used_at)
+        ledger_latest_dt: datetime | None = None
+        for row in ledger_rows:
+            ts = getattr(row, "timestamp", None)
+            if ts is None:
+                continue
+            if ledger_latest_dt is None or ts > ledger_latest_dt:
+                ledger_latest_dt = ts
+
+        token_latest: float = 0.0
+        for tok in tokens:
+            last_used = getattr(tok, "last_used_at", None) or 0
+            if last_used and last_used > token_latest:
+                token_latest = float(last_used)
+
+        token_latest_dt: datetime | None = (
+            datetime.fromtimestamp(token_latest, tz=timezone.utc)
+            if token_latest > 0
+            else None
+        )
+
+        last_seen_at: datetime | None = None
+        last_seen_source: str | None = None
+        if ledger_latest_dt and (
+            token_latest_dt is None or ledger_latest_dt >= token_latest_dt
+        ):
+            last_seen_at = ledger_latest_dt
+            last_seen_source = "ledger"
+        elif token_latest_dt is not None:
+            last_seen_at = token_latest_dt
+            last_seen_source = "token"
+
+        # ── status label
+        if last_seen_at is None:
+            status_label = "never"
+            idle_seconds: float | None = None
+        else:
+            idle_seconds = max(0.0, (now - last_seen_at).total_seconds())
+            if idle_seconds <= 60:
+                status_label = "live"
+            elif idle_seconds <= 15 * 60:
+                status_label = "recent"
+            elif idle_seconds <= 24 * 60 * 60:
+                status_label = "idle"
+            else:
+                status_label = "dormant"
+
+        # ── windowed call counts (ledger only — tokens don't carry
+        # per-call timestamps, just a single last_used_at).
+        one_hour_ago = now - timedelta(hours=1)
+        one_day_ago = now - timedelta(hours=24)
+        calls_last_hour = 0
+        calls_last_24h = 0
+        for row in ledger_rows:
+            ts = getattr(row, "timestamp", None)
+            if ts is None:
+                continue
+            if ts >= one_hour_ago:
+                calls_last_hour += 1
+            if ts >= one_day_ago:
+                calls_last_24h += 1
+
+        # ── hourly buckets, hour 0 == current hour, 23 == 23h ago
+        hourly_counts: list[int] = [0] * 24
+        for row in ledger_rows:
+            ts = getattr(row, "timestamp", None)
+            if ts is None or ts < one_day_ago:
+                continue
+            offset = int((now - ts).total_seconds() // 3600)
+            if 0 <= offset < 24:
+                hourly_counts[offset] += 1
+        hourly_buckets = [
+            {"hour_offset": i, "count": hourly_counts[i]} for i in range(24)
+        ]
+
+        # ── top resources (last 24h window)
+        resource_counts: dict[str, int] = {}
+        for row in ledger_rows:
+            ts = getattr(row, "timestamp", None)
+            if ts is None or ts < one_day_ago:
+                continue
+            resource_id = getattr(row, "resource_id", None)
+            if not resource_id:
+                continue
+            resource_counts[str(resource_id)] = (
+                resource_counts.get(str(resource_id), 0) + 1
+            )
+        top_resources = [
+            {"resource_id": rid, "count": cnt}
+            for rid, cnt in sorted(
+                resource_counts.items(),
+                key=lambda pair: pair[1],
+                reverse=True,
+            )[:5]
+        ]
+
+        return {
+            "last_seen_at": (last_seen_at.isoformat() if last_seen_at else None),
+            "last_seen_source": last_seen_source,
+            "idle_seconds": idle_seconds,
+            "status_label": status_label,
+            "calls_last_hour": calls_last_hour,
+            "calls_last_24h": calls_last_24h,
+            "hourly_buckets": hourly_buckets,
+            "top_resources": top_resources,
+            "evaluated_at": now.isoformat(),
+        }
+
+    def summarize_clients_activity(self) -> dict[str, Any]:
+        """Iter 14.24 — aggregate activity-status counts across every
+        registered client, for the Clients dashboard panel.
+
+        Loops through every client record, fetches that client's
+        ledger window + tokens, and reuses
+        :meth:`_summarize_client_activity` to derive per-client
+        ``status_label`` (live / recent / idle / dormant / never).
+        Folds the labels into a single counts dict the operator can
+        glance at without opening every client detail page.
+
+        Counts emitted:
+
+        - ``total``: number of registered clients.
+        - ``by_activity_status``: ``{live, recent, idle, dormant, never}``
+          counts based on the same status thresholds the per-client
+          activity panel uses (≤60s / ≤15m / ≤24h / >24h / no-signal).
+        - ``by_admin_status``: ``{active, suspended}`` counts based on
+          ``RegistryClient.status`` (admin lifecycle, distinct from
+          activity).
+        - ``by_kind``: counts grouped by ``RegistryClient.kind``.
+        - ``recently_onboarded_count``: clients created in the last
+          7 days (``created_at`` within 7 days of now).
+        - ``calls_last_24h_total``: rollup of ledger calls across all
+          clients in the last 24 hours.
+        - ``generated_at``: ISO timestamp.
+
+        Cost: O(N) ``get_records`` calls plus O(N) token lookups,
+        where N = client count. For typical deployments (≤50 clients)
+        this is well under 100ms; if N grows past a few hundred the
+        right move is a bulk ledger query keyed by actor_id list.
+        That refactor is left for a future iteration since current
+        deployments don't see N that large.
+        """
+        from datetime import datetime, timedelta, timezone
+
+        clients = self._client_store.list_clients(limit=10_000)
+        ledger = self._ledger_or_none()
+        now = datetime.now(timezone.utc)
+        seven_days_ago_ts = (now - timedelta(days=7)).timestamp()
+
+        activity_counts = {
+            "live": 0,
+            "recent": 0,
+            "idle": 0,
+            "dormant": 0,
+            "never": 0,
+        }
+        admin_counts = {"active": 0, "suspended": 0}
+        kind_counts: dict[str, int] = {}
+        recently_onboarded = 0
+        calls_last_24h_total = 0
+
+        for record in clients:
+            # ── activity status from ledger + token last_used_at ──
+            ledger_rows: list[Any] = []
+            if ledger is not None:
+                try:
+                    ledger_rows = list(
+                        ledger.get_records(actor_id=record.slug, limit=1000)
+                    )
+                except Exception:
+                    ledger_rows = []
+            tokens = self.list_client_tokens(record.client_id)
+            activity = self._summarize_client_activity(
+                ledger_rows=ledger_rows,
+                tokens=tokens,
+            )
+            label = str(activity.get("status_label") or "never")
+            if label in activity_counts:
+                activity_counts[label] += 1
+            else:
+                activity_counts["never"] += 1
+            calls_last_24h_total += int(activity.get("calls_last_24h") or 0)
+
+            # ── admin lifecycle status (active / suspended) ──
+            admin_label = "suspended" if str(record.status) == "suspended" else "active"
+            admin_counts[admin_label] += 1
+
+            # ── kind histogram ──
+            kind = str(record.kind or "other")
+            kind_counts[kind] = kind_counts.get(kind, 0) + 1
+
+            # ── recently-onboarded (≤7d) ──
+            try:
+                if float(record.created_at) >= seven_days_ago_ts:
+                    recently_onboarded += 1
+            except (TypeError, ValueError):
+                # Defensive: malformed created_at shouldn't break the
+                # whole aggregate. Just skip the recent-bucket count
+                # for that client.
+                pass
+
+        return {
+            "total": len(clients),
+            "by_activity_status": activity_counts,
+            "by_admin_status": admin_counts,
+            "by_kind": kind_counts,
+            "recently_onboarded_count": recently_onboarded,
+            "calls_last_24h_total": calls_last_24h_total,
+            "generated_at": now.isoformat(),
+        }
 
     @staticmethod
     def _sanitize_client_governance(
@@ -1131,19 +1441,11 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
         consent = dict(sanitized.get("consent") or {})
         consent["edges_from"] = [
-            {
-                k: v
-                for k, v in row.items()
-                if k not in {"target_id", "edge_id"}
-            }
+            {k: v for k, v in row.items() if k not in {"target_id", "edge_id"}}
             for row in consent.get("edges_from", []) or []
         ]
         consent["edges_to"] = [
-            {
-                k: v
-                for k, v in row.items()
-                if k not in {"source_id", "edge_id"}
-            }
+            {k: v for k, v in row.items() if k not in {"source_id", "edge_id"}}
             for row in consent.get("edges_to", []) or []
         ]
         sanitized["consent"] = consent
@@ -1171,7 +1473,506 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         tokens.pop("items", None)
         sanitized["tokens"] = tokens
 
+        # Activity: drop ``top_resources`` (resource ids reveal who
+        # the client has been talking to), keep volumetric signals
+        # (status_label, hourly_buckets, calls_last_*) since those
+        # are ambient and don't leak counterparty identifiers.
+        activity = dict(sanitized.get("activity") or {})
+        activity["top_resources"] = []
+        sanitized["activity"] = activity
+
         return sanitized
+
+    # ── Iter 11: cross-control-plane request simulator ───────────
+
+    async def simulate_client_request(
+        self,
+        client_id_or_slug: str,
+        *,
+        action: str,
+        resource_id: str,
+        metadata: dict[str, Any] | None = None,
+        tags: list[str] | None = None,
+        consent_scope: str = "execute",
+        consent_source_id: str | None = None,
+        metric_name: str | None = None,
+        metric_value: float | None = None,
+    ) -> dict[str, Any]:
+        """Dry-run a request through every plane and return a trace.
+
+        The simulator composes the *real* read-only evaluation path
+        of each control plane:
+
+        * ``PolicyEngine.evaluate`` — actual policy decision.
+        * ``ContextBroker.get_active_contracts_for_agent`` plus a
+          term-coverage scan (the broker has no built-in
+          ``covers_action`` predicate, so the simulator walks the
+          contract's ACCESS_CONTROL terms looking for an
+          ``actions`` allow-list).
+        * ``ConsentGraph.evaluate`` — actual consent decision keyed
+          by (source, target, scope).
+        * Provenance: NO write. The simulator emits a "would-record"
+          preview shaped like ``ProvenanceRecord.to_dict`` so the UI
+          can show what an actual call would have written.
+        * ``BehavioralAnalyzer.get_baseline + compute_deviation`` —
+          baseline lookup with sigma-distance score (no ``observe``
+          side effect).
+
+        Args:
+            client_id_or_slug: UUID or slug of a registered client.
+            action: Logical action ("call_tool", "read_resource", ...).
+            resource_id: Tool / resource name being accessed.
+            metadata: Free-form context passed to the policy engine.
+            tags: Tags passed to the policy engine.
+            consent_scope: Scope to check on the consent edge
+                (``"read"`` / ``"write"`` / ``"execute"`` …).
+            consent_source_id: Who in the consent graph grants
+                access. Defaults to ``resource_id`` so a graph keyed
+                by resource works out of the box; supply a publisher
+                or owner node for graphs keyed differently.
+            metric_name: Metric to evaluate against the actor's
+                behavioral baseline. ``None`` skips the reflexive
+                check entirely.
+            metric_value: Observed value for ``metric_name``.
+
+        Returns:
+            ``{client, request, policy, contracts, consent, ledger,
+            reflexive, verdict, blockers, generated_at}``. The top-
+            level ``verdict`` is ``"allow"`` only when every plane
+            agrees; ``blockers`` lists each plane that would deny.
+
+        The simulator never raises on plane failure — each plane
+        degrades to ``available=False`` with an explanation so the
+        operator can see *why* a particular plane couldn't be
+        consulted (disabled, no baseline yet, etc.).
+        """
+        import hashlib
+
+        client = self.get_client(client_id_or_slug)
+        if client is None:
+            return {
+                "error": f"Client {client_id_or_slug!r} not found.",
+                "status": 404,
+            }
+
+        slug = client.slug
+        request_metadata = dict(metadata or {})
+        request_metadata.setdefault("simulated", True)
+        request_tags = list(tags or [])
+        timestamp = datetime.now(timezone.utc)
+
+        # ── Policy ───────────────────────────────────────────────
+        ctx = self._required_context()
+        engine = getattr(ctx, "policy_engine", None)
+        policy_trace = await self._simulate_policy(
+            engine,
+            slug=slug,
+            action=action,
+            resource_id=resource_id,
+            metadata=request_metadata,
+            tags=request_tags,
+            timestamp=timestamp,
+        )
+
+        # ── Contracts ────────────────────────────────────────────
+        broker = self._broker_or_none()
+        contracts_trace = self._simulate_contracts(broker, slug, action)
+
+        # ── Consent ──────────────────────────────────────────────
+        consent_graph = self._consent_graph_or_none()
+        consent_trace = self._simulate_consent(
+            consent_graph,
+            target_id=slug,
+            source_id=consent_source_id or resource_id,
+            scope=consent_scope,
+            metadata=request_metadata,
+        )
+
+        # ── Provenance preview (no write) ────────────────────────
+        ledger = self._ledger_or_none()
+        empty_input_hash = hashlib.sha256(b"{}").hexdigest()
+        provenance_trace: dict[str, Any] = {
+            "available": ledger is not None,
+            "would_record": ledger is not None,
+            "preview": {
+                "action": _provenance_action_for(action),
+                "actor_id": slug,
+                "resource_id": resource_id,
+                "input_hash_preview": empty_input_hash,
+                "metadata": request_metadata,
+                "timestamp": timestamp.isoformat(),
+            },
+        }
+        if ledger is None:
+            provenance_trace["reason"] = (
+                "Provenance ledger is not enabled on this registry; "
+                "no record would be written."
+            )
+
+        # ── Reflexive ────────────────────────────────────────────
+        analyzer = self._analyzer_or_none()
+        reflexive_trace = self._simulate_reflexive(
+            analyzer,
+            actor_id=slug,
+            metric_name=metric_name,
+            metric_value=metric_value,
+        )
+
+        # ── Compose verdict ──────────────────────────────────────
+        blockers: list[dict[str, Any]] = []
+        if policy_trace.get("decision") == "deny":
+            blockers.append(
+                {"plane": "policy", "reason": policy_trace.get("reason", "")}
+            )
+        if not consent_trace.get("granted", True) and consent_trace.get("available"):
+            blockers.append(
+                {"plane": "consent", "reason": consent_trace.get("reason", "")}
+            )
+        if client.status == "suspended":  # an explicit application-level block
+            blockers.append(
+                {
+                    "plane": "client",
+                    "reason": (client.suspended_reason or "Client is suspended."),
+                }
+            )
+
+        if blockers:
+            verdict = "deny"
+        elif policy_trace.get("decision") == "defer":
+            verdict = "review"
+        else:
+            verdict = "allow"
+
+        return {
+            "client": client.to_dict(),
+            "request": {
+                "action": action,
+                "resource_id": resource_id,
+                "consent_scope": consent_scope,
+                "consent_source_id": consent_source_id or resource_id,
+                "metric_name": metric_name,
+                "metric_value": metric_value,
+                "metadata": request_metadata,
+                "tags": request_tags,
+                "timestamp": timestamp.isoformat(),
+            },
+            "policy": policy_trace,
+            "contracts": contracts_trace,
+            "consent": consent_trace,
+            "ledger": provenance_trace,
+            "reflexive": reflexive_trace,
+            "verdict": verdict,
+            "blockers": blockers,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    async def _simulate_policy(
+        self,
+        engine: Any,
+        *,
+        slug: str,
+        action: str,
+        resource_id: str,
+        metadata: dict[str, Any],
+        tags: list[str],
+        timestamp: Any,
+    ) -> dict[str, Any]:
+        """Call PolicyEngine.evaluate against a fresh
+        :class:`PolicyEvaluationContext`. The engine MAY emit an
+        audit row tagged ``simulated=True`` (we mark the metadata
+        accordingly so audit consumers can filter); that's by design
+        — operators want to know what their kernel actually said.
+        """
+        if engine is None:
+            return {
+                "available": False,
+                "decision": "allow",
+                "reason": (
+                    "Policy kernel is not enabled on this registry; "
+                    "no policy gate would run."
+                ),
+                "policy_id": None,
+                "constraints": [],
+            }
+        try:
+            from fastmcp.server.security.policy.provider import (
+                PolicyEvaluationContext,
+            )
+
+            evaluation_ctx = PolicyEvaluationContext(
+                actor_id=slug,
+                action=action,
+                resource_id=resource_id,
+                metadata=metadata,
+                timestamp=timestamp,
+                tags=frozenset(tags),
+            )
+            result = await engine.evaluate(evaluation_ctx)
+        except Exception as exc:
+            logger.exception("Policy simulation failed")
+            return {
+                "available": True,
+                "decision": "error",
+                "reason": f"Policy evaluation raised: {exc!r}",
+                "policy_id": None,
+                "constraints": [],
+            }
+
+        decision_value = getattr(
+            getattr(result, "decision", None),
+            "value",
+            str(getattr(result, "decision", "")),
+        )
+        return {
+            "available": True,
+            "decision": (decision_value or "").lower() or "allow",
+            "reason": getattr(result, "reason", "") or "",
+            "policy_id": getattr(result, "policy_id", None),
+            "constraints": list(getattr(result, "constraints", []) or []),
+            "evaluated_at": (
+                result.evaluated_at.isoformat()
+                if getattr(result, "evaluated_at", None)
+                else None
+            ),
+        }
+
+    @staticmethod
+    def _simulate_contracts(broker: Any, slug: str, action: str) -> dict[str, Any]:
+        """Walk the agent's active contracts and report whether any
+        of them cover ``action``.
+
+        Coverage rule: a contract is considered to cover ``action``
+        when (a) it has no ACCESS_CONTROL terms (permissive default),
+        or (b) at least one ACCESS_CONTROL term has either no
+        ``actions`` constraint or an ``actions`` list that includes
+        the requested action. This mirrors how operators tend to
+        write contract terms (whitelist of actions per term).
+        """
+        if broker is None:
+            return {
+                "available": False,
+                "covered": True,
+                "reason": (
+                    "Contract Broker is not enabled; no contract validation would run."
+                ),
+                "contracts": [],
+            }
+        try:
+            contracts = list(broker.get_active_contracts_for_agent(slug))
+        except Exception as exc:
+            logger.exception("Contract simulation lookup failed")
+            return {
+                "available": True,
+                "covered": False,
+                "reason": f"Broker lookup raised: {exc!r}",
+                "contracts": [],
+            }
+        if not contracts:
+            return {
+                "available": True,
+                "covered": False,
+                "reason": (
+                    f"No active contracts for agent_id={slug!r}; "
+                    "the request would be rejected by any planes "
+                    "requiring a contract."
+                ),
+                "contracts": [],
+            }
+
+        rows: list[dict[str, Any]] = []
+        any_covers = False
+        for c in contracts:
+            terms = list(getattr(c, "terms", []) or [])
+            access_terms = [
+                t
+                for t in terms
+                if getattr(getattr(t, "term_type", None), "value", "").lower()
+                == "access_control"
+            ]
+            if not access_terms:
+                covers = True
+                why = "no ACCESS_CONTROL terms (permissive default)"
+            else:
+                covers = False
+                why = "no ACCESS_CONTROL term whitelisted this action"
+                for term in access_terms:
+                    constraint = dict(getattr(term, "constraint", {}) or {})
+                    actions = constraint.get("actions")
+                    if not actions or action in actions:
+                        covers = True
+                        why = f"covered by term {getattr(term, 'term_id', '?')!r}"
+                        break
+            if covers:
+                any_covers = True
+            rows.append(
+                {
+                    "contract_id": getattr(c, "contract_id", ""),
+                    "server_id": getattr(c, "server_id", ""),
+                    "covers": covers,
+                    "reason": why,
+                }
+            )
+        return {
+            "available": True,
+            "covered": any_covers,
+            "reason": (
+                "At least one active contract covers this action."
+                if any_covers
+                else "No active contract covers this action."
+            ),
+            "contracts": rows,
+        }
+
+    @staticmethod
+    def _simulate_consent(
+        graph: Any,
+        *,
+        target_id: str,
+        source_id: str,
+        scope: str,
+        metadata: dict[str, Any],
+    ) -> dict[str, Any]:
+        if graph is None:
+            return {
+                "available": False,
+                "granted": True,
+                "reason": ("Consent Graph is not enabled; no consent gate would run."),
+                "path": [],
+            }
+        try:
+            from fastmcp.server.security.consent.models import ConsentQuery
+
+            query = ConsentQuery(
+                source_id=source_id,
+                target_id=target_id,
+                scope=scope,
+                context=metadata,
+            )
+            decision = graph.evaluate(query)
+        except Exception as exc:
+            logger.exception("Consent simulation failed")
+            return {
+                "available": True,
+                "granted": False,
+                "reason": f"Consent evaluation raised: {exc!r}",
+                "path": [],
+            }
+        return {
+            "available": True,
+            "granted": bool(getattr(decision, "granted", False)),
+            "reason": getattr(decision, "reason", "") or "",
+            "path": [
+                {
+                    "edge_id": getattr(edge, "edge_id", ""),
+                    "source_id": getattr(edge, "source_id", ""),
+                    "target_id": getattr(edge, "target_id", ""),
+                    "scopes": list(getattr(edge, "scopes", []) or []),
+                }
+                for edge in getattr(decision, "path", []) or []
+            ],
+            "query": {
+                "source_id": source_id,
+                "target_id": target_id,
+                "scope": scope,
+            },
+        }
+
+    @staticmethod
+    def _simulate_reflexive(
+        analyzer: Any,
+        *,
+        actor_id: str,
+        metric_name: str | None,
+        metric_value: float | None,
+    ) -> dict[str, Any]:
+        if analyzer is None:
+            return {
+                "available": False,
+                "reason": (
+                    "Reflexive Core is not enabled; no behavioral "
+                    "drift check would run."
+                ),
+            }
+        if not metric_name:
+            return {
+                "available": True,
+                "evaluated": False,
+                "reason": (
+                    "No metric specified; supply ``metric_name`` and "
+                    "``metric_value`` to check against the baseline."
+                ),
+            }
+        try:
+            baseline = analyzer.get_baseline(actor_id, metric_name)
+        except Exception as exc:
+            logger.exception("Reflexive baseline lookup failed")
+            return {
+                "available": True,
+                "evaluated": False,
+                "reason": f"Baseline lookup raised: {exc!r}",
+            }
+        if baseline is None:
+            return {
+                "available": True,
+                "evaluated": False,
+                "reason": (
+                    f"No baseline yet for metric {metric_name!r} on "
+                    f"actor {actor_id!r}; the analyzer learns over "
+                    "the first few real calls."
+                ),
+            }
+        sample_count = int(getattr(baseline, "sample_count", 0) or 0)
+        if metric_value is None:
+            return {
+                "available": True,
+                "evaluated": False,
+                "reason": "Specify metric_value to score against baseline.",
+                "baseline": {
+                    "metric_name": metric_name,
+                    "mean": getattr(baseline, "mean", None),
+                    "sample_count": sample_count,
+                },
+            }
+        try:
+            deviation = float(baseline.compute_deviation(float(metric_value)))
+        except Exception as exc:
+            logger.exception("Reflexive deviation compute failed")
+            return {
+                "available": True,
+                "evaluated": False,
+                "reason": f"compute_deviation raised: {exc!r}",
+            }
+        # Ordinal severity bands matching analyzer._classify_severity.
+        if deviation >= 4.0:
+            severity = "critical"
+        elif deviation >= 3.0:
+            severity = "high"
+        elif deviation >= 2.0:
+            severity = "medium"
+        elif deviation >= 1.0:
+            severity = "low"
+        else:
+            severity = "info"
+        return {
+            "available": True,
+            "evaluated": True,
+            "metric_name": metric_name,
+            "metric_value": metric_value,
+            "deviation_sigma": deviation,
+            "severity": severity,
+            "baseline": {
+                "mean": getattr(baseline, "mean", None),
+                "sample_count": sample_count,
+            },
+            "reason": (
+                f"Deviation = {deviation:.2f}σ → severity={severity}."
+                if sample_count >= 5
+                else (
+                    f"Baseline has {sample_count} samples (need ≥5 for a "
+                    "stable deviation score)."
+                )
+            ),
+        }
 
     # ── Iter 9: runtime control-plane toggles ─────────────────────
 
@@ -1194,29 +1995,24 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         persisted = self._control_plane_store.get_all()
         descriptions = {
             "contracts": (
-                "Context Broker: negotiates and records agent ↔ "
-                "server contracts."
+                "Context Broker: negotiates and records agent ↔ server contracts."
             ),
             "consent": (
-                "Consent Graph: federated consent + jurisdiction "
-                "policy evaluator."
+                "Consent Graph: federated consent + jurisdiction policy evaluator."
             ),
             "provenance": (
                 "Provenance Ledger: append-only audit trail of "
                 "every operation, hash-chained."
             ),
             "reflexive": (
-                "Reflexive Core: per-actor behavioral baselines + "
-                "drift detection."
+                "Reflexive Core: per-actor behavioral baselines + drift detection."
             ),
         }
         live_state = {
             "contracts": getattr(ctx, "broker", None) is not None,
             "consent": getattr(ctx, "consent_graph", None) is not None,
             "provenance": getattr(ctx, "provenance_ledger", None) is not None,
-            "reflexive": (
-                getattr(ctx, "behavioral_analyzer", None) is not None
-            ),
+            "reflexive": (getattr(ctx, "behavioral_analyzer", None) is not None),
         }
         planes = []
         for name in sorted(PLANE_NAMES):
@@ -1370,9 +2166,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 backend=backend,
             )
             ctx.broker = broker
-            ctx.middleware.append(
-                ContractValidationMiddleware(broker=broker)
-            )
+            ctx.middleware.append(ContractValidationMiddleware(broker=broker))
             return
 
         if plane == "consent":
@@ -1383,9 +2177,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
             graph = ConsentGraph(graph_id=server_id, backend=backend)
             ctx.consent_graph = graph
-            ctx.middleware.append(
-                ConsentEnforcementMiddleware(graph=graph)
-            )
+            ctx.middleware.append(ConsentEnforcementMiddleware(graph=graph))
             return
 
         if plane == "provenance":
@@ -1398,9 +2190,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
             ledger = ProvenanceLedger(ledger_id=server_id, backend=backend)
             ctx.provenance_ledger = ledger
-            ctx.middleware.append(
-                ProvenanceRecordingMiddleware(ledger=ledger)
-            )
+            ctx.middleware.append(ProvenanceRecordingMiddleware(ledger=ledger))
             return
 
         if plane == "reflexive":
@@ -1441,7 +2231,8 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
             ctx.broker = None
             ctx.middleware = [
-                m for m in ctx.middleware
+                m
+                for m in ctx.middleware
                 if not isinstance(m, ContractValidationMiddleware)
             ]
             return
@@ -1453,7 +2244,8 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
             ctx.consent_graph = None
             ctx.middleware = [
-                m for m in ctx.middleware
+                m
+                for m in ctx.middleware
                 if not isinstance(m, ConsentEnforcementMiddleware)
             ]
             return
@@ -1465,7 +2257,8 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
             ctx.provenance_ledger = None
             ctx.middleware = [
-                m for m in ctx.middleware
+                m
+                for m in ctx.middleware
                 if not isinstance(m, ProvenanceRecordingMiddleware)
             ]
             return
@@ -1478,8 +2271,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             ctx.behavioral_analyzer = None
             ctx.escalation_engine = None
             ctx.middleware = [
-                m for m in ctx.middleware
-                if not isinstance(m, ReflexiveMiddleware)
+                m for m in ctx.middleware if not isinstance(m, ReflexiveMiddleware)
             ]
             return
 
@@ -1511,6 +2303,319 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         if ctx.tool_marketplace is None:
             raise RuntimeError("Tool marketplace is not attached to this registry.")
         return ctx.tool_marketplace
+
+    def publish_toolset_as_listings(
+        self,
+        toolset_id: str,
+        *,
+        publisher_id: str,
+        version: str = "0.0.0",
+        categories: set[ToolCategory] | None = None,
+        extra_tags: set[str] | None = None,
+        server_url_override: str | None = None,
+    ) -> list[ToolListing]:
+        """Iter 13.4: turn an OpenAPI toolset into ``ToolListing`` records.
+
+        Walks the toolset's ``selected_operations`` and publishes one
+        listing per operation through ``ToolMarketplace.publish``. Each
+        listing carries ``AttestationKind.OPENAPI`` and a manifest
+        whose ``metadata`` round-trips the originating ``source_id``,
+        ``operation_key``, ``spec_sha256``, and the input/output
+        schemas — enough for the executor to reconstruct the request
+        and the public detail page to render an input form without
+        re-fetching the raw spec.
+
+        Re-publishing the same toolset is an upsert at the marketplace
+        layer: ``publish`` updates an existing listing keyed by
+        ``tool_name`` rather than creating a duplicate.
+
+        Cross-publisher isolation: callers are expected to verify the
+        toolset belongs to ``publisher_id`` before invoking this
+        method (the route layer does so). The method itself trusts the
+        caller and stamps every manifest with the supplied
+        ``publisher_id`` as the author.
+        """
+        from purecipher.openapi_publish import build_listing_payload
+        from purecipher.openapi_store import (
+            extract_openapi_operations_detailed,
+        )
+
+        toolset = self._openapi_store.get_toolset(toolset_id)
+        if toolset is None:
+            raise ValueError(f"Unknown toolset {toolset_id!r}")
+        source_id = str(toolset.get("source_id") or "")
+        if not source_id:
+            raise ValueError(f"Toolset {toolset_id!r} has no source_id")
+        spec = self._openapi_store.get_source_spec(source_id)
+        if spec is None:
+            raise ValueError(f"OpenAPI source {source_id!r} no longer exists")
+        # Re-fetch the source record so we get spec_sha256, title,
+        # source_url etc. without recomputing.
+        source_record: dict[str, Any] | None = None
+        if not self._openapi_store.db_path:
+            source_record = dict(
+                self._openapi_store._memory_sources.get(source_id) or {}
+            )
+        else:
+            # Reconstruct the public-facing record from spec + sha. We
+            # don't expose a get_source() method on the store; the
+            # spec_sha256 we need is derivable from the spec itself.
+            import hashlib as _hashlib
+            import json as _json
+
+            spec_sha = _hashlib.sha256(
+                _json.dumps(spec, sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest()
+            source_record = {
+                "source_id": source_id,
+                "publisher_id": str(toolset.get("publisher_id") or ""),
+                "spec_json": spec,
+                "spec_sha256": spec_sha,
+            }
+
+        # Pick the default server URL from the spec — operation-level
+        # overrides win, then path-level (handled by the extractor),
+        # then the document's top-level ``servers``.
+        top_servers = spec.get("servers") or []
+        default_server = ""
+        if isinstance(top_servers, list):
+            for srv in top_servers:
+                if isinstance(srv, dict):
+                    url = srv.get("url")
+                    if isinstance(url, str) and url:
+                        default_server = url
+                        break
+
+        ops = extract_openapi_operations_detailed(spec)
+        ops_by_key = {op.get("operation_key"): op for op in ops}
+
+        selected_keys = list(toolset.get("selected_operations") or [])
+        if not selected_keys:
+            return []
+
+        published: list[ToolListing] = []
+        for key in selected_keys:
+            op = ops_by_key.get(key)
+            if op is None:
+                # The toolset might reference an operation that no
+                # longer exists in the current spec — skip rather than
+                # crash, and let the caller see fewer-than-expected
+                # listings.
+                continue
+            # Per-operation server override > toolset-level override > spec default.
+            op_servers = op.get("server_urls") or []
+            op_server = op_servers[0] if op_servers else ""
+            server_url = server_url_override or op_server or default_server
+            if not server_url:
+                raise ValueError(f"Operation {key!r} has no server URL declared")
+            payload = build_listing_payload(
+                op,
+                source=source_record,  # type: ignore[arg-type]
+                toolset=toolset,
+                server_url=server_url,
+                publisher_id=publisher_id,
+                version=version,
+            )
+            tags = set(payload.get("tags") or set())
+            if extra_tags:
+                tags.update(extra_tags)
+            listing = self._marketplace().publish(
+                payload["tool_name"],
+                display_name=payload["display_name"],
+                description=payload["description"],
+                version=payload["version"],
+                author=payload["author"],
+                categories=categories,
+                manifest=payload["manifest"],
+                tags=tags,
+                metadata={
+                    **(payload.get("metadata") or {}),
+                    "issuer_id": self._issuer_id,
+                    "verified_registry": "purecipher",
+                },
+                attestation_kind=AttestationKind.OPENAPI,
+                hosting_mode=HostingMode.PROXY,
+            )
+            published.append(listing)
+            # Iter 13.5: register the listing as a real MCP tool so
+            # ``tools/list`` and ``tools/call`` see it. The proxy tool
+            # delegates to the OpenAPI executor, with all five
+            # governance planes still gating the call via the existing
+            # middleware chain (the proxy is the leaf, not the gate).
+            self._register_openapi_proxy_tool(listing)
+        return published
+
+    def _register_openapi_proxy_tool(self, listing: ToolListing) -> None:
+        """Iter 13.5: bind a published OpenAPI listing to an MCP tool.
+
+        Builds a :class:`FunctionTool` whose async ``fn`` looks the
+        operation back up by ``source_id`` + ``operation_key`` (so the
+        spec is the source of truth — the listing's stored input
+        schema is just a hint), instantiates an
+        :class:`OpenAPIToolExecutor` scoped to the listing's owning
+        publisher, and runs it. Idempotent: re-registering the same
+        ``tool_name`` is fine — FastMCP's local provider replaces the
+        existing entry.
+        """
+        from purecipher.openapi_executor import OpenAPIToolExecutor
+        from purecipher.openapi_publish import (
+            META_OPENAPI_INPUT_SCHEMA,
+            META_OPENAPI_OPERATION_KEY,
+            META_OPENAPI_OUTPUT_SCHEMA,
+            META_OPENAPI_SERVER_URL,
+            META_OPENAPI_SOURCE_ID,
+            META_PROVIDER_KIND,
+            PROVIDER_KIND_OPENAPI,
+        )
+        from purecipher.openapi_store import (
+            extract_openapi_operations_detailed,
+        )
+
+        # Defensively skip listings that aren't OpenAPI-backed.
+        if listing.attestation_kind is not AttestationKind.OPENAPI:
+            return
+        meta = listing.metadata or {}
+        if meta.get(META_PROVIDER_KIND) != PROVIDER_KIND_OPENAPI:
+            return
+        source_id = str(meta.get(META_OPENAPI_SOURCE_ID) or "")
+        operation_key = str(meta.get(META_OPENAPI_OPERATION_KEY) or "")
+        if not source_id or not operation_key:
+            return
+
+        publisher_id = listing.author or ""
+        server_url = str(meta.get(META_OPENAPI_SERVER_URL) or "")
+        input_schema = (
+            meta.get(META_OPENAPI_INPUT_SCHEMA)
+            if isinstance(meta.get(META_OPENAPI_INPUT_SCHEMA), dict)
+            else {"type": "object"}
+        )
+        output_schema_raw = meta.get(META_OPENAPI_OUTPUT_SCHEMA)
+        # Output schemas declared on operations are usually arrays or
+        # primitives, but MCP requires `output_schema` to describe an
+        # object. Drop the schema unless it's already object-shaped to
+        # avoid the marketplace rejecting our tool.
+        output_schema: dict[str, Any] | None = None
+        if (
+            isinstance(output_schema_raw, dict)
+            and output_schema_raw.get("type") == "object"
+        ):
+            output_schema = output_schema_raw
+
+        listing_tool_name = listing.tool_name
+        listing_description = (
+            listing.description or listing.display_name or listing_tool_name
+        )
+
+        async def _openapi_proxy_fn(**arguments: Any) -> Any:
+            spec = self._openapi_store.get_source_spec(source_id)
+            if spec is None:
+                raise RuntimeError(
+                    f"OpenAPI source {source_id!r} for tool "
+                    f"{listing_tool_name!r} no longer exists."
+                )
+            ops = extract_openapi_operations_detailed(spec)
+            op = next(
+                (o for o in ops if o.get("operation_key") == operation_key),
+                None,
+            )
+            if op is None:
+                raise RuntimeError(
+                    f"Operation {operation_key!r} no longer exists in "
+                    f"OpenAPI source {source_id!r}."
+                )
+            # Server URL: stored on the listing wins over re-derive
+            # because the publisher may have overridden it at publish
+            # time. Fall through to the operation's own server.
+            url = server_url
+            if not url:
+                op_servers = op.get("server_urls") or []
+                if op_servers:
+                    url = op_servers[0]
+            if not url:
+                top = spec.get("servers") or []
+                for srv in top:
+                    if isinstance(srv, dict) and srv.get("url"):
+                        url = str(srv["url"])
+                        break
+            if not url:
+                raise RuntimeError(f"Tool {listing_tool_name!r} has no server URL.")
+            executor = OpenAPIToolExecutor(
+                spec=spec,
+                operation=op,
+                server_url=url,
+                publisher_id=publisher_id,
+                source_id=source_id,
+            )
+            result = await executor.execute(
+                arguments,
+                store=self._openapi_store,
+                client=self._openapi_invoke_client,
+            )
+            return {
+                "status_code": result.status_code,
+                "content_type": result.content_type,
+                "body": result.body,
+                "validation_warnings": result.validation_warnings,
+            }
+
+        # Build the FunctionTool directly so we can inject the
+        # OpenAPI-derived input schema verbatim — relying on
+        # ``from_function`` would derive a permissive ``**arguments``
+        # schema that hides the operation's real shape from MCP
+        # clients.
+        from fastmcp.tools.function_tool import FunctionTool
+
+        proxy_tool = FunctionTool(
+            fn=_openapi_proxy_fn,
+            name=listing_tool_name,
+            description=listing_description,
+            parameters=input_schema,
+            output_schema=output_schema,
+            tags={"openapi", "registry-proxy"},
+            meta={
+                "purecipher.attestation_kind": "openapi",
+                "purecipher.openapi.operation_key": operation_key,
+                "purecipher.openapi.source_id": source_id,
+            },
+        )
+        self.add_tool(proxy_tool)
+
+    def _reattach_openapi_proxy_tools(self) -> None:
+        """Iter 13.5: re-register MCP proxy tools for every persisted
+        OpenAPI listing.
+
+        Called once during construction so a SQLite-backed registry
+        that's just been (re)started exposes its previously-published
+        OpenAPI tools without the publisher having to re-run the
+        publish flow. We swallow individual rebuild failures so a
+        single bad listing doesn't keep the registry from booting.
+        """
+        try:
+            marketplace = self._marketplace()
+        except RuntimeError:
+            # Marketplace isn't attached yet (e.g. constructor still
+            # finishing); the publish path will register tools on
+            # demand instead.
+            return
+        # Search by the "openapi" tag we stamp on every OpenAPI-backed
+        # listing during ``publish_toolset_as_listings``. ``search()``
+        # caps at the supplied ``limit`` so we set it high enough that
+        # a registry with thousands of OpenAPI tools still re-attaches
+        # all of them on boot.
+        listings = marketplace.search(tags={"openapi"}, limit=10_000)
+        for listing in listings:
+            if listing.attestation_kind is not AttestationKind.OPENAPI:
+                continue
+            try:
+                self._register_openapi_proxy_tool(listing)
+            except Exception:
+                # Fail-soft: a single bad listing must not keep the
+                # registry from booting. ``logger.exception`` keeps
+                # the stack trace for postmortem.
+                logger.exception(
+                    "Failed to re-attach OpenAPI proxy tool for listing %r",
+                    listing.tool_name,
+                )
 
     def record_registry_notification(
         self,
@@ -1695,13 +2800,16 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         """Prevent admin lifecycle changes that would lock out the registry."""
 
         users = self._account_security.list_accounts()
-        target = next((user for user in users if user.get("username") == username), None)
+        target = next(
+            (user for user in users if user.get("username") == username), None
+        )
         if target is None or target.get("role") != RegistryRole.ADMIN.value:
             return None
         active_admins = [
             user
             for user in users
-            if user.get("role") == RegistryRole.ADMIN.value and user.get("active") is True
+            if user.get("role") == RegistryRole.ADMIN.value
+            and user.get("active") is True
         ]
         is_last_active_admin = (
             target.get("active") is True
@@ -1724,6 +2832,9 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         if normalized in {"approve", "reject", "request-changes"}:
             return {RegistryRole.REVIEWER, RegistryRole.ADMIN}
         if normalized in {"suspend", "unsuspend"}:
+            return {RegistryRole.ADMIN}
+        # Iter 14.11 — deregister is admin-only (terminal removal).
+        if normalized == "deregister":
             return {RegistryRole.ADMIN}
         return set()
 
@@ -2484,9 +3595,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             "deny_count": status.get("deny_count"),
         }
 
-    def _summarize_listing_policy_binding(
-        self, listing: ToolListing
-    ) -> dict[str, Any]:
+    def _summarize_listing_policy_binding(self, listing: ToolListing) -> dict[str, Any]:
         """Project a single listing into a policy-binding row.
 
         Encodes the contract:
@@ -2506,9 +3615,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             "tool_name": listing.tool_name,
             "display_name": listing.display_name or listing.tool_name,
             "hosting_mode": (
-                listing.hosting_mode.value
-                if listing.hosting_mode is not None
-                else None
+                listing.hosting_mode.value if listing.hosting_mode is not None else None
             ),
             "attestation_kind": (
                 listing.attestation_kind.value
@@ -2531,9 +3638,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     "binding_source": "proxy_allowlist",
                     "policy_provider": {
                         "type": "allowlist",
-                        "policy_id": (
-                            f"curator-allowlist-{listing.listing_id}"
-                        ),
+                        "policy_id": (f"curator-allowlist-{listing.listing_id}"),
                         "fail_closed": True,
                         "allowed_count": len(allowed),
                         "allowed_sample": sample,
@@ -2610,9 +3715,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             "display_name": listing.display_name or listing.tool_name,
             "publisher_id": publisher_id,
             "hosting_mode": (
-                listing.hosting_mode.value
-                if listing.hosting_mode is not None
-                else None
+                listing.hosting_mode.value if listing.hosting_mode is not None else None
             ),
             "attestation_kind": (
                 listing.attestation_kind.value
@@ -2685,9 +3788,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 "provenance_ledger_url": f"{self._registry_prefix}/provenance",
                 "moderation_queue_url": f"{self._registry_prefix}/review",
                 "reflexive_core_url": f"{self._registry_prefix}/reflexive",
-                "publisher_url": (
-                    f"{self._registry_prefix}/publishers/{publisher_id}"
-                ),
+                "publisher_url": (f"{self._registry_prefix}/publishers/{publisher_id}"),
             },
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
@@ -2696,9 +3797,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             result = self._sanitize_listing_governance(result)
         return result
 
-    def _sanitize_listing_governance(
-        self, payload: dict[str, Any]
-    ) -> dict[str, Any]:
+    def _sanitize_listing_governance(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Strip identifying fields from a listing governance payload.
 
         Public viewers should see *that* a tool has activity (counts,
@@ -2813,9 +3912,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
         # Cross-tool feed: tag each event with the matching tool
         # if any, sort desc by timestamp, cap at limit.
-        listing_lookup = {
-            listing.tool_name: listing for listing in target_listings
-        }
+        listing_lookup = {listing.tool_name: listing for listing in target_listings}
         recent_events: list[dict[str, Any]] = []
         for event in events:
             for listing in target_listings:
@@ -2829,12 +3926,8 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         # — otherwise the feed dilutes with unrelated drift across
         # the registry. Operators looking at the global view go to
         # /registry/reflexive.
-        recent_events = [
-            entry for entry in recent_events if entry.get("tool_name")
-        ]
-        recent_events.sort(
-            key=lambda entry: entry.get("timestamp", ""), reverse=True
-        )
+        recent_events = [entry for entry in recent_events if entry.get("tool_name")]
+        recent_events.sort(key=lambda entry: entry.get("timestamp", ""), reverse=True)
         recent_events = recent_events[:recent_event_limit]
         # Avoid emitting unused lookup once recent events are built.
         del listing_lookup
@@ -2907,22 +4000,14 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 continue
 
         latest = history[-1] if history else None
-        latest_at = (
-            latest.timestamp.isoformat() if latest is not None else None
-        )
-        latest_severity = (
-            latest.severity.value if latest is not None else None
-        )
-        latest_actor = (
-            getattr(latest, "actor_id", None) if latest is not None else None
-        )
+        latest_at = latest.timestamp.isoformat() if latest is not None else None
+        latest_severity = latest.severity.value if latest is not None else None
+        latest_actor = getattr(latest, "actor_id", None) if latest is not None else None
 
         return {
             "available": True,
             "analyzer_id": getattr(analyzer, "analyzer_id", "default"),
-            "total_drift_count": int(
-                getattr(analyzer, "total_drift_count", 0) or 0
-            ),
+            "total_drift_count": int(getattr(analyzer, "total_drift_count", 0) or 0),
             "monitored_actor_count": actor_count,
             "tracked_metric_count": len(metric_names),
             "tracked_metrics": sorted(metric_names),
@@ -2982,9 +4067,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             if idx > highest_idx:
                 highest_idx = idx
             timestamp = (
-                event.timestamp.isoformat()
-                if getattr(event, "timestamp", None)
-                else ""
+                event.timestamp.isoformat() if getattr(event, "timestamp", None) else ""
             )
             if latest_at is None or timestamp > latest_at:
                 latest_at = timestamp
@@ -2997,9 +4080,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             "tool_name": listing.tool_name,
             "display_name": listing.display_name or listing.tool_name,
             "hosting_mode": (
-                listing.hosting_mode.value
-                if listing.hosting_mode is not None
-                else None
+                listing.hosting_mode.value if listing.hosting_mode is not None else None
             ),
             "attestation_kind": (
                 listing.attestation_kind.value
@@ -3161,16 +4242,13 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     {
                         **entry,
                         "tool_name": listing.tool_name,
-                        "display_name": listing.display_name
-                        or listing.tool_name,
+                        "display_name": listing.display_name or listing.tool_name,
                     }
                 )
 
         # Sort recent decisions across all the publisher's tools by
         # most-recent first, capped.
-        all_decisions.sort(
-            key=lambda item: item.get("created_at", ""), reverse=True
-        )
+        all_decisions.sort(key=lambda item: item.get("created_at", ""), reverse=True)
         recent_decisions = all_decisions[:recent_decision_limit]
 
         # Summary aggregates.
@@ -3199,10 +4277,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             "server_id": publisher_id,
             "summary": {
                 "tool_count": len(per_tool),
-                **{
-                    f"{key}_count": value
-                    for key, value in status_counts.items()
-                },
+                **{f"{key}_count": value for key, value in status_counts.items()},
                 "yanked_version_count": yanked_version_count,
                 "policy_override_count": policy_override_count,
                 "open_moderation_actions": open_moderation_actions,
@@ -3242,9 +4317,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         # Moderation log + open-action flag.
         log = list(listing.moderation_log or [])
         log_dicts = [decision.to_dict() for decision in log]
-        log_dicts.sort(
-            key=lambda item: item.get("created_at", ""), reverse=True
-        )
+        log_dicts.sort(key=lambda item: item.get("created_at", ""), reverse=True)
         latest = log_dicts[0] if log_dicts else None
         open_moderation = status == PublishStatus.PENDING_REVIEW
 
@@ -3302,9 +4375,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             "tool_name": listing.tool_name,
             "display_name": listing.display_name or listing.tool_name,
             "hosting_mode": (
-                listing.hosting_mode.value
-                if listing.hosting_mode is not None
-                else None
+                listing.hosting_mode.value if listing.hosting_mode is not None else None
             ),
             "attestation_kind": (
                 listing.attestation_kind.value
@@ -3319,9 +4390,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 "latest_action": latest["action"] if latest else None,
                 "latest_at": latest["created_at"] if latest else None,
                 "latest_reason": latest["reason"] if latest else None,
-                "latest_moderator_id": (
-                    latest["moderator_id"] if latest else None
-                ),
+                "latest_moderator_id": (latest["moderator_id"] if latest else None),
                 "log": log_dicts,
             },
             "policy_override": {
@@ -3454,9 +4523,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             }
 
         latest = getattr(ledger, "latest_record", None)
-        latest_at = (
-            latest.timestamp.isoformat() if latest is not None else None
-        )
+        latest_at = latest.timestamp.isoformat() if latest is not None else None
         latest_resource = getattr(latest, "resource_id", None) if latest else None
         latest_action = (
             getattr(latest.action, "value", str(latest.action))
@@ -3470,9 +4537,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         return {
             "available": True,
             "ledger_id": getattr(ledger, "ledger_id", "default"),
-            "record_count": int(
-                getattr(ledger, "record_count", 0) or 0
-            ),
+            "record_count": int(getattr(ledger, "record_count", 0) or 0),
             "root_hash": getattr(ledger, "root_hash", "") or "",
             "latest_record_at": latest_at,
             "latest_record_action": latest_action,
@@ -3510,9 +4575,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             "tool_name": listing.tool_name,
             "display_name": listing.display_name or listing.tool_name,
             "hosting_mode": (
-                listing.hosting_mode.value
-                if listing.hosting_mode is not None
-                else None
+                listing.hosting_mode.value if listing.hosting_mode is not None else None
             ),
             "attestation_kind": (
                 listing.attestation_kind.value
@@ -3520,9 +4583,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 else None
             ),
             "status": listing.status.value,
-            "binding_source": (
-                "proxy_ledger" if is_proxy else "no_ledger"
-            ),
+            "binding_source": ("proxy_ledger" if is_proxy else "no_ledger"),
             "expected_ledger_id": (
                 f"curator-proxy-{listing.listing_id}" if is_proxy else None
             ),
@@ -3548,9 +4609,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 central_records = []
 
         latest_central_at = (
-            central_records[0].timestamp.isoformat()
-            if central_records
-            else None
+            central_records[0].timestamp.isoformat() if central_records else None
         )
         latest_central_action = (
             getattr(central_records[0].action, "value", None)
@@ -3624,9 +4683,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         per_tool: list[dict[str, Any]] = []
         for listing in target_listings:
             per_tool.append(
-                self._summarize_listing_consent_binding(
-                    listing, active_edges
-                )
+                self._summarize_listing_consent_binding(listing, active_edges)
             )
 
         requires_consent_count = sum(
@@ -3770,9 +4827,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             "tool_name": listing.tool_name,
             "display_name": listing.display_name or listing.tool_name,
             "hosting_mode": (
-                listing.hosting_mode.value
-                if listing.hosting_mode is not None
-                else None
+                listing.hosting_mode.value if listing.hosting_mode is not None else None
             ),
             "attestation_kind": (
                 listing.attestation_kind.value
@@ -3782,9 +4837,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             "status": listing.status.value,
             "requires_consent": manifest_requires_consent,
             "binding_source": (
-                "consent_required"
-                if manifest_requires_consent
-                else "consent_optional"
+                "consent_required" if manifest_requires_consent else "consent_optional"
             ),
         }
 
@@ -3803,9 +4856,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             "grant_sources": grant_sources[:5],
         }
 
-    def _consent_edge_references_tool(
-        self, edge, tool_name: str
-    ) -> bool:
+    def _consent_edge_references_tool(self, edge, tool_name: str) -> bool:
         """Return True when a consent edge references ``tool_name``.
 
         Heuristics, in order of confidence:
@@ -3918,15 +4969,11 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         per_tool: list[dict[str, Any]] = []
         for listing in target_listings:
             per_tool.append(
-                self._summarize_listing_contract_binding(
-                    listing, active_contracts
-                )
+                self._summarize_listing_contract_binding(listing, active_contracts)
             )
 
         contracted_count = sum(
-            1
-            for entry in per_tool
-            if entry["binding_source"] == "agent_contracts"
+            1 for entry in per_tool if entry["binding_source"] == "agent_contracts"
         )
         uncontracted_count = len(per_tool) - contracted_count
 
@@ -3988,23 +5035,17 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             "broker_id": getattr(broker, "broker_id", "default"),
             "server_id": getattr(broker, "server_id", ""),
             "max_rounds": getattr(broker, "max_rounds", None),
-            "contract_duration_seconds": int(
-                getattr(broker, "contract_duration").total_seconds()
-            )
+            "contract_duration_seconds": int(broker.contract_duration.total_seconds())
             if hasattr(broker, "contract_duration")
             else None,
-            "session_timeout_seconds": int(
-                getattr(broker, "session_timeout").total_seconds()
-            )
+            "session_timeout_seconds": int(broker.session_timeout.total_seconds())
             if hasattr(broker, "session_timeout")
             else None,
             "default_term_count": len(default_terms),
             "default_terms": [
                 {
                     "term_id": getattr(term, "term_id", ""),
-                    "term_type": getattr(
-                        getattr(term, "term_type", None), "value", ""
-                    ),
+                    "term_type": getattr(getattr(term, "term_type", None), "value", ""),
                     "description": getattr(term, "description", ""),
                     "required": bool(getattr(term, "required", False)),
                 }
@@ -4013,9 +5054,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             "active_contract_count": int(
                 getattr(broker, "active_contract_count", 0) or 0
             ),
-            "negotiation_session_count": int(
-                getattr(broker, "session_count", 0) or 0
-            ),
+            "negotiation_session_count": int(getattr(broker, "session_count", 0) or 0),
             "exchange_log_session_count": int(
                 getattr(exchange_log, "session_count", 0) or 0
             )
@@ -4056,9 +5095,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             "tool_name": listing.tool_name,
             "display_name": listing.display_name or listing.tool_name,
             "hosting_mode": (
-                listing.hosting_mode.value
-                if listing.hosting_mode is not None
-                else None
+                listing.hosting_mode.value if listing.hosting_mode is not None else None
             ),
             "attestation_kind": (
                 listing.attestation_kind.value
@@ -4261,15 +5298,39 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             reason_snip = (reason or "").strip()
             if len(reason_snip) > 220:
                 reason_snip = reason_snip[:217] + "…"
-            body = (
-                f"{tool} v{listing.version} — decision by {moderator_id or 'moderator'}."
-            )
-            if reason_snip:
-                body = f"{body} {reason_snip}"
             prefix = self._registry_prefix
+
+            # Iter 14.11 — deregister gets a distinct, more emphatic
+            # notification because it's terminal and platform-wide.
+            # The body explicitly tells viewers the listing is no
+            # longer available to clients so anyone with an integration
+            # against it can plan accordingly. Audiences includes every
+            # role (no filtering) so even drive-by visitors see it.
+            if action == ModerationAction.DEREGISTER:
+                title = f"Server deregistered — {display}"
+                body = (
+                    f"{display} (v{listing.version}) has been "
+                    f"deregistered by {moderator_id or 'admin'}. "
+                    "Calls to this server will be rejected; please "
+                    "remove or migrate any client integrations."
+                )
+                if reason_snip:
+                    body = f"{body} Reason: {reason_snip}"
+            else:
+                title = f"Moderation: {action.value.replace('_', ' ')} — {display}"
+                body = (
+                    f"{tool} v{listing.version} — decision by "
+                    f"{moderator_id or 'moderator'}."
+                )
+                if reason_snip:
+                    body = f"{body} {reason_snip}"
             self.record_registry_notification(
-                event_kind="moderation_decision",
-                title=f"Moderation: {action.value.replace('_', ' ')} — {display}",
+                event_kind=(
+                    "listing_deregistered"
+                    if action == ModerationAction.DEREGISTER
+                    else "moderation_decision"
+                ),
+                title=title,
                 body=body,
                 link_path=f"{prefix}/listings/{quote(tool, safe='')}",
                 audiences=("viewer", "publisher", "reviewer", "admin"),
@@ -4329,11 +5390,9 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         # what the caller passed for ``requested_level``.
         effective_requested_level = requested_level
         if kind == AttestationKind.CURATOR:
-            if (
-                effective_requested_level is None
-                or _level_index(effective_requested_level)
-                > _level_index(CertificationLevel.BASIC)
-            ):
+            if effective_requested_level is None or _level_index(
+                effective_requested_level
+            ) > _level_index(CertificationLevel.BASIC):
                 effective_requested_level = CertificationLevel.BASIC
 
         preflight = self.preflight_submission(
@@ -4463,10 +5522,12 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             HostingMode,
         )
         from purecipher.curation import (
+            CredentialValidationError,
             IntrospectionError,
             UpstreamFetcher,
             UpstreamResolutionError,
             derive_manifest_draft,
+            validate_introspect_env,
         )
         from purecipher.curation.manifest_generator import (
             reconcile_curator_selection,
@@ -4475,15 +5536,11 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         if not isinstance(body, dict):
             raise ValueError("Submission body must be an object.")
 
-        raw_input = str(
-            body.get("upstream") or body.get("upstream_url") or ""
-        ).strip()
+        raw_input = str(body.get("upstream") or body.get("upstream_url") or "").strip()
 
         # Validate hosting_mode early — before the expensive resolve +
         # introspect roundtrips — so a wizard misclick fails fast.
-        raw_hosting_early = str(
-            body.get("hosting_mode", "catalog")
-        ).strip().lower()
+        raw_hosting_early = str(body.get("hosting_mode", "catalog")).strip().lower()
         if raw_hosting_early not in {"catalog", "proxy"}:
             return {
                 "error": (
@@ -4492,6 +5549,26 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 ),
                 "status": 400,
             }
+
+        # Iter 14.8.1 — token-on-submit.
+        #
+        # Submit re-introspects (line below) as a tamper defence — the
+        # manifest a curator vouches for must be bounded by what the
+        # upstream is *currently* exposing, not what was shown at Step
+        # 2. For token-required upstreams (Stripe, Slack, GitHub,
+        # Atlassian), that re-introspect needs the same env the curator
+        # supplied earlier; the wizard sends it back here.
+        #
+        # Same one-shot contract as ``/curate/introspect``: validate,
+        # use, drop. Never persisted, never echoed in the response,
+        # never logged with values.
+        raw_env = body.get("env")
+        try:
+            env = validate_introspect_env(
+                raw_env if isinstance(raw_env, dict) else None
+            )
+        except CredentialValidationError as exc:
+            return {"error": str(exc), "status": 400}
 
         try:
             preview = UpstreamFetcher().resolve(raw_input)
@@ -4506,9 +5583,16 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
         introspector = self._curation_introspector()
         try:
-            introspection = await introspector.introspect(preview.upstream_ref)
+            introspection = await introspector.introspect(preview.upstream_ref, env=env)
         except IntrospectionError as exc:
             return {"error": str(exc), "status": 502}
+        finally:
+            # Drop the local env reference the moment the re-introspect
+            # returns. The remainder of the submit pipeline (manifest
+            # build, persistence, signing) never sees the credentials
+            # — it operates on the introspection result, which is
+            # value-only and contains no secrets.
+            env = None
 
         # An upstream that exposes zero tools, resources, AND prompts
         # is functionally empty — vouching for it carries no useful
@@ -4550,12 +5634,77 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             }
         draft = reconcile_curator_selection(baseline, selected)
 
+        # Iter 14.10 — tool selection.
+        #
+        # The curator picks which observed tools they're actually
+        # vouching for. Same confirm-or-remove contract as
+        # permissions: every entry in ``selected_tools`` must be a
+        # name the registry observed during introspection — names
+        # that aren't observed are silently dropped (never smuggled
+        # into the manifest).
+        #
+        # This narrows two things:
+        # 1. The manifest's data_flow description, so the published
+        #    attestation lists only vouched tools.
+        # 2. The AllowlistPolicy source for proxy hosting mode — the
+        #    proxy will refuse to forward calls to deselected tools.
+        #
+        # Backward-compat: if ``selected_tools`` is omitted, the
+        # curator vouches for the entire observed surface (the
+        # pre-Iter 14.10 behavior).
+        observed_tool_names: list[str] = [t.name for t in introspection.tools]
+        raw_selected_tools = body.get("selected_tools")
+        if raw_selected_tools is None:
+            vouched_tool_names: list[str] = list(observed_tool_names)
+        else:
+            if not isinstance(raw_selected_tools, list):
+                return {
+                    "error": (
+                        "selected_tools must be a list of tool names "
+                        "(or omitted to vouch for all observed)."
+                    ),
+                    "status": 400,
+                }
+            requested = {
+                str(item).strip()
+                for item in raw_selected_tools
+                if isinstance(item, str) and item.strip()
+            }
+            # Preserve original ordering from introspection so the
+            # listing's tool order matches what the upstream returned.
+            vouched_tool_names = [
+                name for name in observed_tool_names if name in requested
+            ]
+            if not vouched_tool_names:
+                return {
+                    "error": (
+                        "Select at least one tool to vouch for. A "
+                        "curator-attested listing with no vouched "
+                        "tools carries no useful trust signal."
+                    ),
+                    "status": 422,
+                }
+
+        # Replace the draft's observed_tool_names with the vouched
+        # subset so ``build_manifest`` describes only the vouched
+        # surface in its data_flow declaration. We rebuild the draft
+        # rather than mutating it because ManifestDraft.observed_tool_names
+        # is treated as immutable everywhere else in the pipeline.
+        from purecipher.curation.manifest_generator import ManifestDraft
+
+        draft = ManifestDraft(
+            upstream_ref=dict(draft.upstream_ref),
+            suggested_tool_name=draft.suggested_tool_name,
+            suggested_display_name=draft.suggested_display_name,
+            suggested_description=draft.suggested_description,
+            permission_suggestions=list(draft.permission_suggestions),
+            observed_tool_names=list(vouched_tool_names),
+        )
+
         tool_name = str(body.get("tool_name", "")).strip() or draft.suggested_tool_name
         if not tool_name:
             return {
-                "error": (
-                    "tool_name is required (auto-suggestion was empty too)."
-                ),
+                "error": ("tool_name is required (auto-suggestion was empty too)."),
                 "status": 400,
             }
         display_name = (
@@ -4566,15 +5715,11 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         version = str(body.get("version", "")).strip() or "0.1.0"
         description = str(body.get("description", "")).strip()
         categories = _coerce_categories(body.get("categories")) or None
-        curator_id = (
-            session.username if session is not None else "local"
-        )
+        curator_id = session.username if session is not None else "local"
         # Map the validated raw_hosting string from earlier into the
         # HostingMode enum (validation already ran before resolve).
         hosting_mode = (
-            HostingMode.PROXY
-            if raw_hosting_early == "proxy"
-            else HostingMode.CATALOG
+            HostingMode.PROXY if raw_hosting_early == "proxy" else HostingMode.CATALOG
         )
 
         manifest = draft.build_manifest(
@@ -4599,11 +5744,16 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     "tool_count": introspection.tool_count,
                     "resource_count": introspection.resource_count,
                     "prompt_count": introspection.prompt_count,
-                    # Persist the observed tool surface so the proxy
-                    # runtime can build an AllowlistPolicy from it.
-                    # Without this, hosting_mode="proxy" silently
-                    # falls back to AllowAllPolicy.
-                    "tool_names": [t.name for t in introspection.tools],
+                    # Iter 14.10 — ``tool_names`` is the *vouched*
+                    # subset (what the curator selected), not the full
+                    # observed surface. Proxy mode reads this to build
+                    # its AllowlistPolicy, so deselected tools are
+                    # blocked at the gateway. The full observed list
+                    # is preserved separately under
+                    # ``observed_tool_names`` for transparency.
+                    "tool_names": list(vouched_tool_names),
+                    "observed_tool_names": list(observed_tool_names),
+                    "vouched_tool_count": len(vouched_tool_names),
                     "resource_uris": [r.uri for r in introspection.resources],
                     "prompt_names": [p.name for p in introspection.prompts],
                 },
@@ -4991,6 +6141,24 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             notice_is_error=notice_is_error,
         )
 
+    def _legacy_ui_disabled_response(self, request: Request) -> Response:
+        """Reject requests for the legacy server-rendered registry UI."""
+
+        payload = {
+            "error": (
+                "Legacy registry UI is disabled on this backend. "
+                "Use the separate registry console instead."
+            ),
+            "status": 404,
+        }
+        if _wants_json(request):
+            return JSONResponse(payload, status_code=404)
+        return Response(
+            content=payload["error"],
+            status_code=404,
+            media_type="text/plain",
+        )
+
     def mount_registry_api(self, *, prefix: str = "/registry") -> PureCipherRegistry:
         """Mount the PureCipher registry HTTP routes."""
 
@@ -5117,7 +6285,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     "auth_enabled": self.auth_enabled,
                     "bootstrap_required": self._bootstrap_required(),
                     "setup_url": f"{prefix}/setup"
-                    if self._bootstrap_required()
+                    if self._bootstrap_required() and self._enable_legacy_registry_ui
                     else None,
                     "session": self._session_payload(session),
                 }
@@ -5218,7 +6386,9 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     status_code=401,
                 )
             username = session.username if session is not None else "local"
-            limit = _int_query_param(request, "limit", default=20, minimum=1, maximum=50)
+            limit = _int_query_param(
+                request, "limit", default=20, minimum=1, maximum=50
+            )
             return JSONResponse(
                 {
                     "username": username,
@@ -5514,7 +6684,9 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     status_code=400,
                 )
             requested_role = body.get("role")
-            role = _role_from_body(requested_role) if requested_role is not None else None
+            role = (
+                _role_from_body(requested_role) if requested_role is not None else None
+            )
             if requested_role is not None and role is None:
                 return JSONResponse(
                     {"error": "Invalid role.", "status": 400},
@@ -5524,12 +6696,17 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             disabled_bool = bool(disabled) if isinstance(disabled, bool) else None
             if session and session.username == username and disabled_bool is True:
                 return JSONResponse(
-                    {"error": "You cannot disable your own admin account.", "status": 400},
+                    {
+                        "error": "You cannot disable your own admin account.",
+                        "status": 400,
+                    },
                     status_code=400,
                 )
             guard_error = self._guard_last_admin_change(username, role, disabled_bool)
             if guard_error:
-                return JSONResponse({"error": guard_error, "status": 400}, status_code=400)
+                return JSONResponse(
+                    {"error": guard_error, "status": 400}, status_code=400
+                )
             updated = self._account_security.update_account(
                 username=username,
                 role=role,
@@ -5572,12 +6749,17 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 )
             if session and session.username == username:
                 return JSONResponse(
-                    {"error": "You cannot disable your own admin account.", "status": 400},
+                    {
+                        "error": "You cannot disable your own admin account.",
+                        "status": 400,
+                    },
                     status_code=400,
                 )
             guard_error = self._guard_last_admin_change(username, None, True)
             if guard_error:
-                return JSONResponse({"error": guard_error, "status": 400}, status_code=400)
+                return JSONResponse(
+                    {"error": guard_error, "status": 400}, status_code=400
+                )
             updated = self._account_security.update_account(
                 username=username,
                 disabled=True,
@@ -5596,7 +6778,9 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             )
             return JSONResponse({"user": updated})
 
-        @self.custom_route(f"{prefix}/admin/users/{{username}}/password", methods=["POST"])
+        @self.custom_route(
+            f"{prefix}/admin/users/{{username}}/password", methods=["POST"]
+        )
         async def registry_admin_reset_user_password(request: Request) -> JSONResponse:
             username = request.path_params.get("username", "")
             session = self._session_from_request(request)
@@ -5646,9 +6830,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             )
             return JSONResponse({"ok": True})
 
-        @self.custom_route(
-            f"{prefix}/admin/control-planes", methods=["GET"]
-        )
+        @self.custom_route(f"{prefix}/admin/control-planes", methods=["GET"])
         async def registry_admin_control_planes(
             request: Request,
         ) -> JSONResponse:
@@ -5663,18 +6845,14 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     {"error": "Authentication required.", "status": 401},
                     status_code=401,
                 )
-            if self.auth_enabled and not self._has_roles(
-                session, {RegistryRole.ADMIN}
-            ):
+            if self.auth_enabled and not self._has_roles(session, {RegistryRole.ADMIN}):
                 return JSONResponse(
                     {"error": "Admin role required.", "status": 403},
                     status_code=403,
                 )
             return JSONResponse(self.get_control_plane_status())
 
-        @self.custom_route(
-            f"{prefix}/admin/control-planes/{{plane}}", methods=["POST"]
-        )
+        @self.custom_route(f"{prefix}/admin/control-planes/{{plane}}", methods=["POST"])
         async def registry_admin_toggle_control_plane(
             request: Request,
         ) -> JSONResponse:
@@ -5694,9 +6872,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     {"error": "Authentication required.", "status": 401},
                     status_code=401,
                 )
-            if self.auth_enabled and not self._has_roles(
-                session, {RegistryRole.ADMIN}
-            ):
+            if self.auth_enabled and not self._has_roles(session, {RegistryRole.ADMIN}):
                 return JSONResponse(
                     {"error": "Admin role required.", "status": 403},
                     status_code=403,
@@ -5709,18 +6885,13 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             if not isinstance(body, dict) or "enabled" not in body:
                 return JSONResponse(
                     {
-                        "error": (
-                            "Body must be JSON like "
-                            '{"enabled": true}.'
-                        ),
+                        "error": ('Body must be JSON like {"enabled": true}.'),
                         "status": 400,
                     },
                     status_code=400,
                 )
             requested = bool(body.get("enabled"))
-            actor = (
-                session.username if session is not None else "anonymous"
-            )
+            actor = session.username if session is not None else "anonymous"
             try:
                 if requested:
                     payload = self.enable_plane(plane, actor_id=actor)
@@ -5735,8 +6906,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 username=actor,
                 event_kind="admin_control_plane_toggle",
                 title=(
-                    f"Control plane {plane} "
-                    f"{'enabled' if requested else 'disabled'}"
+                    f"Control plane {plane} {'enabled' if requested else 'disabled'}"
                 ),
                 detail=(
                     f"{actor} "
@@ -5887,6 +7057,578 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 }
             )
 
+        # ------------------------------------------------------------------
+        # Iter 13.2: OpenAPI credential CRUD
+        # ------------------------------------------------------------------
+        # All routes are publisher-scoped: a publisher can only see and
+        # manage their own credentials. The store enforces this in its
+        # query layer, but we re-check at the route boundary so a bug
+        # in either layer fails closed.
+
+        def _resolve_publisher_id_from(session_obj: Any) -> str:
+            return (
+                publisher_id_from_author(session_obj.username)
+                if session_obj is not None
+                else "publisher"
+            )
+
+        def _validate_credential_payload(
+            scheme_kind: str, secret: dict[str, object] | None
+        ) -> tuple[dict[str, object] | None, str | None]:
+            if not isinstance(secret, dict) or not secret:
+                return None, "`secret` must be a non-empty object"
+            cleaned: dict[str, object] = {}
+            if scheme_kind == "apiKey":
+                key = str(secret.get("api_key") or "").strip()
+                if not key:
+                    return None, "apiKey credentials require `api_key`"
+                cleaned["api_key"] = key
+            elif scheme_kind == "http":
+                http_scheme = str(secret.get("http_scheme") or "").strip().lower()
+                if http_scheme == "bearer":
+                    token = str(secret.get("bearer_token") or "").strip()
+                    if not token:
+                        return None, "http bearer requires `bearer_token`"
+                    cleaned["http_scheme"] = "bearer"
+                    cleaned["bearer_token"] = token
+                elif http_scheme == "basic":
+                    user = str(secret.get("username") or "")
+                    pw = str(secret.get("password") or "")
+                    if not user or not pw:
+                        return None, "http basic requires `username` and `password`"
+                    cleaned["http_scheme"] = "basic"
+                    cleaned["username"] = user
+                    cleaned["password"] = pw
+                else:
+                    return (
+                        None,
+                        "http credentials require `http_scheme` of bearer or basic",
+                    )
+            elif scheme_kind == "oauth2":
+                client_id = str(secret.get("client_id") or "").strip()
+                client_secret = str(secret.get("client_secret") or "").strip()
+                access_token = str(secret.get("access_token") or "").strip()
+                refresh_token = str(secret.get("refresh_token") or "").strip()
+                if not client_id and not access_token:
+                    return (
+                        None,
+                        "oauth2 credentials require `client_id` or `access_token`",
+                    )
+                if client_id:
+                    cleaned["client_id"] = client_id
+                if client_secret:
+                    cleaned["client_secret"] = client_secret
+                if access_token:
+                    cleaned["access_token"] = access_token
+                if refresh_token:
+                    cleaned["refresh_token"] = refresh_token
+            elif scheme_kind == "openIdConnect":
+                id_token = str(secret.get("id_token") or "").strip()
+                access_token = str(secret.get("access_token") or "").strip()
+                client_id = str(secret.get("client_id") or "").strip()
+                client_secret = str(secret.get("client_secret") or "").strip()
+                if not (id_token or access_token or client_id):
+                    return (
+                        None,
+                        "openIdConnect requires one of `id_token`, `access_token`, or `client_id`",
+                    )
+                if id_token:
+                    cleaned["id_token"] = id_token
+                if access_token:
+                    cleaned["access_token"] = access_token
+                if client_id:
+                    cleaned["client_id"] = client_id
+                if client_secret:
+                    cleaned["client_secret"] = client_secret
+            else:
+                return None, f"Unsupported scheme_kind {scheme_kind!r}"
+            return cleaned, None
+
+        @self.custom_route(f"{prefix}/openapi/credentials", methods=["POST"])
+        async def registry_openapi_credentials_upsert(
+            request: Request,
+        ) -> JSONResponse:
+            session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            if self.auth_enabled and not self._has_roles(
+                session,
+                {RegistryRole.PUBLISHER, RegistryRole.REVIEWER, RegistryRole.ADMIN},
+            ):
+                return JSONResponse(
+                    {"error": "Publisher role required.", "status": 403},
+                    status_code=403,
+                )
+            body = await request.json()
+            if not isinstance(body, dict):
+                return JSONResponse(
+                    {"error": "Invalid JSON body", "status": 400},
+                    status_code=400,
+                )
+            source_id = str(body.get("source_id", "") or "").strip()
+            scheme_name = str(body.get("scheme_name", "") or "").strip()
+            scheme_kind = str(body.get("scheme_kind", "") or "").strip()
+            label = str(body.get("label", "") or "").strip()
+            if not source_id or not scheme_name or not scheme_kind:
+                return JSONResponse(
+                    {
+                        "error": "`source_id`, `scheme_name`, and `scheme_kind` are required",
+                        "status": 400,
+                    },
+                    status_code=400,
+                )
+            secret_in = body.get("secret")
+            cleaned, err = _validate_credential_payload(
+                scheme_kind, secret_in if isinstance(secret_in, dict) else None
+            )
+            if err is not None or cleaned is None:
+                return JSONResponse(
+                    {"error": err or "Invalid secret payload.", "status": 400},
+                    status_code=400,
+                )
+            publisher_id = _resolve_publisher_id_from(session)
+            # Sanity-check the source belongs to the requesting
+            # publisher, so credentials can't be silently bound to
+            # someone else's source.
+            spec = self._openapi_store.get_source_spec(source_id)
+            if spec is None:
+                return JSONResponse(
+                    {"error": f"Unknown OpenAPI source {source_id!r}", "status": 404},
+                    status_code=404,
+                )
+            try:
+                record = self._openapi_store.upsert_credential(
+                    publisher_id=publisher_id,
+                    source_id=source_id,
+                    scheme_name=scheme_name,
+                    scheme_kind=scheme_kind,  # type: ignore[arg-type]
+                    secret=cleaned,
+                    label=label,
+                )
+            except (ValueError, RuntimeError) as exc:
+                return JSONResponse(
+                    {"error": str(exc), "status": 400},
+                    status_code=400,
+                )
+            # Never echo plaintext back over the wire — return the
+            # sanitised public projection instead.
+            from purecipher.openapi_store import _credential_secret_hint
+
+            return JSONResponse(
+                {
+                    "credential": {
+                        "credential_id": record["credential_id"],
+                        "created_at": record["created_at"],
+                        "updated_at": record["updated_at"],
+                        "publisher_id": record["publisher_id"],
+                        "source_id": record["source_id"],
+                        "scheme_name": record["scheme_name"],
+                        "scheme_kind": record["scheme_kind"],
+                        "label": record["label"],
+                        "secret_hint": _credential_secret_hint(
+                            record["scheme_kind"], record["secret"]
+                        ),
+                    },
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+
+        @self.custom_route(f"{prefix}/openapi/credentials", methods=["GET"])
+        async def registry_openapi_credentials_list(
+            request: Request,
+        ) -> JSONResponse:
+            session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            if self.auth_enabled and not self._has_roles(
+                session,
+                {RegistryRole.PUBLISHER, RegistryRole.REVIEWER, RegistryRole.ADMIN},
+            ):
+                return JSONResponse(
+                    {"error": "Publisher role required.", "status": 403},
+                    status_code=403,
+                )
+            publisher_id = _resolve_publisher_id_from(session)
+            source_id_param = request.query_params.get("source_id")
+            source_id = source_id_param.strip() if source_id_param else None
+            credentials = self._openapi_store.list_credentials(
+                publisher_id=publisher_id,
+                source_id=source_id or None,
+            )
+            return JSONResponse(
+                {
+                    "credentials": credentials,
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+
+        @self.custom_route(
+            f"{prefix}/openapi/credentials/{{credential_id}}",
+            methods=["DELETE"],
+        )
+        async def registry_openapi_credentials_delete(
+            request: Request,
+        ) -> JSONResponse:
+            session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            if self.auth_enabled and not self._has_roles(
+                session,
+                {RegistryRole.PUBLISHER, RegistryRole.REVIEWER, RegistryRole.ADMIN},
+            ):
+                return JSONResponse(
+                    {"error": "Publisher role required.", "status": 403},
+                    status_code=403,
+                )
+            credential_id = str(
+                request.path_params.get("credential_id", "") or ""
+            ).strip()
+            if not credential_id:
+                return JSONResponse(
+                    {"error": "`credential_id` required", "status": 400},
+                    status_code=400,
+                )
+            publisher_id = _resolve_publisher_id_from(session)
+            deleted = self._openapi_store.delete_credential(
+                credential_id, publisher_id=publisher_id
+            )
+            if not deleted:
+                return JSONResponse(
+                    {"error": "Credential not found.", "status": 404},
+                    status_code=404,
+                )
+            return JSONResponse(
+                {
+                    "deleted": True,
+                    "credential_id": credential_id,
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+
+        # ------------------------------------------------------------------
+        # Iter 13.3: Toolset invocation
+        # ------------------------------------------------------------------
+        # ``invoke_http_client_factory`` lets tests inject an
+        # ``httpx.AsyncClient`` (typically backed by ``MockTransport``)
+        # so we don't need real network. Production runs leave it
+        # ``None`` and the executor opens a one-shot client.
+        @self.custom_route(
+            f"{prefix}/openapi/toolset/{{toolset_id}}/invoke",
+            methods=["POST"],
+        )
+        async def registry_openapi_toolset_invoke(
+            request: Request,
+        ) -> JSONResponse:
+            session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            if self.auth_enabled and not self._has_roles(
+                session,
+                {RegistryRole.PUBLISHER, RegistryRole.REVIEWER, RegistryRole.ADMIN},
+            ):
+                return JSONResponse(
+                    {"error": "Publisher role required.", "status": 403},
+                    status_code=403,
+                )
+            toolset_id = str(request.path_params.get("toolset_id", "") or "").strip()
+            if not toolset_id:
+                return JSONResponse(
+                    {"error": "`toolset_id` required.", "status": 400},
+                    status_code=400,
+                )
+            body = await request.json()
+            if not isinstance(body, dict):
+                return JSONResponse(
+                    {"error": "Invalid JSON body.", "status": 400},
+                    status_code=400,
+                )
+            operation_key = str(body.get("operation_key", "") or "").strip()
+            args = body.get("arguments") or {}
+            if not operation_key:
+                return JSONResponse(
+                    {"error": "`operation_key` required.", "status": 400},
+                    status_code=400,
+                )
+            if not isinstance(args, dict):
+                return JSONResponse(
+                    {"error": "`arguments` must be an object.", "status": 400},
+                    status_code=400,
+                )
+
+            toolset = self._openapi_store.get_toolset(toolset_id)
+            if toolset is None:
+                return JSONResponse(
+                    {"error": f"Unknown toolset {toolset_id!r}.", "status": 404},
+                    status_code=404,
+                )
+            publisher_id = _resolve_publisher_id_from(session)
+            # Tenant isolation: a publisher can only invoke their own
+            # toolsets. The store doesn't filter by publisher, so we
+            # check at the route boundary.
+            if publisher_id and toolset.get("publisher_id") != publisher_id:
+                return JSONResponse(
+                    {"error": "Toolset belongs to another publisher.", "status": 403},
+                    status_code=403,
+                )
+            source_id = str(toolset.get("source_id") or "")
+            if not source_id:
+                return JSONResponse(
+                    {"error": "Toolset has no source_id.", "status": 500},
+                    status_code=500,
+                )
+            spec = self._openapi_store.get_source_spec(source_id)
+            if spec is None:
+                return JSONResponse(
+                    {
+                        "error": f"OpenAPI source {source_id!r} no longer exists.",
+                        "status": 404,
+                    },
+                    status_code=404,
+                )
+
+            # Verify the operation is in the selected set; bringing
+            # operations not in the toolset would let a caller invoke
+            # operations the publisher hadn't approved.
+            selected = set(toolset.get("selected_operations") or [])
+            if selected and operation_key not in selected:
+                return JSONResponse(
+                    {
+                        "error": (
+                            f"Operation {operation_key!r} is not part of toolset "
+                            f"{toolset_id!r}."
+                        ),
+                        "status": 400,
+                    },
+                    status_code=400,
+                )
+
+            from purecipher.openapi_executor import (
+                ArgumentValidationError,
+                OpenAPIToolExecutor,
+            )
+            from purecipher.openapi_store import (
+                extract_openapi_operations_detailed,
+            )
+
+            ops = extract_openapi_operations_detailed(spec)
+            op = next(
+                (o for o in ops if o.get("operation_key") == operation_key),
+                None,
+            )
+            if op is None:
+                return JSONResponse(
+                    {
+                        "error": f"Operation {operation_key!r} not found in source.",
+                        "status": 404,
+                    },
+                    status_code=404,
+                )
+
+            # Pick the first server URL the spec advertises. Operation-
+            # level overrides win, then path-level, then top-level.
+            server_url = ""
+            for candidate in op.get("server_urls") or []:
+                if isinstance(candidate, str) and candidate.strip():
+                    server_url = candidate.strip()
+                    break
+            if not server_url:
+                top_servers = spec.get("servers") or []
+                if isinstance(top_servers, list):
+                    for srv in top_servers:
+                        if isinstance(srv, dict):
+                            url = srv.get("url")
+                            if isinstance(url, str) and url:
+                                server_url = url
+                                break
+            if not server_url:
+                return JSONResponse(
+                    {
+                        "error": "No server URL declared in the OpenAPI document.",
+                        "status": 400,
+                    },
+                    status_code=400,
+                )
+
+            override_url = body.get("server_url")
+            if isinstance(override_url, str) and override_url.strip():
+                server_url = override_url.strip()
+
+            executor = OpenAPIToolExecutor(
+                spec=spec,
+                operation=op,
+                server_url=server_url,
+                publisher_id=publisher_id,
+                source_id=source_id,
+            )
+            try:
+                result = await executor.execute(
+                    args,
+                    store=self._openapi_store,
+                    client=self._openapi_invoke_client,
+                )
+            except ArgumentValidationError as exc:
+                return JSONResponse(
+                    {
+                        "error": "Argument validation failed.",
+                        "issues": exc.messages,
+                        "status": 400,
+                    },
+                    status_code=400,
+                )
+            except (RuntimeError, ValueError) as exc:
+                return JSONResponse(
+                    {"error": str(exc), "status": 400},
+                    status_code=400,
+                )
+
+            return JSONResponse(
+                {
+                    "status_code": result.status_code,
+                    "headers": result.headers,
+                    "content_type": result.content_type,
+                    "body": result.body,
+                    "validation_warnings": result.validation_warnings,
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+
+        # ------------------------------------------------------------------
+        # Iter 13.4: Toolset → ToolListing publish bridge
+        # ------------------------------------------------------------------
+        # Turn a toolset's selected operations into first-class
+        # ``ToolListing`` records on the registry's marketplace. Each
+        # operation becomes its own listing — a toolset is a
+        # publisher-side grouping, not a marketplace concept.
+        @self.custom_route(
+            f"{prefix}/openapi/toolset/{{toolset_id}}/publish",
+            methods=["POST"],
+        )
+        async def registry_openapi_toolset_publish(
+            request: Request,
+        ) -> JSONResponse:
+            session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            if self.auth_enabled and not self._has_roles(
+                session,
+                {RegistryRole.PUBLISHER, RegistryRole.REVIEWER, RegistryRole.ADMIN},
+            ):
+                return JSONResponse(
+                    {"error": "Publisher role required.", "status": 403},
+                    status_code=403,
+                )
+            toolset_id = str(request.path_params.get("toolset_id", "") or "").strip()
+            if not toolset_id:
+                return JSONResponse(
+                    {"error": "`toolset_id` required.", "status": 400},
+                    status_code=400,
+                )
+            body = await request.json()
+            if not isinstance(body, dict):
+                return JSONResponse(
+                    {"error": "Invalid JSON body.", "status": 400},
+                    status_code=400,
+                )
+
+            toolset = self._openapi_store.get_toolset(toolset_id)
+            if toolset is None:
+                return JSONResponse(
+                    {"error": f"Unknown toolset {toolset_id!r}.", "status": 404},
+                    status_code=404,
+                )
+            publisher_id = _resolve_publisher_id_from(session)
+            # Cross-publisher isolation — same gate as /invoke.
+            if publisher_id and toolset.get("publisher_id") != publisher_id:
+                return JSONResponse(
+                    {
+                        "error": "Toolset belongs to another publisher.",
+                        "status": 403,
+                    },
+                    status_code=403,
+                )
+
+            version = str(body.get("version", "") or "").strip() or "0.0.0"
+            categories_raw = body.get("categories") or []
+            categories: set[ToolCategory] | None = None
+            if isinstance(categories_raw, list) and categories_raw:
+                resolved: set[ToolCategory] = set()
+                for c in categories_raw:
+                    if not isinstance(c, str):
+                        continue
+                    try:
+                        resolved.add(ToolCategory(c))
+                    except ValueError:
+                        return JSONResponse(
+                            {
+                                "error": f"Unknown category {c!r}.",
+                                "status": 400,
+                            },
+                            status_code=400,
+                        )
+                if resolved:
+                    categories = resolved
+            extra_tags_raw = body.get("tags") or []
+            extra_tags: set[str] | None = None
+            if isinstance(extra_tags_raw, list):
+                extra_tags = {str(t) for t in extra_tags_raw if t}
+            override_url = body.get("server_url_override")
+            override = (
+                override_url.strip()
+                if isinstance(override_url, str) and override_url.strip()
+                else None
+            )
+
+            try:
+                listings = self.publish_toolset_as_listings(
+                    toolset_id,
+                    publisher_id=publisher_id,
+                    version=version,
+                    categories=categories,
+                    extra_tags=extra_tags,
+                    server_url_override=override,
+                )
+            except (ValueError, RuntimeError) as exc:
+                return JSONResponse(
+                    {"error": str(exc), "status": 400},
+                    status_code=400,
+                )
+
+            return JSONResponse(
+                {
+                    "listings": [
+                        {
+                            "listing_id": L.listing_id,
+                            "tool_name": L.tool_name,
+                            "display_name": L.display_name,
+                            "version": L.version,
+                            "status": L.status.value,
+                            "attestation_kind": L.attestation_kind.value,
+                            "hosting_mode": L.hosting_mode.value,
+                            "operation_key": L.metadata.get(
+                                "purecipher.openapi.operation_key"
+                            ),
+                        }
+                        for L in listings
+                    ],
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+
         mount_registry_policy_routes(
             self,
             prefix,
@@ -5895,6 +7637,8 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
         @self.custom_route(f"{prefix}/setup", methods=["GET"])
         async def registry_setup_page(request: Request):
+            if not self._enable_legacy_registry_ui:
+                return self._legacy_ui_disabled_response(request)
             next_path = _safe_next_path(
                 request.query_params.get("next"),
                 default=prefix,
@@ -5923,7 +7667,10 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 payload = {"error": "Registry auth is disabled.", "status": 400}
                 return JSONResponse(payload, status_code=400)
             if not self._bootstrap_required():
-                payload = {"error": "Registry setup is already complete.", "status": 409}
+                payload = {
+                    "error": "Registry setup is already complete.",
+                    "status": 409,
+                }
                 if _wants_json(request):
                     return JSONResponse(payload, status_code=409)
                 return RedirectResponse(url=f"{prefix}/login", status_code=303)
@@ -5961,7 +7708,9 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             username = str(raw_payload.get("username", "admin")).strip() or "admin"
             password = str(raw_payload.get("password", ""))
             display_name = str(raw_payload.get("display_name", "Registry Admin"))
-            next_path = _safe_next_path(str(raw_payload.get("next", "")), default=prefix)
+            next_path = _safe_next_path(
+                str(raw_payload.get("next", "")), default=prefix
+            )
             if len(password) < 8:
                 payload = {
                     "error": "Admin password must be at least 8 characters.",
@@ -6050,6 +7799,8 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
         @self.custom_route(f"{prefix}/login", methods=["GET"])
         async def registry_login_page(request: Request):
+            if not self._enable_legacy_registry_ui:
+                return self._legacy_ui_disabled_response(request)
             next_path = _safe_next_path(
                 request.query_params.get("next"),
                 default=prefix,
@@ -6142,9 +7893,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             )
 
             client_ip = request.client.host if request.client else ""
-            locked, retry_after = self._login_lockout.is_locked(
-                username, client_ip
-            )
+            locked, retry_after = self._login_lockout.is_locked(username, client_ip)
             if locked:
                 # Still record the attempt for forensics — but as a
                 # `login_locked` event so it's distinguishable from a
@@ -6170,9 +7919,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 }
                 headers = {"Retry-After": str(int(retry_after))}
                 if expects_json:
-                    return JSONResponse(
-                        payload, status_code=429, headers=headers
-                    )
+                    return JSONResponse(payload, status_code=429, headers=headers)
                 return create_secure_html_response(
                     self._render_login_ui(
                         prefix=prefix,
@@ -6222,9 +7969,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     }
                     headers = {"Retry-After": str(int(retry_after))}
                     if expects_json:
-                        return JSONResponse(
-                            payload, status_code=429, headers=headers
-                        )
+                        return JSONResponse(payload, status_code=429, headers=headers)
                     return create_secure_html_response(
                         self._render_login_ui(
                             prefix=prefix,
@@ -6342,6 +8087,8 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
         @self.custom_route(f"{prefix}/app", methods=["GET"])
         async def registry_app(request: Request):
+            if not self._enable_legacy_registry_ui:
+                return self._legacy_ui_disabled_response(request)
             session = self._session_from_request(request)
             if self.auth_enabled and session is None:
                 return self._login_redirect(request, prefix=prefix)
@@ -6363,6 +8110,8 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
         @self.custom_route(prefix, methods=["GET"])
         async def registry_ui(request: Request):
+            if not self._enable_legacy_registry_ui:
+                return self._legacy_ui_disabled_response(request)
             session = self._session_from_request(request)
             app_path = f"{prefix}/app"
             if not self.auth_enabled:
@@ -6377,6 +8126,8 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
         @self.custom_route(f"{prefix}/publish", methods=["GET"])
         async def registry_publish_page(request: Request):
+            if not self._enable_legacy_registry_ui:
+                return self._legacy_ui_disabled_response(request)
             session = self._session_from_request(request)
             if self.auth_enabled and session is None:
                 return self._login_redirect(request, prefix=prefix)
@@ -6392,6 +8143,8 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
         @self.custom_route(f"{prefix}/listings/{{tool_name}}", methods=["GET"])
         async def registry_listing_ui(request: Request):
+            if not self._enable_legacy_registry_ui:
+                return self._legacy_ui_disabled_response(request)
             tool_name = request.path_params.get("tool_name", "")
             session = self._session_from_request(request)
             if self.auth_enabled and session is None:
@@ -6439,6 +8192,8 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             limit = int(request.query_params.get("limit", "200"))
             payload = self.list_publishers(limit=limit)
             if request.query_params.get("view") == "html":
+                if not self._enable_legacy_registry_ui:
+                    return self._legacy_ui_disabled_response(request)
                 session = self._session_from_request(request)
                 if self.auth_enabled and session is None:
                     return self._login_redirect(request, prefix=prefix)
@@ -6474,6 +8229,8 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     status_code=_status_code_from_payload(payload),
                 )
 
+            if not self._enable_legacy_registry_ui:
+                return self._legacy_ui_disabled_response(request)
             if self.auth_enabled and session is None:
                 return self._login_redirect(request, prefix=prefix)
             if "error" in payload:
@@ -6515,15 +8272,11 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             """
             server_id = request.path_params.get("server_id", "")
             session = self._session_from_request(request)
-            include_non_public = bool(
-                self.auth_enabled and session is not None
-            )
+            include_non_public = bool(self.auth_enabled and session is not None)
             payload = self.get_server_policy_governance(
                 server_id, include_non_public=include_non_public
             )
-            return JSONResponse(
-                payload, status_code=_status_code_from_payload(payload)
-            )
+            return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
         @self.custom_route(
             f"{prefix}/servers/{{server_id}}/governance/contracts",
@@ -6540,15 +8293,11 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             """
             server_id = request.path_params.get("server_id", "")
             session = self._session_from_request(request)
-            include_non_public = bool(
-                self.auth_enabled and session is not None
-            )
+            include_non_public = bool(self.auth_enabled and session is not None)
             payload = self.get_server_contract_governance(
                 server_id, include_non_public=include_non_public
             )
-            return JSONResponse(
-                payload, status_code=_status_code_from_payload(payload)
-            )
+            return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
         @self.custom_route(
             f"{prefix}/servers/{{server_id}}/governance/consent",
@@ -6564,15 +8313,11 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             """
             server_id = request.path_params.get("server_id", "")
             session = self._session_from_request(request)
-            include_non_public = bool(
-                self.auth_enabled and session is not None
-            )
+            include_non_public = bool(self.auth_enabled and session is not None)
             payload = self.get_server_consent_governance(
                 server_id, include_non_public=include_non_public
             )
-            return JSONResponse(
-                payload, status_code=_status_code_from_payload(payload)
-            )
+            return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
         @self.custom_route(
             f"{prefix}/servers/{{server_id}}/governance/ledger",
@@ -6588,15 +8333,11 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             """
             server_id = request.path_params.get("server_id", "")
             session = self._session_from_request(request)
-            include_non_public = bool(
-                self.auth_enabled and session is not None
-            )
+            include_non_public = bool(self.auth_enabled and session is not None)
             payload = self.get_server_ledger_governance(
                 server_id, include_non_public=include_non_public
             )
-            return JSONResponse(
-                payload, status_code=_status_code_from_payload(payload)
-            )
+            return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
         @self.custom_route(
             f"{prefix}/servers/{{server_id}}/governance/overrides",
@@ -6614,15 +8355,11 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             """
             server_id = request.path_params.get("server_id", "")
             session = self._session_from_request(request)
-            include_non_public = bool(
-                self.auth_enabled and session is not None
-            )
+            include_non_public = bool(self.auth_enabled and session is not None)
             payload = self.get_server_overrides_governance(
                 server_id, include_non_public=include_non_public
             )
-            return JSONResponse(
-                payload, status_code=_status_code_from_payload(payload)
-            )
+            return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
         @self.custom_route(
             f"{prefix}/servers/{{server_id}}/observability",
@@ -6640,18 +8377,16 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             """
             server_id = request.path_params.get("server_id", "")
             session = self._session_from_request(request)
-            include_non_public = bool(
-                self.auth_enabled and session is not None
-            )
+            include_non_public = bool(self.auth_enabled and session is not None)
             payload = self.get_server_observability(
                 server_id, include_non_public=include_non_public
             )
-            return JSONResponse(
-                payload, status_code=_status_code_from_payload(payload)
-            )
+            return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
         @self.custom_route(f"{prefix}/review", methods=["GET"])
         async def registry_review_queue(request: Request):
+            if not self._enable_legacy_registry_ui:
+                return self._legacy_ui_disabled_response(request)
             session = self._session_from_request(request)
             allowed_roles = {RegistryRole.REVIEWER, RegistryRole.ADMIN}
             if self.auth_enabled and session is None:
@@ -6827,9 +8562,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             # honored, allowing any caller to spoof attribution in the audit
             # log. ``"local"`` is used as the unauthenticated fallback only
             # when ``auth_enabled`` is False (single-tenant local dev).
-            session_moderator_id = (
-                session.username if session is not None else "local"
-            )
+            session_moderator_id = session.username if session is not None else "local"
             payload = self.moderate_listing(
                 listing_id,
                 action_name=action_name,
@@ -6953,7 +8686,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             if listing is None:
                 # Fall back to public-only lookup so the response shape
                 # matches when the listing genuinely doesn't exist (or
-                # was suspended in a way the requestor can't see).
+                # was suspended in a way the requester can't see).
                 payload = self.get_verified_tool(tool_name)
                 return JSONResponse(
                     payload, status_code=_status_code_from_payload(payload)
@@ -6979,17 +8712,13 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             """
             tool_name = request.path_params.get("tool_name", "")
             session = self._session_from_request(request)
-            include_non_public = bool(
-                self.auth_enabled and session is not None
-            )
+            include_non_public = bool(self.auth_enabled and session is not None)
             payload = self.get_listing_governance(
                 tool_name,
                 include_non_public=include_non_public,
                 sanitize_for_public=not include_non_public,
             )
-            return JSONResponse(
-                payload, status_code=_status_code_from_payload(payload)
-            )
+            return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
         @self.custom_route(f"{prefix}/tools/{{tool_name}}/versions", methods=["GET"])
         async def registry_tool_versions(request: Request) -> JSONResponse:
@@ -7021,7 +8750,9 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     "current_version": listing.version,
                     "status": listing.status.value,
                     "version_count": len(versions),
-                    "versions": [v.to_dict() for v in reversed(versions)],  # newest first
+                    "versions": [
+                        v.to_dict() for v in reversed(versions)
+                    ],  # newest first
                     "generated_at": datetime.now(timezone.utc).isoformat(),
                 }
             )
@@ -7232,11 +8963,40 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 body.get("upstream") or body.get("upstream_url") or ""
             ).strip()
             from purecipher.curation import (
+                CredentialValidationError,
                 IntrospectionError,
                 UpstreamFetcher,
                 UpstreamResolutionError,
                 derive_manifest_draft,
+                validate_introspect_env,
             )
+
+            # Iter 14.8 — token-on-introspect.
+            #
+            # Some upstream MCP servers (Stripe, Slack, GitHub, Linear,
+            # Notion, etc.) refuse to start, or return zero tools, until
+            # a credential is present in their environment. The wizard
+            # may pass an ``env`` dict here so the curator's introspect
+            # call can succeed.
+            #
+            # Trust contract: this dict is treated as one-shot. We
+            # validate it, hand it to the introspector, and let it fall
+            # out of scope when the function returns. We never write the
+            # env dict — values or keys — to the database, the manifest,
+            # the response payload, or any audit log. The introspector
+            # itself logs only the *keys* of env (see
+            # ``_redacted_env_keys``) so operators can see what was
+            # passed without ever seeing the values.
+            raw_env = body.get("env")
+            try:
+                env = validate_introspect_env(
+                    raw_env if isinstance(raw_env, dict) else None
+                )
+            except CredentialValidationError as exc:
+                return JSONResponse(
+                    {"error": str(exc), "status": 400},
+                    status_code=400,
+                )
 
             try:
                 preview = UpstreamFetcher().resolve(raw_input)
@@ -7247,12 +9007,18 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 )
             introspector = self._curation_introspector()
             try:
-                result = await introspector.introspect(preview.upstream_ref)
+                result = await introspector.introspect(preview.upstream_ref, env=env)
             except IntrospectionError as exc:
                 return JSONResponse(
                     {"error": str(exc), "status": 502},
                     status_code=502,
                 )
+            finally:
+                # Belt-and-braces: explicitly drop the local reference
+                # so even a future code path that lingers in this scope
+                # can't accidentally serialize the env dict alongside
+                # the introspection result.
+                env = None
             draft = derive_manifest_draft(
                 result,
                 suggested_tool_name=preview.suggested_tool_name,
@@ -7361,9 +9127,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             if record is None:
                 return JSONResponse(
                     {
-                        "error": (
-                            f"Client {client_id_or_slug!r} not found."
-                        ),
+                        "error": (f"Client {client_id_or_slug!r} not found."),
                         "status": 404,
                     },
                     status_code=404,
@@ -7389,8 +9153,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             if self._has_roles(session, {RegistryRole.ADMIN}):
                 return True
             return (
-                publisher_id_from_author(session.username)
-                == record.owner_publisher_id
+                publisher_id_from_author(session.username) == record.owner_publisher_id
             )
 
         @self.custom_route(f"{prefix}/clients", methods=["GET"])
@@ -7430,9 +9193,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     },
                     status_code=403,
                 )
-            records = self.list_clients_for_caller(
-                session=session, limit=limit
-            )
+            records = self.list_clients_for_caller(session=session, limit=limit)
             return JSONResponse(
                 {
                     "items": [r.to_dict() for r in records],
@@ -7440,6 +9201,48 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     "kinds": sorted(CLIENT_KINDS),
                 }
             )
+
+        @self.custom_route(
+            f"{prefix}/clients/activity-summary",
+            methods=["GET"],
+        )
+        async def registry_clients_activity_summary(
+            request: Request,
+        ) -> JSONResponse:
+            """Iter 14.24 — aggregate client activity counts.
+
+            Powers the Clients dashboard panel above the directory.
+            Same role gate as ``GET /clients`` (admin / publisher).
+            Computes by looping every client's ledger window once;
+            for typical deployments (<=50 clients) the loop is well
+            under 100ms. Larger deployments will want a bulk ledger
+            query, which is a future iteration.
+            """
+            session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            if (
+                self.auth_enabled
+                and session is not None
+                and not self._has_roles(
+                    session,
+                    {RegistryRole.ADMIN, RegistryRole.PUBLISHER},
+                )
+            ):
+                return JSONResponse(
+                    {
+                        "error": (
+                            "Publisher or admin role required to view "
+                            "client activity summary."
+                        ),
+                        "status": 403,
+                    },
+                    status_code=403,
+                )
+            return JSONResponse(self.summarize_clients_activity())
 
         @self.custom_route(f"{prefix}/clients", methods=["POST"])
         async def registry_clients_create(
@@ -7477,8 +9280,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 return JSONResponse(
                     {
                         "error": (
-                            "Publisher or admin role required to register "
-                            "MCP clients."
+                            "Publisher or admin role required to register MCP clients."
                         ),
                         "status": 403,
                     },
@@ -7504,32 +9306,27 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             description = str(body.get("description", "") or "")
             intended_use = str(body.get("intended_use", "") or "")
             kind = str(body.get("kind", "agent") or "agent").strip() or "agent"
-            metadata = body.get("metadata") if isinstance(body.get("metadata"), dict) else None
+            metadata = (
+                body.get("metadata") if isinstance(body.get("metadata"), dict) else None
+            )
             issue_initial_token = bool(body.get("issue_initial_token", True))
             token_name = (
-                str(body.get("token_name", "Default") or "Default").strip()
-                or "Default"
+                str(body.get("token_name", "Default") or "Default").strip() or "Default"
             )
 
             # Owner publisher resolution: admins may pick; publishers
             # are pinned to their own derived id.
-            requested_owner = str(
-                body.get("owner_publisher_id", "") or ""
-            ).strip()
+            requested_owner = str(body.get("owner_publisher_id", "") or "").strip()
             if self.auth_enabled and session is not None:
                 is_admin = self._has_roles(session, {RegistryRole.ADMIN})
                 if is_admin and requested_owner:
                     owner_publisher_id = requested_owner
                 else:
-                    owner_publisher_id = publisher_id_from_author(
-                        session.username
-                    )
+                    owner_publisher_id = publisher_id_from_author(session.username)
             else:
                 owner_publisher_id = requested_owner or "publisher"
 
-            actor = (
-                session.username if session is not None else "anonymous"
-            )
+            actor = session.username if session is not None else "anonymous"
             try:
                 payload = self.register_client(
                     display_name=display_name,
@@ -7565,9 +9362,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             )
             return JSONResponse(payload, status_code=201)
 
-        @self.custom_route(
-            f"{prefix}/clients/{{client_id}}", methods=["GET"]
-        )
+        @self.custom_route(f"{prefix}/clients/{{client_id}}", methods=["GET"])
         async def registry_clients_get(
             request: Request,
         ) -> JSONResponse:
@@ -7590,9 +9385,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             if not _can_manage_client(session, resolved):
                 return JSONResponse(
                     {
-                        "error": (
-                            "Not allowed to view this client."
-                        ),
+                        "error": ("Not allowed to view this client."),
                         "status": 403,
                     },
                     status_code=403,
@@ -7605,9 +9398,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 }
             )
 
-        @self.custom_route(
-            f"{prefix}/clients/{{client_id}}", methods=["PATCH"]
-        )
+        @self.custom_route(f"{prefix}/clients/{{client_id}}", methods=["PATCH"])
         async def registry_clients_update(
             request: Request,
         ) -> JSONResponse:
@@ -7949,9 +9740,121 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             payload = self.get_client_governance(
                 resolved.client_id, sanitize_for_public=sanitize
             )
-            return JSONResponse(
-                payload, status_code=_status_code_from_payload(payload)
+            return JSONResponse(payload, status_code=_status_code_from_payload(payload))
+
+        @self.custom_route(
+            f"{prefix}/clients/{{client_id}}/simulate",
+            methods=["POST"],
+        )
+        async def registry_clients_simulate(
+            request: Request,
+        ) -> JSONResponse:
+            """Dry-run a request against every governance plane.
+
+            Iter 11. Owner-or-admin gated. Body shape:
+
+            ``{
+              action: str,
+              resource_id: str,
+              metadata?: dict,
+              tags?: list[str],
+              consent_scope?: str,
+              consent_source_id?: str,
+              metric_name?: str,
+              metric_value?: number,
+            }``
+            """
+            session = self._session_from_request(request)
+            if self.auth_enabled and session is None:
+                return JSONResponse(
+                    {"error": "Authentication required.", "status": 401},
+                    status_code=401,
+                )
+            client_id = request.path_params.get("client_id", "")
+            resolved = _resolve_client_or_404(client_id)
+            if isinstance(resolved, JSONResponse):
+                return resolved
+            if not _can_manage_client(session, resolved):
+                return JSONResponse(
+                    {
+                        "error": "Not allowed to simulate this client.",
+                        "status": 403,
+                    },
+                    status_code=403,
+                )
+            try:
+                body = await request.json()
+            except Exception:
+                body = None
+            if not isinstance(body, dict):
+                return JSONResponse(
+                    {"error": "Body must be a JSON object.", "status": 400},
+                    status_code=400,
+                )
+            action = str(body.get("action", "") or "").strip()
+            resource_id = str(body.get("resource_id", "") or "").strip()
+            if not action or not resource_id:
+                return JSONResponse(
+                    {
+                        "error": ("`action` and `resource_id` are required."),
+                        "status": 400,
+                    },
+                    status_code=400,
+                )
+            metadata = (
+                body.get("metadata") if isinstance(body.get("metadata"), dict) else None
             )
+            tags_raw = body.get("tags")
+            tags = [str(t) for t in tags_raw] if isinstance(tags_raw, list) else None
+            consent_scope = str(body.get("consent_scope", "execute") or "execute")
+            consent_source_id_raw = body.get("consent_source_id")
+            consent_source_id = (
+                str(consent_source_id_raw)
+                if isinstance(consent_source_id_raw, str)
+                and consent_source_id_raw.strip()
+                else None
+            )
+            metric_name_raw = body.get("metric_name")
+            metric_name = (
+                str(metric_name_raw)
+                if isinstance(metric_name_raw, str) and metric_name_raw.strip()
+                else None
+            )
+            metric_value_raw = body.get("metric_value")
+            try:
+                metric_value = (
+                    float(metric_value_raw) if metric_value_raw is not None else None
+                )
+            except (TypeError, ValueError):
+                return JSONResponse(
+                    {
+                        "error": "`metric_value` must be a number.",
+                        "status": 400,
+                    },
+                    status_code=400,
+                )
+            try:
+                payload = await self.simulate_client_request(
+                    resolved.client_id,
+                    action=action,
+                    resource_id=resource_id,
+                    metadata=metadata,
+                    tags=tags,
+                    consent_scope=consent_scope,
+                    consent_source_id=consent_source_id,
+                    metric_name=metric_name,
+                    metric_value=metric_value,
+                )
+            except Exception as exc:
+                logger.exception("Simulator route raised")
+                return JSONResponse(
+                    {
+                        "error": f"Simulation failed: {exc!r}",
+                        "status": 500,
+                    },
+                    status_code=500,
+                )
+            return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
         self._registry_api_mounted = True
         self._registry_prefix = prefix

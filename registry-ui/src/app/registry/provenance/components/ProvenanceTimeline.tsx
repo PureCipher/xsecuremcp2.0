@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { ProvenanceRecord } from "@/lib/registryClient";
-import { Box, ButtonBase, Chip, MenuItem, Select, TextField, Typography } from "@mui/material";
+import { Box, Button, ButtonBase, Chip, MenuItem, Select, TextField, Typography } from "@mui/material";
 
 const ACTION_COLORS: Record<string, { dot: string; bg: string; text: string }> = {
   tool_called: { dot: "var(--app-accent)", bg: "var(--app-control-active-bg)", text: "var(--app-fg)" },
@@ -26,6 +26,65 @@ const ACTION_COLORS: Record<string, { dot: string; bg: string; text: string }> =
 
 function actionColor(action: string) {
   return ACTION_COLORS[action] ?? ACTION_COLORS.custom;
+}
+
+/**
+ * Iter 14.25 — Compact stat tile for the audit summary header.
+ * Three of these render in a row: events / allow / deny. The
+ * ``tone`` prop colors the value: ``"ok"`` (allow) sits muted,
+ * ``"warn"`` (deny when nonzero) reads red, ``"muted"`` (zero
+ * count) fades.
+ */
+function SummaryStat({
+  label,
+  value,
+  tone = "ok",
+}: {
+  label: string;
+  value: string;
+  tone?: "ok" | "warn" | "muted";
+}) {
+  const valueColor =
+    tone === "warn"
+      ? "#b91c1c"
+      : tone === "muted"
+        ? "var(--app-muted)"
+        : "var(--app-fg)";
+  return (
+    <Box
+      sx={{
+        display: "inline-flex",
+        flexDirection: "column",
+        gap: 0,
+        px: 1.5,
+        py: 0.5,
+        borderRight: "1px solid var(--app-border)",
+        "&:last-of-type": { borderRight: "none" },
+      }}
+    >
+      <Typography
+        sx={{
+          fontSize: 10,
+          fontWeight: 700,
+          letterSpacing: "0.04em",
+          textTransform: "uppercase",
+          color: "var(--app-muted)",
+        }}
+      >
+        {label}
+      </Typography>
+      <Typography
+        sx={{
+          fontSize: 18,
+          fontWeight: 800,
+          lineHeight: 1.1,
+          color: valueColor,
+        }}
+      >
+        {value}
+      </Typography>
+    </Box>
+  );
 }
 
 function formatTime(iso: string): string {
@@ -59,9 +118,23 @@ type Props = {
   selectedRecordId?: string;
 };
 
+// Iter 14.25 — actions whose semantics indicate a *deny* outcome.
+// Used by the audit summary header to split records into
+// allow-shaped vs deny-shaped buckets so an admin can answer
+// "how many deny events are in this window?" at a glance.
+const DENY_ACTION_NAMES: ReadonlySet<string> = new Set([
+  "access_denied",
+  "contract_revoked",
+  "error",
+]);
+
 export function ProvenanceTimeline({ records, onSelectRecord, selectedRecordId }: Props) {
   const [filterAction, setFilterAction] = useState<string>("");
   const [filterActor, setFilterActor] = useState<string>("");
+  // Iter 14.25 — explicit resource (tool) dropdown alongside the
+  // free-text search. Reviewers/admins doing forensics frequently
+  // narrow to "everything that touched this tool" before drilling in.
+  const [filterResource, setFilterResource] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
   /* unique actions and actors for filter dropdowns */
@@ -75,11 +148,20 @@ export function ProvenanceTimeline({ records, onSelectRecord, selectedRecordId }
     return Array.from(s).sort();
   }, [records]);
 
+  // Iter 14.25 — resource list, deduped + sorted. Empty resources
+  // (e.g. metadata-only events) are filtered out so the dropdown
+  // doesn't carry a meaningless "" entry.
+  const resources = useMemo(() => {
+    const s = new Set(records.map((r) => r.resource_id).filter(Boolean));
+    return Array.from(s).sort();
+  }, [records]);
+
   /* filtered records */
   const filtered = useMemo(() => {
     return records.filter((r) => {
       if (filterAction && r.action !== filterAction) return false;
       if (filterActor && r.actor_id !== filterActor) return false;
+      if (filterResource && r.resource_id !== filterResource) return false;
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
         return (
@@ -91,7 +173,94 @@ export function ProvenanceTimeline({ records, onSelectRecord, selectedRecordId }
       }
       return true;
     });
-  }, [records, filterAction, filterActor, searchQuery]);
+  }, [records, filterAction, filterActor, filterResource, searchQuery]);
+
+  // Iter 14.25 — deny / allow split across the *filtered* set.
+  // Surfaces in the summary header so an admin running a filter to
+  // "everything client X did" sees the deny count for that scope
+  // without scrolling the timeline.
+  const summary = useMemo(() => {
+    let denyCount = 0;
+    for (const r of filtered) {
+      if (DENY_ACTION_NAMES.has(r.action)) denyCount += 1;
+    }
+    return {
+      total: filtered.length,
+      deny: denyCount,
+      allow: filtered.length - denyCount,
+    };
+  }, [filtered]);
+
+  // Iter 14.25 — CSV export. Audit reviews and compliance handoffs
+  // routinely need a flat file for evidence; without this, an admin
+  // copies cells out of the page DOM. The export honors the active
+  // filters so the file matches what's on screen — that's the
+  // semantics auditors expect.
+  const handleExportCsv = useCallback(() => {
+    if (filtered.length === 0) return;
+    const headers = [
+      "timestamp",
+      "action",
+      "actor_id",
+      "resource_id",
+      "record_id",
+      "input_hash",
+      "output_hash",
+      "previous_hash",
+    ];
+    const escape = (value: unknown) => {
+      const str = value == null ? "" : String(value);
+      if (
+        str.includes(",") ||
+        str.includes("\n") ||
+        str.includes('"')
+      ) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+    const lines = [headers.join(",")];
+    for (const r of filtered) {
+      lines.push(
+        [
+          r.timestamp,
+          r.action,
+          r.actor_id,
+          r.resource_id,
+          r.record_id,
+          r.input_hash,
+          r.output_hash,
+          r.previous_hash,
+        ]
+          .map(escape)
+          .join(","),
+      );
+    }
+    const blob = new Blob([lines.join("\n")], {
+      type: "text/csv;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    a.href = url;
+    a.download = `audit-log-${stamp}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [filtered]);
+
+  const isFiltering =
+    Boolean(filterAction) ||
+    Boolean(filterActor) ||
+    Boolean(filterResource) ||
+    Boolean(searchQuery);
+  const handleClearFilters = useCallback(() => {
+    setFilterAction("");
+    setFilterActor("");
+    setFilterResource("");
+    setSearchQuery("");
+  }, []);
 
   /* group by date */
   const grouped = useMemo(() => {
@@ -106,6 +275,75 @@ export function ProvenanceTimeline({ records, onSelectRecord, selectedRecordId }
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      {/* Iter 14.25 — Audit summary header. Three quick stats give
+          an admin the shape of the (filtered) window before they
+          scroll the timeline: total events, deny count, allow count.
+          The deny number is colored red when nonzero so a window
+          containing rejections jumps out visually. */}
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: 1.5,
+          p: 1.5,
+          borderRadius: 3,
+          border: "1px solid var(--app-border)",
+          bgcolor: "var(--app-control-bg)",
+        }}
+      >
+        <SummaryStat label="Events" value={String(summary.total)} />
+        <SummaryStat
+          label="Allow"
+          value={String(summary.allow)}
+          tone={summary.allow > 0 ? "ok" : "muted"}
+        />
+        <SummaryStat
+          label="Deny"
+          value={String(summary.deny)}
+          tone={summary.deny > 0 ? "warn" : "muted"}
+        />
+        {isFiltering ? (
+          <Typography
+            variant="caption"
+            sx={{ color: "var(--app-muted)", fontStyle: "italic" }}
+          >
+            (filtered from {records.length})
+          </Typography>
+        ) : null}
+        <Box sx={{ ml: "auto", display: "flex", gap: 0.5, flexWrap: "wrap" }}>
+          {isFiltering ? (
+            <Button
+              size="small"
+              variant="text"
+              onClick={handleClearFilters}
+              sx={{
+                textTransform: "none",
+                color: "var(--app-muted)",
+                fontSize: 12,
+                fontWeight: 700,
+              }}
+            >
+              Clear filters
+            </Button>
+          ) : null}
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={handleExportCsv}
+            disabled={filtered.length === 0}
+            sx={{
+              textTransform: "none",
+              borderColor: "var(--app-border)",
+              color: "var(--app-fg)",
+              fontSize: 12,
+            }}
+          >
+            Export CSV ({filtered.length})
+          </Button>
+        </Box>
+      </Box>
+
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
         <TextField
           value={searchQuery}
@@ -169,6 +407,34 @@ export function ProvenanceTimeline({ records, onSelectRecord, selectedRecordId }
             </MenuItem>
           ))}
         </Select>
+        {/* Iter 14.25 — resource (tool) filter. Hidden when the
+            ledger has fewer than two distinct resources to filter
+            against — a single-resource dropdown is just chrome. */}
+        {resources.length > 1 ? (
+          <Select
+            value={filterResource}
+            onChange={(e) => setFilterResource(String(e.target.value))}
+            size="small"
+            displayEmpty
+            sx={{
+              borderRadius: 3,
+              bgcolor: "var(--app-control-bg)",
+              color: "var(--app-fg)",
+              "& fieldset": { borderColor: "var(--app-control-border)" },
+              "&:hover fieldset": { borderColor: "var(--app-accent)" },
+              "&.Mui-focused fieldset": { borderColor: "var(--app-accent)" },
+              minWidth: 200,
+              maxWidth: 320,
+            }}
+          >
+            <MenuItem value="">All resources</MenuItem>
+            {resources.map((r) => (
+              <MenuItem key={r} value={r}>
+                {r}
+              </MenuItem>
+            ))}
+          </Select>
+        ) : null}
         <Typography variant="caption" sx={{ ml: "auto", color: "var(--app-muted)" }}>
           {filtered.length} of {records.length} records
         </Typography>

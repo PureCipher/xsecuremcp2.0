@@ -496,6 +496,28 @@ class CuratorProxyRouter:
             )(scope, receive, send)
             return
 
+        # Iter 14.11 — refuse to forward calls to a deregistered
+        # listing. Admin deregistration is terminal; clients still
+        # holding stale URLs get a clear 410 Gone rather than a
+        # generic 502 from a half-mounted proxy.
+        from fastmcp.server.security.gateway.tool_marketplace import PublishStatus
+
+        if listing.status == PublishStatus.DEREGISTERED:
+            await JSONResponse(
+                {
+                    "error": (
+                        "This server has been deregistered by the "
+                        "registry admin and is no longer available. "
+                        "Remove or migrate any client integrations."
+                    ),
+                    "listing_id": listing_id,
+                    "tool_name": listing.tool_name,
+                    "status": 410,
+                },
+                status_code=410,
+            )(scope, receive, send)
+            return
+
         app = await self._ensure_app(listing_id)
         if app is None:
             await JSONResponse(

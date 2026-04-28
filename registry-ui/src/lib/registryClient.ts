@@ -1,4 +1,12 @@
-import { cookies } from "next/headers";
+// `next/headers` is intentionally NOT imported statically. Importing
+// it at the top forces Turbopack 16 to classify this whole module as
+// server-only, which then poisons every client component that even
+// type-imports from this file (every `"use client"` panel that needs
+// a `RegistrySomething` type would fail the production build with
+// "You're importing a component that needs next/headers"). We pull
+// `cookies()` in lazily inside `backendFetch` instead — which is the
+// only function that actually uses it, and is itself only called
+// from server components & API route handlers.
 
 const DEFAULT_BACKEND_URL = "http://localhost:8000";
 
@@ -611,6 +619,11 @@ async function parseJson<T>(response: Response): Promise<T | null> {
 }
 
 async function backendFetch(path: string, init?: RequestInit) {
+  // Dynamic import keeps `next/headers` out of the module's static
+  // dependency graph — see the comment at the top of this file.
+  // This function only ever runs in server contexts (Server
+  // Components & route handlers), so the runtime resolve is safe.
+  const { cookies } = await import("next/headers");
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get("purecipher_registry_token");
 
@@ -1486,6 +1499,35 @@ export type ClientGovernanceBaseline = {
   samples?: unknown;
 };
 
+export type ClientActivityHourlyBucket = {
+  hour_offset: number;
+  count: number;
+};
+
+export type ClientActivityResource = {
+  resource_id: string;
+  count: number;
+};
+
+export type ClientActivityStatus =
+  | "live"
+  | "recent"
+  | "idle"
+  | "dormant"
+  | "never";
+
+export type ClientActivitySummary = {
+  last_seen_at?: string | null;
+  last_seen_source?: "ledger" | "token" | null;
+  idle_seconds?: number | null;
+  status_label?: ClientActivityStatus | string;
+  calls_last_hour?: number;
+  calls_last_24h?: number;
+  hourly_buckets?: ClientActivityHourlyBucket[];
+  top_resources?: ClientActivityResource[];
+  evaluated_at?: string;
+};
+
 export type ClientGovernanceResponse = RegistryErrorResponse & {
   client_id?: string;
   slug?: string;
@@ -1533,6 +1575,7 @@ export type ClientGovernanceResponse = RegistryErrorResponse & {
     revoked?: number;
     items?: RegistryClientTokenSummary[];
   };
+  activity?: ClientActivitySummary;
   links?: Record<string, string>;
   generated_at?: string;
 };
@@ -1540,6 +1583,29 @@ export type ClientGovernanceResponse = RegistryErrorResponse & {
 export async function listRegistryClients(): Promise<RegistryClientListResponse | null> {
   const response = await backendFetch("/registry/clients");
   return parseJson<RegistryClientListResponse>(response);
+}
+
+// Iter 14.24 — aggregate activity-status counts for the Clients
+// dashboard panel. Backend at GET /registry/clients/activity-summary.
+export type ClientsActivitySummaryResponse = RegistryErrorResponse & {
+  total?: number;
+  by_activity_status?: {
+    live?: number;
+    recent?: number;
+    idle?: number;
+    dormant?: number;
+    never?: number;
+  };
+  by_admin_status?: { active?: number; suspended?: number };
+  by_kind?: Record<string, number>;
+  recently_onboarded_count?: number;
+  calls_last_24h_total?: number;
+  generated_at?: string;
+};
+
+export async function getClientsActivitySummary(): Promise<ClientsActivitySummaryResponse | null> {
+  const response = await backendFetch("/registry/clients/activity-summary");
+  return parseJson<ClientsActivitySummaryResponse>(response);
 }
 
 export async function getRegistryClient(
@@ -1651,6 +1717,127 @@ export async function getRegistryClientGovernance(
     `/registry/clients/${encodeURIComponent(clientIdOrSlug)}/governance`,
   );
   return parseJson<ClientGovernanceResponse>(response);
+}
+
+// ── Iter 11: cross-control-plane request simulator ────────────
+//
+// Powers the per-client SimulationPanel and the onboard wizard's
+// step-4 "simulate access" button. Hits the backend's
+// `/registry/clients/{id}/simulate` route which dry-runs the
+// request through every plane without side effects.
+
+export type ClientSimulationRequestPayload = {
+  action: string;
+  resource_id: string;
+  metadata?: Record<string, unknown>;
+  tags?: string[];
+  consent_scope?: string;
+  consent_source_id?: string;
+  metric_name?: string;
+  metric_value?: number;
+};
+
+export type ClientSimulationPolicyTrace = {
+  available?: boolean;
+  decision?: "allow" | "deny" | "defer" | "error" | string;
+  reason?: string;
+  policy_id?: string | null;
+  constraints?: string[];
+  evaluated_at?: string | null;
+};
+
+export type ClientSimulationContractRow = {
+  contract_id?: string;
+  server_id?: string;
+  covers?: boolean;
+  reason?: string;
+};
+
+export type ClientSimulationContractsTrace = {
+  available?: boolean;
+  covered?: boolean;
+  reason?: string;
+  contracts?: ClientSimulationContractRow[];
+};
+
+export type ClientSimulationConsentEdge = {
+  edge_id?: string;
+  source_id?: string;
+  target_id?: string;
+  scopes?: string[];
+};
+
+export type ClientSimulationConsentTrace = {
+  available?: boolean;
+  granted?: boolean;
+  reason?: string;
+  path?: ClientSimulationConsentEdge[];
+  query?: { source_id?: string; target_id?: string; scope?: string };
+};
+
+export type ClientSimulationLedgerTrace = {
+  available?: boolean;
+  would_record?: boolean;
+  reason?: string;
+  preview?: {
+    action?: string;
+    actor_id?: string;
+    resource_id?: string;
+    input_hash_preview?: string;
+    metadata?: Record<string, unknown>;
+    timestamp?: string;
+  };
+};
+
+export type ClientSimulationReflexiveTrace = {
+  available?: boolean;
+  evaluated?: boolean;
+  reason?: string;
+  metric_name?: string;
+  metric_value?: number;
+  deviation_sigma?: number;
+  severity?: string;
+  baseline?: {
+    metric_name?: string;
+    mean?: unknown;
+    sample_count?: number;
+  };
+};
+
+export type ClientSimulationBlocker = {
+  plane: string;
+  reason: string;
+};
+
+export type ClientSimulationResponse = RegistryErrorResponse & {
+  client?: RegistryClientSummary;
+  request?: ClientSimulationRequestPayload & {
+    timestamp?: string;
+    consent_source_id?: string;
+  };
+  policy?: ClientSimulationPolicyTrace;
+  contracts?: ClientSimulationContractsTrace;
+  consent?: ClientSimulationConsentTrace;
+  ledger?: ClientSimulationLedgerTrace;
+  reflexive?: ClientSimulationReflexiveTrace;
+  verdict?: "allow" | "deny" | "review" | string;
+  blockers?: ClientSimulationBlocker[];
+  generated_at?: string;
+};
+
+export async function simulateRegistryClientRequest(
+  clientIdOrSlug: string,
+  payload: ClientSimulationRequestPayload,
+): Promise<ClientSimulationResponse | null> {
+  const response = await backendFetch(
+    `/registry/clients/${encodeURIComponent(clientIdOrSlug)}/simulate`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+  return parseJson<ClientSimulationResponse>(response);
 }
 
 export async function getReviewQueue(): Promise<ReviewQueueResponse | null> {

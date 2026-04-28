@@ -41,24 +41,13 @@ export default async function RegistryAppPage() {
         actions={
           <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
           {canPublishConsole || (!canReview && !authEnabled) ? (
-            <Link href="/registry/publish/get-started" legacyBehavior passHref>
-              <Button
-                component="a"
-                variant="outlined"
-                sx={{ borderColor: "var(--app-control-border)", color: "var(--app-muted)" }}
-              >
+            <Link href="/registry/publish/get-started"><Button variant="outlined" sx={{ borderColor: "var(--app-control-border)", color: "var(--app-muted)" }}>
                 Publisher onboarding
-              </Button>
-            </Link>
+              </Button></Link>
           ) : null}
-          <Link href="/registry/publishers" legacyBehavior passHref>
-            <Button
-              component="a"
-              variant="contained"
-            >
+          <Link href="/registry/publishers"><Button variant="contained">
               Browse publishers
-            </Button>
-          </Link>
+            </Button></Link>
           </Box>
         }
       />

@@ -48,7 +48,11 @@ export function ProvenanceDashboard({ records, chainStatus }: Props) {
   }, []);
 
   const tabs: { key: Tab; label: string }[] = [
-    { key: "timeline", label: "Timeline" },
+    // Iter 14.25 — renamed "Timeline" → "Audit log" to reflect the
+    // tab's actual purpose for the operator (forensic audit feed
+    // with filters + CSV export). The component remains
+    // ProvenanceTimeline; only the user-facing label changes.
+    { key: "timeline", label: "Audit log" },
     { key: "integrity", label: "Chain Integrity" },
     { key: "proof", label: "Merkle Proof" },
   ];

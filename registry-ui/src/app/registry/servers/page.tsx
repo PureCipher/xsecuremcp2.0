@@ -1,27 +1,15 @@
-import { RegistryPageHeader } from "@/components/security";
-import { listPublishers, type PublisherSummary } from "@/lib/registryClient";
-import { ServersDirectory } from "./ServersDirectory";
+import { redirect } from "next/navigation";
 
-import { Box } from "@mui/material";
-
-export default async function ServersPage() {
-  const payload = (await listPublishers()) ?? { publishers: [], count: 0 };
-  const publishers: PublisherSummary[] = payload.publishers ?? [];
-
-  return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
-      <RegistryPageHeader
-        eyebrow="MCP Servers"
-        title="Onboard and introspect servers"
-        description="Discover tools exposed by each MCP server, apply Governance attachments, and track access outcomes via the ledger and observability stream."
-      />
-
-      <ServersDirectory
-        servers={publishers}
-        onboardHref="/registry/servers/onboard"
-        toolsHref="/registry/app"
-      />
-    </Box>
-  );
+/**
+ * Iter 14.26 — ``/registry/servers`` is now a redirect to
+ * ``/registry/publishers``. The two pages were rendering the same
+ * publisher list with different chrome; the differentiation lived
+ * only in the per-detail governance tabs, which now render on the
+ * publisher detail page directly. Keeping the route alive as a
+ * 308 redirect preserves any bookmarks / external links / older
+ * notification ``link_path`` values that point here.
+ */
+export default function ServersPageRedirect() {
+  redirect("/registry/publishers");
 }
 

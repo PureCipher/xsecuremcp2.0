@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -13,9 +13,11 @@ import {
   Chip,
   CircularProgress,
   FormControlLabel,
+  IconButton,
   Step,
   StepLabel,
   Stepper,
+  Tooltip,
   TextField,
   Typography,
 } from "@mui/material";
@@ -105,6 +107,176 @@ const STEPS = [
 
 type WizardStep = 0 | 1 | 2 | 3;
 
+// ── Iter 14.8 — token-on-introspect ──────────────────────────────
+//
+// Some upstream MCP servers (Stripe, Slack, GitHub, Linear, Notion,
+// Atlassian, Sentry, etc.) refuse to start — or return zero tools —
+// without a credential in their environment. To unblock the curator,
+// Step 2 surfaces an optional credential editor: name/value pairs
+// that the registry passes through to the spawn one time, then drops
+// from process memory. Nothing is persisted server-side; the curator
+// is told this verbatim on the panel.
+//
+// CredentialEntry models a single row in that editor. ``masked``
+// controls whether the field renders as a password input — defaults
+// to true (most credentials are tokens) and the curator can flip it
+// per row to verify a paste.
+
+interface CredentialEntry {
+  /** Stable id so React's keyed renders survive add/remove. */
+  id: string;
+  /** Env var name. Validated server-side against ``[A-Z_][A-Z0-9_]*``. */
+  key: string;
+  /** Token value. Never logged; never persisted. */
+  value: string;
+  /** Whether the value field renders as a password input. */
+  masked: boolean;
+}
+
+let _credentialIdCounter = 0;
+function nextCredentialId(): string {
+  _credentialIdCounter += 1;
+  return `cred-${_credentialIdCounter}`;
+}
+
+function newBlankCredential(key = ""): CredentialEntry {
+  return {
+    id: nextCredentialId(),
+    key,
+    value: "",
+    masked: true,
+  };
+}
+
+/**
+ * Hint map — when the curator's upstream identifier matches one of
+ * these substrings, we pre-seed the credential editor with the
+ * ``ENV_VAR`` name(s) the upstream's README documents.
+ *
+ * The match runs against the lower-cased identifier
+ * (``preview.upstream_ref.identifier``). A single upstream can
+ * declare multiple env vars (e.g. AWS uses three).
+ *
+ * This is a *suggestion only* — the curator can edit, remove, or
+ * supplement any entry. The intent is to spare them a trip to the
+ * upstream's README for the common cases.
+ */
+const CREDENTIAL_HINTS: ReadonlyArray<{
+  match: (id: string) => boolean;
+  label: string;
+  keys: string[];
+}> = [
+  {
+    match: (id) => id.includes("github"),
+    label: "GitHub MCP server",
+    keys: ["GITHUB_PERSONAL_ACCESS_TOKEN"],
+  },
+  {
+    match: (id) => id.includes("stripe"),
+    label: "Stripe MCP server",
+    keys: ["STRIPE_SECRET_KEY"],
+  },
+  {
+    match: (id) => id.includes("slack"),
+    label: "Slack MCP server",
+    keys: ["SLACK_BOT_TOKEN", "SLACK_TEAM_ID"],
+  },
+  {
+    match: (id) => id.includes("linear"),
+    label: "Linear MCP server",
+    keys: ["LINEAR_API_KEY"],
+  },
+  {
+    match: (id) => id.includes("notion"),
+    label: "Notion MCP server",
+    keys: ["NOTION_API_KEY"],
+  },
+  {
+    match: (id) => id.includes("sentry"),
+    label: "Sentry MCP server",
+    keys: ["SENTRY_AUTH_TOKEN"],
+  },
+  {
+    // ``mcp-atlassian`` (PyPI) and the Docker mirror both read
+    // product-specific env vars rather than a single ATLASSIAN_*
+    // pair. URL is the workspace base (``https://x.atlassian.net``
+    // or ``https://x.atlassian.net/wiki`` for Confluence), USERNAME
+    // is the Atlassian account email, API_TOKEN is generated at
+    // id.atlassian.com/manage-profile/security/api-tokens.
+    match: (id) =>
+      id.includes("atlassian") ||
+      id.includes("jira") ||
+      id.includes("confluence"),
+    label: "Atlassian (mcp-atlassian: Jira + Confluence)",
+    keys: [
+      "JIRA_URL",
+      "JIRA_USERNAME",
+      "JIRA_API_TOKEN",
+      "CONFLUENCE_URL",
+      "CONFLUENCE_USERNAME",
+      "CONFLUENCE_API_TOKEN",
+    ],
+  },
+  {
+    match: (id) => id.includes("postgres"),
+    label: "Postgres MCP server",
+    keys: ["DATABASE_URL"],
+  },
+  {
+    match: (id) => id.includes("openai"),
+    label: "OpenAI-backed MCP server",
+    keys: ["OPENAI_API_KEY"],
+  },
+  {
+    match: (id) => id.includes("anthropic"),
+    label: "Anthropic-backed MCP server",
+    keys: ["ANTHROPIC_API_KEY"],
+  },
+  {
+    match: (id) => id.includes("aws") || id.startsWith("amazon"),
+    label: "AWS MCP server",
+    keys: [
+      "AWS_ACCESS_KEY_ID",
+      "AWS_SECRET_ACCESS_KEY",
+      "AWS_REGION",
+    ],
+  },
+];
+
+/**
+ * Match the upstream's identifier against the hint table and return
+ * the first applicable suggestion's env-var names, or an empty list
+ * if no hint fires.
+ */
+function suggestCredentialKeys(
+  preview: UpstreamPreview | null,
+): { label: string; keys: string[] } | null {
+  if (!preview) return null;
+  const id = preview.upstream_ref.identifier.toLowerCase();
+  for (const hint of CREDENTIAL_HINTS) {
+    if (hint.match(id)) return { label: hint.label, keys: hint.keys };
+  }
+  return null;
+}
+
+/**
+ * Strip blank-and-empty rows and translate the editor state into
+ * the wire-format ``env`` dict the registry expects. Returns
+ * ``undefined`` when no usable credentials were entered, which lets
+ * us omit the field entirely so the backend can take the no-env path.
+ */
+function credentialsToEnv(
+  entries: CredentialEntry[],
+): Record<string, string> | undefined {
+  const out: Record<string, string> = {};
+  for (const entry of entries) {
+    const key = entry.key.trim();
+    if (!key || !entry.value) continue;
+    out[key] = entry.value;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 export function OnboardWizard() {
   const router = useRouter();
   const [step, setStep] = useState<WizardStep>(0);
@@ -118,6 +290,18 @@ export function OnboardWizard() {
   // Step 2: introspection result + draft
   const [intro, setIntro] = useState<IntrospectionResult | null>(null);
   const [draft, setDraft] = useState<ManifestDraft | null>(null);
+
+  // Iter 14.8 — token-on-introspect. One-shot credentials passed at
+  // the introspect step. Cleared on successful introspection (the
+  // values served their purpose) and on resetWizard. Values are never
+  // persisted server-side; see CREDENTIAL_HINTS for the seeded keys.
+  const [credentials, setCredentials] = useState<CredentialEntry[]>([]);
+
+  // Iter 14.10 — tool selection. The curator picks which observed
+  // tools they're vouching for. Defaults to all observed; the wizard
+  // re-seeds this whenever introspection returns a new tool list.
+  // Stored as a Set for O(1) membership checks during render.
+  const [selectedTools, setSelectedTools] = useState<Set<string>>(new Set());
 
   // Step 3: curator overrides
   const [toolName, setToolName] = useState("");
@@ -147,6 +331,8 @@ export function OnboardWizard() {
     setPreview(null);
     setIntro(null);
     setDraft(null);
+    setCredentials([]);
+    setSelectedTools(new Set());
     setToolName("");
     setDisplayName("");
     setVersion("0.1.0");
@@ -196,11 +382,18 @@ export function OnboardWizard() {
   const handleIntrospect = useCallback(async () => {
     setError(null);
     setBusy(true);
+    // Iter 14.8 — gather one-shot credentials. ``env`` is included
+    // only when the curator filled in at least one key/value row;
+    // otherwise we omit it so the backend takes the no-env path.
+    const env = credentialsToEnv(credentials);
     try {
       const response = await fetch("/api/curate/introspect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ upstream: upstreamUrl }),
+        body: JSON.stringify({
+          upstream: upstreamUrl,
+          ...(env ? { env } : {}),
+        }),
       });
       const payload = (await response.json()) as IntrospectResponse | {
         error?: string;
@@ -230,17 +423,34 @@ export function OnboardWizard() {
       setDraft(payload.draft);
       setSelections(payload.draft.permission_suggestions);
       setDescription(payload.draft.suggested_description);
+      // Iter 14.10 — default to vouching for all observed tools.
+      // The curator can deselect on Step 3 via the ToolSelector.
+      setSelectedTools(
+        new Set(payload.introspection.tools.map((t) => t.name)),
+      );
+      // Iter 14.8.1 — keep credentials in client state through Step
+      // 3 so we can re-send them with the submit POST. The submit
+      // handler re-introspects (a tamper defence) and that
+      // re-introspect needs the same env. We clear right after the
+      // submit succeeds — see ``handleSubmit`` below. On submit
+      // failure we keep them too, so the curator can fix tool name /
+      // permissions and retry without re-typing the token.
       setStep(2);
     } catch {
       setError("Network error during introspection.");
     } finally {
       setBusy(false);
     }
-  }, [upstreamUrl]);
+  }, [upstreamUrl, credentials]);
 
   const handleSubmit = useCallback(async () => {
     setError(null);
     setBusy(true);
+    // Iter 14.8.1 — re-attach env at submit time. The backend submit
+    // handler re-introspects as a tamper defence; for token-required
+    // upstreams that re-introspect needs the same env the curator
+    // supplied at Step 2. We send only the populated rows.
+    const env = credentialsToEnv(credentials);
     try {
       const response = await fetch("/api/curate/submit", {
         method: "POST",
@@ -256,13 +466,25 @@ export function OnboardWizard() {
             scope: s.scope,
             selected: s.selected,
           })),
+          // Iter 14.10 — vouched tool subset. Sent as an array of
+          // names; the backend filters to observed and rejects empty.
+          selected_tools: Array.from(selectedTools),
+          ...(env ? { env } : {}),
         }),
       });
       const payload = (await response.json()) as SubmitResponse;
       if (!response.ok || payload.error) {
+        // Submit failed — keep credentials in state so the curator
+        // can fix the underlying issue (typo'd tool name, etc.) and
+        // retry without re-typing the token.
         setError(payload.error ?? "Submission failed.");
         return;
       }
+      // Submit succeeded — the listing is now persisted with the
+      // curator's vouch. The credentials were used for the final
+      // re-introspect and are no longer needed; drop them now so
+      // they don't linger in client state past the success screen.
+      setCredentials([]);
       setSubmitResult(payload);
       setStep(3);
     } catch {
@@ -278,6 +500,8 @@ export function OnboardWizard() {
     description,
     selections,
     hostingMode,
+    credentials,
+    selectedTools,
   ]);
 
   const togglePermission = useCallback((scope: string) => {
@@ -319,6 +543,8 @@ export function OnboardWizard() {
         <StepIntrospect
           preview={preview}
           busy={busy}
+          credentials={credentials}
+          setCredentials={setCredentials}
           onBack={() => goBackTo(0)}
           onIntrospect={handleIntrospect}
         />
@@ -327,7 +553,6 @@ export function OnboardWizard() {
       {step === 2 && intro && draft && preview ? (
         <StepConfirm
           intro={intro}
-          draft={draft}
           preview={preview}
           selections={selections}
           toolName={toolName}
@@ -341,6 +566,8 @@ export function OnboardWizard() {
           hostingMode={hostingMode}
           setHostingMode={setHostingMode}
           onTogglePermission={togglePermission}
+          selectedTools={selectedTools}
+          setSelectedTools={setSelectedTools}
           busy={busy}
           onBack={() => goBackTo(1)}
           onSubmit={handleSubmit}
@@ -458,14 +685,54 @@ function StepUpstream({
 function StepIntrospect({
   preview,
   busy,
+  credentials,
+  setCredentials,
   onBack,
   onIntrospect,
 }: {
   preview: UpstreamPreview;
   busy: boolean;
+  credentials: CredentialEntry[];
+  setCredentials: React.Dispatch<React.SetStateAction<CredentialEntry[]>>;
   onBack: () => void;
   onIntrospect: () => void;
 }) {
+  // Iter 14.8 — credential editor lives only on stdio channels.
+  // For HTTP, the registry doesn't have a robust generic header
+  // injection path (the wizard would have to know whether to send
+  // ``Authorization: Bearer …``, ``X-Api-Key: …``, etc.), so we hide
+  // the editor and tell the curator to bake auth into the URL.
+  const channel = preview.upstream_ref.channel;
+  const channelSupportsCredentials =
+    channel === "pypi" || channel === "npm" || channel === "docker";
+
+  // Match the upstream against the hint table once on mount and
+  // pre-seed empty rows for each suggested env var. The curator can
+  // edit / add / remove freely; this just saves them a trip to the
+  // README for the common cases (Stripe, Slack, GitHub, etc.).
+  const hint = useMemo(() => suggestCredentialKeys(preview), [preview]);
+  useEffect(() => {
+    if (!channelSupportsCredentials) return;
+    if (credentials.length > 0) return;
+    if (!hint || hint.keys.length === 0) return;
+    setCredentials(hint.keys.map((k) => newBlankCredential(k)));
+    // We deliberately seed only when the editor is empty so that if a
+    // curator removes all rows we don't repopulate them on re-render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hint, channelSupportsCredentials]);
+
+  const updateCredential = (id: string, patch: Partial<CredentialEntry>) => {
+    setCredentials((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, ...patch } : c)),
+    );
+  };
+  const removeCredential = (id: string) => {
+    setCredentials((prev) => prev.filter((c) => c.id !== id));
+  };
+  const addCredential = () => {
+    setCredentials((prev) => [...prev, newBlankCredential()]);
+  };
+
   return (
     <Card variant="outlined">
       <CardContent>
@@ -529,6 +796,17 @@ function StepIntrospect({
             ))}
           </Alert>
         ) : null}
+
+        {channelSupportsCredentials ? (
+          <CredentialEditor
+            credentials={credentials}
+            hintLabel={hint?.label ?? null}
+            onUpdate={updateCredential}
+            onRemove={removeCredential}
+            onAdd={addCredential}
+          />
+        ) : null}
+
         <Box sx={{ display: "flex", justifyContent: "space-between", mt: 1 }}>
           <Button onClick={onBack} variant="text">
             Back
@@ -553,11 +831,223 @@ function StepIntrospect({
   );
 }
 
+/**
+ * Iter 14.8 — credential editor.
+ *
+ * Renders a compact key/value table for the optional ``env`` dict the
+ * registry passes to the spawn at introspect time. Each row has:
+ *
+ * - A KEY field (text, env-var name).
+ * - A VALUE field that renders as a password input by default, with a
+ *   show/hide eye toggle so the curator can verify a paste before
+ *   submitting.
+ * - A remove button.
+ *
+ * Below the table is an "Add credential" button and a copy block
+ * making the trust contract explicit: credentials are passed once,
+ * never written to disk, never logged.
+ */
+function CredentialEditor({
+  credentials,
+  hintLabel,
+  onUpdate,
+  onRemove,
+  onAdd,
+}: {
+  credentials: CredentialEntry[];
+  hintLabel: string | null;
+  onUpdate: (id: string, patch: Partial<CredentialEntry>) => void;
+  onRemove: (id: string) => void;
+  onAdd: () => void;
+}) {
+  return (
+    <Box
+      sx={{
+        mb: 2,
+        p: 2,
+        border: "1px solid var(--app-border)",
+        borderRadius: 2,
+        bgcolor: "var(--app-surface)",
+      }}
+    >
+      <Typography
+        sx={{
+          fontWeight: 700,
+          fontSize: 12,
+          color: "var(--app-muted)",
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+          mb: 0.5,
+        }}
+      >
+        Credentials (optional)
+      </Typography>
+      <Typography sx={{ color: "var(--app-muted)", fontSize: 13, mb: 1.5 }}>
+        Some upstream MCP servers (Stripe, Slack, GitHub, Linear, Notion,
+        and similar) refuse to start, or return zero tools, until a token
+        is in their environment. Add one row per env var the upstream
+        documents.
+      </Typography>
+      {hintLabel ? (
+        <Alert severity="info" sx={{ mb: 1.5, fontSize: 13 }}>
+          Looks like a <strong>{hintLabel}</strong> — pre-seeded the
+          common env var name(s). Edit, remove, or add rows as needed.
+        </Alert>
+      ) : null}
+
+      {credentials.length > 0 ? (
+        <Box sx={{ display: "grid", gap: 1, mb: 1 }}>
+          {credentials.map((entry) => (
+            <Box
+              key={entry.id}
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", md: "1fr 1fr auto auto" },
+                gap: 1,
+                alignItems: "center",
+              }}
+            >
+              <TextField
+                size="small"
+                placeholder="GITHUB_PERSONAL_ACCESS_TOKEN"
+                value={entry.key}
+                onChange={(e) =>
+                  onUpdate(entry.id, { key: e.target.value })
+                }
+                slotProps={{
+                  htmlInput: {
+                    style: {
+                      fontFamily:
+                        "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                      fontSize: 12,
+                    },
+                  },
+                }}
+              />
+              <TextField
+                size="small"
+                type={entry.masked ? "password" : "text"}
+                placeholder="value"
+                value={entry.value}
+                onChange={(e) =>
+                  onUpdate(entry.id, { value: e.target.value })
+                }
+                autoComplete="off"
+                slotProps={{
+                  htmlInput: {
+                    style: {
+                      fontFamily:
+                        "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                      fontSize: 12,
+                    },
+                    // Help password managers stay out of token fields
+                    // — they tend to autofill the curator's own
+                    // credentials, which is a real footgun here.
+                    "data-1p-ignore": "true",
+                    "data-lpignore": "true",
+                  },
+                }}
+              />
+              <Tooltip title={entry.masked ? "Show value" : "Hide value"}>
+                <IconButton
+                  size="small"
+                  onClick={() =>
+                    onUpdate(entry.id, { masked: !entry.masked })
+                  }
+                  aria-label={entry.masked ? "Show value" : "Hide value"}
+                >
+                  {entry.masked ? (
+                    /* Eye icon — minimal inline SVG to avoid a new
+                       icon library import for a single use. */
+                    <Box
+                      component="svg"
+                      width={16}
+                      height={16}
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                      <circle cx={12} cy={12} r={3} />
+                    </Box>
+                  ) : (
+                    /* Eye-off icon */
+                    <Box
+                      component="svg"
+                      width={16}
+                      height={16}
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                      <line x1={1} y1={1} x2={23} y2={23} />
+                    </Box>
+                  )}
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Remove">
+                <IconButton
+                  size="small"
+                  onClick={() => onRemove(entry.id)}
+                  aria-label="Remove credential"
+                >
+                  <Box
+                    component="svg"
+                    width={16}
+                    height={16}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <line x1={18} y1={6} x2={6} y2={18} />
+                    <line x1={6} y1={6} x2={18} y2={18} />
+                  </Box>
+                </IconButton>
+              </Tooltip>
+            </Box>
+          ))}
+        </Box>
+      ) : null}
+
+      <Button
+        onClick={onAdd}
+        size="small"
+        variant="text"
+        sx={{ textTransform: "none", mb: 1 }}
+      >
+        + Add credential
+      </Button>
+
+      <Typography
+        sx={{
+          fontSize: 11,
+          color: "var(--app-muted)",
+          fontStyle: "italic",
+          lineHeight: 1.5,
+        }}
+      >
+        Credentials are passed to the upstream once, only to introspect
+        its tools. The registry never writes them to disk, never includes
+        them in the published manifest, and never logs the values.
+      </Typography>
+    </Box>
+  );
+}
+
 // ── Step 3 ────────────────────────────────────────────────────
 
 function StepConfirm({
   intro,
-  draft,
   preview,
   selections,
   toolName,
@@ -571,12 +1061,13 @@ function StepConfirm({
   hostingMode,
   setHostingMode,
   onTogglePermission,
+  selectedTools,
+  setSelectedTools,
   busy,
   onBack,
   onSubmit,
 }: {
   intro: IntrospectionResult;
-  draft: ManifestDraft;
   preview: UpstreamPreview;
   selections: PermissionSuggestion[];
   toolName: string;
@@ -590,6 +1081,8 @@ function StepConfirm({
   hostingMode: "catalog" | "proxy";
   setHostingMode: (v: "catalog" | "proxy") => void;
   onTogglePermission: (scope: string) => void;
+  selectedTools: Set<string>;
+  setSelectedTools: React.Dispatch<React.SetStateAction<Set<string>>>;
   busy: boolean;
   onBack: () => void;
   onSubmit: () => void;
@@ -734,33 +1227,12 @@ function StepConfirm({
           </Box>
         )}
 
-        {draft.observed_tool_names.length > 0 ? (
-          <Box sx={{ mb: 2 }}>
-            <Typography
-              sx={{
-                fontWeight: 700,
-                fontSize: 12,
-                color: "var(--app-muted)",
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-                mb: 0.75,
-              }}
-            >
-              Observed tools
-            </Typography>
-            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-              {draft.observed_tool_names.slice(0, 16).map((n) => (
-                <Chip key={n} size="small" label={n} />
-              ))}
-              {draft.observed_tool_names.length > 16 ? (
-                <Chip
-                  size="small"
-                  variant="outlined"
-                  label={`+${draft.observed_tool_names.length - 16} more`}
-                />
-              ) : null}
-            </Box>
-          </Box>
+        {intro.tools.length > 0 ? (
+          <ToolSelector
+            tools={intro.tools}
+            selectedTools={selectedTools}
+            setSelectedTools={setSelectedTools}
+          />
         ) : null}
 
         {/* Hosting-mode chooser. Curator picks whether the registry
@@ -818,7 +1290,7 @@ function StepConfirm({
           </Button>
           <Button
             onClick={onSubmit}
-            disabled={busy || !toolName.trim()}
+            disabled={busy || !toolName.trim() || selectedTools.size === 0}
             variant="contained"
             sx={{
               bgcolor: "var(--app-accent)",
@@ -880,6 +1352,275 @@ function StepDone({
         </Box>
       </CardContent>
     </Card>
+  );
+}
+
+// ── Tool selector (Iter 14.10) ────────────────────────────────
+
+/**
+ * Single component that scales gracefully from 1 to ~200 tools.
+ *
+ * Behavior tiers, all in one layout (no mode switching that the
+ * curator has to learn):
+ *
+ * - Always visible: count badge ("X of Y selected"), Select All /
+ *   None / Invert buttons.
+ * - When >15 tools: a search input that live-filters by name and
+ *   description.
+ * - The list is a fixed-height scroll container so 49 Atlassian
+ *   tools and 4 filesystem tools both render predictably; rows are
+ *   single-line (name in mono + description as secondary text) so
+ *   roughly 8 fit at once.
+ *
+ * The "vouching for X of Y" framing makes the security model
+ * legible: this is the surface the curator is putting their
+ * signature on, not a passive display of what was observed.
+ */
+function ToolSelector({
+  tools,
+  selectedTools,
+  setSelectedTools,
+}: {
+  tools: CapabilityTool[];
+  selectedTools: Set<string>;
+  setSelectedTools: React.Dispatch<React.SetStateAction<Set<string>>>;
+}) {
+  const [filter, setFilter] = useState("");
+
+  const total = tools.length;
+  const selectedCount = selectedTools.size;
+  const showSearch = total > 15;
+
+  // Filter is case-insensitive, matches name OR description.
+  const visibleTools = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    if (!q) return tools;
+    return tools.filter(
+      (t) =>
+        t.name.toLowerCase().includes(q) ||
+        (t.description ?? "").toLowerCase().includes(q),
+    );
+  }, [tools, filter]);
+
+  const toggle = (name: string) => {
+    setSelectedTools((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    setSelectedTools(new Set(tools.map((t) => t.name)));
+  };
+  const selectNone = () => {
+    setSelectedTools(new Set());
+  };
+  const invert = () => {
+    setSelectedTools((prev) => {
+      const next = new Set<string>();
+      for (const t of tools) if (!prev.has(t.name)) next.add(t.name);
+      return next;
+    });
+  };
+
+  // Apply select-all/none/invert *to the filtered subset* when a
+  // search term is active. This is the action curators actually want
+  // when they've narrowed to "delete*" tools and want to remove all
+  // of them at once.
+  const filterIsActive = filter.trim().length > 0;
+  const selectAllVisible = () => {
+    setSelectedTools((prev) => {
+      const next = new Set(prev);
+      for (const t of visibleTools) next.add(t.name);
+      return next;
+    });
+  };
+  const selectNoneVisible = () => {
+    setSelectedTools((prev) => {
+      const next = new Set(prev);
+      for (const t of visibleTools) next.delete(t.name);
+      return next;
+    });
+  };
+
+  return (
+    <Box sx={{ mb: 3 }}>
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "baseline",
+          justifyContent: "space-between",
+          mb: 1,
+          gap: 2,
+          flexWrap: "wrap",
+        }}
+      >
+        <Typography
+          sx={{
+            fontWeight: 700,
+            fontSize: 12,
+            color: "var(--app-muted)",
+            textTransform: "uppercase",
+            letterSpacing: "0.08em",
+          }}
+        >
+          Tools to vouch for ({selectedCount} of {total} selected)
+        </Typography>
+        <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}>
+          <Button
+            size="small"
+            variant="text"
+            onClick={filterIsActive ? selectAllVisible : selectAll}
+            sx={{ textTransform: "none", fontSize: 12, minWidth: 0 }}
+          >
+            {filterIsActive ? "Select visible" : "Select all"}
+          </Button>
+          <Button
+            size="small"
+            variant="text"
+            onClick={filterIsActive ? selectNoneVisible : selectNone}
+            sx={{ textTransform: "none", fontSize: 12, minWidth: 0 }}
+          >
+            {filterIsActive ? "Deselect visible" : "Select none"}
+          </Button>
+          {!filterIsActive ? (
+            <Button
+              size="small"
+              variant="text"
+              onClick={invert}
+              sx={{ textTransform: "none", fontSize: 12, minWidth: 0 }}
+            >
+              Invert
+            </Button>
+          ) : null}
+        </Box>
+      </Box>
+
+      {showSearch ? (
+        <TextField
+          fullWidth
+          size="small"
+          placeholder={`Filter ${total} tools by name or description…`}
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          sx={{ mb: 1 }}
+        />
+      ) : null}
+
+      {selectedCount === 0 ? (
+        <Alert severity="warning" sx={{ mb: 1, fontSize: 13 }}>
+          No tools selected. A curator-attested listing must vouch
+          for at least one tool — submit will be blocked until you
+          select one.
+        </Alert>
+      ) : null}
+
+      <Box
+        sx={{
+          border: "1px solid var(--app-border)",
+          borderRadius: 2,
+          maxHeight: 360,
+          overflowY: "auto",
+          bgcolor: "var(--app-surface)",
+        }}
+      >
+        {visibleTools.length === 0 ? (
+          <Box sx={{ p: 2 }}>
+            <Typography sx={{ color: "var(--app-muted)", fontSize: 13 }}>
+              No tools match {`"${filter}"`}.
+            </Typography>
+          </Box>
+        ) : (
+          visibleTools.map((tool, idx) => {
+            const isSelected = selectedTools.has(tool.name);
+            return (
+              <Box
+                key={tool.name}
+                onClick={() => toggle(tool.name)}
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: "auto 1fr",
+                  gap: 1.25,
+                  alignItems: "flex-start",
+                  px: 1.5,
+                  py: 0.875,
+                  borderBottom:
+                    idx < visibleTools.length - 1
+                      ? "1px solid var(--app-border)"
+                      : "none",
+                  bgcolor: isSelected
+                    ? "var(--app-control-bg)"
+                    : "transparent",
+                  cursor: "pointer",
+                  transition: "background-color 80ms ease",
+                  "&:hover": {
+                    bgcolor: isSelected
+                      ? "var(--app-control-active-bg)"
+                      : "var(--app-control-bg)",
+                  },
+                }}
+              >
+                <Checkbox
+                  checked={isSelected}
+                  onChange={() => toggle(tool.name)}
+                  onClick={(e) => e.stopPropagation()}
+                  size="small"
+                  sx={{ p: 0.25 }}
+                />
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography
+                    sx={{
+                      fontFamily:
+                        "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                      fontSize: 12.5,
+                      fontWeight: 600,
+                      color: "var(--app-fg)",
+                      wordBreak: "break-word",
+                    }}
+                  >
+                    {tool.name}
+                  </Typography>
+                  {tool.description ? (
+                    <Typography
+                      sx={{
+                        fontSize: 12,
+                        color: "var(--app-muted)",
+                        lineHeight: 1.4,
+                        // Truncate to 2 lines so dense rows stay
+                        // scannable even when descriptions are long.
+                        display: "-webkit-box",
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: "vertical",
+                        overflow: "hidden",
+                      }}
+                    >
+                      {tool.description}
+                    </Typography>
+                  ) : null}
+                </Box>
+              </Box>
+            );
+          })
+        )}
+      </Box>
+
+      <Typography
+        sx={{
+          mt: 0.75,
+          fontSize: 11,
+          color: "var(--app-muted)",
+          fontStyle: "italic",
+          lineHeight: 1.5,
+        }}
+      >
+        In proxy hosting mode, deselected tools are blocked at the
+        gateway — calls are rejected before reaching the upstream.
+        In catalog mode, the listing&apos;s attestation describes
+        only the vouched subset.
+      </Typography>
+    </Box>
   );
 }
 

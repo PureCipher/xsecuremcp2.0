@@ -9,13 +9,17 @@ import {
   getToolVersions,
   verifyTool,
   type InstallRecipe,
-  type RegistryDataFlow,
   type RegistryToolListing,
   type ToolVersionItem,
 } from "@/lib/registryClient";
-import { AttestationBadge, CertificationBadge } from "@/components/security";
+import { AttestationBadge } from "@/components/security";
 import { RecipeTabs } from "../RecipeTabs";
 import { ListingGovernanceCard } from "./ListingGovernanceCard";
+import { DeregisterListingButton } from "./DeregisterListingButton";
+import { CertificationTierExplainer } from "./CertificationTierExplainer";
+import { PerClientInstallSnippets } from "./PerClientInstallSnippets";
+import { PermissionNutritionLabel } from "./PermissionNutritionLabel";
+import { VersionHistory } from "./VersionHistory";
 
 function isToolDetail(detail: unknown): detail is RegistryToolListing {
   return (
@@ -89,7 +93,30 @@ export default async function ListingDetailPage(props: { params: Promise<{ toolN
         This listing has been removed from the public catalog by a
         moderator.
       </Alert>
+    ) : status === "deregistered" ? (
+      // Iter 14.11 — terminal removal. Loud red banner so anyone
+      // who lands on the page knows the server is no longer in
+      // service and proxy calls will be rejected with HTTP 410.
+      <Alert severity="error">
+        <AlertTitle>Deregistered</AlertTitle>
+        This server has been deregistered by the registry admin and
+        is no longer available. Calls to proxy-mode endpoints will
+        be rejected with HTTP 410. Please remove or migrate any
+        client integrations that still reference it.
+      </Alert>
     ) : null;
+
+  // Iter 14.11 — only registry admins may deregister, and only
+  // listings that haven't already been removed.
+  const canAdmin = sessionPayload.session.can_admin === true;
+  const canDeregister =
+    canAdmin &&
+    new Set([
+      "published",
+      "suspended",
+      "deprecated",
+      "pending_review",
+    ]).has(status);
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
@@ -130,9 +157,8 @@ export default async function ListingDetailPage(props: { params: Promise<{ toolN
             curatorId={tool.curator_id}
           />
           {tool.listing_id ? (
-            <Link href={`/registry/publish?from=${encodeURIComponent(tool.listing_id)}`} legacyBehavior passHref>
+            <Link href={`/registry/publish?from=${encodeURIComponent(tool.listing_id)}`}>
               <Chip
-                component="a"
                 clickable
                 label="Publish new version"
                 sx={{
@@ -147,7 +173,15 @@ export default async function ListingDetailPage(props: { params: Promise<{ toolN
               />
             </Link>
           ) : null}
-          <CertificationBadge level={tool.certification_level} size="md" />
+          <CertificationTierExplainer level={tool.certification_level} size="md" />
+          {canDeregister && tool.listing_id ? (
+            <DeregisterListingButton
+              listingId={tool.listing_id}
+              toolName={tool.tool_name}
+              displayName={tool.display_name ?? tool.tool_name}
+              status={status}
+            />
+          ) : null}
         </Box>
       </Box>
 
@@ -174,39 +208,10 @@ export default async function ListingDetailPage(props: { params: Promise<{ toolN
               </Box>
             ) : null}
 
-            {tool.manifest ? (
-              <Card
-                variant="outlined"
-                sx={{
-                  mt: 2,
-                  borderRadius: 3,
-                  borderColor: "var(--app-border)",
-                  bgcolor: "var(--app-control-bg)",
-                  boxShadow: "0 12px 34px rgba(15, 23, 42, 0.04)",
-                }}
-              >
-                <CardContent sx={{ p: 2 }}>
-                  <Typography sx={{ fontWeight: 700, color: "var(--app-fg)" }}>Data flows</Typography>
-                  {Array.isArray(tool.manifest.data_flows) && tool.manifest.data_flows.length > 0 ? (
-                    <Box component="ul" sx={{ mt: 1, pl: 2, color: "var(--app-muted)", fontSize: 12 }}>
-                      {tool.manifest.data_flows.map((flow: RegistryDataFlow, idx: number) => (
-                        <li key={idx}>
-                          <Box component="span" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
-                            {flow.classification ?? "internal"}:
-                          </Box>{" "}
-                          {flow.source} → {flow.destination}
-                          {flow.description ? ` — ${flow.description}` : null}
-                        </li>
-                      ))}
-                    </Box>
-                  ) : (
-                    <Typography sx={{ mt: 1, fontSize: 12, color: "var(--app-muted)" }}>
-                      No explicit data_flows were declared in the manifest.
-                    </Typography>
-                  )}
-                </CardContent>
-              </Card>
-            ) : null}
+            {/* Iter 14.30 — Old "Data flows" inline card was replaced
+                by the PermissionNutritionLabel rendered as its own
+                top-level section below (it covers data flows plus
+                permissions and resource_access). */}
           </CardContent>
         </Card>
 
@@ -215,40 +220,29 @@ export default async function ListingDetailPage(props: { params: Promise<{ toolN
             <Typography sx={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--app-muted)" }}>
               Versions
             </Typography>
-            {versions.length ? (
-              <Box component="ul" sx={{ mt: 1.5, pl: 2, color: "var(--app-muted)", fontSize: 12 }}>
-                {versions.slice(0, 12).map((v) => (
-                  <li key={v.version}>
-                    <Box component="span" sx={{ fontWeight: 700, color: "var(--app-fg)" }}>
-                      v{v.version}
-                    </Box>
-                    {v.yanked ? (
-                      <Box component="span" sx={{ ml: 1, color: "rgb(253, 230, 138)" }}>
-                        (yanked{v.yank_reason ? `: ${v.yank_reason}` : ""})
-                      </Box>
-                    ) : null}
-                    {v.published_at ? (
-                      <Box component="span" sx={{ ml: 1 }}>
-                        · {new Date(v.published_at).toLocaleString()}
-                      </Box>
-                    ) : null}
-                    {v.changelog ? (
-                      <Box component="div" sx={{ mt: 0.5, color: "var(--app-muted)" }}>
-                        {v.changelog}
-                      </Box>
-                    ) : null}
-                  </li>
-                ))}
-                {versions.length > 12 ? <li>+{versions.length - 12} more versions</li> : null}
-              </Box>
-            ) : (
-              <Typography sx={{ mt: 1.5, fontSize: 12, color: "var(--app-muted)" }}>
-                No version history available yet.
-              </Typography>
-            )}
+            {/* Iter 14.31 — Version history with manifest-change
+                indicator. Each row tells the curator whether the
+                signed manifest changed at that version (worth a
+                fresh security review) or whether only metadata
+                moved (no new permissions or data flows). */}
+            <VersionHistory versions={versions} />
           </CardContent>
         </Card>
       </Box>
+
+      {/* Iter 14.30 — Permission nutrition label. Renders the
+          manifest's permissions / data_flows / resource_access as
+          a structured Apple-style disclosure card. Sits ABOVE the
+          install snippets so a curator sees what they're agreeing
+          to before they paste config into their client. */}
+      <PermissionNutritionLabel tool={tool} />
+
+      {/* Iter 14.29 — Per-client install snippets. Generated from
+          ``upstream_ref`` for the four most common MCP-aware
+          clients. Sits above RecipeTabs because the curator's
+          first action is "drop this into my client and use it";
+          transport recipes (RecipeTabs) are the next layer down. */}
+      <PerClientInstallSnippets tool={tool} />
 
       <RecipeTabs
         primaryRecipe={primaryRecipe ?? null}

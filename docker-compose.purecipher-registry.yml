@@ -23,6 +23,19 @@ services:
       PURECIPHER_AUTH_COOKIE_NAME: ${PURECIPHER_AUTH_COOKIE_NAME:-purecipher_registry_token}
     volumes:
       - ./.data/purecipher-registry:/data
+      # Iter 14.7: mount the host's Docker socket so the curator's
+      # introspector can ``docker pull`` and ``docker run`` upstream
+      # MCP servers from the Onboard third-party wizard. Without
+      # this, Docker-channel onboards fail at the introspect step
+      # with "Cannot connect to the Docker daemon".
+      #
+      # SECURITY TRADE-OFF: any process inside the registry container
+      # can issue arbitrary Docker commands on the host (effectively
+      # root). Acceptable for local dev / single-tenant deployments;
+      # for shared production environments, consider a remote Docker
+      # daemon over TCP+TLS or a dedicated worker pod that introspects
+      # in a sandboxed environment.
+      - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:
       test:
         - CMD
@@ -53,6 +66,11 @@ services:
       PURECIPHER_AUTH_COOKIE_NAME: ${PURECIPHER_AUTH_COOKIE_NAME:-purecipher_registry_token}
     volumes:
       - ./.data/purecipher-registry:/data
+      # Iter 14.7: parity with the main purecipher-registry service
+      # so Docker-channel onboards work in the control-plane-only
+      # profile too. Same security caveat applies — see the comment
+      # on the main service above.
+      - /var/run/docker.sock:/var/run/docker.sock
 
   # Next.js registry console (proxies API to purecipher-registry).
   registry-ui:

@@ -2,15 +2,46 @@ import Link from "next/link";
 import { Box, Card, CardActionArea, CardContent, Chip, Typography } from "@mui/material";
 import {
   getPublisherProfile,
+  getServerConsentGovernance,
+  getServerContractGovernance,
+  getServerLedgerGovernance,
+  getServerObservability,
+  getServerOverridesGovernance,
+  getServerPolicyGovernance,
   type PublisherSummary,
   type RegistryToolListing,
 } from "@/lib/registryClient";
 import { CertificationBadge, RegistryPageHeader } from "@/components/security";
+// Iter 14.26 — the governance tabs that used to live on
+// ``/registry/servers/[serverId]`` now render below the publisher
+// profile here. Same component, same data shapes — only the entry
+// point moves.
+import { ServerDetailTabs } from "../../servers/[serverId]/ServerDetailTabs";
 
 export default async function PublisherProfilePage(props: { params: Promise<{ publisherId: string }> }) {
   const { publisherId } = await props.params;
   const decodedId = decodeURIComponent(publisherId);
-  const profile = await getPublisherProfile(decodedId);
+  // Iter 14.26 — fetch the profile + every governance projection
+  // in parallel so first paint includes both the profile cards and
+  // the governance tabs. Each call powers one tab; rolling them up
+  // here keeps page-load latency a function of the slowest call.
+  const [
+    profile,
+    policyGovernance,
+    contractGovernance,
+    consentGovernance,
+    ledgerGovernance,
+    overridesGovernance,
+    observability,
+  ] = await Promise.all([
+    getPublisherProfile(decodedId),
+    getServerPolicyGovernance(decodedId),
+    getServerContractGovernance(decodedId),
+    getServerConsentGovernance(decodedId),
+    getServerLedgerGovernance(decodedId),
+    getServerOverridesGovernance(decodedId),
+    getServerObservability(decodedId),
+  ]);
 
   if (!profile) {
     return (
@@ -27,21 +58,9 @@ export default async function PublisherProfilePage(props: { params: Promise<{ pu
             .
           </Typography>
           <Box sx={{ mt: 2 }}>
-            <Link href="/registry/publishers" legacyBehavior passHref>
-              <Box
-                component="a"
-                sx={{
-                  display: "inline-flex",
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: "var(--app-muted)",
-                  textDecoration: "none",
-                  "&:hover": { color: "var(--app-fg)" },
-                }}
-              >
+            <Link href="/registry/publishers"><Box sx={{ display: "inline-flex", fontSize: 11, fontWeight: 700, color: "var(--app-muted)", textDecoration: "none", "&:hover": { color: "var(--app-fg)" }, }}>
                 ← Back to all publishers
-              </Box>
-            </Link>
+              </Box></Link>
           </Box>
         </CardContent>
       </Card>
@@ -57,21 +76,9 @@ export default async function PublisherProfilePage(props: { params: Promise<{ pu
           </Typography>
           <Typography sx={{ mt: 1, fontSize: 12, color: "var(--app-muted)" }}>{profile.error}</Typography>
           <Box sx={{ mt: 2 }}>
-            <Link href="/registry/publishers" legacyBehavior passHref>
-              <Box
-                component="a"
-                sx={{
-                  display: "inline-flex",
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: "var(--app-muted)",
-                  textDecoration: "none",
-                  "&:hover": { color: "var(--app-fg)" },
-                }}
-              >
+            <Link href="/registry/publishers"><Box sx={{ display: "inline-flex", fontSize: 11, fontWeight: 700, color: "var(--app-muted)", textDecoration: "none", "&:hover": { color: "var(--app-fg)" }, }}>
                 ← Back to all publishers
-              </Box>
-            </Link>
+              </Box></Link>
           </Box>
         </CardContent>
       </Card>
@@ -163,8 +170,7 @@ export default async function PublisherProfilePage(props: { params: Promise<{ pu
                     boxShadow: "none",
                   }}
                 >
-                  <Link href={`/registry/listings/${encodeURIComponent(tool.tool_name)}`} legacyBehavior passHref>
-                    <CardActionArea component="a" sx={{ borderRadius: 3 }}>
+                  <Link href={`/registry/listings/${encodeURIComponent(tool.tool_name)}`}><CardActionArea sx={{ borderRadius: 3 }}>
                       <CardContent sx={{ p: 2 }}>
                         <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 1 }}>
                           <Box>
@@ -179,8 +185,7 @@ export default async function PublisherProfilePage(props: { params: Promise<{ pu
                           {tool.description ?? "No description provided."}
                         </Typography>
                       </CardContent>
-                    </CardActionArea>
-                  </Link>
+                    </CardActionArea></Link>
                 </Card>
               ))}
             </Box>
@@ -188,22 +193,28 @@ export default async function PublisherProfilePage(props: { params: Promise<{ pu
         </CardContent>
       </Card>
 
+      {/* Iter 14.26 — Governance + Observability tabs (formerly the
+          MCP Servers detail page). Six tabs: Policy Kernel, Contract
+          Broker, Consent Graph, Provenance Ledger, Overrides, Reflexive
+          Core. Same component as before, same backend data — just
+          rendered here so reviewers/admins don't have to navigate to
+          a separate "MCP Servers" page to do publisher-scoped audit. */}
+      <ServerDetailTabs
+        serverId={decodedId}
+        summary={summary}
+        listings={listings}
+        policyGovernance={policyGovernance}
+        contractGovernance={contractGovernance}
+        consentGovernance={consentGovernance}
+        ledgerGovernance={ledgerGovernance}
+        overridesGovernance={overridesGovernance}
+        observability={observability}
+      />
+
       <Box sx={{ pt: 1 }}>
-        <Link href="/registry/publishers" legacyBehavior passHref>
-          <Box
-            component="a"
-            sx={{
-              display: "inline-flex",
-              fontSize: 11,
-              fontWeight: 700,
-              color: "var(--app-muted)",
-              textDecoration: "none",
-              "&:hover": { color: "var(--app-fg)" },
-            }}
-          >
+        <Link href="/registry/publishers"><Box sx={{ display: "inline-flex", fontSize: 11, fontWeight: 700, color: "var(--app-muted)", textDecoration: "none", "&:hover": { color: "var(--app-fg)" }, }}>
             ← Back to all publishers
-          </Box>
-        </Link>
+          </Box></Link>
       </Box>
     </Box>
   );

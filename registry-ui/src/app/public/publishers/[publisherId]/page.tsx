@@ -6,6 +6,10 @@ import {
   type RegistryToolListing,
 } from "@/lib/registryClient";
 import { CertificationBadge } from "@/components/security";
+// Iter 14.28 — the public-side governance tabs (sanitized for
+// public viewing) used to live on /public/servers/[id]. They now
+// render below the publisher profile here.
+import { PublicServerDetailTabs } from "../../servers/[serverId]/PublicServerDetailTabs";
 
 export default async function PublicPublisherProfilePage(props: {
   params: Promise<{ publisherId: string }>;
@@ -29,11 +33,9 @@ export default async function PublicPublisherProfilePage(props: {
             .
           </Typography>
           <Box sx={{ mt: 2 }}>
-            <Link href="/public/publishers" legacyBehavior passHref>
-              <Box component="a" sx={{ fontSize: 12, fontWeight: 700, color: "var(--app-muted)", textDecoration: "none", "&:hover": { color: "var(--app-fg)" } }}>
+            <Link href="/public/publishers"><Box sx={{ fontSize: 12, fontWeight: 700, color: "var(--app-muted)", textDecoration: "none", "&:hover": { color: "var(--app-fg)" } }}>
                 ← Back to all publishers
-              </Box>
-            </Link>
+              </Box></Link>
           </Box>
         </CardContent>
       </Card>
@@ -49,11 +51,9 @@ export default async function PublicPublisherProfilePage(props: {
           </Typography>
           <Typography sx={{ mt: 1, fontSize: 12, color: "var(--app-muted)" }}>{profile.error}</Typography>
           <Box sx={{ mt: 2 }}>
-            <Link href="/public/publishers" legacyBehavior passHref>
-              <Box component="a" sx={{ fontSize: 12, fontWeight: 700, color: "var(--app-muted)", textDecoration: "none", "&:hover": { color: "var(--app-fg)" } }}>
+            <Link href="/public/publishers"><Box sx={{ fontSize: 12, fontWeight: 700, color: "var(--app-muted)", textDecoration: "none", "&:hover": { color: "var(--app-fg)" } }}>
                 ← Back to all publishers
-              </Box>
-            </Link>
+              </Box></Link>
           </Box>
         </CardContent>
       </Card>
@@ -143,24 +143,7 @@ export default async function PublicPublisherProfilePage(props: {
           ) : (
             <Box sx={{ mt: 2, display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" } }}>
               {listings.map((tool) => (
-                <Link
-                  key={tool.tool_name}
-                  href={`/public/listings/${encodeURIComponent(tool.tool_name)}`}
-                  legacyBehavior
-                  passHref
-                >
-                  <Card
-                    component="a"
-                    variant="outlined"
-                    sx={{
-                      textDecoration: "none",
-                      borderRadius: 3,
-                      borderColor: "var(--app-border)",
-                      bgcolor: "var(--app-control-bg)",
-                      boxShadow: "none",
-                      "&:hover": { borderColor: "var(--app-accent)" },
-                    }}
-                  >
+                <Link key={tool.tool_name} href={`/public/listings/${encodeURIComponent(tool.tool_name)}`}><Card variant="outlined" sx={{ textDecoration: "none", borderRadius: 3, borderColor: "var(--app-border)", bgcolor: "var(--app-control-bg)", boxShadow: "none", "&:hover": { borderColor: "var(--app-accent)" }, }}>
                     <CardContent sx={{ p: 2 }}>
                       <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 1 }}>
                         <Box>
@@ -175,20 +158,26 @@ export default async function PublicPublisherProfilePage(props: {
                         {tool.description ?? "No description provided."}
                       </Typography>
                     </CardContent>
-                  </Card>
-                </Link>
+                  </Card></Link>
               ))}
             </Box>
           )}
         </CardContent>
       </Card>
 
+      {/* Iter 14.28 — Public governance tabs (formerly the public
+          MCP Servers detail page). Sanitized projection — public
+          viewers see activity volume but not counterparty IDs. */}
+      <PublicServerDetailTabs
+        serverId={decodedId}
+        summary={summary}
+        listings={listings}
+      />
+
       <Box sx={{ pt: 1 }}>
-        <Link href="/public/publishers" legacyBehavior passHref>
-          <Box component="a" sx={{ fontSize: 12, fontWeight: 700, color: "var(--app-muted)", textDecoration: "none", "&:hover": { color: "var(--app-fg)" } }}>
+        <Link href="/public/publishers"><Box sx={{ fontSize: 12, fontWeight: 700, color: "var(--app-muted)", textDecoration: "none", "&:hover": { color: "var(--app-fg)" } }}>
             ← Back to all publishers
-          </Box>
-        </Link>
+          </Box></Link>
       </Box>
     </Box>
   );
