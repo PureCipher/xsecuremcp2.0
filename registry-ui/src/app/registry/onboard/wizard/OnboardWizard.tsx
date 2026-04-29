@@ -277,7 +277,7 @@ function credentialsToEnv(
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
-export function OnboardWizard() {
+export function OnboardWizard({ mode = "curator" }: { mode?: "author" | "curator" }) {
   const router = useRouter();
   const [step, setStep] = useState<WizardStep>(0);
   const [busy, setBusy] = useState(false);
@@ -462,6 +462,7 @@ export function OnboardWizard() {
           version,
           description,
           hosting_mode: hostingMode,
+          attestation_kind: mode,
           selected_permissions: selections.map((s) => ({
             scope: s.scope,
             selected: s.selected,
@@ -571,11 +572,12 @@ export function OnboardWizard() {
           busy={busy}
           onBack={() => goBackTo(1)}
           onSubmit={handleSubmit}
+          mode={mode}
         />
       ) : null}
 
       {step === 3 && submitResult ? (
-        <StepDone result={submitResult} router={router} onReset={resetWizard} />
+        <StepDone result={submitResult} router={router} onReset={resetWizard} mode={mode} />
       ) : null}
     </Box>
   );
@@ -1066,6 +1068,7 @@ function StepConfirm({
   busy,
   onBack,
   onSubmit,
+  mode = "curator",
 }: {
   intro: IntrospectionResult;
   preview: UpstreamPreview;
@@ -1086,6 +1089,7 @@ function StepConfirm({
   busy: boolean;
   onBack: () => void;
   onSubmit: () => void;
+  mode?: "author" | "curator";
 }) {
   // Proxy mode is supported for HTTP, PyPI, npm, and Docker upstreams.
   // The stdio channels run a fresh subprocess per session via
@@ -1300,7 +1304,7 @@ function StepConfirm({
               minWidth: 200,
             }}
           >
-            {busy ? <CircularProgress size={18} /> : "Submit curated listing"}
+            {busy ? <CircularProgress size={18} /> : mode === "author" ? "Submit author listing" : "Submit curated listing"}
           </Button>
         </Box>
       </CardContent>
@@ -1314,22 +1318,27 @@ function StepDone({
   result,
   router,
   onReset,
+  mode = "curator",
 }: {
   result: SubmitResponse;
   router: ReturnType<typeof useRouter>;
   onReset: () => void;
+  mode?: "author" | "curator";
 }) {
   const listingName = result.listing?.tool_name ?? "your listing";
   return (
     <Card variant="outlined">
       <CardContent>
         <Alert severity="success" sx={{ mb: 2 }}>
-          Curated listing submitted for review.
+          {mode === "author" ? "Author listing submitted for review." : "Curated listing submitted for review."}
         </Alert>
         <Typography sx={{ color: "var(--app-muted)", fontSize: 14, mb: 2 }}>
-          <strong>{listingName}</strong> was published as a
-          curator-attested listing. A reviewer will approve or reject
-          it before it appears in the public catalog.
+          <strong>{listingName}</strong> was published as
+          {mode === "author"
+            ? " an author-attested listing."
+            : " a curator-attested listing."}{" "}
+          A reviewer will approve or reject it before it appears in
+          the public catalog.
         </Typography>
         <Box sx={{ display: "flex", gap: 1.25 }}>
           <Link
@@ -1511,7 +1520,7 @@ function ToolSelector({
 
       {selectedCount === 0 ? (
         <Alert severity="warning" sx={{ mb: 1, fontSize: 13 }}>
-          No tools selected. A curator-attested listing must vouch
+          No tools selected. A listing must include
           for at least one tool — submit will be blocked until you
           select one.
         </Alert>

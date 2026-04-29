@@ -28,7 +28,7 @@ import {
 } from "@/components/security";
 import type { Column } from "@/components/security";
 
-const BACKEND = "";
+const BACKEND = "/api";
 
 interface IntrospectionResult {
   actor_id: string;

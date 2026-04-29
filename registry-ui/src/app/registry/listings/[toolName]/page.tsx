@@ -235,6 +235,27 @@ export default async function ListingDetailPage(props: { params: Promise<{ toolN
           a structured Apple-style disclosure card. Sits ABOVE the
           install snippets so a curator sees what they're agreeing
           to before they paste config into their client. */}
+      {typeof tool.metadata?.definition_tokens === "number" ? (
+        <Card variant="outlined" sx={{ borderRadius: 4 }}>
+          <CardContent sx={{ p: 2.5, display: "flex", alignItems: "center", gap: 3, flexWrap: "wrap" }}>
+            <Box>
+              <Typography sx={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                Context cost
+              </Typography>
+              <Typography sx={{ mt: 0.5, fontSize: 28, fontWeight: 800, fontFamily: "monospace", color: "var(--app-fg)" }}>
+                ~{(tool.metadata.definition_tokens as number).toLocaleString()}
+              </Typography>
+              <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                tokens per message (idle)
+              </Typography>
+            </Box>
+            <Typography sx={{ fontSize: 12, lineHeight: 1.7, color: "var(--app-muted)", maxWidth: 480 }}>
+              Estimated tokens consumed by this tool&apos;s definition when loaded into an LLM context window — even when the tool is not called. Disconnect unused tools to save context.
+            </Typography>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <PermissionNutritionLabel tool={tool} />
 
       {/* Iter 14.29 — Per-client install snippets. Generated from

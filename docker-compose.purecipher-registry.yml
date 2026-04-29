@@ -21,8 +21,10 @@ services:
       PURECIPHER_JWT_SECRET: ${PURECIPHER_JWT_SECRET:-purecipher-registry-dev-jwt-secret-change-me}
       PURECIPHER_USERS_JSON: ${PURECIPHER_USERS_JSON:-}
       PURECIPHER_AUTH_COOKIE_NAME: ${PURECIPHER_AUTH_COOKIE_NAME:-purecipher_registry_token}
+      PURECIPHER_ALLOW_HTTP_HOSTS: ${PURECIPHER_ALLOW_HTTP_HOSTS:-demo-mcp-server}
     volumes:
       - ./.data/purecipher-registry:/data
+      - ./demo:/app/demo:ro
       # Iter 14.7: mount the host's Docker socket so the curator's
       # introspector can ``docker pull`` and ``docker run`` upstream
       # MCP servers from the Onboard third-party wizard. Without
@@ -107,3 +109,27 @@ services:
     depends_on:
       purecipher-registry:
         condition: service_healthy
+
+  # Demo MCP server for end-to-end integration testing.
+  # Start with: docker compose -f docker-compose.purecipher-registry.yml --profile demo up --build
+  demo-mcp-server:
+    profiles: ["demo"]
+    image: purecipher-secured-mcp-registry:local
+    build:
+      context: .
+      dockerfile: Dockerfile.purecipher-registry
+    ports:
+      - "${DEMO_MCP_PORT:-9000}:9000"
+    command: ["uv", "run", "--no-sync", "python", "/app/demo/demo_mcp_server.py"]
+    volumes:
+      - ./demo:/app/demo:ro
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import socket; s=socket.socket(); s.connect(('127.0.0.1',9000)); s.close()
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s

@@ -40,6 +40,15 @@ logger = logging.getLogger(__name__)
 _ALLOWED_HTTP_SCHEMES = {"https", "http"}
 _LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
+import os as _os
+
+_EXTRA_HTTP_HOSTS = frozenset(
+    h.strip().lower()
+    for h in _os.getenv("PURECIPHER_ALLOW_HTTP_HOSTS", "").split(",")
+    if h.strip()
+)
+_HTTP_ALLOWED_HOSTS = _LOOPBACK_HOSTS | _EXTRA_HTTP_HOSTS
+
 # Path segments commonly used as transport markers — when they show up
 # as the last URL segment, they make terrible tool-name slugs. Fall
 # back to the host's primary label instead.
@@ -430,7 +439,7 @@ def parse_http_upstream(raw: str) -> UpstreamRef:
         )
 
     host = parsed.hostname or ""
-    if parsed.scheme == "http" and host.lower() not in _LOOPBACK_HOSTS:
+    if parsed.scheme == "http" and host.lower() not in _HTTP_ALLOWED_HOSTS:
         raise UpstreamResolutionError(
             "Plain http:// is only allowed for loopback. Use https://."
         )

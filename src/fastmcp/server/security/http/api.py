@@ -2631,6 +2631,49 @@ class SecurityAPI:
             "peers_notified": sum(1 for v in results.values() if v),
         }
 
+    def grant_consent(self, body: dict[str, Any]) -> dict[str, Any]:
+        """Grant a consent edge in the local graph."""
+        if self.federated_consent_graph is None:
+            return {"error": "Consent not configured", "status": 503}
+        graph = self.federated_consent_graph._local_graph
+        from fastmcp.server.security.consent.graph import ConsentNode, NodeType
+
+        source_id = str(body.get("source_id", "")).strip()
+        target_id = str(body.get("target_id", "")).strip()
+        scopes = set(body.get("scopes", ["execute"]))
+        granted_by = str(body.get("granted_by", "api"))
+        if not source_id or not target_id:
+            return {"error": "source_id and target_id are required", "status": 400}
+
+        source_type = str(body.get("source_type", "resource"))
+        target_type = str(body.get("target_type", "agent"))
+        type_map = {"agent": NodeType.AGENT, "resource": NodeType.RESOURCE, "scope": NodeType.SCOPE}
+
+        if not graph.get_node(source_id):
+            graph.add_node(ConsentNode(node_id=source_id, node_type=type_map.get(source_type, NodeType.RESOURCE)))
+        if not graph.get_node(target_id):
+            graph.add_node(ConsentNode(node_id=target_id, node_type=type_map.get(target_type, NodeType.AGENT)))
+
+        edge = graph.grant(source_id=source_id, target_id=target_id, scopes=scopes, granted_by=granted_by)
+        return {
+            "granted": True,
+            "edge_id": edge.edge_id,
+            "source_id": source_id,
+            "target_id": target_id,
+            "scopes": sorted(scopes),
+        }
+
+    def get_consent_graph_status(self) -> dict[str, Any]:
+        """Return consent graph summary."""
+        if self.federated_consent_graph is None:
+            return {"error": "Consent not configured", "status": 503}
+        graph = self.federated_consent_graph._local_graph
+        return {
+            "graph_id": graph.graph_id,
+            "node_count": graph.node_count,
+            "edge_count": graph.edge_count,
+        }
+
     # ── Reflexive Introspection ────────────────────────────────
 
     def get_introspection(self, actor_id: str) -> dict[str, Any]:
@@ -3207,6 +3250,19 @@ def mount_security_routes(
     async def federated_institutions(request: Request) -> JSONResponse:
         return JSONResponse(api.list_institutions())
 
+    @_secured_route(
+        f"{prefix}/consent/grant", methods=["POST"]
+    )
+    async def consent_grant(request: Request) -> JSONResponse:
+        body = await request.json()
+        return JSONResponse(api.grant_consent(body))
+
+    @_secured_route(
+        f"{prefix}/consent/graph", methods=["GET"]
+    )
+    async def consent_graph_status(request: Request) -> JSONResponse:
+        return JSONResponse(api.get_consent_graph_status())
+
     # Reflexive Introspection
     @_secured_route(
         f"{prefix}/reflexive/introspect/{{actor_id}}", methods=["GET"]
@@ -3280,5 +3336,7 @@ def _build_api_from_server(server: FastMCP) -> SecurityAPI:
         policy_validator=getattr(ctx, "policy_validator", None),
         policy_monitor=getattr(ctx, "policy_monitor", None),
         policy_governor=getattr(ctx, "policy_governor", None),
+        broker=getattr(ctx, "broker", None),
+        federated_consent_graph=getattr(ctx, "federated_consent_graph", None),
         introspection_engine=getattr(ctx, "introspection_engine", None),
     )

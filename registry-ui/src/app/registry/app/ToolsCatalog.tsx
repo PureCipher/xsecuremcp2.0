@@ -146,7 +146,7 @@ export function ToolsCatalog({
       ),
     [tools],
   );
-  const showAttestationFilter = hasCuratedListings && hasAuthorListings;
+  const showAttestationFilter = !publicView && hasCuratedListings && hasAuthorListings;
 
   const filtered = useMemo(() => {
     const activeCategories = new Set(selectedCategories);
@@ -460,6 +460,12 @@ export function ToolsCatalog({
                                 }}
                               />
                             </Box>
+
+                            {typeof tool.metadata?.definition_tokens === "number" ? (
+                              <Typography sx={{ fontSize: 11, color: "var(--app-muted)", fontFamily: "monospace" }}>
+                                ~{tool.metadata.definition_tokens.toLocaleString()} tokens idle
+                              </Typography>
+                            ) : null}
 
                             {tool.attestation_kind === "curator" ? (
                               <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>

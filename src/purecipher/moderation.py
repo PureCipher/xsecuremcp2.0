@@ -31,6 +31,8 @@ ACTION_BY_NAME = {
     "request-changes": ModerationAction.REQUEST_CHANGES,
     "request_changes": ModerationAction.REQUEST_CHANGES,
     "deregister": ModerationAction.DEREGISTER,
+    "withdraw": ModerationAction.WITHDRAW,
+    "resubmit": ModerationAction.RESUBMIT,
 }
 
 # Iter 14.11 — ``deregister`` is offered on every status that
@@ -43,6 +45,7 @@ AVAILABLE_ACTIONS = {
     PublishStatus.PUBLISHED: ("suspend", "deregister"),
     PublishStatus.SUSPENDED: ("unsuspend", "deregister"),
     PublishStatus.DEPRECATED: ("deregister",),
+    PublishStatus.WITHDRAWN: ("resubmit",),
 }
 
 

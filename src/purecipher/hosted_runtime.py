@@ -266,9 +266,16 @@ def build_hosted_registry_app(
             return None
         return mp.get(listing_id) if hasattr(mp, "get") else None
 
+    shared_ctx = None
+    try:
+        shared_ctx = registry.security_context
+    except Exception:
+        pass
+
     curator_proxy_router = CuratorProxyRouter(
         listing_lookup=_lookup_listing,
         auth_settings=getattr(registry, "_auth_settings", None),
+        shared_security_context=shared_ctx,
     )
     routes.append(Mount("/runtime/proxy", app=curator_proxy_router))
 

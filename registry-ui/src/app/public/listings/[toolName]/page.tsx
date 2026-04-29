@@ -5,7 +5,6 @@ import { Box, Card, CardContent, Chip, Typography } from "@mui/material";
 
 import {
   getInstallRecipes,
-  getListingGovernance,
   getToolDetail,
   verifyTool,
   type InstallRecipe,
@@ -14,7 +13,6 @@ import {
 } from "@/lib/registryClient";
 import { AttestationBadge, CertificationBadge } from "@/components/security";
 import { RecipeTabs } from "@/app/registry/listings/RecipeTabs";
-import { ListingGovernanceCard } from "@/app/registry/listings/[toolName]/ListingGovernanceCard";
 
 function isToolDetail(detail: unknown): detail is RegistryToolListing {
   return (
@@ -31,11 +29,10 @@ export default async function PublicListingDetailPage(props: {
   const { toolName } = await props.params;
   const decodedName = decodeURIComponent(toolName);
 
-  const [detail, install, verification, governance] = await Promise.all([
+  const [detail, install, verification] = await Promise.all([
     getToolDetail(decodedName),
     getInstallRecipes(decodedName),
     verifyTool(decodedName),
-    getListingGovernance(decodedName),
   ]);
 
   if (!isToolDetail(detail)) {
@@ -144,6 +141,26 @@ export default async function PublicListingDetailPage(props: {
             ) : null}
           </CardContent>
         </Card>
+
+        {typeof tool.metadata?.definition_tokens === "number" ? (
+          <Card variant="outlined" sx={{ borderRadius: 4, borderColor: "var(--app-border)", bgcolor: "var(--app-surface)", boxShadow: "none", alignSelf: "start" }}>
+            <CardContent sx={{ p: 2.5 }}>
+              <Typography sx={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--app-muted)" }}>
+                Context cost
+              </Typography>
+              <Typography sx={{ mt: 1, fontSize: 28, fontWeight: 800, fontFamily: "monospace", color: "var(--app-fg)" }}>
+                ~{(tool.metadata.definition_tokens as number).toLocaleString()}
+              </Typography>
+              <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                tokens per message
+              </Typography>
+              <Typography sx={{ mt: 1.5, fontSize: 12, lineHeight: 1.7, color: "var(--app-muted)" }}>
+                Estimated tokens consumed by this tool&apos;s definition when loaded
+                into an LLM context window — even when the tool is not called.
+              </Typography>
+            </CardContent>
+          </Card>
+        ) : null}
       </Box>
 
       <RecipeTabs
@@ -153,8 +170,6 @@ export default async function PublicListingDetailPage(props: {
         verifyRecipes={verifyRecipes}
         otherRecipes={otherRecipes}
       />
-
-      <ListingGovernanceCard governance={governance} publicView />
 
       {/*
        * Provenance card — only rendered for curator-attested listings.

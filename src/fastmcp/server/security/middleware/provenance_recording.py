@@ -27,6 +27,29 @@ from fastmcp.tools.tool import Tool, ToolResult
 logger = logging.getLogger(__name__)
 
 
+def _estimate_call_tokens(
+    arguments: dict | None,
+    result: ToolResult | None,
+) -> tuple[int, int]:
+    """Estimate input/output tokens for a tool call (chars/4 heuristic)."""
+    import json as _json
+
+    input_chars = len(_json.dumps(arguments or {}, separators=(",", ":"), default=str))
+
+    output_chars = 0
+    if result is not None:
+        for block in result.content:
+            text = getattr(block, "text", None)
+            if text:
+                output_chars += len(str(text))
+        if result.structured_content:
+            output_chars += len(
+                _json.dumps(result.structured_content, separators=(",", ":"), default=str)
+            )
+
+    return (max(1, input_chars // 4), max(1, output_chars // 4) if output_chars else 0)
+
+
 class ProvenanceRecordingMiddleware(Middleware):
     """Middleware that records all MCP operations in the provenance ledger.
 
@@ -83,31 +106,44 @@ class ProvenanceRecordingMiddleware(Middleware):
 
         tool_name = context.message.name
         actor_id = self._get_actor_id(context)
+        arguments = context.message.arguments or {}
         input_data = {
             "tool": tool_name,
-            "arguments": context.message.arguments or {},
+            "arguments": arguments,
         }
 
         try:
             result = await call_next(context)
 
+            input_tokens, output_tokens = _estimate_call_tokens(
+                arguments, result
+            )
             self.ledger.record(
                 action=ProvenanceAction.TOOL_CALLED,
                 actor_id=actor_id,
                 resource_id=tool_name,
                 input_data=input_data,
                 output_data={"status": "success"},
+                metadata={
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                },
             )
 
             return result
 
         except Exception as exc:
+            input_tokens, _ = _estimate_call_tokens(arguments, None)
             self.ledger.record(
                 action=ProvenanceAction.ERROR,
                 actor_id=actor_id,
                 resource_id=tool_name,
                 input_data=input_data,
-                metadata={"error": str(exc), "error_type": type(exc).__name__},
+                metadata={
+                    "error": str(exc),
+                    "error_type": type(exc).__name__,
+                    "input_tokens": input_tokens,
+                },
             )
             raise
 

@@ -117,21 +117,13 @@ export function RegistryShell({
         enabled: canPublishConsole,
         active: pathname.startsWith("/registry/publish/mine"),
       };
-      const getStarted: NavItem = {
-        href: "/registry/publish/get-started",
-        label: "Get started",
-        icon: "publish",
-        enabled: canPublishConsole && !publisherHasListings,
-        active: pathname.startsWith("/registry/publish/get-started"),
-      };
       const publish: NavItem = {
-        href: "/registry/publish",
+        href: "/registry/publish/get-started",
         label: "Publish",
         icon: "publish",
         enabled: canPublishConsole,
         active:
           pathname.startsWith("/registry/publish") &&
-          !pathname.startsWith("/registry/publish/get-started") &&
           !pathname.startsWith("/registry/publish/mine"),
       };
       const onboard: NavItem = {
@@ -142,11 +134,11 @@ export function RegistryShell({
         active: pathname.startsWith("/registry/onboard"),
       };
       const ordered = prefs.publisher.openMineFirst
-        ? [mine, getStarted, publish, onboard]
-        : [publish, getStarted, mine, onboard];
+        ? [mine, publish, onboard]
+        : [publish, mine, onboard];
       return ordered;
     },
-    [pathname, canPublishConsole, publisherHasListings, prefs.publisher.openMineFirst],
+    [pathname, canPublishConsole, prefs.publisher.openMineFirst],
   );
 
   // Iter 14.22 — merged former "Reviewer" + "Admin" sidebar

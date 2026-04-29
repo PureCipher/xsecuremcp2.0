@@ -83,20 +83,18 @@ class ProxyHostingError(RuntimeError):
     """
 
 
-def _build_proxy_security_config(listing: ToolListing) -> SecurityConfig:
+def _build_proxy_security_config(
+    listing: ToolListing,
+    *,
+    shared_context: Any = None,
+) -> SecurityConfig:
     """Translate a curator listing's manifest into a :class:`SecurityConfig`.
 
-    The MVP wires three layers:
-
-    - **Allowlist policy** restricting tool calls to the curator-
-      observed surface. Tool names are pulled from the listing's
-      manifest tags (the curator-vouched tool inventory) and the
-      stored ``observed_tool_names`` if present in metadata; if
-      neither is available we fall back to allowing all calls
-      (with a warning) so empty observations don't dead-end the
-      proxy.
-    - **Provenance ledger** so every proxied request is recorded.
-    - **Alert event bus** so policy denials are observable.
+    When ``shared_context`` is provided (the registry's central
+    :class:`SecurityContext`), the proxy reuses the registry's
+    provenance ledger, alert bus, and reflexive analyzer so events
+    appear in the central governance dashboards. The allowlist policy
+    is always per-listing.
     """
     observed_tools: set[str] = set()
     # The curator-submission flow persists observed tool names in
@@ -146,6 +144,21 @@ def _build_proxy_security_config(listing: ToolListing) -> SecurityConfig:
             listing.listing_id,
         )
         policy = PolicyConfig(fail_closed=False)
+
+    if shared_context is not None:
+        from fastmcp.server.security.config import ReflexiveConfig
+
+        return SecurityConfig(
+            policy=policy,
+            provenance=ProvenanceConfig(
+                ledger_id=shared_context.provenance_ledger.ledger_id
+                if shared_context.provenance_ledger
+                else f"curator-proxy-{listing.listing_id}",
+            ),
+            reflexive=ReflexiveConfig() if shared_context.behavioral_analyzer else None,
+            alerts=AlertConfig(),
+            enabled=True,
+        )
 
     return SecurityConfig(
         policy=policy,
@@ -318,7 +331,11 @@ def _build_client_factory(listing: ToolListing) -> Callable[[], Client]:
     )
 
 
-def build_curator_proxy_server(listing: ToolListing) -> SecureMCP:
+def build_curator_proxy_server(
+    listing: ToolListing,
+    *,
+    shared_context: Any = None,
+) -> SecureMCP:
     """Construct a SecureMCP-enforced proxy server for a curator listing.
 
     The returned :class:`SecureMCP` instance carries:
@@ -349,7 +366,7 @@ def build_curator_proxy_server(listing: ToolListing) -> SecureMCP:
         )
 
     client_factory = _build_client_factory(listing)
-    security = _build_proxy_security_config(listing)
+    security = _build_proxy_security_config(listing, shared_context=shared_context)
 
     proxy = SecureMCP(
         name=f"curator-proxy-{listing.tool_name or listing.listing_id}",
@@ -368,6 +385,36 @@ def build_curator_proxy_server(listing: ToolListing) -> SecureMCP:
     from fastmcp.server.providers.proxy import ProxyProvider
 
     proxy.add_provider(ProxyProvider(client_factory))
+
+    if shared_context is not None:
+        from fastmcp.server.security.middleware.consent_enforcement import (
+            ConsentEnforcementMiddleware,
+        )
+        from fastmcp.server.security.middleware.contract_validation import (
+            ContractValidationMiddleware,
+        )
+        from fastmcp.server.security.middleware.policy_enforcement import (
+            PolicyEnforcementMiddleware,
+        )
+
+        _SKIP = (
+            PolicyEnforcementMiddleware,
+            ContractValidationMiddleware,
+            ConsentEnforcementMiddleware,
+        )
+        for mw in shared_context.middleware:
+            if isinstance(mw, _SKIP):
+                continue
+            try:
+                proxy.add_middleware(mw)
+            except Exception:
+                logger.debug(
+                    "Could not add shared middleware %s to proxy %s",
+                    type(mw).__name__,
+                    listing.listing_id,
+                    exc_info=True,
+                )
+
     return proxy
 
 
@@ -385,19 +432,20 @@ class CuratorProxyRouter:
         *,
         listing_lookup: Any,
         auth_settings: "RegistryAuthSettings | None" = None,
+        shared_security_context: Any = None,
     ) -> None:
         """
         Args:
             listing_lookup: Callable ``(listing_id: str) -> ToolListing | None``.
-                Indirected so the router doesn't depend on a specific
-                marketplace implementation; the registry passes a
-                bound method.
-            auth_settings: Optional registry auth settings. Reserved
-                for future per-listing visibility checks; not enforced
-                in the MVP.
+            auth_settings: Optional registry auth settings.
+            shared_security_context: The registry's central
+                :class:`SecurityContext`. When set, proxy servers share
+                the registry's ledger, analyzer, and event bus so
+                governance events appear in the central dashboards.
         """
         self._lookup = listing_lookup
         self._auth_settings = auth_settings
+        self._shared_context = shared_security_context
         self._lock = asyncio.Lock()
         self._apps: dict[str, Starlette] = {}
         self._lifespans: dict[str, Any] = {}
@@ -412,7 +460,9 @@ class CuratorProxyRouter:
             if listing is None:
                 return None
             try:
-                proxy = build_curator_proxy_server(listing)
+                proxy = build_curator_proxy_server(
+                    listing, shared_context=self._shared_context
+                )
             except ProxyHostingError as exc:
                 logger.warning(
                     "Curator proxy mount refused for %s: %s",

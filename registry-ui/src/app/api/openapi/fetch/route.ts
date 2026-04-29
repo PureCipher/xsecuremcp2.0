@@ -43,7 +43,7 @@ export async function GET(request: Request) {
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000);
+  const timeout = setTimeout(() => controller.abort(), 30_000);
 
   try {
     const res = await fetch(url.toString(), {
@@ -63,9 +63,8 @@ export async function GET(request: Request) {
       );
     }
 
-    // Keep payloads bounded so the UI can't be used as a general-purpose fetcher.
-    if (text.length > 1_500_000) {
-      return NextResponse.json({ error: "OpenAPI document is too large." }, { status: 200 });
+    if (text.length > 25_000_000) {
+      return NextResponse.json({ error: "OpenAPI document is too large (25 MB limit)." }, { status: 200 });
     }
 
     return NextResponse.json({ ok: true, url: url.toString(), text }, { status: 200 });

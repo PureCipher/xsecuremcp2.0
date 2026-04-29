@@ -15,6 +15,10 @@ export function ProvenanceStats({ records, chainStatus }: Props) {
     const actorCounts: Record<string, number> = {};
     let errorCount = 0;
 
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
+    let callsWithTokens = 0;
+
     for (const r of records) {
       actionCounts[r.action] = (actionCounts[r.action] ?? 0) + 1;
       if (r.actor_id) {
@@ -23,6 +27,13 @@ export function ProvenanceStats({ records, chainStatus }: Props) {
       if (r.action === "error" || r.action === "access_denied") {
         errorCount++;
       }
+      const inTok = Number(r.metadata?.input_tokens ?? 0);
+      const outTok = Number(r.metadata?.output_tokens ?? 0);
+      if (inTok > 0 || outTok > 0) {
+        totalInputTokens += inTok;
+        totalOutputTokens += outTok;
+        callsWithTokens++;
+      }
     }
 
     const topActions = Object.entries(actionCounts)
@@ -30,8 +41,9 @@ export function ProvenanceStats({ records, chainStatus }: Props) {
       .slice(0, 5);
 
     const uniqueActors = Object.keys(actorCounts).length;
+    const totalTokens = totalInputTokens + totalOutputTokens;
 
-    return { actionCounts, topActions, uniqueActors, errorCount };
+    return { actionCounts, topActions, uniqueActors, errorCount, totalTokens, totalInputTokens, totalOutputTokens, callsWithTokens };
   }, [records]);
 
   const totalRecords = chainStatus?.record_count ?? records.length;
@@ -106,6 +118,22 @@ export function ProvenanceStats({ records, chainStatus }: Props) {
               </Typography>
             </CardContent>
           </Card>
+
+        {stats.totalTokens > 0 ? (
+          <Card variant="outlined">
+            <CardContent sx={{ p: 2 }}>
+              <Typography sx={{ fontFamily: "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", fontSize: "1.5rem", lineHeight: 1.15, fontWeight: 750, color: "var(--app-fg)" }}>
+                {stats.totalTokens.toLocaleString()}
+              </Typography>
+              <Typography variant="caption" sx={{ color: "var(--app-muted)" }}>
+                Tokens (all calls)
+              </Typography>
+              <Typography sx={{ mt: 0.5, fontSize: 11, color: "var(--app-muted)" }}>
+                {stats.totalInputTokens.toLocaleString()} in · {stats.totalOutputTokens.toLocaleString()} out · {stats.callsWithTokens} calls
+              </Typography>
+            </CardContent>
+          </Card>
+        ) : null}
 
         <Box sx={{ gridColumn: "1 / -1" }}>
           <Card variant="outlined" sx={{ bgcolor: "var(--app-control-bg)" }}>

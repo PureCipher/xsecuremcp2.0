@@ -2,14 +2,17 @@
 
 import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Alert,
   Box,
   Button,
   Card,
   CardContent,
+  Checkbox,
   Chip,
   FormControl,
+  FormControlLabel,
   InputLabel,
   MenuItem,
   Select,
@@ -58,6 +61,52 @@ const STEPS = ["OpenAPI source", "Select operations", "Generate toolset", "Prefl
 
 const DEFAULT_MANIFEST =
   "{\n  \"tool_name\": \"\",\n  \"version\": \"1.0.0\",\n  \"author\": \"\",\n  \"description\": \"\",\n  \"permissions\": [],\n  \"data_flows\": [],\n  \"resource_access\": [],\n  \"tags\": []\n}";
+
+const TOOL_CATEGORIES = [
+  "communication",
+  "collaboration",
+  "social_media",
+  "project_management",
+  "productivity",
+  "crm",
+  "marketing",
+  "ecommerce",
+  "human_resources",
+  "payments",
+  "finance",
+  "blockchain",
+  "database",
+  "analytics",
+  "data_platforms",
+  "machine_learning",
+  "developer_tools",
+  "code_execution",
+  "version_control",
+  "devops",
+  "cloud_platforms",
+  "monitoring",
+  "security",
+  "authentication",
+  "content_management",
+  "media",
+  "design",
+  "search",
+  "knowledge_management",
+  "research",
+  "file_system",
+  "cloud_storage",
+  "healthcare",
+  "legal",
+  "education",
+  "network",
+  "home_automation",
+  "location_services",
+  "travel",
+  "data_access",
+  "ai_ml",
+  "utility",
+  "other",
+] as const;
 
 function looksLikeUrl(value: string): boolean {
   try {
@@ -114,10 +163,11 @@ function tryParseJson(text: string, label: string): { ok: true; value: any } | {
 }
 
 export function OpenApiPublishWizard() {
+  const router = useRouter();
   const [activeStep, setActiveStep] = useState(0);
 
   const [displayName, setDisplayName] = useState("");
-  const [categories, setCategories] = useState("network,utility");
+  const [categories, setCategories] = useState<string[]>(["network", "utility"]);
   const [hostingVisibility, setHostingVisibility] = useState<"public" | "protected" | "private">("protected");
   const [allowedUsersText, setAllowedUsersText] = useState("");
 
@@ -337,10 +387,7 @@ export function OpenApiPublishWizard() {
     if (!display) {
       throw new Error("Display name is required.");
     }
-    const cats = categories
-      .split(",")
-      .map((c) => c.trim())
-      .filter(Boolean);
+    const cats = categories.filter(Boolean);
 
     const manifestParsed = tryParseJson(manifestText, "Manifest");
     if (!manifestParsed.ok) throw new Error(manifestParsed.message);
@@ -402,7 +449,7 @@ export function OpenApiPublishWizard() {
         setError(payload.error ?? "Publish failed.");
         return;
       }
-      setSuccess("Published successfully.");
+      router.push("/registry/publish/mine");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Publish failed.");
     } finally {
@@ -461,14 +508,46 @@ export function OpenApiPublishWizard() {
               size="small"
               fullWidth
             />
-            <TextField
-              label="Categories (comma-separated)"
-              value={categories}
-              onChange={(e) => setCategories(e.target.value)}
-              placeholder="network,utility"
-              size="small"
-              fullWidth
-            />
+            <Box>
+              <Typography sx={{ fontSize: 12, fontWeight: 700, color: "var(--app-muted)", mb: 0.75 }}>
+                Categories
+              </Typography>
+              {categories.length > 0 ? (
+                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, mb: 1 }}>
+                  {categories.map((cat) => (
+                    <Chip
+                      key={cat}
+                      label={cat}
+                      size="small"
+                      onDelete={() => setCategories((prev) => prev.filter((c) => c !== cat))}
+                      sx={{
+                        bgcolor: "var(--app-control-active-bg)",
+                        color: "var(--app-fg)",
+                        fontWeight: 600,
+                        "& .MuiChip-deleteIcon": { color: "var(--app-muted)", "&:hover": { color: "var(--app-fg)" } },
+                      }}
+                    />
+                  ))}
+                </Box>
+              ) : null}
+              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                {TOOL_CATEGORIES.filter((cat) => !categories.includes(cat)).map((cat) => (
+                  <Chip
+                    key={cat}
+                    label={cat}
+                    size="small"
+                    clickable
+                    onClick={() => setCategories((prev) => [...prev, cat])}
+                    sx={{
+                      bgcolor: "var(--app-surface)",
+                      color: "var(--app-muted)",
+                      border: "1px solid var(--app-border)",
+                      "&:hover": { borderColor: "var(--app-accent)", color: "var(--app-fg)" },
+                    }}
+                  />
+                ))}
+              </Box>
+            </Box>
             <Box>
               <FormControl size="small" fullWidth>
                 <InputLabel id="openapi-hosting-visibility-label">Hosting visibility</InputLabel>
@@ -533,60 +612,15 @@ export function OpenApiPublishWizard() {
         ) : null}
 
         {activeStep === 1 ? (
-          <Box sx={{ mt: 2, display: "grid", gap: 1.5 }}>
-            <Typography variant="body2" sx={{ color: "var(--app-muted)" }}>
-              Select the OpenAPI operations you want to expose as tools.
-            </Typography>
-            <Card variant="outlined" sx={{ bgcolor: "var(--app-control-bg)" }}>
-              <CardContent sx={{ p: 2 }}>
-                <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
-                  Operations
-                </Typography>
-                <Box sx={{ mt: 1, display: "grid", gap: 0.75 }}>
-                  {openapiOps.slice(0, 50).map((op) => {
-                    const key = op.operation_key;
-                    const label = `${(op.method ?? "").toUpperCase()} ${op.path ?? ""} — ${op.summary ?? key}`;
-                    return (
-                      <label key={key} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                        <input
-                          type="checkbox"
-                          checked={Boolean(openapiSelected[key])}
-                          onChange={(e) => setOpenapiSelected((prev) => ({ ...prev, [key]: e.target.checked }))}
-                          style={{ marginTop: 3 }}
-                        />
-                        <span style={{ fontSize: 12, color: "var(--app-muted)" }}>{label}</span>
-                      </label>
-                    );
-                  })}
-                  {openapiOps.length > 50 ? (
-                    <Typography variant="caption" sx={{ color: "var(--app-muted)" }}>
-                      Showing first 50 operations. Parsed: {openapiOps.length}.
-                    </Typography>
-                  ) : null}
-                </Box>
-                <Box sx={{ mt: 1.5, display: "flex", flexWrap: "wrap", gap: 1, alignItems: "center" }}>
-                  <Button
-                    type="button"
-                    variant="contained"
-                    disabled={!readyForToolset || openapiLoading}
-                    onClick={() => void createToolset()}
-                    sx={{ textTransform: "none" }}
-                  >
-                    Create toolset ({selectedKeys.length})
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="text"
-                    onClick={() => setOpenapiSelected({})}
-                    sx={{ textTransform: "none" }}
-                  >
-                    Clear selection
-                  </Button>
-                  <Chip size="small" label={`Selected: ${selectedKeys.length}`} />
-                </Box>
-              </CardContent>
-            </Card>
-          </Box>
+          <OperationPicker
+            ops={openapiOps}
+            selected={openapiSelected}
+            setSelected={setOpenapiSelected}
+            readyForToolset={readyForToolset}
+            loading={openapiLoading}
+            selectedCount={selectedKeys.length}
+            onCreateToolset={() => void createToolset()}
+          />
         ) : null}
 
         {activeStep === 3 ? (
@@ -699,8 +733,296 @@ export function OpenApiPublishWizard() {
             </Box>
           </Box>
         ) : null}
+
       </CardContent>
     </Card>
+  );
+}
+
+const METHOD_COLORS: Record<string, string> = {
+  GET: "#22c55e",
+  POST: "#3b82f6",
+  PUT: "#f59e0b",
+  PATCH: "#a855f7",
+  DELETE: "#ef4444",
+};
+
+const PAGE_SIZE = 100;
+
+function OperationPicker({
+  ops,
+  selected,
+  setSelected,
+  readyForToolset,
+  loading,
+  selectedCount,
+  onCreateToolset,
+}: {
+  ops: OpenAPIOperation[];
+  selected: Record<string, boolean>;
+  setSelected: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  readyForToolset: boolean;
+  loading: boolean;
+  selectedCount: number;
+  onCreateToolset: () => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [tagFilter, setTagFilter] = useState("");
+  const [methodFilter, setMethodFilter] = useState("");
+  const [page, setPage] = useState(0);
+
+  const allTags = useMemo(() => {
+    const bag = new Set<string>();
+    for (const op of ops) {
+      if (Array.isArray(op.tags)) {
+        for (const t of op.tags) {
+          const trimmed = String(t).trim();
+          if (trimmed) bag.add(trimmed);
+        }
+      }
+    }
+    return Array.from(bag).sort((a, b) => a.localeCompare(b));
+  }, [ops]);
+
+  const allMethods = useMemo(() => {
+    const bag = new Set<string>();
+    for (const op of ops) {
+      if (op.method) bag.add(op.method.toUpperCase());
+    }
+    return Array.from(bag).sort();
+  }, [ops]);
+
+  const needle = search.toLowerCase().trim();
+
+  const filtered = useMemo(() => {
+    return ops.filter((op) => {
+      if (methodFilter && (op.method ?? "").toUpperCase() !== methodFilter) return false;
+      if (tagFilter) {
+        const tags = Array.isArray(op.tags) ? op.tags.map((t) => String(t).trim()) : [];
+        if (!tags.includes(tagFilter)) return false;
+      }
+      if (needle) {
+        const hay = [
+          op.operation_key,
+          op.method,
+          op.path,
+          op.operation_id,
+          op.summary,
+          op.description,
+          ...(op.tags ?? []),
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        if (!hay.includes(needle)) return false;
+      }
+      return true;
+    });
+  }, [ops, needle, tagFilter, methodFilter]);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount - 1);
+  const pageSlice = filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+
+  const allFilteredSelected = filtered.length > 0 && filtered.every((op) => selected[op.operation_key]);
+
+  function toggleFiltered() {
+    setSelected((prev) => {
+      const next = { ...prev };
+      if (allFilteredSelected) {
+        for (const op of filtered) next[op.operation_key] = false;
+      } else {
+        for (const op of filtered) next[op.operation_key] = true;
+      }
+      return next;
+    });
+  }
+
+  return (
+    <Box sx={{ mt: 2, display: "grid", gap: 1.5 }}>
+      <Typography variant="body2" sx={{ color: "var(--app-muted)" }}>
+        Select the OpenAPI operations to expose as tools ({ops.length} total, {selectedCount} selected).
+      </Typography>
+
+      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, alignItems: "center" }}>
+        <TextField
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+          placeholder="Search endpoints..."
+          size="small"
+          sx={{ minWidth: 240, flex: 1 }}
+        />
+        {allMethods.length > 1 ? (
+          <FormControl size="small" sx={{ minWidth: 110 }}>
+            <InputLabel id="op-method-filter">Method</InputLabel>
+            <Select
+              labelId="op-method-filter"
+              label="Method"
+              value={methodFilter}
+              onChange={(e) => { setMethodFilter(e.target.value); setPage(0); }}
+            >
+              <MenuItem value="">All methods</MenuItem>
+              {allMethods.map((m) => (
+                <MenuItem key={m} value={m}>{m}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        ) : null}
+        {allTags.length > 1 ? (
+          <FormControl size="small" sx={{ minWidth: 160 }}>
+            <InputLabel id="op-tag-filter">Tag</InputLabel>
+            <Select
+              labelId="op-tag-filter"
+              label="Tag"
+              value={tagFilter}
+              onChange={(e) => { setTagFilter(e.target.value); setPage(0); }}
+            >
+              <MenuItem value="">All tags ({allTags.length})</MenuItem>
+              {allTags.map((t) => (
+                <MenuItem key={t} value={t}>{t}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        ) : null}
+      </Box>
+
+      <Card variant="outlined" sx={{ bgcolor: "var(--app-control-bg)" }}>
+        <CardContent sx={{ p: 2 }}>
+          <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 1 }}>
+            <Typography variant="overline" sx={{ color: "var(--app-muted)" }}>
+              {filtered.length === ops.length
+                ? `${ops.length} operations`
+                : `${filtered.length} of ${ops.length} operations`}
+            </Typography>
+            <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    size="small"
+                    checked={allFilteredSelected}
+                    indeterminate={!allFilteredSelected && filtered.some((op) => selected[op.operation_key])}
+                    onChange={toggleFiltered}
+                  />
+                }
+                label={
+                  <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                    {allFilteredSelected ? "Deselect all" : "Select all"} ({filtered.length})
+                  </Typography>
+                }
+              />
+            </Box>
+          </Box>
+
+          <Box sx={{ mt: 1, display: "grid", gap: 0.5, maxHeight: 420, overflowY: "auto" }}>
+            {pageSlice.map((op) => {
+              const key = op.operation_key;
+              const method = (op.method ?? "").toUpperCase();
+              return (
+                <label
+                  key={key}
+                  style={{
+                    display: "flex",
+                    gap: 8,
+                    alignItems: "flex-start",
+                    padding: "4px 0",
+                    cursor: "pointer",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={Boolean(selected[key])}
+                    onChange={(e) => setSelected((prev) => ({ ...prev, [key]: e.target.checked }))}
+                    style={{ marginTop: 3, flexShrink: 0 }}
+                  />
+                  <Box sx={{ minWidth: 0 }}>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
+                      <Box
+                        component="span"
+                        sx={{
+                          fontSize: 10,
+                          fontWeight: 800,
+                          fontFamily: "monospace",
+                          color: METHOD_COLORS[method] ?? "var(--app-muted)",
+                          minWidth: 48,
+                        }}
+                      >
+                        {method}
+                      </Box>
+                      <Box
+                        component="span"
+                        sx={{
+                          fontSize: 12,
+                          fontFamily: "monospace",
+                          color: "var(--app-fg)",
+                          wordBreak: "break-all",
+                        }}
+                      >
+                        {op.path ?? ""}
+                      </Box>
+                    </Box>
+                    {op.summary ? (
+                      <Typography sx={{ fontSize: 11, color: "var(--app-muted)", mt: 0.25 }}>
+                        {op.summary}
+                      </Typography>
+                    ) : null}
+                  </Box>
+                </label>
+              );
+            })}
+            {filtered.length === 0 ? (
+              <Typography sx={{ fontSize: 12, color: "var(--app-muted)", py: 2, textAlign: "center" }}>
+                No operations match the current filters.
+              </Typography>
+            ) : null}
+          </Box>
+
+          {pageCount > 1 ? (
+            <Box sx={{ mt: 1.5, display: "flex", alignItems: "center", gap: 1 }}>
+              <Button
+                size="small"
+                disabled={safePage === 0}
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                sx={{ textTransform: "none", minWidth: 0 }}
+              >
+                Prev
+              </Button>
+              <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                Page {safePage + 1} of {pageCount}
+              </Typography>
+              <Button
+                size="small"
+                disabled={safePage >= pageCount - 1}
+                onClick={() => setPage((p) => p + 1)}
+                sx={{ textTransform: "none", minWidth: 0 }}
+              >
+                Next
+              </Button>
+            </Box>
+          ) : null}
+
+          <Box sx={{ mt: 1.5, display: "flex", flexWrap: "wrap", gap: 1, alignItems: "center" }}>
+            <Button
+              type="button"
+              variant="contained"
+              disabled={!readyForToolset || loading}
+              onClick={onCreateToolset}
+              sx={{ textTransform: "none" }}
+            >
+              Create toolset ({selectedCount})
+            </Button>
+            <Button
+              type="button"
+              variant="text"
+              onClick={() => setSelected({})}
+              sx={{ textTransform: "none" }}
+            >
+              Clear selection
+            </Button>
+            <Chip size="small" label={`Selected: ${selectedCount}`} />
+          </Box>
+        </CardContent>
+      </Card>
+    </Box>
   );
 }
 

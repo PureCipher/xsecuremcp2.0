@@ -92,6 +92,7 @@ from securemcp.config import (
     CertificationConfig,
     ConsentConfig,
     ContractConfig,
+    IntrospectionConfig,
     PolicyConfig,
     ProvenanceConfig,
     ReflexiveConfig,
@@ -658,6 +659,12 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 backend=backend,
             )
 
+        introspection_config: IntrospectionConfig | None = None
+        if enable_reflexive:
+            introspection_config = IntrospectionConfig(
+                enable_pre_execution_gating=False,
+            )
+
         return SecurityConfig(
             alerts=AlertConfig(),
             policy=PolicyConfig(
@@ -680,6 +687,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             consent=consent_config,
             provenance=provenance_config,
             reflexive=reflexive_config,
+            introspection=introspection_config,
         )
 
     def _required_context(self) -> SecurityContext:
@@ -2714,6 +2722,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
         return {
             **listing.to_dict(),
+            "metadata": dict(listing.metadata),
             "manifest": listing.manifest.to_dict()
             if listing.manifest is not None
             else None,
@@ -2833,9 +2842,10 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             return {RegistryRole.REVIEWER, RegistryRole.ADMIN}
         if normalized in {"suspend", "unsuspend"}:
             return {RegistryRole.ADMIN}
-        # Iter 14.11 — deregister is admin-only (terminal removal).
         if normalized == "deregister":
             return {RegistryRole.ADMIN}
+        if normalized in {"withdraw", "resubmit"}:
+            return {RegistryRole.PUBLISHER, RegistryRole.REVIEWER, RegistryRole.ADMIN}
         return set()
 
     def _filter_queue_for_session(
@@ -5316,6 +5326,24 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 )
                 if reason_snip:
                     body = f"{body} Reason: {reason_snip}"
+            elif action == ModerationAction.WITHDRAW:
+                title = f"Listing withdrawn — {display}"
+                body = (
+                    f"{display} (v{listing.version}) was withdrawn "
+                    f"by its publisher ({moderator_id or 'publisher'}). "
+                    "It has been removed from the review queue."
+                )
+                if reason_snip:
+                    body = f"{body} Reason: {reason_snip}"
+            elif action == ModerationAction.RESUBMIT:
+                title = f"Listing resubmitted — {display}"
+                body = (
+                    f"{display} (v{listing.version}) was resubmitted "
+                    f"by its publisher ({moderator_id or 'publisher'}). "
+                    "It has been returned to the review queue."
+                )
+                if reason_snip:
+                    body = f"{body} Note: {reason_snip}"
             else:
                 title = f"Moderation: {action.value.replace('_', ' ')} — {display}"
                 body = (
@@ -5328,6 +5356,10 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 event_kind=(
                     "listing_deregistered"
                     if action == ModerationAction.DEREGISTER
+                    else "listing_withdrawn"
+                    if action == ModerationAction.WITHDRAW
+                    else "listing_resubmitted"
+                    if action == ModerationAction.RESUBMIT
                     else "moderation_decision"
                 ),
                 title=title,
@@ -5411,6 +5443,12 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 manifest_digest=preflight.manifest_digest,
             )
 
+        from purecipher.token_cost import estimate_definition_tokens
+
+        definition_tokens = estimate_definition_tokens(
+            manifest.to_dict() if hasattr(manifest, "to_dict") else {}
+        )
+
         listing = self._marketplace().publish(
             manifest.tool_name,
             display_name=display_name or manifest.tool_name,
@@ -5427,6 +5465,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             metadata={
                 "issuer_id": self._issuer_id,
                 "verified_registry": "purecipher",
+                "definition_tokens": definition_tokens,
                 **(metadata or {}),
             },
             changelog=changelog,
@@ -5546,6 +5585,16 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 "error": (
                     "hosting_mode must be 'catalog' or 'proxy' "
                     f"(got {raw_hosting_early!r})."
+                ),
+                "status": 400,
+            }
+
+        raw_attestation_kind = str(body.get("attestation_kind", "curator")).strip().lower()
+        if raw_attestation_kind not in {"author", "curator"}:
+            return {
+                "error": (
+                    "attestation_kind must be 'author' or 'curator' "
+                    f"(got {raw_attestation_kind!r})."
                 ),
                 "status": 400,
             }
@@ -5715,7 +5764,8 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         version = str(body.get("version", "")).strip() or "0.1.0"
         description = str(body.get("description", "")).strip()
         categories = _coerce_categories(body.get("categories")) or None
-        curator_id = session.username if session is not None else "local"
+        submitter = session.username if session is not None else "local"
+        curator_id = submitter if raw_attestation_kind == "curator" else ""
         # Map the validated raw_hosting string from earlier into the
         # HostingMode enum (validation already ran before resolve).
         hosting_mode = (
@@ -5726,7 +5776,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             tool_name=tool_name,
             display_name=display_name,
             version=version,
-            author=curator_id,
+            author=submitter,
             description=description,
         )
 
@@ -5758,7 +5808,11 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     "prompt_names": [p.name for p in introspection.prompts],
                 },
             },
-            attestation_kind=AttestationKind.CURATOR,
+            attestation_kind=(
+                AttestationKind.AUTHOR
+                if raw_attestation_kind == "author"
+                else AttestationKind.CURATOR
+            ),
             upstream_ref=preview.upstream_ref,
             curator_id=curator_id,
             hosting_mode=hosting_mode,
@@ -5774,10 +5828,21 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             try:
                 self._account_activity.append(
                     username=session.username,
-                    event_kind="curated_listing_submitted",
-                    title=f"Curated listing: {display_name}",
+                    event_kind=(
+                        "author_listing_submitted"
+                        if raw_attestation_kind == "author"
+                        else "curated_listing_submitted"
+                    ),
+                    title=(
+                        f"Author listing: {display_name}"
+                        if raw_attestation_kind == "author"
+                        else f"Curated listing: {display_name}"
+                    ),
                     detail=(
-                        f"Vouched for {preview.upstream_ref.identifier} "
+                        f"Connected {preview.upstream_ref.identifier} "
+                        f"({introspection.tool_count} tool(s) observed)"
+                        if raw_attestation_kind == "author"
+                        else f"Vouched for {preview.upstream_ref.identifier} "
                         f"({introspection.tool_count} tool(s) observed)"
                     ),
                     metadata={
@@ -8557,11 +8622,104 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     )
                 metadata = parsed
 
-            # Moderator identity comes from the authenticated session, never
-            # from the request body. Pre-fix the body's ``moderator_id`` was
-            # honored, allowing any caller to spoof attribution in the audit
-            # log. ``"local"`` is used as the unauthenticated fallback only
-            # when ``auth_enabled`` is False (single-tenant local dev).
+            # Withdraw: publishers may only withdraw their own pending
+            # listings. Admins/reviewers can withdraw any listing.
+            if action_name.strip().lower() == "withdraw":
+                marketplace = self._marketplace()
+                target = marketplace.get(listing_id)
+                if target is None:
+                    err = {"error": f"Listing '{listing_id}' not found", "status": 404}
+                    if expects_json:
+                        return JSONResponse(err, status_code=404)
+                    return create_secure_html_response(
+                        self._render_review_queue_ui(
+                            prefix=prefix,
+                            notice_title="Withdraw failed",
+                            notice_body=err["error"],
+                            notice_is_error=True,
+                        ),
+                        status_code=404,
+                    )
+                if target.status != PublishStatus.PENDING_REVIEW:
+                    err = {"error": "Only pending-review listings can be withdrawn.", "status": 400}
+                    if expects_json:
+                        return JSONResponse(err, status_code=400)
+                    return create_secure_html_response(
+                        self._render_review_queue_ui(
+                            prefix=prefix,
+                            notice_title="Withdraw failed",
+                            notice_body=err["error"],
+                            notice_is_error=True,
+                        ),
+                        status_code=400,
+                    )
+                caller = session.username if session is not None else "local"
+                is_owner = target.author == caller
+                is_privileged = session is not None and self._has_roles(
+                    session, {RegistryRole.REVIEWER, RegistryRole.ADMIN}
+                )
+                if not is_owner and not is_privileged:
+                    err = {"error": "You can only withdraw your own listings.", "status": 403}
+                    if expects_json:
+                        return JSONResponse(err, status_code=403)
+                    return create_secure_html_response(
+                        self._render_review_queue_ui(
+                            prefix=prefix,
+                            notice_title="Withdraw failed",
+                            notice_body=err["error"],
+                            notice_is_error=True,
+                        ),
+                        status_code=403,
+                    )
+
+            if action_name.strip().lower() == "resubmit":
+                marketplace = self._marketplace()
+                target = marketplace.get(listing_id)
+                if target is None:
+                    err = {"error": f"Listing '{listing_id}' not found", "status": 404}
+                    if expects_json:
+                        return JSONResponse(err, status_code=404)
+                    return create_secure_html_response(
+                        self._render_review_queue_ui(
+                            prefix=prefix,
+                            notice_title="Resubmit failed",
+                            notice_body=err["error"],
+                            notice_is_error=True,
+                        ),
+                        status_code=404,
+                    )
+                if target.status != PublishStatus.WITHDRAWN:
+                    err = {"error": "Only withdrawn listings can be resubmitted.", "status": 400}
+                    if expects_json:
+                        return JSONResponse(err, status_code=400)
+                    return create_secure_html_response(
+                        self._render_review_queue_ui(
+                            prefix=prefix,
+                            notice_title="Resubmit failed",
+                            notice_body=err["error"],
+                            notice_is_error=True,
+                        ),
+                        status_code=400,
+                    )
+                caller = session.username if session is not None else "local"
+                is_owner = target.author == caller
+                is_privileged = session is not None and self._has_roles(
+                    session, {RegistryRole.REVIEWER, RegistryRole.ADMIN}
+                )
+                if not is_owner and not is_privileged:
+                    err = {"error": "You can only resubmit your own listings.", "status": 403}
+                    if expects_json:
+                        return JSONResponse(err, status_code=403)
+                    return create_secure_html_response(
+                        self._render_review_queue_ui(
+                            prefix=prefix,
+                            notice_title="Resubmit failed",
+                            notice_body=err["error"],
+                            notice_is_error=True,
+                        ),
+                        status_code=403,
+                    )
+
             session_moderator_id = session.username if session is not None else "local"
             payload = self.moderate_listing(
                 listing_id,

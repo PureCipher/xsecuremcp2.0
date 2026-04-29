@@ -5,6 +5,8 @@ import { Box, Button, Card, CardActions, CardContent, Chip, Typography } from "@
 
 import { RegistryPageHeader } from "@/components/security";
 import { getMyListings, getRegistrySession, requirePublisherRole } from "@/lib/registryClient";
+import { WithdrawButton } from "./WithdrawButton";
+import { ResubmitButton } from "./ResubmitButton";
 
 type Listing = {
   listing_id?: string;
@@ -16,6 +18,8 @@ type Listing = {
   description?: string;
   manifest?: Record<string, unknown> | null;
   metadata?: Record<string, unknown> | null;
+  attestation_kind?: string;
+  hosting_mode?: string;
   moderation_log?: { action?: string; moderator_id?: string; reason?: string }[];
 };
 
@@ -33,15 +37,17 @@ export default async function MyListingsPage() {
   }
 
   const payload = (await getMyListings()) ?? {};
-  const tools = (payload.tools ?? []) as Listing[];
+  const allTools = (payload.tools ?? []) as Listing[];
+  const tools = allTools.filter((t) => t.status !== "rejected");
 
   const sorted = [...tools].sort((a, b) => {
     const rank = (s?: string) => {
       if (s === "pending_review") return 0;
-      if (s === "draft") return 1;
-      if (s === "rejected") return 2;
-      if (s === "suspended") return 3;
-      if (s === "published") return 4;
+      if (s === "withdrawn") return 1;
+      if (s === "draft") return 2;
+      if (s === "rejected") return 3;
+      if (s === "suspended") return 4;
+      if (s === "published") return 5;
       return 9;
     };
     return rank(a.status) - rank(b.status);
@@ -55,7 +61,7 @@ export default async function MyListingsPage() {
         description="Track your submissions across draft, pending review, and published states."
         actions={
           <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
-          <Link href="/registry/publish"><Button variant="contained" sx={{ bgcolor: "var(--app-accent)", color: "var(--app-accent-contrast)", "&:hover": { bgcolor: "var(--app-accent)" }, }}>
+          <Link href="/registry/publish/get-started"><Button variant="contained" sx={{ bgcolor: "var(--app-accent)", color: "var(--app-accent-contrast)", "&:hover": { bgcolor: "var(--app-accent)" }, }}>
               Publish a tool
             </Button></Link>
           <Link href="/registry/publish/get-started"><Button variant="outlined" sx={{ borderColor: "var(--app-control-border)", color: "var(--app-muted)", bgcolor: "var(--app-control-bg)", "&:hover": { bgcolor: "var(--app-hover-bg)", borderColor: "var(--app-control-border)" }, }}>
@@ -115,6 +121,19 @@ export default async function MyListingsPage() {
                       <Link href={`/registry/publish?from=${encodeURIComponent(item.listing_id ?? "")}`}><Button size="small" variant="outlined" sx={{ borderColor: "var(--app-accent)", color: "var(--app-muted)", "&:hover": { bgcolor: "var(--app-control-active-bg)", borderColor: "var(--app-accent)" }, }}>
                           Publish new version
                         </Button></Link>
+                      {item.status === "pending_review" && item.listing_id ? (
+                        <WithdrawButton listingId={item.listing_id} displayName={item.display_name ?? item.tool_name ?? "this listing"} />
+                      ) : null}
+                      {item.status === "withdrawn" && item.listing_id ? (
+                        <>
+                          <ResubmitButton listingId={item.listing_id} />
+                          <Link href={reviseHref(item)}>
+                            <Button size="small" variant="outlined" sx={{ borderColor: "var(--app-control-border)", color: "var(--app-muted)", "&:hover": { bgcolor: "var(--app-hover-bg)", borderColor: "var(--app-control-border)" } }}>
+                              Revise and resubmit
+                            </Button>
+                          </Link>
+                        </>
+                      ) : null}
                     </CardActions>
                   ) : null}
                 </Card>
@@ -125,6 +144,21 @@ export default async function MyListingsPage() {
       </Card>
     </Box>
   );
+}
+
+function reviseHref(item: Listing): string {
+  const id = encodeURIComponent(item.listing_id ?? "");
+  const meta = item.metadata ?? {};
+  if (meta.curated && item.attestation_kind === "author") {
+    return `/registry/onboard?mode=author&from=${id}`;
+  }
+  if (meta.curated && item.attestation_kind === "curator") {
+    return `/registry/onboard?from=${id}`;
+  }
+  if (item.attestation_kind === "openapi" || item.hosting_mode === "proxy") {
+    return `/registry/publish/openapi?from=${id}`;
+  }
+  return `/registry/publish?from=${id}`;
 }
 
 function lastModerationReason(item: Listing): string {
@@ -144,9 +178,11 @@ function StatusChip({ status }: { status?: string }) {
         ? { bgcolor: "var(--app-control-active-bg)", color: "var(--app-muted)" }
         : s === "rejected"
           ? { bgcolor: "rgba(239, 68, 68, 0.12)", color: "#b91c1c" }
-          : s === "suspended"
-            ? { bgcolor: "rgba(249, 115, 22, 0.12)", color: "#c2410c" }
-            : { bgcolor: "var(--app-active-bg)", color: "var(--app-muted)" };
+          : s === "withdrawn"
+            ? { bgcolor: "rgba(245, 158, 11, 0.18)", color: "#78350f" }
+            : s === "suspended"
+              ? { bgcolor: "rgba(249, 115, 22, 0.12)", color: "#c2410c" }
+              : { bgcolor: "var(--app-active-bg)", color: "var(--app-muted)" };
 
   return (
     <Chip

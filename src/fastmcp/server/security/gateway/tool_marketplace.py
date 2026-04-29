@@ -45,16 +45,68 @@ logger = logging.getLogger(__name__)
 class ToolCategory(Enum):
     """Categories for marketplace tool classification."""
 
-    DATA_ACCESS = "data_access"
-    FILE_SYSTEM = "file_system"
-    NETWORK = "network"
-    CODE_EXECUTION = "code_execution"
-    AI_ML = "ai_ml"
+    # Communication & Collaboration
     COMMUNICATION = "communication"
-    SEARCH = "search"
+    COLLABORATION = "collaboration"
+    SOCIAL_MEDIA = "social_media"
+
+    # Productivity & Business
+    PROJECT_MANAGEMENT = "project_management"
+    PRODUCTIVITY = "productivity"
+    CRM = "crm"
+    MARKETING = "marketing"
+    ECOMMERCE = "ecommerce"
+    HUMAN_RESOURCES = "human_resources"
+
+    # Finance & Payments
+    PAYMENTS = "payments"
+    FINANCE = "finance"
+    BLOCKCHAIN = "blockchain"
+
+    # Data & Analytics
     DATABASE = "database"
-    AUTHENTICATION = "authentication"
+    ANALYTICS = "analytics"
+    DATA_PLATFORMS = "data_platforms"
+    MACHINE_LEARNING = "machine_learning"
+
+    # Development & Infrastructure
+    DEVELOPER_TOOLS = "developer_tools"
+    CODE_EXECUTION = "code_execution"
+    VERSION_CONTROL = "version_control"
+    DEVOPS = "devops"
+    CLOUD_PLATFORMS = "cloud_platforms"
     MONITORING = "monitoring"
+    SECURITY = "security"
+    AUTHENTICATION = "authentication"
+
+    # Content & Media
+    CONTENT_MANAGEMENT = "content_management"
+    MEDIA = "media"
+    DESIGN = "design"
+
+    # Knowledge & Search
+    SEARCH = "search"
+    KNOWLEDGE_MANAGEMENT = "knowledge_management"
+    RESEARCH = "research"
+
+    # Storage & Files
+    FILE_SYSTEM = "file_system"
+    CLOUD_STORAGE = "cloud_storage"
+
+    # Vertical Industries
+    HEALTHCARE = "healthcare"
+    LEGAL = "legal"
+    EDUCATION = "education"
+
+    # Infrastructure
+    NETWORK = "network"
+    HOME_AUTOMATION = "home_automation"
+    LOCATION_SERVICES = "location_services"
+    TRAVEL = "travel"
+
+    # General
+    DATA_ACCESS = "data_access"
+    AI_ML = "ai_ml"
     UTILITY = "utility"
     OTHER = "other"
 
@@ -68,6 +120,7 @@ class PublishStatus(Enum):
     SUSPENDED = "suspended"
     DEPRECATED = "deprecated"
     REJECTED = "rejected"
+    WITHDRAWN = "withdrawn"
     # Iter 14.11 — admin-driven permanent removal. Distinct from
     # SUSPENDED (which is reversible via UNSUSPEND) and from
     # DEPRECATED (which keeps the listing visible with an obsolete
@@ -100,6 +153,8 @@ class ModerationAction(Enum):
     # withdraws a listing from the platform (policy violation,
     # security incident, abandonment by author, etc.).
     DEREGISTER = "deregister"
+    WITHDRAW = "withdraw"
+    RESUBMIT = "resubmit"
 
 
 @dataclass
@@ -1598,6 +1653,8 @@ class ToolMarketplace:
             ModerationAction.DEPRECATE: PublishStatus.DEPRECATED,
             ModerationAction.REQUEST_CHANGES: PublishStatus.DRAFT,
             ModerationAction.DEREGISTER: PublishStatus.DEREGISTERED,
+            ModerationAction.WITHDRAW: PublishStatus.WITHDRAWN,
+            ModerationAction.RESUBMIT: PublishStatus.PENDING_REVIEW,
         }
 
         new_status = status_map.get(action)

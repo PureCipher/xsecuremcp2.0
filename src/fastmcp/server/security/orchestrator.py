@@ -97,6 +97,7 @@ class SecurityContext:
     behavioral_analyzer: BehavioralAnalyzer | None = None
     escalation_engine: EscalationEngine | None = None
     consent_graph: ConsentGraph | None = None
+    federated_consent_graph: Any = None
     audit_api: AuditAPI | None = None
     marketplace: Marketplace | None = None
     registry: TrustRegistry | None = None
@@ -293,11 +294,21 @@ class SecurityOrchestrator:
                 ReflexiveMiddleware,
             )
 
+            introspection_engine = None
+            if config.introspection is not None:
+                introspection_engine = config.introspection.get_introspection_engine(
+                    analyzer=analyzer,
+                    escalation_engine=escalation_engine,
+                )
+                ctx.introspection_engine = introspection_engine  # type: ignore[attr-defined]
+                logger.debug("Introspection engine enabled")
+
             ctx.middleware.append(
                 ReflexiveMiddleware(
                     analyzer=analyzer,
                     escalation_engine=escalation_engine,
                     bypass_stdio=bypass_stdio,
+                    introspection_engine=introspection_engine,
                 )
             )
             logger.debug("Reflexive core enabled")
@@ -321,6 +332,17 @@ class SecurityOrchestrator:
                     bypass_stdio=bypass_stdio,
                     require_for_list=config.consent.require_for_list,
                 )
+            )
+
+            from fastmcp.server.security.consent.federation import (
+                FederatedConsentGraph,
+            )
+
+            ctx.federated_consent_graph = FederatedConsentGraph(
+                local_graph=graph,
+                federation=ctx.federation,
+                institution_id=server_name,
+                event_bus=bus_for_components,
             )
             logger.debug("Consent graph enabled")
 
