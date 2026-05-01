@@ -106,9 +106,7 @@ def _reject_internal_host(host: str) -> None:
     # The cloud-provider metadata service. Refused with a specific
     # message so curators understand why.
     if lower in {"169.254.169.254", "metadata.google.internal", "fd00:ec2::254"}:
-        raise UpstreamResolutionError(
-            "Refusing to curate a cloud-metadata endpoint."
-        )
+        raise UpstreamResolutionError("Refusing to curate a cloud-metadata endpoint.")
     # IP-literal in a private/link-local/multicast/reserved range?
     try:
         addr = ipaddress.ip_address(lower)
@@ -134,7 +132,7 @@ def _split_versioned(spec: str) -> tuple[str, str]:
     first ``@`` (the scope) is preserved, only the *last* ``@`` is
     treated as the version separator.
     """
-    if "@" not in spec or spec.startswith("@") and spec.count("@") == 1:
+    if "@" not in spec or (spec.startswith("@") and spec.count("@") == 1):
         return spec, ""
     last_at = spec.rfind("@")
     # Scoped npm: ``@scope/pkg`` — only one @ at the start, no version.
@@ -165,19 +163,14 @@ def parse_pypi_upstream(raw: str) -> UpstreamRef:
     cleaned = raw.strip()
     if not cleaned.lower().startswith("pypi:"):
         raise UpstreamResolutionError(
-            "PyPI upstream must start with 'pypi:' "
-            "(e.g. 'pypi:markitdown-mcp@1.2.3')."
+            "PyPI upstream must start with 'pypi:' (e.g. 'pypi:markitdown-mcp@1.2.3')."
         )
     spec = cleaned[len("pypi:") :].strip()
     if not spec:
-        raise UpstreamResolutionError(
-            "Empty PyPI package name after 'pypi:' prefix."
-        )
+        raise UpstreamResolutionError("Empty PyPI package name after 'pypi:' prefix.")
     pkg, version = _split_versioned(spec)
     if not _PYPI_PKG_RE.match(pkg):
-        raise UpstreamResolutionError(
-            f"Invalid PyPI package name: {pkg!r}."
-        )
+        raise UpstreamResolutionError(f"Invalid PyPI package name: {pkg!r}.")
     return UpstreamRef(
         channel=UpstreamChannel.PYPI,
         identifier=pkg,
@@ -204,14 +197,10 @@ def parse_npm_upstream(raw: str) -> UpstreamRef:
         )
     spec = cleaned[len("npm:") :].strip()
     if not spec:
-        raise UpstreamResolutionError(
-            "Empty npm package name after 'npm:' prefix."
-        )
+        raise UpstreamResolutionError("Empty npm package name after 'npm:' prefix.")
     pkg, version = _split_versioned(spec)
     if not _NPM_PKG_RE.match(pkg):
-        raise UpstreamResolutionError(
-            f"Invalid npm package name: {pkg!r}."
-        )
+        raise UpstreamResolutionError(f"Invalid npm package name: {pkg!r}.")
     return UpstreamRef(
         channel=UpstreamChannel.NPM,
         identifier=pkg,
@@ -228,9 +217,7 @@ def parse_npm_upstream(raw: str) -> UpstreamRef:
 # (which may include a port like ``localhost:5000``). We don't do a
 # full grammar match because real-world references are messier than
 # the spec; we reject obvious garbage and accept the rest.
-_DOCKER_REF_RE = __import__("re").compile(
-    r"^[a-z0-9]([a-z0-9._/:-]*[a-z0-9])?$"
-)
+_DOCKER_REF_RE = __import__("re").compile(r"^[a-z0-9]([a-z0-9._/:-]*[a-z0-9])?$")
 _DOCKER_TAG_RE = __import__("re").compile(r"^[\w][\w.-]{0,127}$")
 _DOCKER_DIGEST_RE = __import__("re").compile(
     r"^sha(?:256:[a-f0-9]{64}|512:[a-f0-9]{128})$"
@@ -319,15 +306,11 @@ def parse_docker_upstream(raw: str) -> UpstreamRef:
         )
     spec = cleaned[len("docker:") :].strip()
     if not spec:
-        raise UpstreamResolutionError(
-            "Empty Docker reference after 'docker:' prefix."
-        )
+        raise UpstreamResolutionError("Empty Docker reference after 'docker:' prefix.")
 
     image_name, tag, digest = _split_docker_reference(spec)
     if not image_name:
-        raise UpstreamResolutionError(
-            "Docker reference is missing the image name."
-        )
+        raise UpstreamResolutionError("Docker reference is missing the image name.")
     if not _DOCKER_REF_RE.match(image_name):
         raise UpstreamResolutionError(
             f"Invalid Docker image name: {image_name!r}. Use lowercase "
@@ -625,8 +608,7 @@ class PyPIUpstreamFetcher:
                 response = client.get(url)
                 if response.status_code == 404:
                     raise UpstreamResolutionError(
-                        f"PyPI couldn't find a package named "
-                        f"{ref.identifier!r}."
+                        f"PyPI couldn't find a package named {ref.identifier!r}."
                     )
                 response.raise_for_status()
                 data = response.json()
@@ -732,8 +714,7 @@ class NpmUpstreamFetcher:
                 response = client.get(url)
                 if response.status_code == 404:
                     raise UpstreamResolutionError(
-                        f"npm couldn't find a package named "
-                        f"{ref.identifier!r}."
+                        f"npm couldn't find a package named {ref.identifier!r}."
                     )
                 response.raise_for_status()
                 data = response.json()
@@ -771,7 +752,9 @@ class NpmUpstreamFetcher:
         )
         slug = _slugify_pkg(ref.identifier)
         display = version_data.get("name") or data.get("name") or slug
-        description_full = str(version_data.get("description") or data.get("description") or "")
+        description_full = str(
+            version_data.get("description") or data.get("description") or ""
+        )
 
         new_ref = UpstreamRef(
             channel=UpstreamChannel.NPM,
@@ -782,7 +765,9 @@ class NpmUpstreamFetcher:
             metadata={
                 "raw_spec": ref.metadata.get("raw_spec", ""),
                 "summary": description_full,
-                "license": str(version_data.get("license") or data.get("license") or ""),
+                "license": str(
+                    version_data.get("license") or data.get("license") or ""
+                ),
                 "registry": "npm",
             },
         )

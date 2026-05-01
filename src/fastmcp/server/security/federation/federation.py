@@ -161,7 +161,9 @@ class BroadcastResult:
 
     @property
     def failure_count(self) -> int:
-        return sum(1 for d in self.deliveries if not d.delivered and not d.skipped_reason)
+        return sum(
+            1 for d in self.deliveries if not d.delivered and not d.skipped_reason
+        )
 
     @property
     def skipped_count(self) -> int:
@@ -571,9 +573,7 @@ class TrustFederation:
         """The currently-configured broadcast transport, if any."""
         return self._broadcast_transport
 
-    def set_broadcast_transport(
-        self, transport: BroadcastTransport | None
-    ) -> None:
+    def set_broadcast_transport(self, transport: BroadcastTransport | None) -> None:
         """Late-bind the broadcast transport (e.g. wire it after construction)."""
         self._broadcast_transport = transport
 
@@ -776,9 +776,7 @@ class TrustFederation:
         return self._record_push_success(peer, start)
 
     @staticmethod
-    def _record_push_success(
-        peer: FederationPeer, start: float
-    ) -> BroadcastDelivery:
+    def _record_push_success(peer: FederationPeer, start: float) -> BroadcastDelivery:
         peer.pushed_revocations += 1
         peer.last_push_at = datetime.now(timezone.utc)
         # A peer that was UNREACHABLE before successfully receiving a

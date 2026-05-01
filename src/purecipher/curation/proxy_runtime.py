@@ -57,6 +57,8 @@ from fastmcp import Client
 from fastmcp.server.providers.proxy import FastMCPProxy
 from fastmcp.server.security.config import (
     AlertConfig,
+    ConsentConfig,
+    ContractConfig,
     PolicyConfig,
     ProvenanceConfig,
     SecurityConfig,
@@ -83,6 +85,28 @@ class ProxyHostingError(RuntimeError):
     """
 
 
+def _listing_enforcement_flags(listing: ToolListing) -> tuple[bool, bool]:
+    """Return ``(require_consent, require_contract)`` for a listing.
+
+    Curators opt in to consent/contract gating at submit time by
+    setting flags in ``listing.metadata["enforcement"]``. ``require_consent``
+    also falls back to ``listing.manifest.requires_consent`` so the
+    manifest-level declaration keeps its existing meaning.
+    """
+    metadata = listing.metadata or {}
+    enforcement: dict[str, Any] = {}
+    if isinstance(metadata, dict):
+        raw = metadata.get("enforcement")
+        if isinstance(raw, dict):
+            enforcement = raw
+
+    require_consent = bool(enforcement.get("require_consent", False))
+    if not require_consent and listing.manifest is not None:
+        require_consent = bool(getattr(listing.manifest, "requires_consent", False))
+    require_contract = bool(enforcement.get("require_contract", False))
+    return require_consent, require_contract
+
+
 def _build_proxy_security_config(
     listing: ToolListing,
     *,
@@ -95,6 +119,11 @@ def _build_proxy_security_config(
     provenance ledger, alert bus, and reflexive analyzer so events
     appear in the central governance dashboards. The allowlist policy
     is always per-listing.
+
+    Consent and contract enforcement are opt-in per listing via
+    ``listing.metadata["enforcement"]``. When set, the proxy borrows
+    the registry's consent graph / context broker so grants and
+    contracts issued through the central API apply to proxy traffic.
     """
     observed_tools: set[str] = set()
     # The curator-submission flow persists observed tool names in
@@ -145,8 +174,18 @@ def _build_proxy_security_config(
         )
         policy = PolicyConfig(fail_closed=False)
 
+    require_consent, require_contract = _listing_enforcement_flags(listing)
+
     if shared_context is not None:
         from fastmcp.server.security.config import ReflexiveConfig
+
+        consent_cfg: ConsentConfig | None = None
+        if require_consent and shared_context.consent_graph is not None:
+            consent_cfg = ConsentConfig(graph=shared_context.consent_graph)
+
+        contract_cfg: ContractConfig | None = None
+        if require_contract and shared_context.broker is not None:
+            contract_cfg = ContractConfig(broker=shared_context.broker)
 
         return SecurityConfig(
             policy=policy,
@@ -156,10 +195,15 @@ def _build_proxy_security_config(
                 else f"curator-proxy-{listing.listing_id}",
             ),
             reflexive=ReflexiveConfig() if shared_context.behavioral_analyzer else None,
+            consent=consent_cfg,
+            contracts=contract_cfg,
             alerts=AlertConfig(),
             enabled=True,
         )
 
+    # Standalone proxy (no shared registry context): consent/contract
+    # gating requires a shared graph/broker, so the flags have no effect
+    # here — the proxy still runs with policy + provenance only.
     return SecurityConfig(
         policy=policy,
         provenance=ProvenanceConfig(
@@ -219,9 +263,7 @@ def _build_client_factory(listing: ToolListing) -> Callable[[], Client]:
     """
     ref = listing.upstream_ref
     if ref is None:  # pragma: no cover — caller guards this
-        raise ProxyHostingError(
-            f"Listing {listing.listing_id!r} has no upstream_ref."
-        )
+        raise ProxyHostingError(f"Listing {listing.listing_id!r} has no upstream_ref.")
 
     if ref.channel == UpstreamChannel.HTTP:
         upstream_url = ref.identifier
@@ -238,8 +280,7 @@ def _build_client_factory(listing: ToolListing) -> Callable[[], Client]:
     if ref.channel == UpstreamChannel.PYPI:
         if not ref.identifier:
             raise ProxyHostingError(
-                f"Listing {listing.listing_id!r} has an empty PyPI "
-                "package name."
+                f"Listing {listing.listing_id!r} has an empty PyPI package name."
             )
         # Local import keeps the module load cheap when the registry
         # only ever hosts HTTP upstreams (no Node/uv import side
@@ -256,8 +297,7 @@ def _build_client_factory(listing: ToolListing) -> Callable[[], Client]:
     if ref.channel == UpstreamChannel.NPM:
         if not ref.identifier:
             raise ProxyHostingError(
-                f"Listing {listing.listing_id!r} has an empty npm "
-                "package name."
+                f"Listing {listing.listing_id!r} has an empty npm package name."
             )
         from fastmcp.client.transports.stdio import NpxStdioTransport
 
@@ -293,8 +333,7 @@ def _build_client_factory(listing: ToolListing) -> Callable[[], Client]:
     if ref.channel == UpstreamChannel.DOCKER:
         if not ref.identifier:
             raise ProxyHostingError(
-                f"Listing {listing.listing_id!r} has an empty Docker "
-                "image name."
+                f"Listing {listing.listing_id!r} has an empty Docker image name."
             )
         # Probe for ``docker`` on PATH eagerly so a missing launcher
         # surfaces as a structured ProxyHostingError instead of an
@@ -335,6 +374,7 @@ def build_curator_proxy_server(
     listing: ToolListing,
     *,
     shared_context: Any = None,
+    registry: Any = None,
 ) -> SecureMCP:
     """Construct a SecureMCP-enforced proxy server for a curator listing.
 
@@ -396,11 +436,23 @@ def build_curator_proxy_server(
         from fastmcp.server.security.middleware.policy_enforcement import (
             PolicyEnforcementMiddleware,
         )
+        from purecipher.middleware.client_actor import (
+            ClientActorResolverMiddleware,
+        )
+        from purecipher.middleware.client_aware_middleware import (
+            upgrade_middleware_for_client_actor,
+        )
 
+        # Policy/contract/consent are per-proxy: the orchestrator
+        # already mounted fresh instances from ``security`` above, so
+        # don't also copy the registry's centrally-scoped ones or calls
+        # would be evaluated twice (and against the wrong engine).
         _SKIP = (
             PolicyEnforcementMiddleware,
             ContractValidationMiddleware,
             ConsentEnforcementMiddleware,
+            # The resolver is per-registry; we re-insert our own below.
+            ClientActorResolverMiddleware,
         )
         for mw in shared_context.middleware:
             if isinstance(mw, _SKIP):
@@ -414,6 +466,21 @@ def build_curator_proxy_server(
                     listing.listing_id,
                     exc_info=True,
                 )
+
+        # Upgrade any freshly-mounted consent/contract middleware to
+        # the client-aware subclasses so they key off the resolved
+        # client slug (consistent with provenance/reflexive on the
+        # registry's main /mcp surface).
+        proxy.middleware[:] = upgrade_middleware_for_client_actor(proxy.middleware)
+
+        # Resolve the bearer token → client slug *before* enforcement
+        # runs. When the caller passed a registry, we install a
+        # resolver at the front of the chain so consent / contract
+        # middleware see stable client identity. Without it they fall
+        # back to the token-prefix actor (keeps behavior for callers
+        # that only plumb a shared security context).
+        if registry is not None:
+            proxy.middleware.insert(0, ClientActorResolverMiddleware(registry))
 
     return proxy
 
@@ -431,8 +498,9 @@ class CuratorProxyRouter:
         self,
         *,
         listing_lookup: Any,
-        auth_settings: "RegistryAuthSettings | None" = None,
+        auth_settings: RegistryAuthSettings | None = None,
         shared_security_context: Any = None,
+        registry: Any = None,
     ) -> None:
         """
         Args:
@@ -442,10 +510,17 @@ class CuratorProxyRouter:
                 :class:`SecurityContext`. When set, proxy servers share
                 the registry's ledger, analyzer, and event bus so
                 governance events appear in the central dashboards.
+            registry: Optional :class:`PureCipherRegistry` instance.
+                When set, each lazily-mounted proxy installs a
+                :class:`ClientActorResolverMiddleware` so bearer
+                tokens resolve to the issuing client's slug —
+                lets consent/contract enforcement key off stable
+                client identity rather than a token-prefix stub.
         """
         self._lookup = listing_lookup
         self._auth_settings = auth_settings
         self._shared_context = shared_security_context
+        self._registry = registry
         self._lock = asyncio.Lock()
         self._apps: dict[str, Starlette] = {}
         self._lifespans: dict[str, Any] = {}
@@ -461,7 +536,9 @@ class CuratorProxyRouter:
                 return None
             try:
                 proxy = build_curator_proxy_server(
-                    listing, shared_context=self._shared_context
+                    listing,
+                    shared_context=self._shared_context,
+                    registry=self._registry,
                 )
             except ProxyHostingError as exc:
                 logger.warning(
@@ -490,15 +567,13 @@ class CuratorProxyRouter:
             try:
                 await ctx.__aexit__(None, None, None)
             except Exception:
-                logger.warning(
-                    "Curator proxy lifespan teardown raised", exc_info=True
-                )
+                logger.warning("Curator proxy lifespan teardown raised", exc_info=True)
 
     async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
         if scope.get("type") != "http":
-            await PlainTextResponse(
-                "Unsupported scope.", status_code=400
-            )(scope, receive, send)
+            await PlainTextResponse("Unsupported scope.", status_code=400)(
+                scope, receive, send
+            )
             return
 
         # Starlette ``Mount("/runtime/proxy", app=raw_asgi)`` does not
@@ -509,7 +584,7 @@ class CuratorProxyRouter:
         full_path = str(scope.get("path") or "")
         root_path = str(scope.get("root_path") or "")
         if root_path and full_path.startswith(root_path):
-            inner_path = full_path[len(root_path):]
+            inner_path = full_path[len(root_path) :]
         else:
             inner_path = full_path
         listing_id = inner_path.lstrip("/").split("/", 1)[0].strip()

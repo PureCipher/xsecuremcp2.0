@@ -105,9 +105,7 @@ class TestLoadBundlesFromDisk:
         with caplog.at_level(logging.WARNING):
             bundles = load_bundles_from_disk(tmp_path)
         assert [b.bundle_id for b in bundles] == ["good-one"]
-        assert any(
-            "bundle_id" in rec.getMessage() for rec in caplog.records
-        )
+        assert any("bundle_id" in rec.getMessage() for rec in caplog.records)
 
     def test_providers_must_be_non_empty_list(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
@@ -147,12 +145,8 @@ class TestLoadBundlesFromDisk:
 
         # Two files with the same bundle_id; sorted by name, "a.json"
         # comes first and wins.
-        _write_bundle(
-            tmp_path, "a", _valid_payload("dup-id")
-        )
-        _write_bundle(
-            tmp_path, "b", _valid_payload("dup-id")
-        )
+        _write_bundle(tmp_path, "a", _valid_payload("dup-id"))
+        _write_bundle(tmp_path, "b", _valid_payload("dup-id"))
         with caplog.at_level(logging.WARNING):
             bundles = load_bundles_from_disk(tmp_path)
         assert [b.bundle_id for b in bundles] == ["dup-id"]
@@ -238,14 +232,11 @@ class TestEffectiveBundles:
         with caplog.at_level(logging.WARNING):
             listed = workbench.list_policy_bundles()
         # The real GDPR bundle is still the one returned.
-        gdpr = next(
-            b for b in listed if b["bundle_id"] == "gdpr-data-protection"
-        )
+        gdpr = next(b for b in listed if b["bundle_id"] == "gdpr-data-protection")
         assert gdpr["title"] == "GDPR Data Protection"
         # And the operator gets a warning.
         assert any(
-            "collides with a built-in" in rec.getMessage()
-            for rec in caplog.records
+            "collides with a built-in" in rec.getMessage() for rec in caplog.records
         )
 
     def test_unset_env_var_falls_back_to_builtins_only(

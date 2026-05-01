@@ -39,6 +39,7 @@ from fastmcp.server.security.reflexive.profiles import (
 )
 
 __all__ = [
+    "DEFAULT_THREAT_THRESHOLDS",
     "ActorProfile",
     "ActorProfileManager",
     "AnomalyDetector",
@@ -46,7 +47,6 @@ __all__ = [
     "BehavioralBaseline",
     "ComplianceStatus",
     "ConfirmationRequiredError",
-    "DEFAULT_THREAT_THRESHOLDS",
     "DriftEvent",
     "DriftSeverity",
     "DriftType",

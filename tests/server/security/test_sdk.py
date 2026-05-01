@@ -39,9 +39,9 @@ from fastmcp.server.security.sdk.client import (
     ToolSecurityProfile,
 )
 from fastmcp.server.security.sdk.decorators import (
-    SecurityDenied,
     SecurityDecorator,
     SecurityDecoratorConfig,
+    SecurityDenied,
 )
 
 # ── Helpers ─────────────────────────────────────────────────────
@@ -591,9 +591,7 @@ class TestSecurityDecoratorEnforcement:
 
         with pytest.raises(SecurityDenied) as exc_info:
             runs()
-        assert any(
-            "requires certification" in r for r in exc_info.value.result.reasons
-        )
+        assert any("requires certification" in r for r in exc_info.value.result.reasons)
 
     def test_required_permissions_denied_without_manifest(self):
         """If the manifest doesn't grant the required permission, deny."""
@@ -611,8 +609,7 @@ class TestSecurityDecoratorEnforcement:
         with pytest.raises(SecurityDenied) as exc_info:
             runs()
         assert any(
-            "missing required permissions" in r
-            for r in exc_info.value.result.reasons
+            "missing required permissions" in r for r in exc_info.value.result.reasons
         )
 
     def test_required_permissions_satisfied_by_manifest(self):

@@ -7,12 +7,6 @@ binding, HTTP endpoints, backward compatibility, and full lifecycle.
 
 from __future__ import annotations
 
-import time
-from datetime import datetime, timezone
-from unittest.mock import MagicMock
-
-import pytest
-
 from fastmcp.server.security.reflexive.analyzer import (
     BehavioralAnalyzer,
     EscalationEngine,
@@ -22,9 +16,9 @@ from fastmcp.server.security.reflexive.introspection import (
     IntrospectionEngine,
 )
 from fastmcp.server.security.reflexive.models import (
+    DEFAULT_THREAT_THRESHOLDS,
     BehavioralBaseline,
     ComplianceStatus,
-    DEFAULT_THREAT_THRESHOLDS,
     DriftEvent,
     DriftSeverity,
     DriftType,
@@ -35,10 +29,8 @@ from fastmcp.server.security.reflexive.models import (
     ThreatLevel,
 )
 from fastmcp.server.security.reflexive.profiles import (
-    ActorProfile,
     ActorProfileManager,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -50,7 +42,9 @@ def _make_engine(
     enable_gating: bool = True,
     thresholds: dict[ThreatLevel, float] | None = None,
     rules: list[EscalationRule] | None = None,
-) -> tuple[IntrospectionEngine, BehavioralAnalyzer, EscalationEngine, ActorProfileManager]:
+) -> tuple[
+    IntrospectionEngine, BehavioralAnalyzer, EscalationEngine, ActorProfileManager
+]:
     """Create an IntrospectionEngine with its dependencies."""
     analyzer = BehavioralAnalyzer(min_samples=5)
     esc = EscalationEngine(rules=rules or [])
@@ -248,7 +242,9 @@ class TestIntrospectionEngine:
         assert ie.get_threat_level("agent-1") == ThreatLevel.NONE
         # Bump score by recording critical drift events
         for _ in range(10):
-            pm.record_drift("agent-1", _build_drift_event("agent-1", DriftSeverity.CRITICAL))
+            pm.record_drift(
+                "agent-1", _build_drift_event("agent-1", DriftSeverity.CRITICAL)
+            )
         level = ie.get_threat_level("agent-1")
         assert level in (ThreatLevel.HIGH, ThreatLevel.CRITICAL)
 
@@ -261,7 +257,9 @@ class TestIntrospectionEngine:
         ie, _, _, pm = _make_engine()
         # Pump up threat score
         for _ in range(10):
-            pm.record_drift("agent-1", _build_drift_event("agent-1", DriftSeverity.CRITICAL))
+            pm.record_drift(
+                "agent-1", _build_drift_event("agent-1", DriftSeverity.CRITICAL)
+            )
         constraints = ie.get_active_constraints("agent-1")
         assert "sandbox_required" in constraints
         assert "audit_all_outputs" in constraints
@@ -284,7 +282,9 @@ class TestExecutionVerdicts:
         ie, _, _, pm = _make_engine()
         # Push score well above critical threshold (50)
         for _ in range(15):
-            pm.record_drift("agent-1", _build_drift_event("agent-1", DriftSeverity.CRITICAL))
+            pm.record_drift(
+                "agent-1", _build_drift_event("agent-1", DriftSeverity.CRITICAL)
+            )
         verdict = ie.get_execution_verdict("agent-1", "call_tool")
         assert verdict == ExecutionVerdict.HALT
 
@@ -308,7 +308,9 @@ class TestExecutionVerdicts:
         ie, _, _, pm = _make_engine()
         # Push score to medium range (15-29)
         for _ in range(8):
-            pm.record_drift("agent-1", _build_drift_event("agent-1", DriftSeverity.MEDIUM))
+            pm.record_drift(
+                "agent-1", _build_drift_event("agent-1", DriftSeverity.MEDIUM)
+            )
         score = pm.threat_score("agent-1")
         # Ensure score is in MEDIUM range
         if 15.0 <= score < 30.0:
@@ -319,7 +321,9 @@ class TestExecutionVerdicts:
         ie, _, _, pm = _make_engine()
         # Push score to high range (30-49)
         for _ in range(10):
-            pm.record_drift("agent-1", _build_drift_event("agent-1", DriftSeverity.CRITICAL))
+            pm.record_drift(
+                "agent-1", _build_drift_event("agent-1", DriftSeverity.CRITICAL)
+            )
         score = pm.threat_score("agent-1")
         level = ie._score_to_level(score)
         if level == ThreatLevel.HIGH:
@@ -330,7 +334,9 @@ class TestExecutionVerdicts:
         ie, _, _, pm = _make_engine(enable_gating=False)
         # Even with high threat, verdict is PROCEED when gating is off
         for _ in range(15):
-            pm.record_drift("agent-1", _build_drift_event("agent-1", DriftSeverity.CRITICAL))
+            pm.record_drift(
+                "agent-1", _build_drift_event("agent-1", DriftSeverity.CRITICAL)
+            )
         verdict = ie.get_execution_verdict("agent-1", "call_tool")
         assert verdict == ExecutionVerdict.PROCEED
 
@@ -436,9 +442,7 @@ class TestAccountabilityBinding:
 class TestHTTPEndpoints:
     """Test SecurityAPI introspection methods."""
 
-    def _make_api(
-        self, *, with_engine: bool = True
-    ) -> "SecurityAPI":
+    def _make_api(self, *, with_engine: bool = True) -> SecurityAPI:
         from fastmcp.server.security.http.api import SecurityAPI
 
         if not with_engine:
@@ -525,46 +529,33 @@ class TestBackwardCompatibility:
 
     def test_reflexive_models_still_importable(self) -> None:
         from fastmcp.server.security.reflexive.models import (
-            BehavioralBaseline,
             DriftEvent,
-            DriftSeverity,
-            DriftType,
-            EscalationAction,
-            EscalationRule,
         )
+
         assert BehavioralBaseline is not None
         assert DriftEvent is not None
 
     def test_reflexive_init_exports_old_types(self) -> None:
         from fastmcp.server.security.reflexive import (
             BehavioralAnalyzer,
-            EscalationEngine,
-            ActorProfile,
-            ActorProfileManager,
         )
+
         assert BehavioralAnalyzer is not None
 
     def test_reflexive_init_exports_new_types(self) -> None:
         from fastmcp.server.security.reflexive import (
-            IntrospectionEngine,
-            IntrospectionResult,
-            ComplianceStatus,
-            ExecutionVerdict,
-            ThreatLevel,
             ConfirmationRequiredError,
+            IntrospectionEngine,
         )
+
         assert IntrospectionEngine is not None
         assert ConfirmationRequiredError is not None
 
     def test_security_init_exports_new_types(self) -> None:
         from fastmcp.server.security import (
-            IntrospectionEngine,
-            IntrospectionResult,
-            ExecutionVerdict,
-            ThreatLevel,
-            ConfirmationRequiredError,
             IntrospectionConfig,
         )
+
         assert IntrospectionConfig is not None
 
     def test_config_introspection_config(self) -> None:

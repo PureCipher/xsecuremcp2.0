@@ -260,9 +260,7 @@ class SecurityEventBus:
         )
         return sum(1 for ok in results if ok)
 
-    async def _dispatch_async(
-        self, sub: Subscription, event: SecurityEvent
-    ) -> bool:
+    async def _dispatch_async(self, sub: Subscription, event: SecurityEvent) -> bool:
         timeout_s = self._effective_timeout_ms(sub) / 1000.0
         start = time.monotonic()
         try:

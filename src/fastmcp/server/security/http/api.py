@@ -64,8 +64,9 @@ from fastmcp.server.security.policy.workbench_store import PolicyWorkbenchStore
 if TYPE_CHECKING:
     from fastmcp import FastMCP
     from fastmcp.server.security.alerts.bus import SecurityEventBus
-    from fastmcp.server.security.contracts.broker import ContextBroker
     from fastmcp.server.security.compliance.reports import ComplianceReporter
+    from fastmcp.server.security.consent.federation import FederatedConsentGraph
+    from fastmcp.server.security.contracts.broker import ContextBroker
     from fastmcp.server.security.dashboard.snapshot import SecurityDashboard
     from fastmcp.server.security.federation.crl import CertificateRevocationList
     from fastmcp.server.security.federation.federation import TrustFederation
@@ -76,7 +77,6 @@ if TYPE_CHECKING:
     from fastmcp.server.security.policy.monitoring import PolicyMonitor
     from fastmcp.server.security.policy.validator import PolicyValidator
     from fastmcp.server.security.policy.versioning.manager import PolicyVersionManager
-    from fastmcp.server.security.consent.federation import FederatedConsentGraph
     from fastmcp.server.security.provenance.ledger import ProvenanceLedger
     from fastmcp.server.security.reflexive.introspection import IntrospectionEngine
     from fastmcp.server.security.registry.registry import TrustRegistry
@@ -513,9 +513,7 @@ class SecurityAPI:
         from fastmcp.server.security.provenance.records import ProvenanceAction
 
         return {
-            "actions": [
-                {"value": a.value, "name": a.name} for a in ProvenanceAction
-            ],
+            "actions": [{"value": a.value, "name": a.name} for a in ProvenanceAction],
         }
 
     # ── Policy ────────────────────────────────────────────────
@@ -929,7 +927,8 @@ class SecurityAPI:
         payload = await self.import_policy_snapshot(
             pack.get("snapshot", {}),
             author=author,
-            description_prefix=description or f"Apply pack: {pack.get('title', pack_id)}",
+            description_prefix=description
+            or f"Apply pack: {pack.get('title', pack_id)}",
             metadata={
                 "workbench_kind": "saved_pack",
                 "pack_id": pack_id,
@@ -939,7 +938,7 @@ class SecurityAPI:
         if payload.get("status") in {"imported", "no_changes"}:
             payload["pack"] = pack
         return payload
-    
+
     def capture_policy_environment(
         self,
         environment_id: str,
@@ -982,15 +981,17 @@ class SecurityAPI:
             "status": "captured",
             "environment": {
                 **environment,
-                **{
-                    "capture_count": state.get("capture_count", 0),
-                    "current_version_number": state.get("current", {}).get("version_number"),
-                    "current_provider_count": state.get("current", {}).get("provider_count"),
-                    "current_source_label": state.get("current", {}).get("source_label"),
-                    "captured_at": state.get("current", {}).get("captured_at"),
-                    "captured_by": state.get("current", {}).get("captured_by"),
-                    "last_capture_note": state.get("current", {}).get("note"),
-                },
+                "capture_count": state.get("capture_count", 0),
+                "current_version_number": state.get("current", {}).get(
+                    "version_number"
+                ),
+                "current_provider_count": state.get("current", {}).get(
+                    "provider_count"
+                ),
+                "current_source_label": state.get("current", {}).get("source_label"),
+                "captured_at": state.get("current", {}).get("captured_at"),
+                "captured_by": state.get("current", {}).get("captured_by"),
+                "last_capture_note": state.get("current", {}).get("note"),
             },
             "environments": self.get_policy_environment_profiles(),
         }
@@ -1005,7 +1006,9 @@ class SecurityAPI:
     ) -> dict[str, Any]:
         """Create a promotion proposal from one environment into another."""
 
-        source_state = self._policy_workbench().get_environment_state(source_environment)
+        source_state = self._policy_workbench().get_environment_state(
+            source_environment
+        )
         if source_state is None:
             return {
                 "error": f"No captured policy baseline found for {source_environment}.",
@@ -1427,7 +1430,9 @@ class SecurityAPI:
         history = self._policy_workbench().record_analytics_snapshot(
             {
                 "current_version": (
-                    current_version.version_number if current_version is not None else None
+                    current_version.version_number
+                    if current_version is not None
+                    else None
                 ),
                 "provider_count": policy.get("provider_count"),
                 "evaluation_count": policy.get("evaluation_count"),
@@ -2479,9 +2484,7 @@ class SecurityAPI:
                 "target_jurisdiction", ""
             ),
             data_residency=(geographic_context or {}).get("data_residency"),
-            processing_location=(geographic_context or {}).get(
-                "processing_location"
-            ),
+            processing_location=(geographic_context or {}).get("processing_location"),
         )
         query = FederatedConsentQuery(
             source_id=source_id,
@@ -2549,16 +2552,10 @@ class SecurityAPI:
 
         geo = (
             GeographicContext(
-                source_jurisdiction=geographic_context.get(
-                    "source_jurisdiction", ""
-                ),
-                target_jurisdiction=geographic_context.get(
-                    "target_jurisdiction", ""
-                ),
+                source_jurisdiction=geographic_context.get("source_jurisdiction", ""),
+                target_jurisdiction=geographic_context.get("target_jurisdiction", ""),
                 data_residency=geographic_context.get("data_residency"),
-                processing_location=geographic_context.get(
-                    "processing_location"
-                ),
+                processing_location=geographic_context.get("processing_location"),
             )
             if geographic_context
             else None
@@ -2571,9 +2568,7 @@ class SecurityAPI:
             "resource_id": rights.resource_id,
             "allowed_scopes": rights.allowed_scopes,
             "jurisdiction_constraints": rights.jurisdiction_constraints,
-            "expires_at": rights.expires_at.isoformat()
-            if rights.expires_at
-            else None,
+            "expires_at": rights.expires_at.isoformat() if rights.expires_at else None,
             "conditions": rights.conditions,
             "grant_sources": rights.grant_sources,
         }
@@ -2607,8 +2602,7 @@ class SecurityAPI:
         institutions = self.federated_consent_graph.list_institutions()
         return {
             "institutions": {
-                iid: {"jurisdiction_code": jcode}
-                for iid, jcode in institutions.items()
+                iid: {"jurisdiction_code": jcode} for iid, jcode in institutions.items()
             },
             "count": len(institutions),
         }
@@ -2622,9 +2616,7 @@ class SecurityAPI:
         if self.federated_consent_graph is None:
             return {"error": "Federated consent not configured", "status": 503}
 
-        results = self.federated_consent_graph.propagate_consent(
-            edge_id, target_peers
-        )
+        results = self.federated_consent_graph.propagate_consent(edge_id, target_peers)
         return {
             "edge_id": edge_id,
             "propagation_results": results,
@@ -2647,14 +2639,33 @@ class SecurityAPI:
 
         source_type = str(body.get("source_type", "resource"))
         target_type = str(body.get("target_type", "agent"))
-        type_map = {"agent": NodeType.AGENT, "resource": NodeType.RESOURCE, "scope": NodeType.SCOPE}
+        type_map = {
+            "agent": NodeType.AGENT,
+            "resource": NodeType.RESOURCE,
+            "scope": NodeType.SCOPE,
+        }
 
         if not graph.get_node(source_id):
-            graph.add_node(ConsentNode(node_id=source_id, node_type=type_map.get(source_type, NodeType.RESOURCE)))
+            graph.add_node(
+                ConsentNode(
+                    node_id=source_id,
+                    node_type=type_map.get(source_type, NodeType.RESOURCE),
+                )
+            )
         if not graph.get_node(target_id):
-            graph.add_node(ConsentNode(node_id=target_id, node_type=type_map.get(target_type, NodeType.AGENT)))
+            graph.add_node(
+                ConsentNode(
+                    node_id=target_id,
+                    node_type=type_map.get(target_type, NodeType.AGENT),
+                )
+            )
 
-        edge = graph.grant(source_id=source_id, target_id=target_id, scopes=scopes, granted_by=granted_by)
+        edge = graph.grant(
+            source_id=source_id,
+            target_id=target_id,
+            scopes=scopes,
+            granted_by=granted_by,
+        )
         return {
             "granted": True,
             "edge_id": edge.edge_id,
@@ -2701,9 +2712,7 @@ class SecurityAPI:
         if self.introspection_engine is None:
             return {"error": "Introspection engine not configured", "status": 503}
 
-        verdict = self.introspection_engine.get_execution_verdict(
-            actor_id, operation
-        )
+        verdict = self.introspection_engine.get_execution_verdict(actor_id, operation)
         return {
             "actor_id": actor_id,
             "operation": operation,
@@ -2983,9 +2992,7 @@ def mount_security_routes(
         lid = request.path_params.get("listing_id", "")
         return JSONResponse(api.get_marketplace_listing(lid))
 
-    @_secured_route(
-        f"{prefix}/marketplace/{{listing_id}}/install", methods=["POST"]
-    )
+    @_secured_route(f"{prefix}/marketplace/{{listing_id}}/install", methods=["POST"])
     async def marketplace_install_endpoint(request: Request) -> JSONResponse:
         lid = request.path_params.get("listing_id", "")
         try:
@@ -3001,9 +3008,7 @@ def mount_security_routes(
             )
         )
 
-    @_secured_route(
-        f"{prefix}/marketplace/{{listing_id}}/uninstall", methods=["POST"]
-    )
+    @_secured_route(f"{prefix}/marketplace/{{listing_id}}/uninstall", methods=["POST"])
     async def marketplace_uninstall_endpoint(request: Request) -> JSONResponse:
         lid = request.path_params.get("listing_id", "")
         try:
@@ -3014,9 +3019,7 @@ def mount_security_routes(
             api.marketplace_uninstall(lid, installer_id=body.get("installer_id", ""))
         )
 
-    @_secured_route(
-        f"{prefix}/marketplace/{{listing_id}}/moderate", methods=["POST"]
-    )
+    @_secured_route(f"{prefix}/marketplace/{{listing_id}}/moderate", methods=["POST"])
     async def marketplace_moderate_endpoint(request: Request) -> JSONResponse:
         lid = request.path_params.get("listing_id", "")
         try:
@@ -3036,9 +3039,7 @@ def mount_security_routes(
     async def marketplace_moderation_queue_endpoint(request: Request) -> JSONResponse:
         return JSONResponse(api.marketplace_moderation_queue())
 
-    @_secured_route(
-        f"{prefix}/marketplace/{{listing_id}}/versions", methods=["GET"]
-    )
+    @_secured_route(f"{prefix}/marketplace/{{listing_id}}/versions", methods=["GET"])
     async def marketplace_versions_endpoint(request: Request) -> JSONResponse:
         lid = request.path_params.get("listing_id", "")
         return JSONResponse(api.marketplace_version_history(lid))
@@ -3110,9 +3111,7 @@ def mount_security_routes(
     async def provenance_actions_endpoint(request: Request) -> JSONResponse:
         return JSONResponse(api.get_provenance_actions())
 
-    @_secured_route(
-        f"{prefix}/provenance/proof/{{record_id}}", methods=["GET"]
-    )
+    @_secured_route(f"{prefix}/provenance/proof/{{record_id}}", methods=["GET"])
     async def provenance_proof_endpoint(request: Request) -> JSONResponse:
         record_id = request.path_params.get("record_id", "")
         return JSONResponse(api.get_provenance_proof(record_id))
@@ -3138,9 +3137,7 @@ def mount_security_routes(
             body = {}
         return JSONResponse(await api.negotiate_contract(body))
 
-    @_secured_route(
-        f"{prefix}/contracts/{{contract_id}}/sign", methods=["POST"]
-    )
+    @_secured_route(f"{prefix}/contracts/{{contract_id}}/sign", methods=["POST"])
     async def contracts_sign_endpoint(request: Request) -> JSONResponse:
         cid = request.path_params.get("contract_id", "")
         try:
@@ -3159,9 +3156,7 @@ def mount_security_routes(
         agent_id = request.query_params.get("agent_id", "")
         return JSONResponse(api.list_agent_contracts(agent_id))
 
-    @_secured_route(
-        f"{prefix}/contracts/{{contract_id}}/revoke", methods=["POST"]
-    )
+    @_secured_route(f"{prefix}/contracts/{{contract_id}}/revoke", methods=["POST"])
     async def contracts_revoke_endpoint(request: Request) -> JSONResponse:
         cid = request.path_params.get("contract_id", "")
         try:
@@ -3186,9 +3181,7 @@ def mount_security_routes(
         return JSONResponse(api.verify_exchange_chain(sid))
 
     # Federated Consent
-    @_secured_route(
-        f"{prefix}/consent/federated/evaluate", methods=["POST"]
-    )
+    @_secured_route(f"{prefix}/consent/federated/evaluate", methods=["POST"])
     async def federated_consent_evaluate(request: Request) -> JSONResponse:
         body = await request.json()
         return JSONResponse(
@@ -3198,9 +3191,7 @@ def mount_security_routes(
                 scope=body.get("scope", ""),
                 geographic_context=body.get("geographic_context"),
                 jurisdictions=body.get("jurisdictions"),
-                require_all_jurisdictions=body.get(
-                    "require_all_jurisdictions", True
-                ),
+                require_all_jurisdictions=body.get("require_all_jurisdictions", True),
             )
         )
 
@@ -3221,14 +3212,10 @@ def mount_security_routes(
             except Exception:
                 geo = None
         return JSONResponse(
-            api.get_access_rights(
-                agent_id, resource_id, geographic_context=geo
-            )
+            api.get_access_rights(agent_id, resource_id, geographic_context=geo)
         )
 
-    @_secured_route(
-        f"{prefix}/consent/federated/propagate", methods=["POST"]
-    )
+    @_secured_route(f"{prefix}/consent/federated/propagate", methods=["POST"])
     async def federated_consent_propagate(request: Request) -> JSONResponse:
         body = await request.json()
         return JSONResponse(
@@ -3238,35 +3225,25 @@ def mount_security_routes(
             )
         )
 
-    @_secured_route(
-        f"{prefix}/consent/federated/jurisdictions", methods=["GET"]
-    )
+    @_secured_route(f"{prefix}/consent/federated/jurisdictions", methods=["GET"])
     async def federated_jurisdictions(request: Request) -> JSONResponse:
         return JSONResponse(api.list_jurisdictions())
 
-    @_secured_route(
-        f"{prefix}/consent/federated/institutions", methods=["GET"]
-    )
+    @_secured_route(f"{prefix}/consent/federated/institutions", methods=["GET"])
     async def federated_institutions(request: Request) -> JSONResponse:
         return JSONResponse(api.list_institutions())
 
-    @_secured_route(
-        f"{prefix}/consent/grant", methods=["POST"]
-    )
+    @_secured_route(f"{prefix}/consent/grant", methods=["POST"])
     async def consent_grant(request: Request) -> JSONResponse:
         body = await request.json()
         return JSONResponse(api.grant_consent(body))
 
-    @_secured_route(
-        f"{prefix}/consent/graph", methods=["GET"]
-    )
+    @_secured_route(f"{prefix}/consent/graph", methods=["GET"])
     async def consent_graph_status(request: Request) -> JSONResponse:
         return JSONResponse(api.get_consent_graph_status())
 
     # Reflexive Introspection
-    @_secured_route(
-        f"{prefix}/reflexive/introspect/{{actor_id}}", methods=["GET"]
-    )
+    @_secured_route(f"{prefix}/reflexive/introspect/{{actor_id}}", methods=["GET"])
     async def reflexive_introspect(request: Request) -> JSONResponse:
         actor_id = request.path_params.get("actor_id", "")
         return JSONResponse(api.get_introspection(actor_id))
@@ -3279,23 +3256,17 @@ def mount_security_routes(
         operation = request.path_params.get("operation", "")
         return JSONResponse(api.get_verdict(actor_id, operation))
 
-    @_secured_route(
-        f"{prefix}/reflexive/threat-level/{{actor_id}}", methods=["GET"]
-    )
+    @_secured_route(f"{prefix}/reflexive/threat-level/{{actor_id}}", methods=["GET"])
     async def reflexive_threat_level(request: Request) -> JSONResponse:
         actor_id = request.path_params.get("actor_id", "")
         return JSONResponse(api.get_actor_threat_level(actor_id))
 
-    @_secured_route(
-        f"{prefix}/reflexive/constraints/{{actor_id}}", methods=["GET"]
-    )
+    @_secured_route(f"{prefix}/reflexive/constraints/{{actor_id}}", methods=["GET"])
     async def reflexive_constraints(request: Request) -> JSONResponse:
         actor_id = request.path_params.get("actor_id", "")
         return JSONResponse(api.get_actor_constraints(actor_id))
 
-    @_secured_route(
-        f"{prefix}/reflexive/accountability", methods=["GET"]
-    )
+    @_secured_route(f"{prefix}/reflexive/accountability", methods=["GET"])
     async def reflexive_accountability(request: Request) -> JSONResponse:
         actor_id = request.query_params.get("actor_id")
         limit = int(request.query_params.get("limit", "100"))

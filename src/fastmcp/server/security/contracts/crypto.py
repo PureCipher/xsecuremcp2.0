@@ -205,13 +205,19 @@ class ContractCryptoHandler:
                     algorithm=SigningAlgorithm.HMAC_SHA256,
                     secret_key=key_material,
                 )
-            elif signature.algorithm in (SigningAlgorithm.RSA_PSS, SigningAlgorithm.ECDSA_P256):
+            elif signature.algorithm in (
+                SigningAlgorithm.RSA_PSS,
+                SigningAlgorithm.ECDSA_P256,
+            ):
                 temp = ContractCryptoHandler(
                     algorithm=signature.algorithm,
                     public_key=key_material,
                 )
             else:
-                logger.warning("Unsupported algorithm for external verification: %s", signature.algorithm)
+                logger.warning(
+                    "Unsupported algorithm for external verification: %s",
+                    signature.algorithm,
+                )
                 return False
             return temp.verify(data, signature)
         except Exception:

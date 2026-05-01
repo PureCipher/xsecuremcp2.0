@@ -33,7 +33,6 @@ from fastmcp.server.security.certification.manifest import (
 
 if TYPE_CHECKING:
     from fastmcp.server.security.sdk.client import (
-        SecureMCPClient,
         SecurityCheckResult,
     )
 
@@ -57,9 +56,7 @@ class SecurityDenied(Exception):
     def __init__(self, result: SecurityCheckResult) -> None:
         self.result = result
         reasons = "; ".join(result.reasons) if result.reasons else "unspecified"
-        super().__init__(
-            f"Security check denied tool '{result.tool_name}': {reasons}"
-        )
+        super().__init__(f"Security check denied tool '{result.tool_name}': {reasons}")
 
 
 @dataclass
@@ -368,9 +365,7 @@ class SecurityDecorator:
         self, tool_name: str, cfg: SecurityDecoratorConfig
     ) -> SecurityCheckResult:
         self._require_client()
-        manifest = (
-            self._build_manifest(tool_name, cfg) if cfg.sandbox_enabled else None
-        )
+        manifest = self._build_manifest(tool_name, cfg) if cfg.sandbox_enabled else None
         result = self.client.check_tool(
             tool_name,
             min_trust_score=cfg.min_trust_score,
@@ -385,9 +380,7 @@ class SecurityDecorator:
         self, tool_name: str, cfg: SecurityDecoratorConfig
     ) -> SecurityCheckResult:
         self._require_client()
-        manifest = (
-            self._build_manifest(tool_name, cfg) if cfg.sandbox_enabled else None
-        )
+        manifest = self._build_manifest(tool_name, cfg) if cfg.sandbox_enabled else None
         result = await self.client.acheck_tool(
             tool_name,
             min_trust_score=cfg.min_trust_score,

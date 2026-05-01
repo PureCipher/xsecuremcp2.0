@@ -171,9 +171,7 @@ class TestAttachSecuritySettings:
         assert ctx.policy_engine.fail_closed is False
         assert ctx.policy_engine.allow_hot_swap is False
 
-    def test_env_var_override_warns_when_no_policy_config(
-        self, monkeypatch, caplog
-    ):
+    def test_env_var_override_warns_when_no_policy_config(self, monkeypatch, caplog):
         import logging
 
         _clear_security_env(monkeypatch)
@@ -205,8 +203,7 @@ class TestAttachSecuritySettings:
             )
 
         assert any(
-            "bypass_stdio=True" in r.message
-            and "STDIO transport" in r.message
+            "bypass_stdio=True" in r.message and "STDIO transport" in r.message
             for r in caplog.records
         )
 
@@ -225,9 +222,7 @@ class TestAttachSecuritySettings:
                 bypass_stdio=False,
             )
 
-        assert not any(
-            "bypass_stdio=True" in r.message for r in caplog.records
-        )
+        assert not any("bypass_stdio=True" in r.message for r in caplog.records)
 
     def test_orchestrator_uses_public_event_bus_setter(self, monkeypatch):
         """Regression test: the orchestrator must wire event buses through

@@ -8,27 +8,21 @@ serialization.
 from __future__ import annotations
 
 import asyncio
-import tempfile
 from pathlib import Path
-from typing import Any
 
 import pytest
 
 from fastmcp.server.security.policy.engine import PolicyEngine
 from fastmcp.server.security.policy.governance import (
     PolicyGovernor,
-    ProposalAction,
     ProposalStatus,
 )
 from fastmcp.server.security.policy.provider import (
     AllowAllPolicy,
-    DenyAllPolicy,
-    PolicyEvaluationContext,
 )
 from fastmcp.server.security.policy.validator import PolicyValidator
 from fastmcp.server.security.storage.memory import MemoryBackend
 from fastmcp.server.security.storage.sqlite import SQLiteBackend
-
 
 # ── Storage Backend Proposal Tests ────────────────────────────────
 
@@ -371,7 +365,9 @@ class TestGovernorPersistence:
             "corrupt-test", "bad-1", {"missing": "required_fields"}
         )
         storage.save_policy_proposal(
-            "corrupt-test", "bad-2", {"proposal_id": "bad-2", "action": "invalid_action"}
+            "corrupt-test",
+            "bad-2",
+            {"proposal_id": "bad-2", "action": "invalid_action"},
         )
 
         # Should not raise — bad proposals are silently skipped

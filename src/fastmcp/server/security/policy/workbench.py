@@ -211,7 +211,12 @@ _BUNDLES: tuple[PolicyBundle, ...] = (
                         "manage_policy",
                     ],
                     "data_processor": ["call_tool", "read_resource"],
-                    "dpo": ["call_tool", "read_resource", "manage_policy", "review_listing"],
+                    "dpo": [
+                        "call_tool",
+                        "read_resource",
+                        "manage_policy",
+                        "review_listing",
+                    ],
                     "admin": ["*"],
                 },
                 "default_decision": "deny",
@@ -1038,9 +1043,7 @@ class BundleLoadError(ValueError):
     """
 
 
-def _validate_bundle_payload(
-    payload: Any, *, source: str
-) -> PolicyBundle:
+def _validate_bundle_payload(payload: Any, *, source: str) -> PolicyBundle:
     """Validate one decoded JSON payload and build a PolicyBundle.
 
     Strict on the required fields (``bundle_id``, ``title``,
@@ -1103,9 +1106,7 @@ def _validate_bundle_payload(
         out: list[str] = []
         for item in value:
             if not isinstance(item, str):
-                raise BundleLoadError(
-                    f"{source}: {key!r} entries must be strings."
-                )
+                raise BundleLoadError(f"{source}: {key!r} entries must be strings.")
             out.append(item)
         return tuple(out)
 
@@ -1165,9 +1166,7 @@ def load_bundles_from_disk(
         try:
             raw = entry.read_text(encoding="utf-8")
         except OSError as exc:
-            logger.warning(
-                "Couldn't read policy bundle file %s: %s", entry, exc
-            )
+            logger.warning("Couldn't read policy bundle file %s: %s", entry, exc)
             continue
         try:
             payload = json.loads(raw)

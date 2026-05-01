@@ -154,7 +154,11 @@ class ClientActorResolverMiddleware(Middleware):
             return None
         if request is None:
             return None
-        auth = request.headers.get("Authorization", "") if hasattr(request, "headers") else ""
+        auth = (
+            request.headers.get("Authorization", "")
+            if hasattr(request, "headers")
+            else ""
+        )
         if not auth or not auth.lower().startswith("bearer "):
             return None
         secret = auth[len("Bearer ") :].strip()

@@ -7,7 +7,6 @@ the global singleton convenience functions.
 
 from __future__ import annotations
 
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -16,15 +15,11 @@ from fastmcp.server.security.policy.plugin_registry import (
     PolicyTypeDescriptor,
     PolicyTypeRegistry,
     get_registry,
-    register_policy_type,
-    unregister_policy_type,
 )
 from fastmcp.server.security.policy.provider import (
     AllowAllPolicy,
-    DenyAllPolicy,
     PolicyProvider,
 )
-
 
 # ── Helpers ──────────────────────────────────────────────────────
 
@@ -173,7 +168,9 @@ class TestRegistrySchema:
     def test_dump_schema_shape(self) -> None:
         reg = PolicyTypeRegistry()
         reg._plugins_discovered = True
-        reg.register(_make_descriptor(type_key="test", jurisdiction="EU", category="compliance"))
+        reg.register(
+            _make_descriptor(type_key="test", jurisdiction="EU", category="compliance")
+        )
         schema = reg.dump_schema()
         assert "policy_types" in schema
         assert "test" in schema["policy_types"]
@@ -269,8 +266,8 @@ class TestGlobalSingleton:
     def test_builtin_types_are_registered(self) -> None:
         """After importing declarative, built-in types should be present."""
         # Force declarative + built_in imports to trigger registration
-        import fastmcp.server.security.policy.declarative  # noqa: F401
         import fastmcp.server.security.policy.built_in  # noqa: F401
+        import fastmcp.server.security.policy.declarative  # noqa: F401
 
         registry = get_registry()
         # Spot-check a few built-in types

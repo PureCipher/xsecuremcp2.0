@@ -106,7 +106,9 @@ def mount_policy_routes(
             ),
             author=str(body.get("author", "api")),
             pack_id=str(body.get("pack_id")) if body.get("pack_id") else None,
-            tags=list(body.get("tags", [])) if isinstance(body.get("tags"), list) else None,
+            tags=list(body.get("tags", []))
+            if isinstance(body.get("tags"), list)
+            else None,
             recommended_environments=(
                 list(body.get("recommended_environments", []))
                 if isinstance(body.get("recommended_environments"), list)
@@ -122,9 +124,7 @@ def mount_policy_routes(
         payload = api.delete_policy_pack(str(pack_id))
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
-    @_route(
-        f"{prefix}/policy/bundles/{{bundle_id}}/stage", methods=["POST"]
-    )
+    @_route(f"{prefix}/policy/bundles/{{bundle_id}}/stage", methods=["POST"])
     async def policy_bundle_stage_endpoint(request: Request) -> JSONResponse:
         bundle_id = request.path_params.get("bundle_id", "")
         body = await request.json()
@@ -304,7 +304,9 @@ def mount_policy_routes(
             ),
             description=str(body.get("description", "")),
             author=str(body.get("author", "api")),
-            metadata=body.get("metadata") if isinstance(body.get("metadata"), dict) else None,
+            metadata=body.get("metadata")
+            if isinstance(body.get("metadata"), dict)
+            else None,
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 

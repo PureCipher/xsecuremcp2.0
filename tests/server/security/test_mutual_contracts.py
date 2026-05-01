@@ -18,13 +18,11 @@ from fastmcp.server.security.contracts.exchange_log import (
     ExchangeLog,
 )
 from fastmcp.server.security.contracts.schema import (
-    Contract,
     ContractNegotiationRequest,
     ContractStatus,
     ContractTerm,
     NegotiationStatus,
 )
-
 
 # ── AgentKeyRegistry ─────────────────────────────────────────────
 
@@ -103,7 +101,9 @@ class TestCryptoExternalKey:
         data = {"contract_id": "c1", "terms": []}
         sig = agent_handler.sign(data, signer_id="agent-1")
 
-        assert server_handler.verify_with_external_key(data, sig, b"agent-secret") is True
+        assert (
+            server_handler.verify_with_external_key(data, sig, b"agent-secret") is True
+        )
 
     def test_verify_with_wrong_external_key_fails(self) -> None:
         handler = ContractCryptoHandler(
@@ -149,7 +149,9 @@ class TestMutualSigningFlow:
             secret_key=b"server-secret",
         )
         registry = AgentKeyRegistry()
-        registry.register_agent_key("agent-1", b"agent-secret", SigningAlgorithm.HMAC_SHA256)
+        registry.register_agent_key(
+            "agent-1", b"agent-secret", SigningAlgorithm.HMAC_SHA256
+        )
 
         broker = ContextBroker(
             server_id="srv",
@@ -181,7 +183,9 @@ class TestMutualSigningFlow:
             secret_key=b"agent-secret",
         )
         registry = AgentKeyRegistry()
-        registry.register_agent_key("agent-1", b"agent-secret", SigningAlgorithm.HMAC_SHA256)
+        registry.register_agent_key(
+            "agent-1", b"agent-secret", SigningAlgorithm.HMAC_SHA256
+        )
 
         broker = ContextBroker(
             server_id="srv",
@@ -200,7 +204,9 @@ class TestMutualSigningFlow:
         # Agent signs
         contract_data = contract.to_dict()
         agent_sig = agent_handler.sign(contract_data, signer_id="agent-1")
-        success, error = await broker.agent_sign_contract(contract.contract_id, agent_sig)
+        success, error = await broker.agent_sign_contract(
+            contract.contract_id, agent_sig
+        )
 
         assert success is True
         assert error == ""
@@ -223,7 +229,9 @@ class TestMutualSigningFlow:
             secret_key=b"wrong-key",
         )
         registry = AgentKeyRegistry()
-        registry.register_agent_key("agent-1", b"correct-key", SigningAlgorithm.HMAC_SHA256)
+        registry.register_agent_key(
+            "agent-1", b"correct-key", SigningAlgorithm.HMAC_SHA256
+        )
 
         broker = ContextBroker(
             server_id="srv",
@@ -294,7 +302,9 @@ class TestMutualSigningFlow:
         assert contract.status == ContractStatus.PENDING_COUNTERSIGN
 
         # Register agent and sign to activate
-        registry.register_agent_key("agent-1", b"agent-key", SigningAlgorithm.HMAC_SHA256)
+        registry.register_agent_key(
+            "agent-1", b"agent-key", SigningAlgorithm.HMAC_SHA256
+        )
         agent_handler = ContractCryptoHandler(
             algorithm=SigningAlgorithm.HMAC_SHA256,
             secret_key=b"agent-key",
@@ -304,7 +314,9 @@ class TestMutualSigningFlow:
         assert success
 
         # Try to sign again
-        success2, error2 = await broker.agent_sign_contract(contract.contract_id, agent_sig)
+        success2, error2 = await broker.agent_sign_contract(
+            contract.contract_id, agent_sig
+        )
         assert success2 is False
         assert "not awaiting countersignature" in error2
 
@@ -441,7 +453,9 @@ class TestExchangeLogMutualSigning:
             secret_key=b"agent-secret",
         )
         registry = AgentKeyRegistry()
-        registry.register_agent_key("agent-1", b"agent-secret", SigningAlgorithm.HMAC_SHA256)
+        registry.register_agent_key(
+            "agent-1", b"agent-secret", SigningAlgorithm.HMAC_SHA256
+        )
 
         broker = ContextBroker(
             server_id="srv",
@@ -489,7 +503,9 @@ class TestExchangeLogMutualSigning:
             secret_key=b"server-secret",
         )
         registry = AgentKeyRegistry()
-        registry.register_agent_key("agent-1", b"correct-key", SigningAlgorithm.HMAC_SHA256)
+        registry.register_agent_key(
+            "agent-1", b"correct-key", SigningAlgorithm.HMAC_SHA256
+        )
 
         broker = ContextBroker(
             server_id="srv",
@@ -556,15 +572,17 @@ class TestContractHTTPEndpoints:
     async def test_negotiate_contract_endpoint(self) -> None:
         api, _broker = self._make_api()
 
-        result = await api.negotiate_contract({
-            "agent_id": "agent-1",
-            "proposed_terms": [
-                {
-                    "description": "Read-only access",
-                    "constraint": {"read_only": True},
-                },
-            ],
-        })
+        result = await api.negotiate_contract(
+            {
+                "agent_id": "agent-1",
+                "proposed_terms": [
+                    {
+                        "description": "Read-only access",
+                        "constraint": {"read_only": True},
+                    },
+                ],
+            }
+        )
 
         assert result["status"] == "accepted"
         assert "session_id" in result
@@ -575,10 +593,12 @@ class TestContractHTTPEndpoints:
         api, broker = self._make_api(with_registry=True)
 
         # Negotiate
-        result = await api.negotiate_contract({
-            "agent_id": "agent-1",
-            "proposed_terms": [],
-        })
+        result = await api.negotiate_contract(
+            {
+                "agent_id": "agent-1",
+                "proposed_terms": [],
+            }
+        )
         assert result["status"] == "accepted"
         contract_id = result["contract"]["contract_id"]
 
@@ -596,11 +616,14 @@ class TestContractHTTPEndpoints:
         assert contract is not None
         agent_sig = agent_handler.sign(contract.to_dict(), signer_id="agent-1")
 
-        sign_result = await api.agent_sign_contract_endpoint(contract_id, {
-            "algorithm": "hmac-sha256",
-            "signer_id": "agent-1",
-            "signature": agent_sig.signature,
-        })
+        sign_result = await api.agent_sign_contract_endpoint(
+            contract_id,
+            {
+                "algorithm": "hmac-sha256",
+                "signer_id": "agent-1",
+                "signature": agent_sig.signature,
+            },
+        )
         assert sign_result["success"] is True
 
         # Now mutually signed
@@ -617,10 +640,12 @@ class TestContractHTTPEndpoints:
     async def test_list_agent_contracts(self) -> None:
         api, _broker = self._make_api()
 
-        await api.negotiate_contract({
-            "agent_id": "agent-1",
-            "proposed_terms": [],
-        })
+        await api.negotiate_contract(
+            {
+                "agent_id": "agent-1",
+                "proposed_terms": [],
+            }
+        )
 
         result = api.list_agent_contracts("agent-1")
         assert result["count"] == 1
@@ -630,10 +655,12 @@ class TestContractHTTPEndpoints:
     async def test_revoke_contract_endpoint(self) -> None:
         api, _broker = self._make_api()
 
-        neg = await api.negotiate_contract({
-            "agent_id": "agent-1",
-            "proposed_terms": [],
-        })
+        neg = await api.negotiate_contract(
+            {
+                "agent_id": "agent-1",
+                "proposed_terms": [],
+            }
+        )
         contract_id = neg["contract"]["contract_id"]
 
         result = await api.revoke_contract_endpoint(contract_id, reason="testing")
@@ -643,10 +670,12 @@ class TestContractHTTPEndpoints:
     async def test_exchange_log_entries_endpoint(self) -> None:
         api, _broker = self._make_api()
 
-        neg = await api.negotiate_contract({
-            "agent_id": "agent-1",
-            "proposed_terms": [],
-        })
+        neg = await api.negotiate_contract(
+            {
+                "agent_id": "agent-1",
+                "proposed_terms": [],
+            }
+        )
         session_id = neg["session_id"]
 
         result = api.get_exchange_log_entries(session_id=session_id)
@@ -657,10 +686,12 @@ class TestContractHTTPEndpoints:
     async def test_verify_exchange_chain_endpoint(self) -> None:
         api, _broker = self._make_api()
 
-        neg = await api.negotiate_contract({
-            "agent_id": "agent-1",
-            "proposed_terms": [],
-        })
+        neg = await api.negotiate_contract(
+            {
+                "agent_id": "agent-1",
+                "proposed_terms": [],
+            }
+        )
         session_id = neg["session_id"]
 
         result = api.verify_exchange_chain(session_id)
@@ -695,7 +726,9 @@ class TestFullContractLifecycle:
             secret_key=b"agent-secret",
         )
         registry = AgentKeyRegistry()
-        registry.register_agent_key("agent-1", b"agent-secret", SigningAlgorithm.HMAC_SHA256)
+        registry.register_agent_key(
+            "agent-1", b"agent-secret", SigningAlgorithm.HMAC_SHA256
+        )
 
         def evaluator(
             terms: list[ContractTerm],
@@ -764,9 +797,13 @@ class TestFullContractLifecycle:
 
         # Verify we can export the audit trail
         entries = broker.exchange_log.export_entries(session_id=session_id)
-        assert len(entries) >= 7  # started, proposal, counter_sent, counter_received, accepted, signed, agent_signed
+        assert (
+            len(entries) >= 7
+        )  # started, proposal, counter_sent, counter_received, accepted, signed, agent_signed
 
         # Revoke and confirm
-        revoked = await broker.revoke_contract(contract.contract_id, reason="test complete")
+        revoked = await broker.revoke_contract(
+            contract.contract_id, reason="test complete"
+        )
         assert revoked
         assert updated.status == ContractStatus.REVOKED

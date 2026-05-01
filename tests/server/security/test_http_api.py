@@ -392,9 +392,7 @@ class TestMountRoutes:
         from fastmcp.server.security.http.api import SecurityAPI, mount_security_routes
 
         server = FastMCP("test-server")
-        api = mount_security_routes(
-            server, api=SecurityAPI(), bearer_token="t"
-        )
+        api = mount_security_routes(server, api=SecurityAPI(), bearer_token="t")
         assert isinstance(api, SecurityAPI)
 
     def test_mount_with_custom_prefix(self):
@@ -465,9 +463,7 @@ class TestMountSecurityRoutesAuth:
         with caplog.at_level(logging.WARNING):
             mount_security_routes(server, require_auth=False)
 
-        assert any(
-            "without authentication" in r.message for r in caplog.records
-        )
+        assert any("without authentication" in r.message for r in caplog.records)
 
     def test_get_endpoint_requires_bearer_token(self):
         from fastmcp.server.security.http.api import mount_security_routes

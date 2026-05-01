@@ -7,11 +7,12 @@ toolsets as Streamable HTTP MCP endpoints without requiring a restart.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Any, AsyncGenerator
+from typing import Any
 
-from starlette.responses import JSONResponse, PlainTextResponse, Response
 from starlette.applications import Starlette
+from starlette.responses import JSONResponse, PlainTextResponse, Response
 from starlette.routing import Mount
 
 from purecipher.auth import RegistryAuthSettings
@@ -69,7 +70,11 @@ class ToolsetGatewayRouter:
             if toolset is None:
                 return None
             metadata = toolset.get("metadata") or {}
-            upstream = str(metadata.get("upstream_base_url") or "").strip() if isinstance(metadata, dict) else ""
+            upstream = (
+                str(metadata.get("upstream_base_url") or "").strip()
+                if isinstance(metadata, dict)
+                else ""
+            )
             if not upstream:
                 return None
 
@@ -118,7 +123,9 @@ class ToolsetGatewayRouter:
     def _enforce_visibility(self, *, toolset: dict[str, Any], scope) -> Response | None:
         metadata = toolset.get("metadata") or {}
         metadata_dict = dict(metadata) if isinstance(metadata, dict) else {}
-        visibility = str(metadata_dict.get("hosting_visibility") or "public").strip().lower()
+        visibility = (
+            str(metadata_dict.get("hosting_visibility") or "public").strip().lower()
+        )
 
         # Public = no auth required.
         if visibility == "public":
@@ -149,13 +156,20 @@ class ToolsetGatewayRouter:
             allowed = [x for x in allowed if x]
             if allowed and getattr(session, "username", None) not in set(allowed):
                 return JSONResponse(
-                    {"error": "Not authorized for private hosted toolset.", "status": 403},
+                    {
+                        "error": "Not authorized for private hosted toolset.",
+                        "status": 403,
+                    },
                     status_code=403,
                 )
             return None
 
         return JSONResponse(
-            {"error": "Unknown hosting_visibility.", "status": 400, "hosting_visibility": visibility},
+            {
+                "error": "Unknown hosting_visibility.",
+                "status": 400,
+                "hosting_visibility": visibility,
+            },
             status_code=400,
         )
 
@@ -170,7 +184,9 @@ class ToolsetGatewayRouter:
     async def __call__(self, scope, receive, send) -> None:
         # Starlette Mount("/mcp/toolsets", app=...) strips prefix; expect "/<toolset_id>"
         if scope.get("type") != "http":
-            await PlainTextResponse("Unsupported scope.", status_code=400)(scope, receive, send)
+            await PlainTextResponse("Unsupported scope.", status_code=400)(
+                scope, receive, send
+            )
             return
 
         path = str(scope.get("path") or "")
@@ -276,6 +292,11 @@ def build_hosted_registry_app(
         listing_lookup=_lookup_listing,
         auth_settings=getattr(registry, "_auth_settings", None),
         shared_security_context=shared_ctx,
+        # Pass the registry so proxies can resolve bearer tokens to
+        # client slugs for consent/contract enforcement. Kept as a
+        # separate argument (rather than a SecurityContext attribute)
+        # so we don't widen SecureMCP's dataclass schema.
+        registry=registry,
     )
     routes.append(Mount("/runtime/proxy", app=curator_proxy_router))
 
@@ -289,4 +310,3 @@ def build_hosted_registry_app(
 
 
 __all__ = ["build_hosted_registry_app", "hosted_lifespan"]
-

@@ -143,7 +143,9 @@ def mount_registry_policy_routes(
             ),
             author=session.username if session is not None else "registry-admin",
             pack_id=str(body.get("pack_id")) if body.get("pack_id") else None,
-            tags=list(body.get("tags", [])) if isinstance(body.get("tags"), list) else None,
+            tags=list(body.get("tags", []))
+            if isinstance(body.get("tags"), list)
+            else None,
             recommended_environments=(
                 list(body.get("recommended_environments", []))
                 if isinstance(body.get("recommended_environments"), list)
@@ -271,12 +273,14 @@ def mount_registry_policy_routes(
             note=str(body.get("note", "")) if isinstance(body, dict) else "",
             source_snapshot=(
                 body.get("source_snapshot")
-                if isinstance(body, dict) and isinstance(body.get("source_snapshot"), dict)
+                if isinstance(body, dict)
+                and isinstance(body.get("source_snapshot"), dict)
                 else None
             ),
             source_version_number=(
                 int(body["source_version_number"])
-                if isinstance(body, dict) and body.get("source_version_number") is not None
+                if isinstance(body, dict)
+                and body.get("source_version_number") is not None
                 else None
             ),
         )
@@ -467,7 +471,9 @@ def mount_registry_policy_routes(
             ),
             description=str(body.get("description", "")),
             author=session.username if session is not None else "registry-admin",
-            metadata=body.get("metadata") if isinstance(body.get("metadata"), dict) else None,
+            metadata=body.get("metadata")
+            if isinstance(body.get("metadata"), dict)
+            else None,
         )
         actor = session.username if session is not None else "registry-admin"
         proposal_obj = payload.get("proposal")

@@ -55,23 +55,22 @@ from datetime import time
 from pathlib import Path
 from typing import Any
 
+# Import built_in to trigger registration of compliance types (gdpr, hipaa, etc.)
+import fastmcp.server.security.policy.built_in as _built_in  # noqa: F401
 from fastmcp.server.security.policy.composition import AllOf, AnyOf, FirstMatch, Not
 from fastmcp.server.security.policy.plugin_registry import (
     PolicyTypeDescriptor,
     get_registry,
 )
-
-# Import built_in to trigger registration of compliance types (gdpr, hipaa, etc.)
-import fastmcp.server.security.policy.built_in as _built_in  # noqa: F401
 from fastmcp.server.security.policy.policies.abac import AttributeBasedPolicy
+from fastmcp.server.security.policy.policies.allowlist import (
+    AllowlistPolicy,
+    DenylistPolicy,
+)
 from fastmcp.server.security.policy.policies.compliance_rule import (
     ComplianceRulePolicy,
     ComplianceRuleSpec,
     MetadataCheck,
-)
-from fastmcp.server.security.policy.policies.allowlist import (
-    AllowlistPolicy,
-    DenylistPolicy,
 )
 from fastmcp.server.security.policy.policies.rate_limit import RateLimitPolicy
 from fastmcp.server.security.policy.policies.rbac import RoleBasedPolicy

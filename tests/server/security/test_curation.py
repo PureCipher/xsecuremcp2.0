@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 from starlette.testclient import TestClient
 
+from fastmcp.server.security.certification.manifest import PermissionScope
 from fastmcp.server.security.gateway.tool_marketplace import (
     AttestationKind,
     ToolCategory,
@@ -20,7 +21,6 @@ from purecipher.curation import (
     parse_http_upstream,
 )
 from purecipher.curation.introspector import (
-    CapabilityPrompt,
     CapabilityResource,
     CapabilityTool,
     HTTPIntrospector,
@@ -31,7 +31,6 @@ from purecipher.curation.manifest_generator import (
     derive_manifest_draft,
     reconcile_curator_selection,
 )
-from fastmcp.server.security.certification.manifest import PermissionScope
 
 TEST_SIGNING_SECRET = "purecipher-curation-test-signing-secret"
 
@@ -75,9 +74,7 @@ class TestParseHttpUpstream:
 
 class TestHTTPUpstreamFetcher:
     def test_resolve_produces_preview_with_slug(self):
-        preview = HTTPUpstreamFetcher().resolve(
-            "https://mcp.upstash.com/context7"
-        )
+        preview = HTTPUpstreamFetcher().resolve("https://mcp.upstash.com/context7")
         assert preview.upstream_ref.channel == UpstreamChannel.HTTP
         assert preview.suggested_tool_name == "context7"
         assert preview.suggested_display_name == "Context7"
@@ -498,9 +495,7 @@ class TestReconcileCuratorSelection:
             [{"scope": "garbage", "selected": True}, "not-a-dict"],
         )
         # Original suggestion list shape unchanged.
-        assert len(updated.permission_suggestions) == len(
-            draft.permission_suggestions
-        )
+        assert len(updated.permission_suggestions) == len(draft.permission_suggestions)
 
     def test_build_manifest_emits_call_tool_implicitly(self):
         draft = self._draft()
@@ -565,10 +560,7 @@ class TestCurateRoutes:
             assert r.status_code == 200
             body = r.json()
             assert body["introspection"]["tool_count"] == 1
-            scopes = {
-                p["scope"]
-                for p in body["draft"]["permission_suggestions"]
-            }
+            scopes = {p["scope"] for p in body["draft"]["permission_suggestions"]}
             assert PermissionScope.NETWORK_ACCESS.value in scopes
 
     def test_introspect_502_when_upstream_unreachable(self):
@@ -683,9 +675,7 @@ class TestSSRFDefence:
             ("https://[fe80::1]/mcp", "private"),  # link-local IPv6
         ],
     )
-    def test_internal_addresses_rejected(
-        self, url: str, fragment_in_error: str | None
-    ):
+    def test_internal_addresses_rejected(self, url: str, fragment_in_error: str | None):
         if fragment_in_error is None:
             # Loopback IPv6 should pass.
             ref = parse_http_upstream(url)
@@ -743,7 +733,6 @@ class TestAuthorListingTakeoverPrevention:
 
     def test_curator_cannot_overwrite_author_listing(self):
         from fastmcp.server.security.gateway.tool_marketplace import (
-            AttestationKind,
             HostingMode,
             ToolMarketplace,
             UpstreamChannel,
@@ -777,14 +766,11 @@ class TestAuthorListingTakeoverPrevention:
         """The takeover guard must not break legitimate author
         republishes (version bumps, description edits, etc.)."""
         from fastmcp.server.security.gateway.tool_marketplace import (
-            AttestationKind,
             ToolMarketplace,
         )
 
         marketplace = ToolMarketplace()
-        marketplace.publish(
-            tool_name="my-tool", version="1.0.0", author="me"
-        )
+        marketplace.publish(tool_name="my-tool", version="1.0.0", author="me")
         listing = marketplace.publish(
             tool_name="my-tool",
             version="1.1.0",
@@ -798,7 +784,6 @@ class TestAuthorListingTakeoverPrevention:
         """A curator updating an existing curator-attested listing
         with new permissions / version should still work."""
         from fastmcp.server.security.gateway.tool_marketplace import (
-            AttestationKind,
             HostingMode,
             ToolMarketplace,
             UpstreamChannel,
@@ -1032,9 +1017,7 @@ class TestParseDockerUpstream:
         from purecipher.curation import parse_docker_upstream
 
         digest = "sha256:" + "c" * 64
-        ref = parse_docker_upstream(
-            f"docker:registry.internal:8443/team/mcp@{digest}"
-        )
+        ref = parse_docker_upstream(f"docker:registry.internal:8443/team/mcp@{digest}")
         assert ref.identifier == "registry.internal:8443/team/mcp"
         assert ref.version == ""
         assert ref.pinned_hash == digest
@@ -1234,7 +1217,7 @@ class _FakeHttpClient:
     def __init__(self, response: _FakeHttpResponse | Exception) -> None:
         self._response = response
 
-    def __enter__(self) -> "_FakeHttpClient":
+    def __enter__(self) -> _FakeHttpClient:
         return self
 
     def __exit__(self, *args: Any) -> None:
@@ -1277,8 +1260,7 @@ class TestPyPIUpstreamFetcher:
         assert preview.upstream_ref.version == "1.2.3"
         assert preview.upstream_ref.pinned_hash == "sha256:" + ("a" * 64)
         assert (
-            preview.upstream_ref.source_url
-            == "https://github.com/microsoft/markitdown"
+            preview.upstream_ref.source_url == "https://github.com/microsoft/markitdown"
         )
         assert preview.suggested_tool_name == "markitdown-mcp"
         # Latest-version note explains the auto-pin.
@@ -1305,9 +1287,7 @@ class TestPyPIUpstreamFetcher:
         )
 
         fetcher = PyPIUpstreamFetcher(
-            http_client_factory=lambda: _FakeHttpClient(
-                ConnectionError("network down")
-            )
+            http_client_factory=lambda: _FakeHttpClient(ConnectionError("network down"))
         )
         with pytest.raises(UpstreamResolutionError, match="Couldn't reach PyPI"):
             fetcher.resolve("pypi:any-pkg")
@@ -1344,8 +1324,7 @@ class TestNpmUpstreamFetcher:
 
         assert preview.upstream_ref.channel == UpstreamChannel.NPM
         assert (
-            preview.upstream_ref.identifier
-            == "@modelcontextprotocol/server-everything"
+            preview.upstream_ref.identifier == "@modelcontextprotocol/server-everything"
         )
         assert preview.upstream_ref.version == "0.5.0"
         assert preview.upstream_ref.pinned_hash == "sha512-abc"
@@ -1475,9 +1454,7 @@ class TestStdioIntrospectorDispatch:
         from purecipher.curation import StdioIntrospector, parse_docker_upstream
 
         introspector = StdioIntrospector()
-        ref = parse_docker_upstream(
-            "docker:ghcr.io/example/mcp:v1@sha256:" + "a" * 64
-        )
+        ref = parse_docker_upstream("docker:ghcr.io/example/mcp:v1@sha256:" + "a" * 64)
         client = introspector._build_client(ref)
         assert isinstance(client.transport, StdioTransport)
         assert client.transport.command == "docker"
@@ -1506,9 +1483,7 @@ class TestIntrospectorDispatch:
         )
         introspector = Introspector(http_introspector=http)
         result = asyncio.run(
-            introspector.introspect(
-                parse_http_upstream("https://x.example/mcp")
-            )
+            introspector.introspect(parse_http_upstream("https://x.example/mcp"))
         )
         assert result.tool_count == 1
 
@@ -1522,14 +1497,10 @@ class TestIntrospectorDispatch:
         from purecipher.curation.upstream import parse_pypi_upstream
 
         stdio = StdioIntrospector(
-            client_factory=lambda *args: _FakeClient(
-                tools=[_FakeTool("xxx")]
-            )
+            client_factory=lambda *args: _FakeClient(tools=[_FakeTool("xxx")])
         )
         introspector = Introspector(stdio_introspector=stdio)
-        result = asyncio.run(
-            introspector.introspect(parse_pypi_upstream("pypi:p@1.0"))
-        )
+        result = asyncio.run(introspector.introspect(parse_pypi_upstream("pypi:p@1.0")))
         assert result.tool_count == 1
 
     def test_routes_docker(self):
@@ -1544,15 +1515,11 @@ class TestIntrospectorDispatch:
         )
 
         stdio = StdioIntrospector(
-            client_factory=lambda *args: _FakeClient(
-                tools=[_FakeTool("xxx")]
-            )
+            client_factory=lambda *args: _FakeClient(tools=[_FakeTool("xxx")])
         )
         introspector = Introspector(stdio_introspector=stdio)
         result = asyncio.run(
-            introspector.introspect(
-                parse_docker_upstream("docker:ghcr.io/x/y:v1")
-            )
+            introspector.introspect(parse_docker_upstream("docker:ghcr.io/x/y:v1"))
         )
         assert result.tool_count == 1
 
@@ -1578,9 +1545,7 @@ class TestCurateRoutesMultiChannel:
             client_factory=lambda url: _FakeClient(tools=http_intro_tools or []),
         )
         stdio_intro = StdioIntrospector(
-            client_factory=lambda *args: _FakeClient(
-                tools=stdio_intro_tools or []
-            ),
+            client_factory=lambda *args: _FakeClient(tools=stdio_intro_tools or []),
         )
         registry.set_curation_introspector(
             Introspector(
@@ -1613,7 +1578,6 @@ class TestCurateRoutesMultiChannel:
             Introspector,
             PyPIUpstreamFetcher,
             StdioIntrospector,
-            UpstreamFetcher,
         )
 
         # Build the registry with a fake httpx for PyPI metadata too.
@@ -1636,9 +1600,7 @@ class TestCurateRoutesMultiChannel:
                 tools=[_FakeTool("fetch_url", "Fetch a URL")]
             )
         )
-        registry.set_curation_introspector(
-            Introspector(stdio_introspector=stdio_intro)
-        )
+        registry.set_curation_introspector(Introspector(stdio_introspector=stdio_intro))
         # Patch the route's UpstreamFetcher constructor so it picks
         # up the fake httpx — done by monkey-patching the class default.
         orig_pypi_init = PyPIUpstreamFetcher.__init__
@@ -1646,9 +1608,7 @@ class TestCurateRoutesMultiChannel:
         def _patched_pypi_init(self, **kwargs):
             kwargs.setdefault(
                 "http_client_factory",
-                lambda: _FakeHttpClient(
-                    _FakeHttpResponse(json_payload=pypi_payload)
-                ),
+                lambda: _FakeHttpClient(_FakeHttpResponse(json_payload=pypi_payload)),
             )
             orig_pypi_init(self, **kwargs)
 
@@ -1662,12 +1622,8 @@ class TestCurateRoutesMultiChannel:
                 assert r.status_code == 200, r.text
                 body = r.json()
                 assert body["introspection"]["tool_count"] == 1
-                assert (
-                    body["draft"]["upstream_ref"]["channel"] == "pypi"
-                )
-                assert (
-                    body["draft"]["upstream_ref"]["version"] == "1.0.0"
-                )
+                assert body["draft"]["upstream_ref"]["channel"] == "pypi"
+                assert body["draft"]["upstream_ref"]["version"] == "1.0.0"
         finally:
             PyPIUpstreamFetcher.__init__ = orig_pypi_init  # type: ignore[assignment]
 
@@ -1694,7 +1650,6 @@ class TestCuratorProxyHosting:
             SecurityManifest,
         )
         from fastmcp.server.security.gateway.tool_marketplace import (
-            AttestationKind,
             ToolListing,
             UpstreamRef,
         )
@@ -1767,7 +1722,6 @@ class TestCuratorProxyHosting:
         identifier and version pinned via ``@<version>``."""
         from fastmcp.client.transports.stdio import UvxStdioTransport
         from fastmcp.server.security.gateway.tool_marketplace import (
-            AttestationKind,
             HostingMode,
             ToolListing,
             UpstreamChannel,
@@ -1802,7 +1756,6 @@ class TestCuratorProxyHosting:
         uvx must be the bare identifier — no stray ``@``."""
         from fastmcp.client.transports.stdio import UvxStdioTransport
         from fastmcp.server.security.gateway.tool_marketplace import (
-            AttestationKind,
             HostingMode,
             ToolListing,
             UpstreamChannel,
@@ -1827,7 +1780,6 @@ class TestCuratorProxyHosting:
 
     def test_build_proxy_pypi_refuses_empty_identifier(self):
         from fastmcp.server.security.gateway.tool_marketplace import (
-            AttestationKind,
             HostingMode,
             ToolListing,
             UpstreamChannel,
@@ -1868,7 +1820,6 @@ class TestCuratorProxyHosting:
 
         from fastmcp.client.transports.stdio import NpxStdioTransport
         from fastmcp.server.security.gateway.tool_marketplace import (
-            AttestationKind,
             HostingMode,
             ToolListing,
             UpstreamChannel,
@@ -1897,9 +1848,7 @@ class TestCuratorProxyHosting:
             "@modelcontextprotocol/server-filesystem@0.6.2"
         )
 
-    def test_build_proxy_npm_surfaces_missing_npx_as_proxy_error(
-        self, monkeypatch
-    ):
+    def test_build_proxy_npm_surfaces_missing_npx_as_proxy_error(self, monkeypatch):
         """If the registry host doesn't have ``npx`` installed,
         :class:`NpxStdioTransport` raises ``ValueError("Command 'npx'
         not found")``. ``build_curator_proxy_server`` must wrap that as
@@ -1909,7 +1858,6 @@ class TestCuratorProxyHosting:
         """
         import fastmcp.client.transports.stdio as stdio_mod
         from fastmcp.server.security.gateway.tool_marketplace import (
-            AttestationKind,
             HostingMode,
             ToolListing,
             UpstreamChannel,
@@ -1948,7 +1896,6 @@ class TestCuratorProxyHosting:
 
     def test_build_proxy_npm_refuses_empty_identifier(self):
         from fastmcp.server.security.gateway.tool_marketplace import (
-            AttestationKind,
             HostingMode,
             ToolListing,
             UpstreamChannel,
@@ -1972,18 +1919,16 @@ class TestCuratorProxyHosting:
         with pytest.raises(ProxyHostingError, match="empty npm"):
             build_curator_proxy_server(listing)
 
-    def test_build_proxy_docker_uses_stdio_transport_with_image_ref(
-        self, monkeypatch
-    ):
+    def test_build_proxy_docker_uses_stdio_transport_with_image_ref(self, monkeypatch):
         """A Docker-channel listing in proxy mode must construct a
         ``Client(StdioTransport(command='docker', args=[...,
         image_ref]))``. The image_ref combines image name + optional
         tag + optional digest via :func:`image_ref_for`. Resource
         flags (``--rm -i --memory=512m --pids-limit=128``) are
         present so each session gets a clean, bounded container."""
+        import purecipher.curation.proxy_runtime as proxy_mod
         from fastmcp.client.transports.stdio import StdioTransport
         from fastmcp.server.security.gateway.tool_marketplace import (
-            AttestationKind,
             HostingMode,
             ToolListing,
             UpstreamChannel,
@@ -1991,14 +1936,11 @@ class TestCuratorProxyHosting:
         )
         from purecipher.curation import build_curator_proxy_server
         from purecipher.curation.proxy_runtime import _build_client_factory
-        import purecipher.curation.proxy_runtime as proxy_mod
 
         # Pretend the registry host has docker installed so the
         # eager probe in _build_client_factory passes regardless of
         # the test environment. The test focuses on transport wiring.
-        monkeypatch.setattr(
-            proxy_mod.shutil, "which", lambda name: "/usr/bin/docker"
-        )
+        monkeypatch.setattr(proxy_mod.shutil, "which", lambda name: "/usr/bin/docker")
 
         digest = "sha256:" + "a" * 64
         listing = ToolListing(
@@ -2036,20 +1978,17 @@ class TestCuratorProxyHosting:
         """A bare ``docker:nginx`` upstream (no tag, no digest) must
         still produce a working transport — image_ref reconstruction
         falls back to just the image name."""
+        import purecipher.curation.proxy_runtime as proxy_mod
         from fastmcp.client.transports.stdio import StdioTransport
         from fastmcp.server.security.gateway.tool_marketplace import (
-            AttestationKind,
             HostingMode,
             ToolListing,
             UpstreamChannel,
             UpstreamRef,
         )
         from purecipher.curation.proxy_runtime import _build_client_factory
-        import purecipher.curation.proxy_runtime as proxy_mod
 
-        monkeypatch.setattr(
-            proxy_mod.shutil, "which", lambda name: "/usr/bin/docker"
-        )
+        monkeypatch.setattr(proxy_mod.shutil, "which", lambda name: "/usr/bin/docker")
 
         listing = ToolListing(
             tool_name="docker-curated",
@@ -2066,8 +2005,8 @@ class TestCuratorProxyHosting:
         assert client.transport.args[-1] == "nginx"
 
     def test_build_proxy_docker_refuses_empty_identifier(self, monkeypatch):
+        import purecipher.curation.proxy_runtime as proxy_mod
         from fastmcp.server.security.gateway.tool_marketplace import (
-            AttestationKind,
             HostingMode,
             ToolListing,
             UpstreamChannel,
@@ -2077,11 +2016,8 @@ class TestCuratorProxyHosting:
             ProxyHostingError,
             build_curator_proxy_server,
         )
-        import purecipher.curation.proxy_runtime as proxy_mod
 
-        monkeypatch.setattr(
-            proxy_mod.shutil, "which", lambda name: "/usr/bin/docker"
-        )
+        monkeypatch.setattr(proxy_mod.shutil, "which", lambda name: "/usr/bin/docker")
 
         listing = ToolListing(
             tool_name="docker-curated",
@@ -2103,8 +2039,8 @@ class TestCuratorProxyHosting:
         structured :class:`ProxyHostingError` so the curator gets a
         clear "install docker" message instead of a confusing
         FileNotFoundError raised inside the per-session subprocess."""
+        import purecipher.curation.proxy_runtime as proxy_mod
         from fastmcp.server.security.gateway.tool_marketplace import (
-            AttestationKind,
             HostingMode,
             ToolListing,
             UpstreamChannel,
@@ -2114,7 +2050,6 @@ class TestCuratorProxyHosting:
             ProxyHostingError,
             build_curator_proxy_server,
         )
-        import purecipher.curation.proxy_runtime as proxy_mod
 
         monkeypatch.setattr(proxy_mod.shutil, "which", lambda name: None)
 
@@ -2136,7 +2071,6 @@ class TestCuratorProxyHosting:
         must surface a structured ProxyHostingError instead of
         crashing later when the factory tries to construct a Client."""
         from fastmcp.server.security.gateway.tool_marketplace import (
-            AttestationKind,
             HostingMode,
             ToolListing,
             UpstreamChannel,
@@ -2168,13 +2102,13 @@ class TestCuratorProxyHosting:
         because manifest.tags only carried marker tags, not the
         observed tool names.
         """
+        from fastmcp.server.security.policy.policies.allowlist import (
+            AllowlistPolicy,
+        )
         from purecipher.curation import (
             HTTPIntrospector,
             Introspector,
             build_curator_proxy_server,
-        )
-        from fastmcp.server.security.policy.policies.allowlist import (
-            AllowlistPolicy,
         )
 
         registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
@@ -2455,10 +2389,7 @@ class TestSubmitProxyMode:
                             "dist-tags": {"latest": "0.6.2"},
                             "versions": {
                                 "0.6.2": {
-                                    "name": (
-                                        "@modelcontextprotocol/"
-                                        "server-filesystem"
-                                    ),
+                                    "name": ("@modelcontextprotocol/server-filesystem"),
                                     "version": "0.6.2",
                                     "description": "Filesystem MCP",
                                     "license": "MIT",
@@ -2578,18 +2509,14 @@ class TestLauncherProbe:
         for value in result.values():
             assert value is None or isinstance(value, str)
 
-    def test_probe_logs_warning_when_launchers_missing(
-        self, caplog, monkeypatch
-    ):
+    def test_probe_logs_warning_when_launchers_missing(self, caplog, monkeypatch):
         import logging
 
-        from purecipher.curation import check_introspection_launchers
         import purecipher.curation.introspector as introspector_mod
+        from purecipher.curation import check_introspection_launchers
 
         # Force shutil.which to return None for all launchers.
-        monkeypatch.setattr(
-            introspector_mod.shutil, "which", lambda _name: None
-        )
+        monkeypatch.setattr(introspector_mod.shutil, "which", lambda _name: None)
         with caplog.at_level(logging.WARNING):
             result = check_introspection_launchers()
         assert result == {"uvx": None, "npx": None, "docker": None}
@@ -2769,9 +2696,9 @@ class TestCuratorCertificationCap:
             CertificationLevel.SELF_ATTESTED.value,
             CertificationLevel.BASIC.value,
         }
-        assert (
-            listing["certification_level"] in capped_levels
-        ), f"curator listing got {listing['certification_level']!r}, expected ≤ basic"
+        assert listing["certification_level"] in capped_levels, (
+            f"curator listing got {listing['certification_level']!r}, expected ≤ basic"
+        )
 
     def test_curator_cap_overrides_explicit_higher_request(self):
         """Direct ``submit_tool(attestation_kind=CURATOR,
@@ -2785,7 +2712,6 @@ class TestCuratorCertificationCap:
             SecurityManifest,
         )
         from fastmcp.server.security.gateway.tool_marketplace import (
-            AttestationKind,
             HostingMode,
             UpstreamChannel,
             UpstreamRef,
@@ -2825,7 +2751,9 @@ class TestCuratorCertificationCap:
             CertificationLevel as _CL,
         )
 
-        assert _level_index_helper(result.attestation.certification_level) <= _level_index_helper(_CL.BASIC)
+        assert _level_index_helper(
+            result.attestation.certification_level
+        ) <= _level_index_helper(_CL.BASIC)
 
     def test_author_submission_unchanged(self):
         """The cap only applies to curator submissions — author

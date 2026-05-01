@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
-from fastmcp.server.security.provenance.records import ProvenanceAction, hash_data
+from fastmcp.server.security.provenance.records import ProvenanceAction
 from fastmcp.server.security.provenance.schemes import (
     BlockchainAnchoredLedger,
     ChainAnchor,
@@ -13,7 +11,6 @@ from fastmcp.server.security.provenance.schemes import (
     LedgerSchemeType,
     LocalMerkleLedger,
 )
-
 
 # ── LocalMerkleLedger ────────────────────────────────────────────
 
@@ -164,9 +161,7 @@ class TestBlockchainAnchoredLedger:
 
     def test_auto_anchor_at_interval(self) -> None:
         backend = InMemoryAnchorBackend()
-        scheme = BlockchainAnchoredLedger(
-            anchor_backend=backend, anchor_interval=5
-        )
+        scheme = BlockchainAnchoredLedger(anchor_backend=backend, anchor_interval=5)
         for i in range(12):
             scheme.add_record_hash(f"h{i}")
         # Should have anchored at 5 and 10
@@ -176,9 +171,7 @@ class TestBlockchainAnchoredLedger:
 
     def test_manual_anchor(self) -> None:
         backend = InMemoryAnchorBackend()
-        scheme = BlockchainAnchoredLedger(
-            anchor_backend=backend, anchor_interval=0
-        )
+        scheme = BlockchainAnchoredLedger(anchor_backend=backend, anchor_interval=0)
         for i in range(3):
             scheme.add_record_hash(f"h{i}")
         assert len(scheme.anchors) == 0
@@ -204,18 +197,14 @@ class TestBlockchainAnchoredLedger:
 
     def test_verify_anchors(self) -> None:
         backend = InMemoryAnchorBackend()
-        scheme = BlockchainAnchoredLedger(
-            anchor_backend=backend, anchor_interval=3
-        )
+        scheme = BlockchainAnchoredLedger(anchor_backend=backend, anchor_interval=3)
         for i in range(6):
             scheme.add_record_hash(f"h{i}")
         assert scheme.verify_anchors()
 
     def test_anchor_chaining(self) -> None:
         backend = InMemoryAnchorBackend()
-        scheme = BlockchainAnchoredLedger(
-            anchor_backend=backend, anchor_interval=3
-        )
+        scheme = BlockchainAnchoredLedger(anchor_backend=backend, anchor_interval=3)
         for i in range(9):
             scheme.add_record_hash(f"h{i}")
         anchors = scheme.anchors
@@ -229,9 +218,7 @@ class TestBlockchainAnchoredLedger:
 
     def test_status(self) -> None:
         backend = InMemoryAnchorBackend()
-        scheme = BlockchainAnchoredLedger(
-            anchor_backend=backend, anchor_interval=10
-        )
+        scheme = BlockchainAnchoredLedger(anchor_backend=backend, anchor_interval=10)
         for i in range(5):
             scheme.add_record_hash(f"h{i}")
         status = scheme.get_status()
@@ -243,9 +230,7 @@ class TestBlockchainAnchoredLedger:
 
     def test_latest_anchor(self) -> None:
         backend = InMemoryAnchorBackend()
-        scheme = BlockchainAnchoredLedger(
-            anchor_backend=backend, anchor_interval=0
-        )
+        scheme = BlockchainAnchoredLedger(anchor_backend=backend, anchor_interval=0)
         assert scheme.latest_anchor is None
         scheme.add_record_hash("h1")
         scheme.anchor_now()
@@ -304,9 +289,7 @@ class TestLedgerSchemeIntegration:
         from fastmcp.server.security.provenance.ledger import ProvenanceLedger
 
         backend = InMemoryAnchorBackend(chain_name="eth-testnet")
-        scheme = BlockchainAnchoredLedger(
-            anchor_backend=backend, anchor_interval=3
-        )
+        scheme = BlockchainAnchoredLedger(anchor_backend=backend, anchor_interval=3)
         ledger = ProvenanceLedger(scheme=scheme)
 
         for i in range(5):

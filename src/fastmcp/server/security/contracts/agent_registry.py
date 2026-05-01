@@ -58,7 +58,9 @@ class AgentKeyRegistry:
         """
         with self._lock:
             self._keys[agent_id] = (key_material, algorithm)
-            logger.info("Registered key for agent %s (algorithm=%s)", agent_id, algorithm.value)
+            logger.info(
+                "Registered key for agent %s (algorithm=%s)", agent_id, algorithm.value
+            )
 
     def get_agent_key(self, agent_id: str) -> tuple[Any, SigningAlgorithm] | None:
         """Look up key material for an agent.

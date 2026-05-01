@@ -48,7 +48,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any
 
 from fastmcp.server.security.policy.provider import (
     PolicyDecision,
@@ -170,8 +169,7 @@ class ComplianceRulePolicy:
                 ):
                     rule_passed = False
                     fail_reasons.append(
-                        f"'{check.metadata_key}' value '{value}' "
-                        f"not in allowed set"
+                        f"'{check.metadata_key}' value '{value}' not in allowed set"
                     )
 
             if rule_passed:
@@ -184,8 +182,10 @@ class ComplianceRulePolicy:
         if self.require_all_rules:
             if not failed:
                 constraints = [f"compliance:{name}" for name in passed]
-                allow_msg = matched_rules[0].allow_message if len(matched_rules) == 1 else (
-                    f"{framework_label}: All {len(passed)} rules passed"
+                allow_msg = (
+                    matched_rules[0].allow_message
+                    if len(matched_rules) == 1
+                    else (f"{framework_label}: All {len(passed)} rules passed")
                 )
                 return PolicyResult(
                     decision=PolicyDecision.ALLOW,

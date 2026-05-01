@@ -110,10 +110,7 @@ class CertificationPipeline:
         self._min_level_for_signing = min_level_for_signing
         self._require_crypto_for_valid = require_crypto_for_valid
 
-        if (
-            crypto_handler is None
-            and not require_crypto_for_valid
-        ):
+        if crypto_handler is None and not require_crypto_for_valid:
             logger.warning(
                 "CertificationPipeline configured with require_crypto_for_valid="
                 "False and no crypto handler — attestations will be marked VALID "

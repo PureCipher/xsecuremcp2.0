@@ -176,16 +176,12 @@ class ReflexiveMiddleware(Middleware):
             )
             await asyncio.sleep(self.throttle_delay_seconds)
 
-    def _post_execution_record(
-        self, actor_id: str, operation_id: str = ""
-    ) -> None:
+    def _post_execution_record(self, actor_id: str, operation_id: str = "") -> None:
         """Record introspection after execution for accountability binding."""
         if self.introspection_engine is None:
             return
         result = self.introspection_engine.introspect(actor_id)
-        self.introspection_engine.bind_to_provenance(
-            actor_id, result, operation_id
-        )
+        self.introspection_engine.bind_to_provenance(actor_id, result, operation_id)
 
     def _process_drift(self, events: list[DriftEvent]) -> None:
         """Process drift events through escalation engine and profile manager."""

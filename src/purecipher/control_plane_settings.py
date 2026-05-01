@@ -20,9 +20,8 @@ from __future__ import annotations
 
 import sqlite3
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
-
 
 # Canonical plane names. These are the keys used everywhere in the
 # Iter 9 surface — keep this set in sync with
@@ -183,7 +182,12 @@ class RegistryControlPlaneStore:
                     updated_at = excluded.updated_at,
                     updated_by = excluded.updated_by
                 """,
-                (record.plane, int(record.enabled), record.updated_at, record.updated_by),
+                (
+                    record.plane,
+                    int(record.enabled),
+                    record.updated_at,
+                    record.updated_by,
+                ),
             )
             conn.commit()
         finally:

@@ -26,7 +26,10 @@ from securemcp.config import SecurityConfig
 def _format_path(path_template: str, values: dict[str, Any]) -> str:
     out = path_template
     for key, value in values.items():
-        out = out.replace("{" + str(key) + "}", httpx.QueryParams({str(key): str(value)}).get(str(key)) or str(value))
+        out = out.replace(
+            "{" + str(key) + "}",
+            httpx.QueryParams({str(key): str(value)}).get(str(key)) or str(value),
+        )
     return out
 
 
@@ -50,7 +53,9 @@ class OpenAPIGateway(SecureMCP[LifespanResultT]):
         http_client: httpx.AsyncClient | None = None,
         **kwargs: Any,
     ) -> None:
-        super().__init__(name=name, security=security, mount_security_api=False, **kwargs)
+        super().__init__(
+            name=name, security=security, mount_security_api=False, **kwargs
+        )
         self._config = config
         self._store = OpenAPIStore(config.persistence_path)
         self._http_client = http_client or httpx.AsyncClient(
@@ -86,20 +91,32 @@ class OpenAPIGateway(SecureMCP[LifespanResultT]):
 
             summary = str(op.get("summary") or "").strip()
             description = str(op.get("description") or "").strip()
-            doc = (summary + "\n\n" + description).strip() or f"Proxy {method.upper()} {path_template}"
+            doc = (
+                summary + "\n\n" + description
+            ).strip() or f"Proxy {method.upper()} {path_template}"
 
-            async def _handler(payload: dict[str, Any], *, _m=method, _p=path_template) -> dict[str, Any]:
+            async def _handler(
+                payload: dict[str, Any], *, _m=method, _p=path_template
+            ) -> dict[str, Any]:
                 path_values = payload.get("path")
                 query_values = payload.get("query")
                 header_values = payload.get("headers")
                 body_value = payload.get("body")
 
                 path_dict = dict(path_values) if isinstance(path_values, dict) else {}
-                query_dict = dict(query_values) if isinstance(query_values, dict) else {}
-                header_dict = {str(k): str(v) for k, v in dict(header_values).items()} if isinstance(header_values, dict) else {}
+                query_dict = (
+                    dict(query_values) if isinstance(query_values, dict) else {}
+                )
+                header_dict = (
+                    {str(k): str(v) for k, v in dict(header_values).items()}
+                    if isinstance(header_values, dict)
+                    else {}
+                )
 
                 url_path = _format_path(_p, path_dict)
-                qs = urlencode({k: v for k, v in query_dict.items() if v is not None}, doseq=True)
+                qs = urlencode(
+                    {k: v for k, v in query_dict.items() if v is not None}, doseq=True
+                )
                 url = f"{url_path}{'?' + qs if qs else ''}"
 
                 res = await self._http_client.request(
@@ -135,4 +152,3 @@ __all__ = [
     "OpenAPIGateway",
     "OpenAPIGatewayConfig",
 ]
-

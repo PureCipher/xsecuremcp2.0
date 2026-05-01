@@ -63,8 +63,7 @@ class RegistrySession:
             "display_name": self.display_name,
             "expires_at": self.expires_at,
             "session_id": self.session_id,
-            "can_submit": self.role
-            in {RegistryRole.PUBLISHER, RegistryRole.REVIEWER},
+            "can_submit": self.role in {RegistryRole.PUBLISHER, RegistryRole.REVIEWER},
             "can_review": self.role in {RegistryRole.REVIEWER, RegistryRole.ADMIN},
             "can_admin": self.role == RegistryRole.ADMIN,
         }

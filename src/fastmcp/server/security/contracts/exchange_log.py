@@ -131,9 +131,7 @@ class ExchangeLog:
         existing = self._session_genesis.get(session_id)
         if existing is not None:
             return existing
-        nonce = (
-            f"genesis-{self.log_id}-{session_id}-{secrets.token_hex(32)}"
-        )
+        nonce = f"genesis-{self.log_id}-{session_id}-{secrets.token_hex(32)}"
         self._session_genesis[session_id] = nonce
         return nonce
 
@@ -255,9 +253,7 @@ class ExchangeLog:
         expected_genesis = self._session_genesis.get(session_id)
         if expected_genesis is None or first_link != expected_genesis:
             if first_link != _LEGACY_EXCHANGE_GENESIS_SENTINEL:
-                logger.warning(
-                    "Chain for session %s: invalid genesis link", session_id
-                )
+                logger.warning("Chain for session %s: invalid genesis link", session_id)
                 return False
 
         # Verify each subsequent entry links to the previous

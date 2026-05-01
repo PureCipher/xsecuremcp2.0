@@ -313,21 +313,16 @@ class RegistryClientStore:
         if slug is not None:
             slug = slug.strip().lower()
             if not is_valid_slug(slug):
-                raise ValueError(
-                    f"Invalid slug {slug!r}: must be lowercase URL-safe."
-                )
+                raise ValueError(f"Invalid slug {slug!r}: must be lowercase URL-safe.")
         else:
             slug = slugify_client(display)
             if not slug:
                 raise ValueError(
-                    "Couldn't derive a slug from display_name; supply "
-                    "an explicit slug."
+                    "Couldn't derive a slug from display_name; supply an explicit slug."
                 )
 
         if self.get_client_by_slug(slug) is not None:
-            raise ClientStoreError(
-                f"A client with slug {slug!r} already exists."
-            )
+            raise ClientStoreError(f"A client with slug {slug!r} already exists.")
 
         kind = (kind or "agent").strip().lower()
         if kind not in CLIENT_KINDS:
@@ -401,9 +396,7 @@ class RegistryClientStore:
             records = list(self._memory_clients.values())
             if owner_publisher_id is not None:
                 records = [
-                    r
-                    for r in records
-                    if r.owner_publisher_id == owner_publisher_id
+                    r for r in records if r.owner_publisher_id == owner_publisher_id
                 ]
             records.sort(key=lambda r: r.updated_at, reverse=True)
             return records[:limit]
@@ -455,8 +448,7 @@ class RegistryClientStore:
             merged_metadata.update(metadata)
         if kind is not None and kind not in CLIENT_KINDS:
             raise ClientStoreError(
-                f"Unknown client kind: {kind!r}. "
-                f"Allowed: {sorted(CLIENT_KINDS)}"
+                f"Unknown client kind: {kind!r}. Allowed: {sorted(CLIENT_KINDS)}"
             )
         updated = RegistryClient(
             client_id=existing.client_id,
@@ -467,9 +459,7 @@ class RegistryClientStore:
                 else existing.display_name
             ),
             description=(
-                description.strip()
-                if description is not None
-                else existing.description
+                description.strip() if description is not None else existing.description
             ),
             intended_use=(
                 intended_use.strip()
@@ -508,9 +498,7 @@ class RegistryClientStore:
             kind=existing.kind,
             owner_publisher_id=existing.owner_publisher_id,
             status=status,
-            suspended_reason=(
-                reason.strip() if status == "suspended" else ""
-            ),
+            suspended_reason=(reason.strip() if status == "suspended" else ""),
             created_at=existing.created_at,
             updated_at=time.time(),
             metadata=dict(existing.metadata),
@@ -820,7 +808,9 @@ def _row_to_token(row: Any, cols: Iterable[str]) -> RegistryClientToken:
         created_by=str(record["created_by"] or ""),
         created_at=float(record["created_at"] or 0.0),
         revoked_at=(
-            float(record["revoked_at"]) if record.get("revoked_at") is not None else None
+            float(record["revoked_at"])
+            if record.get("revoked_at") is not None
+            else None
         ),
         last_used_at=(
             float(record["last_used_at"])

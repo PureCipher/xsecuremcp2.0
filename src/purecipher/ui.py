@@ -1209,26 +1209,26 @@ button {
 }
 """
 
-LISTING_INTERACTIONS_SCRIPT = f"""
+LISTING_INTERACTIONS_SCRIPT = """
 <script>
-function setRegistryField(id, value) {{
+function setRegistryField(id, value) {
   const field = document.getElementById(id);
-  if (field) {{
+  if (field) {
     field.value = value || "";
-  }}
-}}
+  }
+}
 
-async function copyRegistryBlock(button) {{
+async function copyRegistryBlock(button) {
   const targetId = button.getAttribute("data-copy-target");
   const target = document.getElementById(targetId);
-  if (!target) {{
+  if (!target) {
     return;
-  }}
+  }
 
   const originalLabel = button.getAttribute("data-original-label") || button.textContent;
   const text = target.textContent || "";
 
-  async function fallbackCopy(value) {{
+  async function fallbackCopy(value) {
     const helper = document.createElement("textarea");
     helper.value = value;
     helper.setAttribute("readonly", "");
@@ -1238,27 +1238,27 @@ async function copyRegistryBlock(button) {{
     helper.select();
     document.execCommand("copy");
     document.body.removeChild(helper);
-  }}
+  }
 
-  try {{
-    if (navigator.clipboard && navigator.clipboard.writeText) {{
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
       await navigator.clipboard.writeText(text);
-    }} else {{
+    } else {
       await fallbackCopy(text);
-    }}
+    }
     button.textContent = "Copied";
     button.classList.add("is-copied");
-  }} catch (error) {{
+  } catch (error) {
     button.textContent = "Select manually";
     button.classList.remove("is-copied");
-  }}
+  }
 
   window.clearTimeout(button._copyTimer);
-  button._copyTimer = window.setTimeout(() => {{
+  button._copyTimer = window.setTimeout(() => {
     button.textContent = originalLabel;
     button.classList.remove("is-copied");
-  }}, 1800);
-}}
+  }, 1800);
+}
 </script>
 """
 
@@ -4057,10 +4057,14 @@ def create_setup_html(
               </ul>
             </div>
             <div class="login-form-wrapper">
-              <form class="auth-panel" method="post" action="{_escape(f"{registry_prefix}/setup")}">
+              <form class="auth-panel" method="post" action="{
+        _escape(f"{registry_prefix}/setup")
+    }">
               <input type="hidden" name="next" value="{_escape(next_path)}" />
               <label class="detail-note" for="username">Admin username</label>
-              <input id="username" name="username" value="{_escape(default_username)}" style="margin-top: 8px;" />
+              <input id="username" name="username" value="{
+        _escape(default_username)
+    }" style="margin-top: 8px;" />
               <label class="detail-note" for="display_name" style="margin-top: 12px; display: block;">Display name</label>
               <input id="display_name" name="display_name" value="Registry Admin" style="margin-top: 8px;" />
               <label class="detail-note" for="password" style="margin-top: 12px; display: block;">Password</label>
@@ -4081,10 +4085,10 @@ __all__ = [
     "SAMPLE_RUNTIME_METADATA_JSON",
     "create_listing_detail_html",
     "create_login_html",
-    "create_setup_html",
     "create_publish_html",
     "create_publisher_index_html",
     "create_publisher_profile_html",
     "create_registry_ui_html",
     "create_review_queue_html",
+    "create_setup_html",
 ]

@@ -126,9 +126,7 @@ def validate_introspect_env(
     cleaned: dict[str, str] = {}
     for raw_key, raw_value in env.items():
         if not isinstance(raw_key, str):
-            raise CredentialValidationError(
-                "Credential keys must be strings."
-            )
+            raise CredentialValidationError("Credential keys must be strings.")
         key = raw_key.strip()
         if not _ENV_KEY_RE.match(key):
             raise CredentialValidationError(
@@ -374,16 +372,12 @@ class HTTPIntrospector:
                 # Servers that don't implement resources will surface
                 # an MCP error here. Treat as "no resources" rather
                 # than failing the whole introspection.
-                logger.debug(
-                    "Upstream %s did not expose resources/list", url
-                )
+                logger.debug("Upstream %s did not expose resources/list", url)
                 resources_raw = []
             try:
                 prompts_raw = await client.list_prompts()
             except Exception:
-                logger.debug(
-                    "Upstream %s did not expose prompts/list", url
-                )
+                logger.debug("Upstream %s did not expose prompts/list", url)
                 prompts_raw = []
 
         tools = [_to_capability_tool(t) for t in (tools_raw or [])]
@@ -429,7 +423,9 @@ def _to_capability_resource(raw: Any) -> CapabilityResource:
         uri=str(uri),
         name=str(getattr(raw, "name", "") or ""),
         description=str(getattr(raw, "description", "") or ""),
-        mime_type=str(getattr(raw, "mimeType", "") or getattr(raw, "mime_type", "") or ""),
+        mime_type=str(
+            getattr(raw, "mimeType", "") or getattr(raw, "mime_type", "") or ""
+        ),
     )
 
 
@@ -825,6 +821,5 @@ class Introspector:
         ):
             return await self._stdio.introspect(upstream_ref, env=env)
         raise IntrospectionError(
-            f"Channel {upstream_ref.channel.value} is not supported in "
-            "this iteration."
+            f"Channel {upstream_ref.channel.value} is not supported in this iteration."
         )

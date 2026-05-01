@@ -410,8 +410,7 @@ class PolicyEnforcementMiddleware(Middleware):
                 # operator's mis-tagging that the engine cannot detect.
                 if _tool_is_readonly(tool_tags):
                     logger.debug(
-                        "Constraint 'read_only' satisfied for %s "
-                        "(tool tags: %s)",
+                        "Constraint 'read_only' satisfied for %s (tool tags: %s)",
                         resource_id,
                         sorted(tool_tags),
                     )

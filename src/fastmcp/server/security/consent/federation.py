@@ -424,12 +424,14 @@ class FederatedConsentGraph:
                 peer.peer_id,
             )
 
-        self._audit_log.append({
-            "action": "consent_propagated",
-            "edge_id": edge_id,
-            "target_peers": list(results.keys()),
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        })
+        self._audit_log.append(
+            {
+                "action": "consent_propagated",
+                "edge_id": edge_id,
+                "target_peers": list(results.keys()),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        )
 
         return results
 
@@ -483,12 +485,14 @@ class FederatedConsentGraph:
             metadata=metadata,
         )
 
-        self._audit_log.append({
-            "action": "consent_received",
-            "edge_id": edge.edge_id,
-            "peer_id": peer_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        })
+        self._audit_log.append(
+            {
+                "action": "consent_received",
+                "edge_id": edge.edge_id,
+                "peer_id": peer_id,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        )
 
         return edge
 
@@ -668,28 +672,21 @@ class FederatedConsentGraph:
             return f"Local consent denied: {local_decision.reason}"
 
         failed_jurisdictions = [
-            jcode
-            for jcode, jr in jurisdiction_results.items()
-            if not jr.satisfied
+            jcode for jcode, jr in jurisdiction_results.items() if not jr.satisfied
         ]
         if failed_jurisdictions:
             return (
-                f"Jurisdiction policy not satisfied: "
-                f"{', '.join(failed_jurisdictions)}"
+                f"Jurisdiction policy not satisfied: {', '.join(failed_jurisdictions)}"
             )
 
-        failed_peers = [
-            pid for pid, pd in peer_decisions.items() if not pd.granted
-        ]
+        failed_peers = [pid for pid, pd in peer_decisions.items() if not pd.granted]
         if failed_peers and not granted:
             return f"Peer consent denied: {', '.join(failed_peers)}"
 
         if granted:
             parts = ["Local consent granted"]
             if jurisdiction_results:
-                parts.append(
-                    f"{len(jurisdiction_results)} jurisdiction(s) satisfied"
-                )
+                parts.append(f"{len(jurisdiction_results)} jurisdiction(s) satisfied")
             if peer_decisions:
                 peer_ok = sum(1 for pd in peer_decisions.values() if pd.granted)
                 parts.append(f"{peer_ok}/{len(peer_decisions)} peer(s) granted")
@@ -705,9 +702,7 @@ class FederatedConsentGraph:
             "target_id": edge.target_id,
             "scopes": sorted(edge.scopes),
             "granted_at": edge.granted_at.isoformat(),
-            "expires_at": (
-                edge.expires_at.isoformat() if edge.expires_at else None
-            ),
+            "expires_at": (edge.expires_at.isoformat() if edge.expires_at else None),
             "metadata": dict(edge.metadata),
             "institution_id": self._institution_id,
         }

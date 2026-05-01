@@ -26,7 +26,6 @@ from fastmcp.server.security.certification.manifest import (
     PermissionScope,
     SecurityManifest,
 )
-
 from purecipher.curation.introspector import IntrospectionResult
 
 logger = logging.getLogger(__name__)
@@ -445,9 +444,7 @@ def reconcile_curator_selection(
 
     updated: list[PermissionSuggestion] = []
     for suggestion in draft.permission_suggestions:
-        new_state = chosen_states.get(
-            suggestion.scope.value, suggestion.selected
-        )
+        new_state = chosen_states.get(suggestion.scope.value, suggestion.selected)
         updated.append(
             PermissionSuggestion(
                 scope=suggestion.scope,
@@ -479,7 +476,7 @@ def _word_in(haystack: str, needle: str) -> bool:
     # Cheap whole-word check: search needle surrounded by non-alnum
     # boundaries (or string boundaries).
     n = len(needle)
-    for i in range(0, len(haystack) - n + 1):
+    for i in range(len(haystack) - n + 1):
         if haystack[i : i + n] != needle:
             continue
         before = haystack[i - 1] if i > 0 else " "

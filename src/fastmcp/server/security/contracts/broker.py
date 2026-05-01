@@ -441,7 +441,10 @@ class ContextBroker:
             return False, "Contract not found"
 
         if contract.status != ContractStatus.PENDING_COUNTERSIGN:
-            return False, f"Contract is not awaiting countersignature (status={contract.status.value})"
+            return (
+                False,
+                f"Contract is not awaiting countersignature (status={contract.status.value})",
+            )
 
         if self.agent_registry is None:
             return False, "Agent registry not configured"

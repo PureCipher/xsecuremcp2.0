@@ -41,7 +41,12 @@ ACTION_BY_NAME = {
 # (terminal) or on DRAFT/REJECTED (never made it to the catalog, so
 # there's nothing to deregister).
 AVAILABLE_ACTIONS = {
-    PublishStatus.PENDING_REVIEW: ("approve", "reject", "request-changes", "deregister"),
+    PublishStatus.PENDING_REVIEW: (
+        "approve",
+        "reject",
+        "request-changes",
+        "deregister",
+    ),
     PublishStatus.PUBLISHED: ("suspend", "deregister"),
     PublishStatus.SUSPENDED: ("unsuspend", "deregister"),
     PublishStatus.DEPRECATED: ("deregister",),

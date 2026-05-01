@@ -7,36 +7,25 @@ consent propagation, and HTTP endpoints.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-
-import pytest
 
 from fastmcp.server.security.consent.federation import FederatedConsentGraph
 from fastmcp.server.security.consent.graph import ConsentGraph
 from fastmcp.server.security.consent.models import (
-    AccessRights,
     ConsentCondition,
-    ConsentDecision,
-    ConsentEdge,
     ConsentNode,
-    ConsentQuery,
-    ConsentScope,
-    FederatedConsentDecision,
     FederatedConsentQuery,
     GeographicContext,
     JurisdictionPolicy,
-    JurisdictionResult,
     NodeType,
 )
 from fastmcp.server.security.federation.federation import (
-    FederationPeer,
     PeerStatus,
     TrustFederation,
 )
 
-
 # ── Helpers ───────────────────────────────────────────────────────
+
 
 def _make_graph() -> ConsentGraph:
     """Create a consent graph with basic nodes."""
@@ -175,9 +164,7 @@ class TestFederatedConsentGraphInit:
     def test_register_institution(self):
         g = _make_graph()
         fed = FederatedConsentGraph(g, institution_id="inst-a")
-        node = fed.register_institution(
-            "hospital-a", "EU", label="Hospital A"
-        )
+        node = fed.register_institution("hospital-a", "EU", label="Hospital A")
         assert node.node_type == NodeType.INSTITUTION
         assert node.node_id == "hospital-a"
         assert node.metadata["jurisdiction_code"] == "EU"
@@ -545,9 +532,7 @@ class TestAccessRightsComputation:
         )
         fed = FederatedConsentGraph(g, institution_id="inst-a")
 
-        rights = fed.compute_access_rights(
-            "agent-1", "data-resource", scopes=["read"]
-        )
+        rights = fed.compute_access_rights("agent-1", "data-resource", scopes=["read"])
         assert rights.expires_at is not None
         assert rights.expires_at == future
 
@@ -566,9 +551,7 @@ class TestAccessRightsComputation:
         )
         fed = FederatedConsentGraph(g, institution_id="inst-a")
 
-        rights = fed.compute_access_rights(
-            "agent-1", "data-resource", scopes=["read"]
-        )
+        rights = fed.compute_access_rights("agent-1", "data-resource", scopes=["read"])
         assert "Must be within business hours" in rights.conditions
 
     def test_access_rights_grant_sources(self):
@@ -576,9 +559,7 @@ class TestAccessRightsComputation:
         g.grant("data-resource", "agent-1", {"read"})
         fed = FederatedConsentGraph(g, institution_id="hospital-a")
 
-        rights = fed.compute_access_rights(
-            "agent-1", "data-resource", scopes=["read"]
-        )
+        rights = fed.compute_access_rights("agent-1", "data-resource", scopes=["read"])
         assert "hospital-a" in rights.grant_sources
 
 
@@ -905,18 +886,22 @@ class TestFullLifecycle:
         assert fed.institution_count == 2
 
         # 2. Register jurisdiction policies
-        fed.register_jurisdiction_policy(JurisdictionPolicy(
-            jurisdiction_id="eu-gdpr",
-            jurisdiction_code="EU",
-            applicable_regulations=["GDPR"],
-            required_consent_scopes=["read"],
-        ))
-        fed.register_jurisdiction_policy(JurisdictionPolicy(
-            jurisdiction_id="us-ca-ccpa",
-            jurisdiction_code="US-CA",
-            applicable_regulations=["CCPA"],
-            required_consent_scopes=["read"],
-        ))
+        fed.register_jurisdiction_policy(
+            JurisdictionPolicy(
+                jurisdiction_id="eu-gdpr",
+                jurisdiction_code="EU",
+                applicable_regulations=["GDPR"],
+                required_consent_scopes=["read"],
+            )
+        )
+        fed.register_jurisdiction_policy(
+            JurisdictionPolicy(
+                jurisdiction_id="us-ca-ccpa",
+                jurisdiction_code="US-CA",
+                applicable_regulations=["CCPA"],
+                required_consent_scopes=["read"],
+            )
+        )
         assert fed.jurisdiction_count == 2
 
         # 3. Add nodes and grant consent
@@ -933,16 +918,18 @@ class TestFullLifecycle:
         peer = f.add_peer("hospital-b-registry", peer_id="peer-b", trust_weight=0.8)
 
         # 5. Evaluate federated consent (cross-jurisdiction)
-        decision = fed.evaluate_federated_consent(FederatedConsentQuery(
-            source_id="patient-data",
-            target_id="ml-agent",
-            scope="read",
-            geographic_context=GeographicContext(
-                source_jurisdiction="EU",
-                target_jurisdiction="US-CA",
-            ),
-            include_peers=False,  # Peers don't have consent yet
-        ))
+        decision = fed.evaluate_federated_consent(
+            FederatedConsentQuery(
+                source_id="patient-data",
+                target_id="ml-agent",
+                scope="read",
+                geographic_context=GeographicContext(
+                    source_jurisdiction="EU",
+                    target_jurisdiction="US-CA",
+                ),
+                include_peers=False,  # Peers don't have consent yet
+            )
+        )
         assert decision.granted is True
         assert decision.jurisdiction_results["EU"].satisfied is True
         assert decision.jurisdiction_results["US-CA"].satisfied is True

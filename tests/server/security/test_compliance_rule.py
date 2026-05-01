@@ -39,8 +39,14 @@ def _gdpr_rule() -> ComplianceRuleSpec:
             MetadataCheck(
                 metadata_key="legal_basis",
                 allowed_values=frozenset(
-                    {"consent", "contract", "legal_obligation",
-                     "legitimate_interests", "public_interest", "vital_interests"}
+                    {
+                        "consent",
+                        "contract",
+                        "legal_obligation",
+                        "legitimate_interests",
+                        "public_interest",
+                        "vital_interests",
+                    }
                 ),
             ),
         ),
@@ -58,8 +64,12 @@ def _hipaa_rule() -> ComplianceRuleSpec:
             MetadataCheck(
                 metadata_key="actor_role",
                 allowed_values=frozenset(
-                    {"healthcare_provider", "business_associate",
-                     "health_plan", "healthcare_clearinghouse"}
+                    {
+                        "healthcare_provider",
+                        "business_associate",
+                        "health_plan",
+                        "healthcare_clearinghouse",
+                    }
                 ),
             ),
             MetadataCheck(
@@ -229,27 +239,29 @@ class TestComplianceRuleDeclarative:
     def test_load_gdpr_from_config(self) -> None:
         from fastmcp.server.security.policy.declarative import load_policy
 
-        policy = load_policy({
-            "type": "compliance_rule",
-            "policy_id": "gdpr-test",
-            "version": "1.0.0",
-            "framework": "GDPR",
-            "rules": [
-                {
-                    "name": "legal_basis",
-                    "description": "Require legal basis",
-                    "tags": ["pii"],
-                    "checks": [
-                        {
-                            "metadata_key": "legal_basis",
-                            "allowed_values": ["consent", "contract"],
-                        }
-                    ],
-                    "deny_message": "Missing legal basis",
-                    "allow_message": "Legal basis valid",
-                }
-            ],
-        })
+        policy = load_policy(
+            {
+                "type": "compliance_rule",
+                "policy_id": "gdpr-test",
+                "version": "1.0.0",
+                "framework": "GDPR",
+                "rules": [
+                    {
+                        "name": "legal_basis",
+                        "description": "Require legal basis",
+                        "tags": ["pii"],
+                        "checks": [
+                            {
+                                "metadata_key": "legal_basis",
+                                "allowed_values": ["consent", "contract"],
+                            }
+                        ],
+                        "deny_message": "Missing legal basis",
+                        "allow_message": "Legal basis valid",
+                    }
+                ],
+            }
+        )
         assert isinstance(policy, ComplianceRulePolicy)
         assert policy.framework == "GDPR"
         assert len(policy.rules) == 1
@@ -259,26 +271,28 @@ class TestComplianceRuleDeclarative:
     def test_load_hipaa_from_config(self) -> None:
         from fastmcp.server.security.policy.declarative import load_policy
 
-        policy = load_policy({
-            "type": "compliance_rule",
-            "policy_id": "hipaa-test",
-            "framework": "HIPAA",
-            "rules": [
-                {
-                    "name": "phi_gate",
-                    "description": "PHI requires role + purpose",
-                    "tags": ["phi", "health_data"],
-                    "checks": [
-                        {
-                            "metadata_key": "actor_role",
-                            "allowed_values": ["healthcare_provider"],
-                        },
-                        {"metadata_key": "purpose"},
-                    ],
-                    "deny_message": "HIPAA violation",
-                }
-            ],
-        })
+        policy = load_policy(
+            {
+                "type": "compliance_rule",
+                "policy_id": "hipaa-test",
+                "framework": "HIPAA",
+                "rules": [
+                    {
+                        "name": "phi_gate",
+                        "description": "PHI requires role + purpose",
+                        "tags": ["phi", "health_data"],
+                        "checks": [
+                            {
+                                "metadata_key": "actor_role",
+                                "allowed_values": ["healthcare_provider"],
+                            },
+                            {"metadata_key": "purpose"},
+                        ],
+                        "deny_message": "HIPAA violation",
+                    }
+                ],
+            }
+        )
         assert isinstance(policy, ComplianceRulePolicy)
         assert policy.framework == "HIPAA"
         assert len(policy.rules[0].checks) == 2
@@ -287,22 +301,24 @@ class TestComplianceRuleDeclarative:
     async def test_loaded_policy_evaluates_correctly(self) -> None:
         from fastmcp.server.security.policy.declarative import load_policy
 
-        policy = load_policy({
-            "type": "compliance_rule",
-            "policy_id": "eval-test",
-            "framework": "Test",
-            "rules": [
-                {
-                    "name": "auth_check",
-                    "description": "Require auth token",
-                    "tags": ["secure"],
-                    "checks": [
-                        {"metadata_key": "auth_token"},
-                    ],
-                    "deny_message": "Auth required",
-                }
-            ],
-        })
+        policy = load_policy(
+            {
+                "type": "compliance_rule",
+                "policy_id": "eval-test",
+                "framework": "Test",
+                "rules": [
+                    {
+                        "name": "auth_check",
+                        "description": "Require auth token",
+                        "tags": ["secure"],
+                        "checks": [
+                            {"metadata_key": "auth_token"},
+                        ],
+                        "deny_message": "Auth required",
+                    }
+                ],
+            }
+        )
 
         denied = await policy.evaluate(_ctx(tags=frozenset({"secure"})))
         assert denied.decision == PolicyDecision.DENY
@@ -386,9 +402,7 @@ class TestBundleComplianceRuleIntegration:
         untagged = await provider.evaluate(_ctx(tags=frozenset({"safe"})))
         assert untagged.decision == PolicyDecision.DEFER
 
-        missing_basis = await provider.evaluate(
-            _ctx(tags=frozenset({"pii"}))
-        )
+        missing_basis = await provider.evaluate(_ctx(tags=frozenset({"pii"})))
         assert missing_basis.decision == PolicyDecision.DENY
 
         valid_basis = await provider.evaluate(
@@ -414,9 +428,7 @@ class TestBundleComplianceRuleIntegration:
         untagged = await provider.evaluate(_ctx(tags=frozenset({"safe"})))
         assert untagged.decision == PolicyDecision.DEFER
 
-        missing_all = await provider.evaluate(
-            _ctx(tags=frozenset({"phi"}))
-        )
+        missing_all = await provider.evaluate(_ctx(tags=frozenset({"phi"})))
         assert missing_all.decision == PolicyDecision.DENY
 
         role_only = await provider.evaluate(
@@ -453,9 +465,7 @@ class TestBundleComplianceRuleIntegration:
         untagged = await provider.evaluate(_ctx(tags=frozenset({"safe"})))
         assert untagged.decision == PolicyDecision.DEFER
 
-        missing_all = await provider.evaluate(
-            _ctx(tags=frozenset({"cardholder_data"}))
-        )
+        missing_all = await provider.evaluate(_ctx(tags=frozenset({"cardholder_data"})))
         assert missing_all.decision == PolicyDecision.DENY
 
         role_only = await provider.evaluate(
@@ -492,9 +502,7 @@ class TestBundleComplianceRuleIntegration:
         untagged = await provider.evaluate(_ctx(tags=frozenset({"safe"})))
         assert untagged.decision == PolicyDecision.DEFER
 
-        missing_purpose = await provider.evaluate(
-            _ctx(tags=frozenset({"consumer_pi"}))
-        )
+        missing_purpose = await provider.evaluate(_ctx(tags=frozenset({"consumer_pi"})))
         assert missing_purpose.decision == PolicyDecision.DENY
 
         valid_access = await provider.evaluate(
@@ -537,9 +545,7 @@ class TestBundleComplianceRuleIntegration:
         untagged = await provider.evaluate(_ctx(tags=frozenset({"safe"})))
         assert untagged.decision == PolicyDecision.DEFER
 
-        missing_all = await provider.evaluate(
-            _ctx(tags=frozenset({"student_record"}))
-        )
+        missing_all = await provider.evaluate(_ctx(tags=frozenset({"student_record"})))
         assert missing_all.decision == PolicyDecision.DENY
 
         valid_access = await provider.evaluate(

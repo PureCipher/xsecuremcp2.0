@@ -11,7 +11,18 @@ services:
       dockerfile: Dockerfile.purecipher-registry
     ports:
       - "${PURECIPHER_REGISTRY_PORT:-8000}:8000"
-    command: ["uv", "run", "--no-sync", "purecipher-registry", "--host-toolsets", "--host", "0.0.0.0", "--port", "8000"]
+    command:
+      [
+        "uv",
+        "run",
+        "--no-sync",
+        "purecipher-registry",
+        "--host-toolsets",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+      ]
     environment:
       PURECIPHER_SIGNING_SECRET: ${PURECIPHER_SIGNING_SECRET:-purecipher-registry-dev-signing-secret}
       PURECIPHER_REGISTRY_DB: /data/purecipher-registry.db
@@ -120,7 +131,8 @@ services:
       dockerfile: Dockerfile.purecipher-registry
     ports:
       - "${DEMO_MCP_PORT:-9000}:9000"
-    command: ["uv", "run", "--no-sync", "python", "/app/demo/demo_mcp_server.py"]
+    command:
+      ["uv", "run", "--no-sync", "python", "/app/demo/demo_mcp_server.py"]
     volumes:
       - ./demo:/app/demo:ro
     healthcheck:

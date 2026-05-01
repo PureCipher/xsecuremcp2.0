@@ -131,9 +131,7 @@ class ProvenanceLedger:
             # 32 random bytes = 64 hex chars. Mixed with the ledger_id
             # so it's visually distinguishable from a record hash and so
             # different ledgers can't accidentally share a root.
-            self._genesis_hash = (
-                f"genesis-{self.ledger_id}-{secrets.token_hex(32)}"
-            )
+            self._genesis_hash = f"genesis-{self.ledger_id}-{secrets.token_hex(32)}"
         return self._genesis_hash
 
     @property

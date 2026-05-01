@@ -23,7 +23,9 @@ def _visible_to_session(
         return True
     if not audiences:
         return True
-    effective = role if role in {"viewer", "publisher", "reviewer", "admin"} else "viewer"
+    effective = (
+        role if role in {"viewer", "publisher", "reviewer", "admin"} else "viewer"
+    )
     return effective in audiences
 
 
@@ -130,7 +132,9 @@ class RegistryNotificationFeed:
             try:
                 aud_list = json.loads(audiences_json)
                 audiences_t = (
-                    tuple(str(x) for x in aud_list) if isinstance(aud_list, list) else ()
+                    tuple(str(x) for x in aud_list)
+                    if isinstance(aud_list, list)
+                    else ()
                 )
             except json.JSONDecodeError:
                 audiences_t = ()

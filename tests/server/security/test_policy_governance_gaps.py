@@ -1029,7 +1029,9 @@ class TestSecurityAPIGovernance:
         }
         for bundle in list_policy_bundles():
             missing = required_fields - set(bundle.keys())
-            assert not missing, f"Bundle {bundle['bundle_id']} missing fields: {missing}"
+            assert not missing, (
+                f"Bundle {bundle['bundle_id']} missing fields: {missing}"
+            )
             assert bundle["provider_count"] >= 1
             assert len(bundle["providers"]) == bundle["provider_count"]
             assert len(bundle["provider_summaries"]) == bundle["provider_count"]

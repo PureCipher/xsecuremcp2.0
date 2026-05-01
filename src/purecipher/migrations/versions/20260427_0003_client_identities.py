@@ -37,9 +37,7 @@ def upgrade() -> None:
             sa.Column("display_name", sa.Text(), nullable=False),
             sa.Column("description", sa.Text(), nullable=False),
             sa.Column("intended_use", sa.Text(), nullable=False),
-            sa.Column(
-                "kind", sa.Text(), nullable=False, server_default="agent"
-            ),
+            sa.Column("kind", sa.Text(), nullable=False, server_default="agent"),
             sa.Column("owner_publisher_id", sa.Text(), nullable=False),
             sa.Column("status", sa.Text(), nullable=False),
             sa.Column("suspended_reason", sa.Text(), nullable=False),

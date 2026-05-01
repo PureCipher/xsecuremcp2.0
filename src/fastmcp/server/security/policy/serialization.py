@@ -24,12 +24,12 @@ from typing import Any, cast
 from fastmcp.server.security.policy.composition import AllOf, AnyOf, FirstMatch, Not
 from fastmcp.server.security.policy.declarative import load_policy
 from fastmcp.server.security.policy.policies.abac import AttributeBasedPolicy
-from fastmcp.server.security.policy.policies.compliance_rule import (
-    ComplianceRulePolicy,
-)
 from fastmcp.server.security.policy.policies.allowlist import (
     AllowlistPolicy,
     DenylistPolicy,
+)
+from fastmcp.server.security.policy.policies.compliance_rule import (
+    ComplianceRulePolicy,
 )
 from fastmcp.server.security.policy.policies.rate_limit import RateLimitPolicy
 from fastmcp.server.security.policy.policies.rbac import RoleBasedPolicy
@@ -284,7 +284,11 @@ def policy_provider_to_config(provider: PolicyProvider) -> dict[str, Any]:
                                 if check.allowed_values is not None
                                 else {}
                             ),
-                            **({"required": check.required} if not check.required else {}),
+                            **(
+                                {"required": check.required}
+                                if not check.required
+                                else {}
+                            ),
                         }
                         for check in rule.checks
                     ],

@@ -15,9 +15,8 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 from fastmcp.server.security.reflexive.models import (
-    ComplianceStatus,
     DEFAULT_THREAT_THRESHOLDS,
-    DriftSeverity,
+    ComplianceStatus,
     EscalationAction,
     ExecutionVerdict,
     IntrospectionResult,
@@ -154,7 +153,8 @@ class IntrospectionEngine:
             compliance_status=compliance_status,
             verdict=verdict,
             should_halt=verdict == ExecutionVerdict.HALT,
-            should_require_confirmation=verdict == ExecutionVerdict.REQUIRE_CONFIRMATION,
+            should_require_confirmation=verdict
+            == ExecutionVerdict.REQUIRE_CONFIRMATION,
             constraints=constraints,
         )
 
@@ -245,9 +245,7 @@ class IntrospectionEngine:
 
     # ── Accountability ────────────────────────────────────────────
 
-    def record_introspection(
-        self, actor_id: str, result: IntrospectionResult
-    ) -> None:
+    def record_introspection(self, actor_id: str, result: IntrospectionResult) -> None:
         """Record an introspection result for accountability.
 
         Appends to both the per-actor history and the global

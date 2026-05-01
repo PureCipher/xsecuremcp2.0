@@ -44,7 +44,9 @@ def _estimate_call_tokens(
                 output_chars += len(str(text))
         if result.structured_content:
             output_chars += len(
-                _json.dumps(result.structured_content, separators=(",", ":"), default=str)
+                _json.dumps(
+                    result.structured_content, separators=(",", ":"), default=str
+                )
             )
 
     return (max(1, input_chars // 4), max(1, output_chars // 4) if output_chars else 0)
@@ -115,9 +117,7 @@ class ProvenanceRecordingMiddleware(Middleware):
         try:
             result = await call_next(context)
 
-            input_tokens, output_tokens = _estimate_call_tokens(
-                arguments, result
-            )
+            input_tokens, output_tokens = _estimate_call_tokens(arguments, result)
             self.ledger.record(
                 action=ProvenanceAction.TOOL_CALLED,
                 actor_id=actor_id,

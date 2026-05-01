@@ -335,8 +335,7 @@ class TestSQLiteBackendThreadSafety:
             seen[thread_id] = backend._get_conn()
 
         threads = [
-            threading.Thread(target=_grab, args=(i,), daemon=True)
-            for i in range(2)
+            threading.Thread(target=_grab, args=(i,), daemon=True) for i in range(2)
         ]
         for t in threads:
             t.start()

@@ -111,9 +111,7 @@ class ClientAwareConsentEnforcementMiddleware(ConsentEnforcementMiddleware):
 # ── Provenance ─────────────────────────────────────────────────────
 
 
-class ClientAwareProvenanceRecordingMiddleware(
-    ProvenanceRecordingMiddleware
-):
+class ClientAwareProvenanceRecordingMiddleware(ProvenanceRecordingMiddleware):
     """``ProvenanceRecordingMiddleware`` whose actor extractor
     returns the resolved client slug when available.
     """
@@ -166,9 +164,8 @@ def upgrade_middleware_for_client_actor(middleware_chain: list) -> list:
     for component in middleware_chain:
         replaced = False
         for upstream_cls, replacement_cls in _REPLACEMENT_MAP:
-            if (
-                isinstance(component, upstream_cls)
-                and not isinstance(component, replacement_cls)
+            if isinstance(component, upstream_cls) and not isinstance(
+                component, replacement_cls
             ):
                 # In-place class swap. The subclass is a structural
                 # superset (no extra ``__init__``-only state) so

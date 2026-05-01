@@ -822,9 +822,7 @@ class TestEventBusTimeoutsAndAsync:
         assert delivered == 0
         assert seen == []
         assert bus.error_count == 1
-        assert any(
-            "async but emit() is sync" in r.message for r in caplog.records
-        )
+        assert any("async but emit() is sync" in r.message for r in caplog.records)
 
     def test_per_subscription_timeout_overrides_default(self, caplog):
         import logging

@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import os
+
 import uvicorn
+
 from purecipher import PureCipherRegistry
 from purecipher.hosted_runtime import build_hosted_registry_app
 
 
 def _persistence_path() -> str:
     return os.getenv("PURECIPHER_PERSISTENCE_PATH", "purecipher-registry.db")
+
 
 def build_app():
     persistence = _persistence_path()
@@ -27,4 +30,3 @@ if __name__ == "__main__":
         port=int(os.getenv("PORT", "8000")),
         log_level=os.getenv("LOG_LEVEL", "info"),
     )
-

@@ -21,7 +21,6 @@ import argparse
 import re
 from pathlib import Path
 
-
 # Match a ``<Link href=... legacyBehavior passHref> <Child component="a" ...>
 # inner </Child> </Link>`` block where Child is one of the safe set
 # (Button, Box, CardActionArea). The href can be either a string
@@ -148,7 +147,7 @@ def _migrate_text(text: str) -> tuple[str, int]:
         if new_attrs:
             new_open += f" {new_attrs}"
         new_open += ">"
-        inner = text[child_open_end:close_pos - len(f"</{tag}>")]
+        inner = text[child_open_end : close_pos - len(f"</{tag}>")]
         out.append(new_open)
         out.append(inner)
         out.append(f"</{tag}>")
@@ -165,9 +164,7 @@ def main() -> int:
         default="src",
         help="Directory to scan (default: src)",
     )
-    parser.add_argument(
-        "--dry-run", action="store_true", help="Don't write files."
-    )
+    parser.add_argument("--dry-run", action="store_true", help="Don't write files.")
     args = parser.parse_args()
 
     root = Path(args.root)

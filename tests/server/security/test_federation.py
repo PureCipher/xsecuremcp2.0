@@ -16,7 +16,6 @@ from fastmcp.server.security.federation.crl import (
     RevocationReason,
 )
 from fastmcp.server.security.federation.federation import (
-    BroadcastDelivery,
     BroadcastResult,
     FederatedQuery,
     FederationPeer,
@@ -660,9 +659,7 @@ class TestHTTPBroadcastTransport:
             HTTPBroadcastTransport,
         )
 
-        peer = FederationPeer(
-            peer_id="p1", name="p", endpoint="https://example.com/"
-        )
+        peer = FederationPeer(peer_id="p1", name="p", endpoint="https://example.com/")
         transport = HTTPBroadcastTransport(path="/fed/revoke")
         assert transport._build_url(peer) == "https://example.com/fed/revoke"
 

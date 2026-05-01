@@ -312,6 +312,12 @@ export function OnboardWizard({ mode = "curator" }: { mode?: "author" | "curator
   const [hostingMode, setHostingMode] = useState<"catalog" | "proxy">(
     "catalog",
   );
+  // Iter 15 — opt-in consent/contract enforcement. Only meaningful
+  // when hosting_mode === "proxy"; the submit payload sends them
+  // regardless (the backend ignores them in catalog mode) so the
+  // curator's intent is preserved if they toggle back and forth.
+  const [requireConsent, setRequireConsent] = useState(false);
+  const [requireContract, setRequireContract] = useState(false);
 
   // Step 4: result
   const [submitResult, setSubmitResult] = useState<SubmitResponse | null>(null);
@@ -339,6 +345,8 @@ export function OnboardWizard({ mode = "curator" }: { mode?: "author" | "curator
     setDescription("");
     setSelections([]);
     setHostingMode("catalog");
+    setRequireConsent(false);
+    setRequireContract(false);
     setSubmitResult(null);
   }, []);
 
@@ -470,6 +478,9 @@ export function OnboardWizard({ mode = "curator" }: { mode?: "author" | "curator
           // Iter 14.10 — vouched tool subset. Sent as an array of
           // names; the backend filters to observed and rejects empty.
           selected_tools: Array.from(selectedTools),
+          // Iter 15 — opt-in enforcement flags. No-op in catalog mode.
+          require_consent: hostingMode === "proxy" ? requireConsent : false,
+          require_contract: hostingMode === "proxy" ? requireContract : false,
           ...(env ? { env } : {}),
         }),
       });
@@ -501,6 +512,8 @@ export function OnboardWizard({ mode = "curator" }: { mode?: "author" | "curator
     description,
     selections,
     hostingMode,
+    requireConsent,
+    requireContract,
     credentials,
     selectedTools,
   ]);
@@ -566,6 +579,10 @@ export function OnboardWizard({ mode = "curator" }: { mode?: "author" | "curator
           setDescription={setDescription}
           hostingMode={hostingMode}
           setHostingMode={setHostingMode}
+          requireConsent={requireConsent}
+          setRequireConsent={setRequireConsent}
+          requireContract={requireContract}
+          setRequireContract={setRequireContract}
           onTogglePermission={togglePermission}
           selectedTools={selectedTools}
           setSelectedTools={setSelectedTools}
@@ -1062,6 +1079,10 @@ function StepConfirm({
   setDescription,
   hostingMode,
   setHostingMode,
+  requireConsent,
+  setRequireConsent,
+  requireContract,
+  setRequireContract,
   onTogglePermission,
   selectedTools,
   setSelectedTools,
@@ -1083,6 +1104,10 @@ function StepConfirm({
   setDescription: (v: string) => void;
   hostingMode: "catalog" | "proxy";
   setHostingMode: (v: "catalog" | "proxy") => void;
+  requireConsent: boolean;
+  setRequireConsent: (v: boolean) => void;
+  requireContract: boolean;
+  setRequireContract: (v: boolean) => void;
   onTogglePermission: (scope: string) => void;
   selectedTools: Set<string>;
   setSelectedTools: React.Dispatch<React.SetStateAction<Set<string>>>;
@@ -1287,6 +1312,74 @@ function StepConfirm({
             />
           </Box>
         </Box>
+
+        {hostingMode === "proxy" ? (
+          <Box sx={{ mb: 3 }}>
+            <Typography
+              sx={{
+                fontWeight: 700,
+                fontSize: 12,
+                color: "var(--app-muted)",
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                mb: 1,
+              }}
+            >
+              Runtime gating (optional)
+            </Typography>
+            <Box
+              sx={{
+                display: "grid",
+                gap: 0.5,
+                p: 1.75,
+                border: "1px solid var(--app-border)",
+                borderRadius: 2,
+                bgcolor: "var(--app-surface)",
+              }}
+            >
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={requireConsent}
+                    onChange={(e) => setRequireConsent(e.target.checked)}
+                  />
+                }
+                label={
+                  <Box>
+                    <Typography sx={{ fontSize: 13, fontWeight: 600, color: "var(--app-fg)" }}>
+                      Require consent grant before every tool call
+                    </Typography>
+                    <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                      Callers must have a matching edge in the consent
+                      graph (issue via <code>/security/consent/grant</code>)
+                      or the proxy denies the call.
+                    </Typography>
+                  </Box>
+                }
+              />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={requireContract}
+                    onChange={(e) => setRequireContract(e.target.checked)}
+                  />
+                }
+                label={
+                  <Box>
+                    <Typography sx={{ fontSize: 13, fontWeight: 600, color: "var(--app-fg)" }}>
+                      Require an active contract with the registry
+                    </Typography>
+                    <Typography sx={{ fontSize: 12, color: "var(--app-muted)" }}>
+                      Callers must have negotiated a contract via{" "}
+                      <code>/security/contracts/negotiate</code> before
+                      the proxy forwards calls.
+                    </Typography>
+                  </Box>
+                }
+              />
+            </Box>
+          </Box>
+        ) : null}
 
         <Box sx={{ display: "flex", justifyContent: "space-between" }}>
           <Button onClick={onBack} variant="text">

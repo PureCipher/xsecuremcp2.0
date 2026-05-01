@@ -928,9 +928,7 @@ class TestCuratorAttestationFields:
         from fastmcp.server.security.storage.memory import MemoryBackend
 
         backend = MemoryBackend()
-        original = ToolMarketplace(
-            backend=backend, marketplace_id="curator-test"
-        )
+        original = ToolMarketplace(backend=backend, marketplace_id="curator-test")
         original.publish(
             tool_name="persisted-curated",
             display_name="Persisted",
@@ -948,9 +946,7 @@ class TestCuratorAttestationFields:
         )
 
         # Reload from backend and confirm the curator fields survived.
-        reloaded = ToolMarketplace(
-            backend=backend, marketplace_id="curator-test"
-        )
+        reloaded = ToolMarketplace(backend=backend, marketplace_id="curator-test")
         listing = reloaded.get_by_name("persisted-curated")
         assert listing is not None
         assert listing.attestation_kind == AttestationKind.CURATOR

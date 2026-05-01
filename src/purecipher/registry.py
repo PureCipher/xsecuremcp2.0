@@ -5589,7 +5589,9 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 "status": 400,
             }
 
-        raw_attestation_kind = str(body.get("attestation_kind", "curator")).strip().lower()
+        raw_attestation_kind = (
+            str(body.get("attestation_kind", "curator")).strip().lower()
+        )
         if raw_attestation_kind not in {"author", "curator"}:
             return {
                 "error": (
@@ -5772,6 +5774,15 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             HostingMode.PROXY if raw_hosting_early == "proxy" else HostingMode.CATALOG
         )
 
+        # Iter 15 — opt-in consent/contract enforcement on proxy mode.
+        # Curators who want the proxy to gate tool calls on a consent
+        # grant or an active contract flip these flags at submit time.
+        # Only meaningful when hosting_mode == proxy (catalog listings
+        # don't touch the runtime); we still round-trip them for
+        # transparency so the UI can reflect the curator's choice.
+        require_consent_flag = bool(body.get("require_consent", False))
+        require_contract_flag = bool(body.get("require_contract", False))
+
         manifest = draft.build_manifest(
             tool_name=tool_name,
             display_name=display_name,
@@ -5779,6 +5790,19 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             author=submitter,
             description=description,
         )
+        # Reflect the curator's consent-gating choice on the manifest
+        # so it's part of the signed attestation. Contracts are a
+        # runtime-only concern — they bind to a live broker, not a
+        # static manifest — so we don't mirror that flag here.
+        if require_consent_flag:
+            try:
+                manifest.requires_consent = True
+            except Exception:
+                logger.debug(
+                    "Could not set requires_consent on manifest for %s",
+                    tool_name,
+                    exc_info=True,
+                )
 
         result = self.submit_tool(
             manifest,
@@ -5806,6 +5830,10 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     "vouched_tool_count": len(vouched_tool_names),
                     "resource_uris": [r.uri for r in introspection.resources],
                     "prompt_names": [p.name for p in introspection.prompts],
+                },
+                "enforcement": {
+                    "require_consent": require_consent_flag,
+                    "require_contract": require_contract_flag,
                 },
             },
             attestation_kind=(
@@ -8641,7 +8669,10 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                         status_code=404,
                     )
                 if target.status != PublishStatus.PENDING_REVIEW:
-                    err = {"error": "Only pending-review listings can be withdrawn.", "status": 400}
+                    err = {
+                        "error": "Only pending-review listings can be withdrawn.",
+                        "status": 400,
+                    }
                     if expects_json:
                         return JSONResponse(err, status_code=400)
                     return create_secure_html_response(
@@ -8659,7 +8690,10 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     session, {RegistryRole.REVIEWER, RegistryRole.ADMIN}
                 )
                 if not is_owner and not is_privileged:
-                    err = {"error": "You can only withdraw your own listings.", "status": 403}
+                    err = {
+                        "error": "You can only withdraw your own listings.",
+                        "status": 403,
+                    }
                     if expects_json:
                         return JSONResponse(err, status_code=403)
                     return create_secure_html_response(
@@ -8689,7 +8723,10 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                         status_code=404,
                     )
                 if target.status != PublishStatus.WITHDRAWN:
-                    err = {"error": "Only withdrawn listings can be resubmitted.", "status": 400}
+                    err = {
+                        "error": "Only withdrawn listings can be resubmitted.",
+                        "status": 400,
+                    }
                     if expects_json:
                         return JSONResponse(err, status_code=400)
                     return create_secure_html_response(
@@ -8707,7 +8744,10 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     session, {RegistryRole.REVIEWER, RegistryRole.ADMIN}
                 )
                 if not is_owner and not is_privileged:
-                    err = {"error": "You can only resubmit your own listings.", "status": 403}
+                    err = {
+                        "error": "You can only resubmit your own listings.",
+                        "status": 403,
+                    }
                     if expects_json:
                         return JSONResponse(err, status_code=403)
                     return create_secure_html_response(

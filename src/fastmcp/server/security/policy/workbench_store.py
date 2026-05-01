@@ -94,9 +94,7 @@ class PolicyWorkbenchStore:
         """Create or update a private reusable pack."""
 
         existing = (
-            self._state["saved_packs"].get(pack_id)
-            if pack_id is not None
-            else None
+            self._state["saved_packs"].get(pack_id) if pack_id is not None else None
         )
         current_id = pack_id or str(uuid.uuid4())
         created_at = (
@@ -281,7 +279,9 @@ class PolicyWorkbenchStore:
         promotions.sort(key=lambda item: str(item.get("created_at", "")), reverse=True)
         return copy.deepcopy(promotions[:limit])
 
-    def record_analytics_snapshot(self, snapshot: dict[str, Any]) -> list[dict[str, Any]]:
+    def record_analytics_snapshot(
+        self, snapshot: dict[str, Any]
+    ) -> list[dict[str, Any]]:
         """Append a lightweight analytics point and return recent history."""
 
         history = list(self._state["analytics_snapshots"])

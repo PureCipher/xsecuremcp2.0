@@ -287,7 +287,9 @@ class RegistryAccountSecurityStore:
             )
             or str(account["username"]),
             source=str(account.get("source") or "local"),
-            created_at=float(account.get("created_at") or account.get("updated_at") or _now()),
+            created_at=float(
+                account.get("created_at") or account.get("updated_at") or _now()
+            ),
             disabled_at=disabled_at,
         )
         if disabled is True or (role is not None and role != current_role):
@@ -306,7 +308,9 @@ class RegistryAccountSecurityStore:
             role=RegistryRole(str(account["role"])),
             display_name=str(account["display_name"]),
             source=str(account.get("source") or "local"),
-            created_at=float(account.get("created_at") or account.get("updated_at") or _now()),
+            created_at=float(
+                account.get("created_at") or account.get("updated_at") or _now()
+            ),
             disabled_at=account.get("disabled_at"),
         )
         self.revoke_sessions_for_user(username=username)
@@ -397,7 +401,8 @@ class RegistryAccountSecurityStore:
                 "revoked_at": _iso(float(row["revoked_at"]))
                 if row.get("revoked_at") is not None
                 else None,
-                "active": row.get("revoked_at") is None and float(row["expires_at"]) > _now(),
+                "active": row.get("revoked_at") is None
+                and float(row["expires_at"]) > _now(),
             }
             for row in self._list_session_rows(username=username, limit=limit)
         ]
@@ -423,7 +428,9 @@ class RegistryAccountSecurityStore:
         self._save_token(record)
         return {"token": token, "token_record": self._serialize_token(record)}
 
-    def list_api_tokens(self, *, username: str, limit: int = 20) -> list[dict[str, Any]]:
+    def list_api_tokens(
+        self, *, username: str, limit: int = 20
+    ) -> list[dict[str, Any]]:
         rows = self._list_token_rows(username=username, limit=limit)
         return [self._serialize_token(row) for row in rows]
 
@@ -514,7 +521,16 @@ class RegistryAccountSecurityStore:
             conn.close()
             if row is None:
                 return None
-            username_v, password_hash, role, display_name, source, updated_at, created_at, disabled_at = row
+            (
+                username_v,
+                password_hash,
+                role,
+                display_name,
+                source,
+                updated_at,
+                created_at,
+                disabled_at,
+            ) = row
             return {
                 "username": username_v,
                 "password_hash": password_hash,
@@ -737,9 +753,13 @@ class RegistryAccountSecurityStore:
             "role": str(row["role"]),
             "display_name": str(row["display_name"]),
             "source": str(row.get("source") or "local"),
-            "created_at": _iso(float(row.get("created_at") or row.get("updated_at") or _now())),
+            "created_at": _iso(
+                float(row.get("created_at") or row.get("updated_at") or _now())
+            ),
             "updated_at": _iso(float(row.get("updated_at") or _now())),
-            "disabled_at": _iso(float(disabled_at)) if disabled_at is not None else None,
+            "disabled_at": _iso(float(disabled_at))
+            if disabled_at is not None
+            else None,
             "active": disabled_at is None,
         }
 
@@ -758,7 +778,16 @@ def _session_row(row: tuple[Any, ...]) -> dict[str, Any]:
 
 
 def _account_row(row: tuple[Any, ...]) -> dict[str, Any]:
-    username, password_hash, role, display_name, source, updated_at, created_at, disabled_at = row
+    (
+        username,
+        password_hash,
+        role,
+        display_name,
+        source,
+        updated_at,
+        created_at,
+        disabled_at,
+    ) = row
     return {
         "username": username,
         "password_hash": password_hash,
@@ -779,12 +808,24 @@ def _session_record(row: dict[str, Any]) -> RegistrySessionRecord:
         display_name=str(row["display_name"]),
         created_at=float(row["created_at"]),
         expires_at=float(row["expires_at"]),
-        revoked_at=float(row["revoked_at"]) if row.get("revoked_at") is not None else None,
+        revoked_at=float(row["revoked_at"])
+        if row.get("revoked_at") is not None
+        else None,
     )
 
 
 def _token_row(row: tuple[Any, ...]) -> dict[str, Any]:
-    token_id, token_hash, username, name, role, display_name, created_at, last_used_at, revoked_at = row
+    (
+        token_id,
+        token_hash,
+        username,
+        name,
+        role,
+        display_name,
+        created_at,
+        last_used_at,
+        revoked_at,
+    ) = row
     return {
         "token_id": token_id,
         "token_hash": token_hash,

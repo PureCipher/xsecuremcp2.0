@@ -237,9 +237,7 @@ def verify_chain_dump(dump: dict[str, Any]) -> dict[str, Any]:
     # the first record's ``previous_hash`` must match. Legacy dumps
     # without that field used the literal ``"genesis"`` sentinel.
     declared_genesis = dump.get("genesis_hash")
-    expected_genesis = (
-        declared_genesis if declared_genesis else "genesis"
-    )
+    expected_genesis = declared_genesis if declared_genesis else "genesis"
     if records[0].get("previous_hash") != expected_genesis:
         broken_links.append(0)
 

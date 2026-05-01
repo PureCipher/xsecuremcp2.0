@@ -120,7 +120,9 @@ class RegistryAccountActivityStore:
 
         out: list[dict[str, Any]] = []
         for row in rows:
-            id_, created_at, row_username, event_kind, title, detail, metadata_json = row
+            id_, created_at, row_username, event_kind, title, detail, metadata_json = (
+                row
+            )
             try:
                 metadata = json.loads(metadata_json)
             except json.JSONDecodeError:

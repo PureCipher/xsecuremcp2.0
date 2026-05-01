@@ -187,9 +187,7 @@ class PolicyTypeRegistry:
         so the frontend can consume it without changes.
         """
         self._ensure_discovered()
-        descriptors = self.list_types(
-            jurisdiction=jurisdiction, category=category
-        )
+        descriptors = self.list_types(jurisdiction=jurisdiction, category=category)
         policy_types: dict[str, Any] = {}
         for desc in descriptors:
             entry: dict[str, Any] = {
@@ -217,9 +215,7 @@ class PolicyTypeRegistry:
     ) -> list[dict[str, Any]]:
         """Return a lightweight list of registered plugin descriptors."""
         self._ensure_discovered()
-        descriptors = self.list_types(
-            jurisdiction=jurisdiction, category=category
-        )
+        descriptors = self.list_types(jurisdiction=jurisdiction, category=category)
         return [
             {
                 "type_key": d.type_key,
@@ -235,9 +231,7 @@ class PolicyTypeRegistry:
 
     # ── Entry-point discovery ──────────────────────────────────
 
-    def discover_plugins(
-        self, group: str = POLICY_TYPES_ENTRY_POINT_GROUP
-    ) -> int:
+    def discover_plugins(self, group: str = POLICY_TYPES_ENTRY_POINT_GROUP) -> int:
         """Scan installed packages for policy-type entry points.
 
         Each entry point must resolve to a :class:`PolicyTypeDescriptor`.
