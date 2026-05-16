@@ -114,7 +114,11 @@ _CC6_3_LEAST_PRIV = ComplianceRuleSpec(
         "Callers must state the scope being exercised so the auditor "
         "can compare against the entitlement."
     ),
-    tags=frozenset({"soc2_scoped", "privileged_access"}),
+    # Only ``privileged_access`` activates this rule. Tagging
+    # ``soc2_scoped`` alone must not imply a privilege elevation that
+    # requires entitlement_scope (CC6.1/CC6.2/CC7.2 cover baseline
+    # SOC2-scoped production calls).
+    tags=frozenset({"privileged_access"}),
     checks=(
         MetadataCheck(metadata_key="entitlement_scope"),
     ),

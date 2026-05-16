@@ -65,6 +65,12 @@ def conformance_server(_require_npx):
     thread.join(timeout=5)
 
 
+# Pinned: @latest currently depends on ``fs.globSync``, which only exists
+# on Node.js 22+. CI/dev often runs Node 20 LTS; keep a last-good 0.1.x
+# until the runner baseline moves.
+_CONFORMANCE_PACKAGE = "@modelcontextprotocol/conformance@0.1.13"
+
+
 @pytest.mark.conformance
 @pytest.mark.timeout(120)
 def test_mcp_conformance(conformance_server):
@@ -72,7 +78,7 @@ def test_mcp_conformance(conformance_server):
     cmd = [
         "npx",
         "--yes",
-        "@modelcontextprotocol/conformance@latest",
+        _CONFORMANCE_PACKAGE,
         "server",
         "--url",
         conformance_server,

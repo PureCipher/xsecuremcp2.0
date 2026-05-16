@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from fastmcp.server.security.policy.provider import (
     AllowAllPolicy,
+    Citation,
     PolicyDecision,
     PolicyEvaluationContext,
     PolicyProvider,
@@ -391,11 +392,24 @@ class PolicyEngine:
         for r in results:
             all_constraints.extend(r.constraints)
 
+        # Preserve regulation citations from every provider (compliance
+        # packs attach them on ALLOW). Without this merge, the audit log
+        # would show ALLOW with an empty citation tuple.
+        merged_citations: list[Citation] = []
+        seen: set[tuple[str, str, str]] = set()
+        for r in results:
+            for c in getattr(r, "citations", ()) or ():
+                key = (c.source, c.article, c.version)
+                if key not in seen:
+                    seen.add(key)
+                    merged_citations.append(c)
+
         final_result = PolicyResult(
             decision=PolicyDecision.ALLOW,
             reason=allow_result.reason,
             policy_id=allow_result.policy_id,
             constraints=all_constraints,
+            citations=tuple(merged_citations),
         )
         self._record_audit(context, final_result, start_time)
         return final_result

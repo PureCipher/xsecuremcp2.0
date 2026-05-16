@@ -2598,7 +2598,7 @@ class TestDefaultIntrospectorIsMultiChannel:
         # the stdio path, not what stdio does next.
         orig_introspect = StdioIntrospector.introspect
 
-        async def _fake_introspect(self, upstream_ref):
+        async def _fake_introspect(self, upstream_ref, **kwargs):
             raise IntrospectionError("stub stdio introspection (test)")
 
         PyPIUpstreamFetcher.__init__ = _patched_fetcher  # type: ignore[assignment]
