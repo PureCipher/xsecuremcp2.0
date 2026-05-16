@@ -144,7 +144,7 @@ class SecurityOrchestrator:
         config: SecurityConfig,
         *,
         server_name: str = "securemcp-server",
-        bypass_stdio: bool = True,
+        bypass_stdio: bool = False,
     ) -> SecurityContext:
         """Create all security components from the given config.
 
@@ -152,6 +152,9 @@ class SecurityOrchestrator:
             config: Master security configuration.
             server_name: Server identity for the context broker.
             bypass_stdio: Whether middleware should skip STDIO transport.
+                Defaults to ``False`` — STDIO is a privileged execution
+                surface that the middleware treats like any other
+                transport. See ``v3-notes/mcp-stdio-hardening.md``.
 
         Returns:
             A fully-wired SecurityContext.

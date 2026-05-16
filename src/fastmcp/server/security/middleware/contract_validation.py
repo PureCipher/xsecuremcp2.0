@@ -49,7 +49,9 @@ class ContractValidationMiddleware(Middleware):
 
     Args:
         broker: The ContextBroker managing contracts.
-        bypass_stdio: If True (default), skip contract checks for STDIO transport.
+        bypass_stdio: If True, skip contract checks for STDIO transport.
+            Defaults to ``False``; see
+            ``v3-notes/mcp-stdio-hardening.md``.
         require_for_list: If True, require contracts for list operations too.
             Default is False (lists are unrestricted).
     """
@@ -58,7 +60,7 @@ class ContractValidationMiddleware(Middleware):
         self,
         broker: ContextBroker,
         *,
-        bypass_stdio: bool = True,
+        bypass_stdio: bool = False,
         require_for_list: bool = False,
     ) -> None:
         self.broker = broker

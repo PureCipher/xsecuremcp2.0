@@ -5782,6 +5782,13 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         # transparency so the UI can reflect the curator's choice.
         require_consent_flag = bool(body.get("require_consent", False))
         require_contract_flag = bool(body.get("require_contract", False))
+        # Iter 16 — opt-in capability policy. Prepends the default
+        # Rego + Cedar capability bundle to the proxy's policy chain
+        # so destructive / production-sensitive actions are evaluated
+        # before the allowlist fires.
+        require_capability_policy_flag = bool(
+            body.get("require_capability_policy", False)
+        )
 
         manifest = draft.build_manifest(
             tool_name=tool_name,
@@ -5834,6 +5841,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 "enforcement": {
                     "require_consent": require_consent_flag,
                     "require_contract": require_contract_flag,
+                    "require_capability_policy": require_capability_policy_flag,
                 },
             },
             attestation_kind=(

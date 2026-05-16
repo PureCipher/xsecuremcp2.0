@@ -21,7 +21,7 @@ server = SecureMCP("secure-server", security=SecurityConfig(...))
 | Environment Variable | Legacy Alias | Default | Description |
 |---|---|---|---|
 | `SECUREMCP_ENABLED` | `FASTMCP_SECURITY_ENABLED` | `true` | Master switch for helper-based SecureMCP attachment. When `false`, `attach_security()` attaches an empty context and registers no security middleware. |
-| `SECUREMCP_POLICY_BYPASS_STDIO` | `FASTMCP_SECURITY_POLICY_BYPASS_STDIO` | `true` | Default `bypass_stdio` value used by `attach_security()` when wiring security middleware. |
+| `SECUREMCP_POLICY_BYPASS_STDIO` | `FASTMCP_SECURITY_POLICY_BYPASS_STDIO` | `false` | Default `bypass_stdio` value used by `attach_security()` when wiring security middleware. Defaults to `false` so policy, contract, consent, provenance, and reflexive middleware evaluate STDIO calls just like HTTP. STDIO is a privileged execution surface (it spawns subprocesses from a launcher spec); treating it as trusted by default is the exact assumption the May 2026 MCP STDIO disclosure highlighted. Operators who mount SecureMCP inside a trust boundary where STDIO is known-safe can opt back in by setting this to `true`. |
 | `SECUREMCP_POLICY_FAIL_CLOSED` | `FASTMCP_SECURITY_POLICY_FAIL_CLOSED` | `true` | Reserved default for environments that derive policy configuration from settings. |
 | `SECUREMCP_POLICY_HOT_SWAP` | `FASTMCP_SECURITY_POLICY_HOT_SWAP` | `true` | Reserved default for environments that derive policy hot-swap behavior from settings. |
 

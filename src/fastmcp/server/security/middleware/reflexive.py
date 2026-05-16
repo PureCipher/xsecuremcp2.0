@@ -60,7 +60,9 @@ class ReflexiveMiddleware(Middleware):
     Args:
         analyzer: The behavioral analyzer for drift detection.
         escalation_engine: Engine for processing drift events.
-        bypass_stdio: If True (default), skip monitoring for STDIO transport.
+        bypass_stdio: If True, skip monitoring for STDIO transport.
+            Defaults to ``False`` so behavioural drift is caught on
+            STDIO; see ``v3-notes/mcp-stdio-hardening.md``.
         profile_manager: Optional ActorProfileManager for scope tracking
             and threat scoring. If None, one is created automatically.
         introspection_engine: Optional IntrospectionEngine for pre-execution
@@ -75,7 +77,7 @@ class ReflexiveMiddleware(Middleware):
         analyzer: BehavioralAnalyzer,
         escalation_engine: EscalationEngine | None = None,
         *,
-        bypass_stdio: bool = True,
+        bypass_stdio: bool = False,
         profile_manager: ActorProfileManager | None = None,
         introspection_engine: IntrospectionEngine | None = None,
         throttle_delay_seconds: float = 2.0,

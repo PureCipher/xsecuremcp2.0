@@ -53,7 +53,9 @@ class ConsentEnforcementMiddleware(Middleware):
     Args:
         graph: The consent graph to evaluate against.
         resource_owner: Default owner ID for resource consent checks.
-        bypass_stdio: Skip consent checks for STDIO transport.
+        bypass_stdio: Skip consent checks for STDIO transport. Defaults
+            to ``False`` — STDIO is treated as a privileged execution
+            surface; see ``v3-notes/mcp-stdio-hardening.md``.
         require_for_list: If True, check consent for list operations.
     """
 
@@ -62,7 +64,7 @@ class ConsentEnforcementMiddleware(Middleware):
         graph: ConsentGraph,
         *,
         resource_owner: str = "server",
-        bypass_stdio: bool = True,
+        bypass_stdio: bool = False,
         require_for_list: bool = False,
     ) -> None:
         self.graph = graph

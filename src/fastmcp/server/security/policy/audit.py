@@ -39,6 +39,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastmcp.server.security.policy.provider import (
+    Citation,
     PolicyDecision,
     PolicyEvaluationContext,
     PolicyResult,
@@ -51,11 +52,19 @@ logger = logging.getLogger(__name__)
 class AuditEntry:
     """A single audit log entry recording a policy decision.
 
+    The core 7-tuple (actor/action/resource/decision/reason/policy_id)
+    is canonical — every policy evaluation records these. Capability
+    fields (environment/risk/principal_type/resource_type/
+    approval_granted/approval_ticket) are populated when the caller
+    supplied them on the PolicyEvaluationContext; they default to the
+    same safe-deny values the context uses so legacy records don't
+    look suspicious.
+
     Attributes:
         actor_id: Who made the request.
         action: What action was attempted.
         resource_id: The target resource.
-        decision: The final ALLOW/DENY/DEFER decision.
+        decision: The final ALLOW/DENY/DEFER/REQUIRE_APPROVAL decision.
         reason: Human-readable reason from the policy.
         policy_id: ID of the policy that made the decision.
         constraints: Any constraints attached to an ALLOW.
@@ -63,6 +72,18 @@ class AuditEntry:
         tags: Tags from the evaluation context.
         timestamp: When the evaluation occurred.
         elapsed_ms: Time taken for the evaluation in milliseconds.
+        environment: Environment the request was evaluated in.
+        risk: Declared or inferred risk level.
+        principal_type: Classification of the caller.
+        resource_type: Classification of the resource.
+        approval_granted: Whether an approval ticket accompanied the call.
+        approval_ticket: Opaque ticket id (only present when approval
+            was granted). Never contains secrets.
+        citations: Regulation citations attached by compliance
+            providers. Tuple so the record is hashable and the order
+            (first = primary) is preserved for reports that want the
+            citation that blocked the call rather than any ancillary
+            ones.
     """
 
     actor_id: str | None
@@ -76,6 +97,13 @@ class AuditEntry:
     tags: frozenset[str] = field(default_factory=frozenset)
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     elapsed_ms: float = 0.0
+    environment: str = "production"
+    risk: str = "low"
+    principal_type: str = "agent"
+    resource_type: str = "tool"
+    approval_granted: bool = False
+    approval_ticket: str | None = None
+    citations: tuple[Citation, ...] = field(default_factory=tuple)
 
     def to_dict(self) -> dict[str, Any]:
         """Export as a JSON-serializable dict."""
@@ -91,6 +119,13 @@ class AuditEntry:
             "tags": sorted(self.tags),
             "timestamp": self.timestamp.isoformat(),
             "elapsed_ms": self.elapsed_ms,
+            "environment": self.environment,
+            "risk": self.risk,
+            "principal_type": self.principal_type,
+            "resource_type": self.resource_type,
+            "approval_granted": self.approval_granted,
+            "approval_ticket": self.approval_ticket,
+            "citations": [c.to_dict() for c in self.citations],
         }
 
 
@@ -160,6 +195,20 @@ class PolicyAuditLog:
         Returns:
             The created AuditEntry.
         """
+        # Capability fields are optional on older PolicyEvaluationContext
+        # instances built via positional-only signatures. Read defensively
+        # so hot-path evaluation can't explode on a surprise shape.
+        environment = getattr(context, "environment", "production")
+        risk = getattr(context, "risk", "low")
+        principal_type = getattr(context, "principal_type", "agent")
+        resource_type = getattr(context, "resource_type", "tool")
+        approval_granted = bool(getattr(context, "approval_granted", False))
+        approval_ticket = getattr(context, "approval_ticket", None)
+
+        # ``citations`` is a tuple on the result; audit entries are
+        # hashable dataclasses so we keep it as a tuple here too.
+        result_citations = getattr(result, "citations", ()) or ()
+
         entry = AuditEntry(
             actor_id=context.actor_id,
             action=context.action,
@@ -172,6 +221,13 @@ class PolicyAuditLog:
             tags=context.tags,
             timestamp=datetime.now(timezone.utc),
             elapsed_ms=elapsed_ms,
+            environment=environment,
+            risk=risk,
+            principal_type=principal_type,
+            resource_type=resource_type,
+            approval_granted=approval_granted,
+            approval_ticket=approval_ticket,
+            citations=tuple(result_citations),
         )
 
         with self._lock:

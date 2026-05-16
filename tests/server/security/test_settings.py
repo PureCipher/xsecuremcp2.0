@@ -91,6 +91,31 @@ class TestAttachSecuritySettings:
         )
         assert policy_mw.bypass_stdio is False
 
+    def test_attach_security_defaults_to_enforcing_stdio(self, monkeypatch):
+        """Iter 0: with no explicit env var or kwarg, attach_security must
+        wire middleware that evaluates STDIO calls. See
+        ``v3-notes/mcp-stdio-hardening.md``."""
+        _clear_security_env(monkeypatch)
+
+        server = FastMCP("test")
+        attach_security(
+            server,
+            SecurityConfig(policy=PolicyConfig(providers=[AllowAllPolicy()])),
+        )
+
+        policy_mw = next(
+            m for m in server.middleware if isinstance(m, PolicyEnforcementMiddleware)
+        )
+        assert policy_mw.bypass_stdio is False
+
+    def test_security_settings_defaults_to_enforcing_stdio(self, monkeypatch):
+        """Iter 0: ``SecuritySettings.policy_bypass_stdio`` must default to
+        ``False`` so deployments that never set the env var still get
+        STDIO enforcement."""
+        _clear_security_env(monkeypatch)
+        settings = SecuritySettings()
+        assert settings.policy_bypass_stdio is False
+
     def test_attach_security_override_beats_settings(self, monkeypatch):
         _clear_security_env(monkeypatch)
         monkeypatch.setenv("SECUREMCP_POLICY_BYPASS_STDIO", "false")

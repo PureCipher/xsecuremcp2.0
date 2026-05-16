@@ -62,7 +62,9 @@ class ProvenanceRecordingMiddleware(Middleware):
 
     Args:
         ledger: The ProvenanceLedger to record into.
-        bypass_stdio: If True (default), skip recording for STDIO transport.
+        bypass_stdio: If True, skip recording for STDIO transport.
+            Defaults to ``False`` so STDIO operations are auditable
+            alongside HTTP; see ``v3-notes/mcp-stdio-hardening.md``.
         record_list_operations: If True, record list operations too.
             Default is False (only record execution operations).
     """
@@ -71,7 +73,7 @@ class ProvenanceRecordingMiddleware(Middleware):
         self,
         ledger: ProvenanceLedger,
         *,
-        bypass_stdio: bool = True,
+        bypass_stdio: bool = False,
         record_list_operations: bool = False,
     ) -> None:
         self.ledger = ledger

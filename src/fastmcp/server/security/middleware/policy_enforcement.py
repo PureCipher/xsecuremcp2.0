@@ -49,14 +49,17 @@ class PolicyEnforcementMiddleware(Middleware):
 
     Args:
         policy_engine: The engine to evaluate requests against.
-        bypass_stdio: If True (default), skip policy checks for STDIO transport.
+        bypass_stdio: If True, skip policy checks for STDIO transport.
+            Defaults to ``False`` — STDIO is a privileged execution
+            surface and the middleware evaluates it just like HTTP.
+            See ``v3-notes/mcp-stdio-hardening.md`` for the rationale.
     """
 
     def __init__(
         self,
         policy_engine: PolicyEngine,
         *,
-        bypass_stdio: bool = True,
+        bypass_stdio: bool = False,
     ) -> None:
         self.policy_engine = policy_engine
         self.bypass_stdio = bypass_stdio
@@ -93,6 +96,7 @@ class PolicyEnforcementMiddleware(Middleware):
         metadata["method"] = middleware_context.method
         metadata["source"] = middleware_context.source
 
+        capability = _capability_overrides(tags, metadata)
         return PolicyEvaluationContext(
             actor_id=actor_id,
             action=action,
@@ -100,6 +104,7 @@ class PolicyEnforcementMiddleware(Middleware):
             metadata=metadata,
             timestamp=middleware_context.timestamp,
             tags=tags,
+            **capability,
         )
 
     def _build_list_context(
@@ -109,11 +114,13 @@ class PolicyEnforcementMiddleware(Middleware):
         tags: frozenset[str],
     ) -> PolicyEvaluationContext:
         """Build a lightweight context for list-level filtering."""
+        capability = _capability_overrides(tags, {})
         return PolicyEvaluationContext(
             actor_id=None,
             action=action,
             resource_id=resource_id,
             tags=tags,
+            **capability,
         )
 
     # ── Tool operations ──────────────────────────────────────────────
@@ -148,20 +155,35 @@ class PolicyEnforcementMiddleware(Middleware):
             extra_metadata={"arguments": context.message.arguments or {}},
         )
 
-        # Get tool to access its tags
+        # Get tool to access its tags. We rebuild the evaluation
+        # context so the capability fields (environment / risk /
+        # resource_type) reflect the tool's tags — not the generic
+        # defaults the first _build_context call used.
         tool = await fastmcp_ctx.fastmcp.get_tool(tool_name)
         if tool is not None:
+            tool_tags = frozenset(tool.tags)
+            capability = _capability_overrides(tool_tags, eval_ctx.metadata)
             eval_ctx = PolicyEvaluationContext(
                 actor_id=eval_ctx.actor_id,
                 action=eval_ctx.action,
                 resource_id=eval_ctx.resource_id,
                 metadata=eval_ctx.metadata,
                 timestamp=eval_ctx.timestamp,
-                tags=frozenset(tool.tags),
+                tags=tool_tags,
+                **capability,
             )
 
         result = await self.policy_engine.evaluate(eval_ctx)
-        if result.decision == PolicyDecision.DENY:
+        # REQUIRE_APPROVAL is a non-terminal deny from the caller's
+        # perspective — the action cannot execute right now but may
+        # be retried with approval metadata attached. We reuse the
+        # DENY surfacing so clients see a consistent error shape;
+        # PolicyViolationError carries the original decision for
+        # callers that want to branch.
+        if result.decision in (
+            PolicyDecision.DENY,
+            PolicyDecision.REQUIRE_APPROVAL,
+        ):
             raise PolicyViolationError(result)
 
         # Enforce constraints from policy result
@@ -196,7 +218,13 @@ class PolicyEnforcementMiddleware(Middleware):
             )
             try:
                 result = await self.policy_engine.evaluate(eval_ctx)
-                if result.decision != PolicyDecision.DENY:
+                # Hide components that need approval too — listing
+                # them would invite callers to attempt calls that
+                # won't succeed without a human-in-the-loop ticket.
+                if result.decision not in (
+                    PolicyDecision.DENY,
+                    PolicyDecision.REQUIRE_APPROVAL,
+                ):
                     permitted.append(tool)
             except Exception:
                 logger.debug(
@@ -238,7 +266,16 @@ class PolicyEnforcementMiddleware(Middleware):
         )
 
         result = await self.policy_engine.evaluate(eval_ctx)
-        if result.decision == PolicyDecision.DENY:
+        # REQUIRE_APPROVAL is a non-terminal deny from the caller's
+        # perspective — the action cannot execute right now but may
+        # be retried with approval metadata attached. We reuse the
+        # DENY surfacing so clients see a consistent error shape;
+        # PolicyViolationError carries the original decision for
+        # callers that want to branch.
+        if result.decision in (
+            PolicyDecision.DENY,
+            PolicyDecision.REQUIRE_APPROVAL,
+        ):
             raise PolicyViolationError(result)
 
         return await call_next(context)
@@ -263,7 +300,10 @@ class PolicyEnforcementMiddleware(Middleware):
             )
             try:
                 result = await self.policy_engine.evaluate(eval_ctx)
-                if result.decision != PolicyDecision.DENY:
+                if result.decision not in (
+                    PolicyDecision.DENY,
+                    PolicyDecision.REQUIRE_APPROVAL,
+                ):
                     permitted.append(resource)
             except Exception:
                 logger.debug(
@@ -295,7 +335,10 @@ class PolicyEnforcementMiddleware(Middleware):
             )
             try:
                 result = await self.policy_engine.evaluate(eval_ctx)
-                if result.decision != PolicyDecision.DENY:
+                if result.decision not in (
+                    PolicyDecision.DENY,
+                    PolicyDecision.REQUIRE_APPROVAL,
+                ):
                     permitted.append(template)
             except Exception:
                 logger.debug(
@@ -337,7 +380,16 @@ class PolicyEnforcementMiddleware(Middleware):
         )
 
         result = await self.policy_engine.evaluate(eval_ctx)
-        if result.decision == PolicyDecision.DENY:
+        # REQUIRE_APPROVAL is a non-terminal deny from the caller's
+        # perspective — the action cannot execute right now but may
+        # be retried with approval metadata attached. We reuse the
+        # DENY surfacing so clients see a consistent error shape;
+        # PolicyViolationError carries the original decision for
+        # callers that want to branch.
+        if result.decision in (
+            PolicyDecision.DENY,
+            PolicyDecision.REQUIRE_APPROVAL,
+        ):
             raise PolicyViolationError(result)
 
         return await call_next(context)
@@ -362,7 +414,10 @@ class PolicyEnforcementMiddleware(Middleware):
             )
             try:
                 result = await self.policy_engine.evaluate(eval_ctx)
-                if result.decision != PolicyDecision.DENY:
+                if result.decision not in (
+                    PolicyDecision.DENY,
+                    PolicyDecision.REQUIRE_APPROVAL,
+                ):
                     permitted.append(prompt)
             except Exception:
                 logger.debug(
@@ -492,3 +547,62 @@ def _tool_is_readonly(tool_tags: frozenset[str]) -> bool:
         return False
     lowered = {t.lower() for t in tool_tags}
     return bool(lowered & _READ_ONLY_TAGS)
+
+
+# Convention tag prefixes that map onto PolicyEvaluationContext
+# capability fields. Tool authors and curators signal the capability
+# surface of a tool via tags so the Policy Kernel can key its Rego /
+# Cedar rules off a stable, serializable attribute instead of the
+# caller having to thread fields down through every middleware.
+_TAG_PREFIX_RESOURCE_TYPE = "resource:"
+_TAG_PREFIX_ENVIRONMENT = "env:"
+_TAG_PREFIX_RISK = "risk:"
+_TAG_PREFIX_PRINCIPAL_TYPE = "principal:"
+
+
+def _capability_overrides(tags: frozenset[str], metadata: dict) -> dict[str, object]:
+    """Translate capability-signaling tags/metadata into context kwargs.
+
+    Three conventions, evaluated in priority order:
+
+    1. Explicit ``capability`` dict on request metadata (from a
+       curator-injected middleware) wins — it's the richest signal.
+    2. ``resource:<type>`` / ``env:<env>`` / ``risk:<lvl>`` /
+       ``principal:<type>`` tag prefixes next.
+    3. Otherwise the PolicyEvaluationContext dataclass defaults apply.
+
+    The approval fields are only ever set through metadata; tags are
+    not trusted to claim approval.
+    """
+    overrides: dict[str, object] = {}
+
+    # Path 2: tag prefixes.
+    for tag in tags:
+        lowered = tag.lower()
+        if lowered.startswith(_TAG_PREFIX_RESOURCE_TYPE):
+            overrides["resource_type"] = lowered[len(_TAG_PREFIX_RESOURCE_TYPE) :]
+        elif lowered.startswith(_TAG_PREFIX_ENVIRONMENT):
+            overrides["environment"] = lowered[len(_TAG_PREFIX_ENVIRONMENT) :]
+        elif lowered.startswith(_TAG_PREFIX_RISK):
+            overrides["risk"] = lowered[len(_TAG_PREFIX_RISK) :]
+        elif lowered.startswith(_TAG_PREFIX_PRINCIPAL_TYPE):
+            overrides["principal_type"] = lowered[len(_TAG_PREFIX_PRINCIPAL_TYPE) :]
+
+    # Path 1: explicit metadata wins (overrides tags).
+    cap_md = metadata.get("capability") if isinstance(metadata, dict) else None
+    if isinstance(cap_md, dict):
+        for field_name in (
+            "principal_type",
+            "resource_type",
+            "environment",
+            "risk",
+        ):
+            if field_name in cap_md and isinstance(cap_md[field_name], str):
+                overrides[field_name] = cap_md[field_name]
+        if cap_md.get("approval_granted"):
+            overrides["approval_granted"] = True
+            ticket = cap_md.get("approval_ticket")
+            if isinstance(ticket, str) and ticket:
+                overrides["approval_ticket"] = ticket
+
+    return overrides

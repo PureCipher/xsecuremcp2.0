@@ -1,7 +1,13 @@
-# PureCipher registry API + Next.js registry-ui.
+# PureCipher registry API only (Next.js console lives in the xregistry repo).
 # Quick start: `docker compose -f docker-compose.purecipher-registry.yml up --build`
-# Then open http://localhost:${REGISTRY_UI_PORT:-3000}
-# Dev passwords: viewer123, publisher123, reviewer123, admin123 (see purecipher.auth).
+# API: http://localhost:${PURECIPHER_REGISTRY_PORT:-8000}/registry/health
+#
+# For the full stack (registry + Next.js console + public site), use the
+# sibling product repo: https://github.com/PureCipher/xregistry
+#   docker compose --env-file .env.compose.example up --build
+#
+# To pin the backend build context when this compose file is copied elsewhere, set:
+#   export SECUREMCP_REPO=/path/to/xsecuremcp2.0
 
 services:
   purecipher-registry:
@@ -84,42 +90,6 @@ services:
       # profile too. Same security caveat applies — see the comment
       # on the main service above.
       - /var/run/docker.sock:/var/run/docker.sock
-
-  # Next.js registry console (proxies API to purecipher-registry).
-  registry-ui:
-    image: purecipher-registry-ui:local
-    build:
-      context: ./registry-ui
-      dockerfile: Dockerfile
-      args:
-        REGISTRY_BACKEND_URL: http://purecipher-registry:8000
-    ports:
-      - "${REGISTRY_UI_PORT:-3000}:3000"
-    environment:
-      REGISTRY_BACKEND_URL: http://purecipher-registry:8000
-    depends_on:
-      purecipher-registry:
-        condition: service_healthy
-
-  # Public registry UI (no console routes, no login required).
-  registry-public-ui:
-    image: purecipher-registry-ui:local
-    build:
-      context: ./registry-ui
-      dockerfile: Dockerfile
-      args:
-        REGISTRY_BACKEND_URL: http://purecipher-registry:8000
-    ports:
-      - "${PUBLIC_REGISTRY_UI_PORT:-3001}:3000"
-    environment:
-      REGISTRY_BACKEND_URL: http://purecipher-registry:8000
-      PUBLIC_REGISTRY_ONLY: "true"
-      # Optional: link back to your console (can be a different host/port).
-      NEXT_PUBLIC_CONSOLE_URL: ${NEXT_PUBLIC_CONSOLE_URL:-http://localhost:${REGISTRY_UI_PORT:-3000}/registry/app}
-      NEXT_PUBLIC_CONSOLE_SIGNIN_URL: ${NEXT_PUBLIC_CONSOLE_SIGNIN_URL:-http://localhost:${REGISTRY_UI_PORT:-3000}/login}
-    depends_on:
-      purecipher-registry:
-        condition: service_healthy
 
   # Demo MCP server for end-to-end integration testing.
   # Start with: docker compose -f docker-compose.purecipher-registry.yml --profile demo up --build

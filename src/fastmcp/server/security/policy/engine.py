@@ -202,9 +202,18 @@ class PolicyEngine:
     async def evaluate(self, context: PolicyEvaluationContext) -> PolicyResult:
         """Evaluate a request against all configured policy providers.
 
-        All providers must return ALLOW for the overall result to be ALLOW.
-        Any DENY immediately short-circuits. DEFER is treated as ALLOW
-        unless all providers defer (then fail_closed determines outcome).
+        Aggregation semantics (precedence high→low):
+
+        - **DENY** — any provider that denies short-circuits the chain.
+          Overrides every other decision.
+        - **REQUIRE_APPROVAL** — if no provider denies, the first
+          provider to return REQUIRE_APPROVAL wins. Turned into ALLOW
+          only when the context already carries an approval token
+          *and* every provider that surfaced REQUIRE_APPROVAL accepts
+          that token (re-evaluated implicitly via the context).
+        - **ALLOW** — returned when at least one provider allows and
+          no provider denies or demands approval.
+        - **DEFER-only** — fail_closed decides between DENY and ALLOW.
 
         Args:
             context: The evaluation context with actor, action, resource details.
@@ -215,6 +224,13 @@ class PolicyEngine:
         self._evaluation_count += 1
         start_time = datetime.now(timezone.utc)
 
+        # Track the first REQUIRE_APPROVAL seen in this run — if no
+        # provider denies, it becomes the aggregate outcome. Cleared
+        # when a provider explicitly allows *after* consuming the
+        # approval_ticket (that path never materializes: once a
+        # REQUIRE_APPROVAL lands, we don't retro-promote to ALLOW).
+        pending_approval: PolicyResult | None = None
+
         results: list[PolicyResult] = []
         for provider in self._providers:
             try:
@@ -223,6 +239,12 @@ class PolicyEngine:
                     raw_result = await raw_result
                 result = cast(PolicyResult, raw_result)
                 results.append(result)
+
+                if (
+                    result.decision == PolicyDecision.REQUIRE_APPROVAL
+                    and pending_approval is None
+                ):
+                    pending_approval = result
 
                 if result.decision == PolicyDecision.DENY:
                     self._deny_count += 1
@@ -314,6 +336,53 @@ class PolicyEngine:
             )
             self._record_audit(context, defer_allow, start_time)
             return defer_allow
+
+        # REQUIRE_APPROVAL wins over ALLOW when no provider denied.
+        # A provider can retract the demand by also returning ALLOW
+        # in the same chain — that's what "approval consumed" looks
+        # like: the CapabilityPolicy emits REQUIRE_APPROVAL when it
+        # sees a high-risk action, then re-emits ALLOW on the same
+        # context when approval_granted=True. We surface the approval
+        # only when no ALLOW explicitly acknowledged the high-risk
+        # path.
+        if pending_approval is not None:
+            approval_consumed = any(
+                r.decision == PolicyDecision.ALLOW
+                and "approval" in r.reason.lower()
+                for r in results
+            )
+            if not approval_consumed:
+                if self._event_bus is not None:
+                    from fastmcp.server.security.alerts.models import (
+                        AlertSeverity,
+                        SecurityEvent,
+                        SecurityEventType,
+                    )
+
+                    await self._event_bus.aemit(
+                        SecurityEvent(
+                            event_type=SecurityEventType.POLICY_DENIED,
+                            severity=AlertSeverity.INFO,
+                            layer="policy",
+                            message=f"Approval required: {pending_approval.reason}",
+                            actor_id=context.actor_id,
+                            resource_id=context.resource_id,
+                            data={
+                                "policy_id": pending_approval.policy_id,
+                                "action": context.action,
+                                "outcome": "require_approval",
+                            },
+                        )
+                    )
+                logger.info(
+                    "Policy REQUIRE_APPROVAL from %s: %s (action=%s, resource=%s)",
+                    pending_approval.policy_id,
+                    pending_approval.reason,
+                    context.action,
+                    context.resource_id,
+                )
+                self._record_audit(context, pending_approval, start_time)
+                return pending_approval
 
         # At least one ALLOW, no DENY → aggregate ALLOW
         allow_result = next(r for r in results if r.decision == PolicyDecision.ALLOW)

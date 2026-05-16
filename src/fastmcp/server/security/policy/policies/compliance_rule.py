@@ -50,6 +50,7 @@ import logging
 from dataclasses import dataclass, field
 
 from fastmcp.server.security.policy.provider import (
+    Citation,
     PolicyDecision,
     PolicyEvaluationContext,
     PolicyResult,
@@ -78,6 +79,13 @@ class MetadataCheck:
 class ComplianceRuleSpec:
     """One logical rule within a compliance policy.
 
+    Each rule bundles the enforcement surface — which tags activate it
+    and what metadata has to be present — with an optional structured
+    citation to the official regulation text that motivates the rule.
+    The citation rides the PolicyResult (and therefore the audit log)
+    so a reviewer can go from a DENY record back to the cited article
+    without re-parsing free-text descriptions.
+
     Attributes:
         name: Short identifier for audit trails.
         description: Human-readable explanation.
@@ -86,6 +94,10 @@ class ComplianceRuleSpec:
         checks: Metadata requirements that must all pass.
         deny_message: Message returned when a check fails.
         allow_message: Message returned when all checks pass.
+        citation: Structured reference to the regulation text the
+            rule enforces. ``None`` means the rule is operator-local
+            (no external citation); compliance packs should always
+            provide one.
     """
 
     name: str
@@ -94,6 +106,7 @@ class ComplianceRuleSpec:
     checks: tuple[MetadataCheck, ...]
     deny_message: str = "Access denied by compliance rule"
     allow_message: str = "Access permitted by compliance rule"
+    citation: Citation | None = None
 
 
 @dataclass
@@ -179,6 +192,14 @@ class ComplianceRulePolicy:
 
         framework_label = self.framework or "Compliance"
 
+        # Citations from every matched rule flow through on both ALLOW
+        # and DENY paths. Callers aggregating the audit log can then
+        # answer "how many calls hit GDPR Article 6 this week" without
+        # reparsing free-text deny messages.
+        all_citations = tuple(
+            rule.citation for rule in matched_rules if rule.citation is not None
+        )
+
         if self.require_all_rules:
             if not failed:
                 constraints = [f"compliance:{name}" for name in passed]
@@ -192,6 +213,7 @@ class ComplianceRulePolicy:
                     reason=allow_msg,
                     policy_id=self.policy_id,
                     constraints=constraints,
+                    citations=all_citations,
                 )
             first_fail_name, first_fail_reason = failed[0]
             matching_rule = next(
@@ -202,11 +224,24 @@ class ComplianceRulePolicy:
                 if matching_rule
                 else f"{framework_label}: {first_fail_reason}"
             )
+            # On DENY we surface the specific failing rule's citation
+            # first so the audit entry points at the article that
+            # rejected the call, followed by the other matched rules'
+            # citations for context.
+            deny_citations: tuple[Citation, ...] = ()
+            if matching_rule is not None and matching_rule.citation is not None:
+                others = tuple(
+                    c for c in all_citations if c is not matching_rule.citation
+                )
+                deny_citations = (matching_rule.citation, *others)
+            else:
+                deny_citations = all_citations
             return PolicyResult(
                 decision=PolicyDecision.DENY,
                 reason=deny_msg,
                 policy_id=self.policy_id,
                 constraints=[f"failed:{first_fail_name}"],
+                citations=deny_citations,
             )
         else:
             if passed:
@@ -216,12 +251,14 @@ class ComplianceRulePolicy:
                     reason=f"{framework_label}: {len(passed)}/{len(matched_rules)} rules passed",
                     policy_id=self.policy_id,
                     constraints=constraints,
+                    citations=all_citations,
                 )
             all_reasons = "; ".join(f"{n}: {r}" for n, r in failed)
             return PolicyResult(
                 decision=PolicyDecision.DENY,
                 reason=f"{framework_label}: No rules passed ({all_reasons})",
                 policy_id=self.policy_id,
+                citations=all_citations,
             )
 
     async def get_policy_id(self) -> str:

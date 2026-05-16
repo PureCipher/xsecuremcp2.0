@@ -72,11 +72,16 @@ class SecuritySettings(BaseSettings):
             description=inspect.cleandoc(
                 """
                 Whether helper-based SecureMCP attachment bypasses STDIO
-                transport by default when wiring middleware.
+                transport by default when wiring middleware. Defaults to
+                ``False`` so policy/contract/consent/provenance/reflexive
+                middleware evaluate STDIO calls just like HTTP. Operators
+                who mount SecureMCP inside a trust boundary where STDIO
+                is known-safe can opt back in with
+                ``SECUREMCP_POLICY_BYPASS_STDIO=true``.
                 """
             ),
         ),
-    ] = True
+    ] = False
 
     policy_hot_swap: Annotated[
         bool,

@@ -48,6 +48,7 @@ import asyncio
 import logging
 import shutil
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from starlette.applications import Starlette
@@ -85,12 +86,27 @@ class ProxyHostingError(RuntimeError):
     """
 
 
-def _listing_enforcement_flags(listing: ToolListing) -> tuple[bool, bool]:
-    """Return ``(require_consent, require_contract)`` for a listing.
+@dataclass(frozen=True)
+class _EnforcementFlags:
+    """Per-listing enforcement toggles read from ``listing.metadata``.
 
-    Curators opt in to consent/contract gating at submit time by
-    setting flags in ``listing.metadata["enforcement"]``. ``require_consent``
-    also falls back to ``listing.manifest.requires_consent`` so the
+    The proxy runtime checks these when building the :class:`SecurityConfig`
+    for a listing's lazy-mounted SecureMCP proxy. Flags are additive
+    — the proxy's always-on safety layers (policy allowlist + provenance)
+    run regardless; these toggles turn on additional gating.
+    """
+
+    require_consent: bool
+    require_contract: bool
+    require_capability_policy: bool
+
+
+def _listing_enforcement_flags(listing: ToolListing) -> _EnforcementFlags:
+    """Return the enforcement toggles for a listing.
+
+    Curators opt in at submit time by setting flags in
+    ``listing.metadata["enforcement"]``. ``require_consent`` also
+    falls back to ``listing.manifest.requires_consent`` so the
     manifest-level declaration keeps its existing meaning.
     """
     metadata = listing.metadata or {}
@@ -104,7 +120,14 @@ def _listing_enforcement_flags(listing: ToolListing) -> tuple[bool, bool]:
     if not require_consent and listing.manifest is not None:
         require_consent = bool(getattr(listing.manifest, "requires_consent", False))
     require_contract = bool(enforcement.get("require_contract", False))
-    return require_consent, require_contract
+    require_capability_policy = bool(
+        enforcement.get("require_capability_policy", False)
+    )
+    return _EnforcementFlags(
+        require_consent=require_consent,
+        require_contract=require_contract,
+        require_capability_policy=require_capability_policy,
+    )
 
 
 def _build_proxy_security_config(
@@ -153,19 +176,40 @@ def _build_proxy_security_config(
     # these don't go through the policy engine in our middleware, but
     # we explicitly note the contract here.
 
-    if observed_tools:
-        policy = PolicyConfig(
-            providers=[
-                AllowlistPolicy(
-                    allowed=observed_tools,
-                    policy_id=f"curator-allowlist-{listing.listing_id}",
-                )
-            ],
-            fail_closed=True,
+    flags = _listing_enforcement_flags(listing)
+
+    # The provider order below is deliberate: the capability bundle
+    # sees every call first, so a DENY or REQUIRE_APPROVAL from the
+    # default bundle short-circuits before the AllowlistPolicy even
+    # runs. This is what makes "backup deletion is always blocked"
+    # true even if a curator somehow vouched for a delete_backup tool.
+    providers: list[Any] = []
+    if flags.require_capability_policy:
+        from fastmcp.server.security.policy.capability import (
+            default_capability_bundle,
         )
+
+        providers.extend(
+            default_capability_bundle(
+                rego_policy_id=f"capability-rego-{listing.listing_id}",
+                cedar_policy_id=f"capability-cedar-{listing.listing_id}",
+            )
+        )
+
+    if observed_tools:
+        providers.append(
+            AllowlistPolicy(
+                allowed=observed_tools,
+                policy_id=f"curator-allowlist-{listing.listing_id}",
+            )
+        )
+
+    if providers:
+        policy = PolicyConfig(providers=providers, fail_closed=True)
     else:
-        # No observed tools — open policy + warning. Keeps the proxy
-        # usable while making the operator aware of the gap.
+        # No observed tools and no capability policy — open policy +
+        # warning. Keeps the proxy usable while making the operator
+        # aware of the gap.
         logger.warning(
             "Curator listing %s has no observed tools recorded; the "
             "proxy will not enforce a tool allowlist. Re-run "
@@ -174,17 +218,15 @@ def _build_proxy_security_config(
         )
         policy = PolicyConfig(fail_closed=False)
 
-    require_consent, require_contract = _listing_enforcement_flags(listing)
-
     if shared_context is not None:
         from fastmcp.server.security.config import ReflexiveConfig
 
         consent_cfg: ConsentConfig | None = None
-        if require_consent and shared_context.consent_graph is not None:
+        if flags.require_consent and shared_context.consent_graph is not None:
             consent_cfg = ConsentConfig(graph=shared_context.consent_graph)
 
         contract_cfg: ContractConfig | None = None
-        if require_contract and shared_context.broker is not None:
+        if flags.require_contract and shared_context.broker is not None:
             contract_cfg = ContractConfig(broker=shared_context.broker)
 
         return SecurityConfig(

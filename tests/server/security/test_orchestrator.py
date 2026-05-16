@@ -455,3 +455,15 @@ class TestBypassStdio:
         mw = ctx.middleware[0]
         assert isinstance(mw, PolicyEnforcementMiddleware)
         assert mw.bypass_stdio is False
+
+    def test_bypass_stdio_defaults_to_false(self):
+        """Iter 0: STDIO is a privileged execution surface. The orchestrator
+        must not bypass policy enforcement on it by default. See
+        ``v3-notes/mcp-stdio-hardening.md``."""
+        cfg = SecurityConfig(
+            policy=PolicyConfig(providers=[AllowAllPolicy()]),
+        )
+        ctx = SecurityOrchestrator.bootstrap(cfg)
+        mw = ctx.middleware[0]
+        assert isinstance(mw, PolicyEnforcementMiddleware)
+        assert mw.bypass_stdio is False

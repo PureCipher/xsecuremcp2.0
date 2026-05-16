@@ -166,22 +166,32 @@ uv run purecipher-registry --port 8000
 
 ## Docker Launch
 
-The repo now includes a dedicated registry image and compose file:
+This repository ships a Docker Compose file for the **registry API only** (`purecipher-registry` on port **8000** by default):
 
 ```bash
 docker compose -f docker-compose.purecipher-registry.yml up --build
 ```
 
-The same file also builds and runs **registry-ui** (Next.js on port **3000** by default), with `REGISTRY_BACKEND_URL` pointed at the registry container. Open `http://localhost:3000` for the console and `http://localhost:8000/registry/health` for the API health check. Override host ports with `PURECIPHER_REGISTRY_PORT` and `REGISTRY_UI_PORT` if needed.
+Open [http://localhost:8000/registry/health](http://localhost:8000/registry/health) for the API health check.
 
-The compose setup now defaults to the local secure mode:
+The API compose setup defaults to the local secure mode:
 
 - moderation enabled
 - JWT auth enabled
 - persistent SQLite storage mounted at `./.data/purecipher-registry`
 - development users available unless `PURECIPHER_USERS_JSON` is set
 
-If you want to override the defaults cleanly, copy the example env file and pass it to Compose:
+The Next.js registry console and public catalog UI live in the separate **[xregistry](https://github.com/PureCipher/xregistry)** product repository. Clone it beside this repo and run:
+
+```bash
+cd xregistry
+export SECUREMCP_REPO=../xsecuremcp2.0
+docker compose --env-file .env.compose.example up --build
+```
+
+That starts `purecipher-registry` from this codebase plus the console on port **3000** (override with `REGISTRY_UI_PORT`) and the public site on **3001** (`PUBLIC_REGISTRY_UI_PORT`). Override host ports for the API with `PURECIPHER_REGISTRY_PORT`.
+
+If you want to override the defaults cleanly for the API-only compose, copy the example env file and pass it to Compose:
 
 ```bash
 cp .env.purecipher-registry.example .env.purecipher-registry
