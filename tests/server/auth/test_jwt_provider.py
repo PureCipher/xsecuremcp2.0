@@ -1,8 +1,13 @@
+import time
 from collections.abc import AsyncGenerator
-from typing import Any
+from typing import Any, cast
 from unittest.mock import patch
 
 import pytest
+from joserfc import jwk as jose_jwk
+from joserfc import jwt
+from joserfc.jws import JWSRegistry
+from joserfc.registry import HeaderParameter
 from pytest_httpx import HTTPXMock
 
 from fastmcp import FastMCP
@@ -42,10 +47,6 @@ class SymmetricKeyHelper:
             additional_claims: Any additional claims to include
             algorithm: JWT signing algorithm (HS256, HS384, or HS512)
         """
-        import time
-
-        from authlib.jose import JsonWebToken
-
         # Create header
         header = {"alg": algorithm}
 
@@ -67,10 +68,10 @@ class SymmetricKeyHelper:
             payload.update(additional_claims)
 
         # Create JWT
-        jwt_lib = JsonWebToken([algorithm])
-        token_bytes = jwt_lib.encode(header, payload, self.secret)
+        signing_key = jose_jwk.import_key(self.secret, "oct")
+        token = jwt.encode(header, payload, signing_key, algorithms=[algorithm])
 
-        return token_bytes.decode("utf-8")
+        return token
 
 
 @pytest.fixture(scope="module")
@@ -181,6 +182,73 @@ class TestRSAKeyPair:
 
         assert isinstance(token, str)
         # We'll validate the scopes in the BearerToken tests
+
+
+class TestJWTVerifierHeaders:
+    async def test_non_critical_private_header_is_allowed(
+        self, rsa_key_pair: RSAKeyPair
+    ):
+        signing_key = jose_jwk.import_key(
+            rsa_key_pair.private_key.get_secret_value(),
+            "RSA",
+        )
+        token = jwt.encode(
+            {
+                "alg": "RS256",
+                "cat": "cl_example",
+            },
+            {
+                "sub": "test-user",
+                "iss": "https://test.example.com",
+                "exp": int(time.time()) + 3600,
+            },
+            signing_key,
+            algorithms=["RS256"],
+            registry=JWSRegistry(strict_check_header=False),
+        )
+        verifier = JWTVerifier(
+            public_key=rsa_key_pair.public_key,
+            issuer="https://test.example.com",
+        )
+
+        access_token = await verifier.verify_token(token)
+
+        assert access_token is not None
+        assert access_token.client_id == "test-user"
+
+    async def test_critical_private_header_is_rejected(self, rsa_key_pair: RSAKeyPair):
+        signing_key = jose_jwk.import_key(
+            rsa_key_pair.private_key.get_secret_value(),
+            "RSA",
+        )
+        token = jwt.encode(
+            {
+                "alg": "RS256",
+                "crit": ["cat"],
+                "cat": "cl_example",
+            },
+            {
+                "sub": "test-user",
+                "iss": "https://test.example.com",
+                "exp": int(time.time()) + 3600,
+            },
+            signing_key,
+            algorithms=["RS256"],
+            registry=JWSRegistry(
+                header_registry={
+                    "cat": HeaderParameter("Custom private header", "str")
+                },
+                strict_check_header=False,
+            ),
+        )
+        verifier = JWTVerifier(
+            public_key=rsa_key_pair.public_key,
+            issuer="https://test.example.com",
+        )
+
+        access_token = await verifier.verify_token(token)
+
+        assert access_token is None
 
 
 class TestSymmetricKeyJWT:
@@ -433,13 +501,22 @@ class TestBearerTokenJWKS:
     @pytest.fixture
     def mock_jwks_data(self, rsa_key_pair: RSAKeyPair) -> JWKSData:
         """Create mock JWKS data from RSA key pair."""
-        from authlib.jose import JsonWebKey
-
         # Create JWK from the RSA public key
-        jwk = JsonWebKey.import_key(rsa_key_pair.public_key)
-        jwk_data: JWKData = jwk.as_dict()
-        jwk_data["kid"] = "test-key-1"
-        jwk_data["alg"] = "RS256"
+        public_key = jose_jwk.import_key(rsa_key_pair.public_key, "RSA")
+        public_key_data = public_key.as_dict()
+        kty = public_key_data["kty"]
+        n = public_key_data["n"]
+        e = public_key_data["e"]
+        assert isinstance(kty, str)
+        assert isinstance(n, str)
+        assert isinstance(e, str)
+        jwk_data = JWKData(
+            kty=kty,
+            n=n,
+            e=e,
+            kid="test-key-1",
+            alg="RS256",
+        )
 
         return {"keys": [jwk_data]}
 
@@ -481,6 +558,85 @@ class TestBearerTokenJWKS:
         assert access_token.claims.get("sub") == username
         assert access_token.claims.get("iss") == issuer
         assert access_token.claims.get("aud") == audience
+
+    async def test_jwks_skips_unsupported_key_types(
+        self,
+        rsa_key_pair: RSAKeyPair,
+        jwks_provider: JWTVerifier,
+        mock_jwks_data: JWKSData,
+        httpx_mock: HTTPXMock,
+        mock_dns,
+    ):
+        """An unsupported key type in the JWKS (e.g. OKP/Ed25519) must be
+        skipped, not poison the whole key set - #4515.
+
+        Some authorization servers (e.g. Rauthy, Ory Hydra) publish an
+        Ed25519 key alongside RSA keys; tokens signed by the RSA keys must
+        still verify.
+        """
+        okp_key = cast(
+            "JWKData",
+            {
+                "kty": "OKP",
+                "crv": "Ed25519",
+                "kid": "ed25519-key",
+                "alg": "EdDSA",
+                "use": "sig",
+                "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+            },
+        )
+        mock_jwks_data["keys"][0]["kid"] = "test-key-1"
+        # Unsupported key FIRST, so an unguarded conversion loop would
+        # abort before reaching the RSA key the token needs
+        mock_jwks_data["keys"].insert(0, okp_key)
+        httpx_mock.add_response(json=mock_jwks_data)
+
+        token = rsa_key_pair.create_token(
+            subject="test-user",
+            issuer="https://test.example.com",
+            audience="https://api.example.com",
+            kid="test-key-1",
+        )
+
+        access_token = await jwks_provider.load_access_token(token)
+        assert access_token is not None
+        assert access_token.client_id == "test-user"
+
+    async def test_jwks_with_only_unsupported_keys_rejects_cleanly(
+        self,
+        rsa_key_pair: RSAKeyPair,
+        jwks_provider: JWTVerifier,
+        httpx_mock: HTTPXMock,
+        mock_dns,
+    ):
+        """If every key in the JWKS is unsupported, verification fails
+        cleanly (returns None) rather than crashing - #4515."""
+        okp_only = {
+            "keys": [
+                cast(
+                    "JWKData",
+                    {
+                        "kty": "OKP",
+                        "crv": "Ed25519",
+                        "kid": "ed25519-key",
+                        "alg": "EdDSA",
+                        "use": "sig",
+                        "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+                    },
+                )
+            ]
+        }
+        httpx_mock.add_response(json=okp_only)
+
+        token = rsa_key_pair.create_token(
+            subject="test-user",
+            issuer="https://test.example.com",
+            audience="https://api.example.com",
+            kid="ed25519-key",
+        )
+
+        access_token = await jwks_provider.load_access_token(token)
+        assert access_token is None
 
     async def test_jwks_token_validation_with_invalid_key(
         self,

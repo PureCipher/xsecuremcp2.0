@@ -20,6 +20,7 @@ from fastmcp.server.auth import (
 from fastmcp.server.middleware import AuthMiddleware
 from fastmcp.server.transforms import ToolTransform
 from fastmcp.tools.tool_transform import ToolTransformConfig, TransformedTool
+from fastmcp.utilities.versions import VersionSpec
 
 # =============================================================================
 # Test helpers
@@ -42,6 +43,12 @@ def make_tool() -> Mock:
     tool = Mock()
     tool.tags = set()
     return tool
+
+
+def make_restricted_tag_server() -> FastMCP:
+    return FastMCP(
+        middleware=[AuthMiddleware(auth=restrict_tag("admin", scopes=["admin"]))]
+    )
 
 
 # =============================================================================
@@ -808,5 +815,180 @@ class TestAuthMiddlewareCallTool:
                     "authorization" in str(exc_info.value).lower()
                     or "insufficient" in str(exc_info.value).lower()
                 )
+        finally:
+            auth_context_var.reset(tok)
+
+
+class TestAuthMiddlewareVersionedRequests:
+    async def test_middleware_blocks_explicit_restricted_tool_version(self):
+        """AuthMiddleware should check the requested tool version."""
+        mcp = make_restricted_tag_server()
+
+        @mcp.tool(name="calc", version="1.0", tags={"admin"})
+        def calc_v1() -> str:
+            return "restricted"
+
+        @mcp.tool(name="calc", version="2.0")
+        def calc_v2() -> str:
+            return "public"
+
+        tok = set_token(make_token(scopes=["read"]))
+        try:
+            async with Client(mcp) as client:
+                with pytest.raises(Exception, match="authorization|insufficient"):
+                    await client.call_tool("calc", {}, version="1.0")
+        finally:
+            auth_context_var.reset(tok)
+
+    async def test_middleware_blocks_restricted_tool_version_selected_by_range(self):
+        """AuthMiddleware should check non-exact direct server version specs."""
+        mcp = make_restricted_tag_server()
+
+        @mcp.tool(name="calc", version="1.0", tags={"admin"})
+        def calc_v1() -> str:
+            return "restricted"
+
+        @mcp.tool(name="calc", version="2.0")
+        def calc_v2() -> str:
+            return "public"
+
+        tok = set_token(make_token(scopes=["read"]))
+        try:
+            with pytest.raises(AuthorizationError):
+                await mcp.call_tool("calc", {}, version=VersionSpec(lt="2.0"))
+        finally:
+            auth_context_var.reset(tok)
+
+    async def test_middleware_blocks_explicit_restricted_resource_version(self):
+        """AuthMiddleware should check the requested resource version."""
+        mcp = make_restricted_tag_server()
+
+        @mcp.resource("data://info", version="1.0", tags={"admin"})
+        def info_v1() -> str:
+            return "restricted"
+
+        @mcp.resource("data://info", version="2.0")
+        def info_v2() -> str:
+            return "public"
+
+        tok = set_token(make_token(scopes=["read"]))
+        try:
+            async with Client(mcp) as client:
+                with pytest.raises(Exception, match="authorization|insufficient"):
+                    await client.read_resource("data://info", version="1.0")
+        finally:
+            auth_context_var.reset(tok)
+
+    async def test_middleware_blocks_explicit_restricted_template_version(self):
+        """AuthMiddleware should check the requested resource template version."""
+        mcp = make_restricted_tag_server()
+
+        @mcp.resource("data://items/{item_id}", version="1.0", tags={"admin"})
+        def item_v1(item_id: str) -> str:
+            return f"restricted {item_id}"
+
+        @mcp.resource("data://items/{item_id}", version="2.0")
+        def item_v2(item_id: str) -> str:
+            return f"public {item_id}"
+
+        tok = set_token(make_token(scopes=["read"]))
+        try:
+            async with Client(mcp) as client:
+                with pytest.raises(Exception, match="authorization|insufficient"):
+                    await client.read_resource("data://items/123", version="1.0")
+        finally:
+            auth_context_var.reset(tok)
+
+    async def test_middleware_blocks_explicit_restricted_prompt_version(self):
+        """AuthMiddleware should check the requested prompt version."""
+        mcp = make_restricted_tag_server()
+
+        @mcp.prompt(name="greet", version="1.0", tags={"admin"})
+        def greet_v1() -> str:
+            return "restricted"
+
+        @mcp.prompt(name="greet", version="2.0")
+        def greet_v2() -> str:
+            return "public"
+
+        tok = set_token(make_token(scopes=["read"]))
+        try:
+            async with Client(mcp) as client:
+                with pytest.raises(Exception, match="authorization|insufficient"):
+                    await client.get_prompt("greet", version="1.0")
+        finally:
+            auth_context_var.reset(tok)
+
+
+# =============================================================================
+# Tests for component-level auth denial messaging (issue #4054 bug 1)
+# =============================================================================
+
+
+def _allow_all(ctx: AuthContext) -> bool:
+    """Global auth check that always passes (component-level auth still applies)."""
+    return True
+
+
+class TestComponentAuthDenialMessage:
+    """When component-level auth denies access, get_tool/get_resource/get_prompt
+    return None, so the middleware cannot distinguish "missing" from "denied".
+
+    The message must stay ambiguous ("not found or not authorized") rather than
+    asserting the component does not exist (misleading) or that it exists but is
+    forbidden (leaks existence to unauthorized callers).
+    """
+
+    async def test_call_tool_denied_by_component_auth(self):
+        mcp = FastMCP(middleware=[AuthMiddleware(auth=_allow_all)])
+
+        @mcp.tool(auth=require_scopes("admin"))
+        def secret_tool() -> str:
+            return "secret"
+
+        token = make_token(scopes=["read"])
+        tok = set_token(token)
+        try:
+            async with Client(mcp) as client:
+                with pytest.raises(Exception) as exc_info:
+                    await client.call_tool("secret_tool", {})
+            message = str(exc_info.value)
+            assert "not found or not authorized" in message
+        finally:
+            auth_context_var.reset(tok)
+
+    async def test_read_resource_denied_by_component_auth(self):
+        mcp = FastMCP(middleware=[AuthMiddleware(auth=_allow_all)])
+
+        @mcp.resource("data://secret", auth=require_scopes("admin"))
+        def secret_resource() -> str:
+            return "secret"
+
+        token = make_token(scopes=["read"])
+        tok = set_token(token)
+        try:
+            async with Client(mcp) as client:
+                with pytest.raises(Exception) as exc_info:
+                    await client.read_resource("data://secret")
+            message = str(exc_info.value)
+            assert "not found or not authorized" in message
+        finally:
+            auth_context_var.reset(tok)
+
+    async def test_get_prompt_denied_by_component_auth(self):
+        mcp = FastMCP(middleware=[AuthMiddleware(auth=_allow_all)])
+
+        @mcp.prompt(auth=require_scopes("admin"))
+        def secret_prompt() -> str:
+            return "secret"
+
+        token = make_token(scopes=["read"])
+        tok = set_token(token)
+        try:
+            async with Client(mcp) as client:
+                with pytest.raises(Exception) as exc_info:
+                    await client.get_prompt("secret_prompt")
+            message = str(exc_info.value)
+            assert "not found or not authorized" in message
         finally:
             auth_context_var.reset(tok)

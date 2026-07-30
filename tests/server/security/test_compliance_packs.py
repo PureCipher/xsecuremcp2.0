@@ -86,15 +86,11 @@ class TestPackRegistryParity:
             # Canonicals: source non-empty, article non-empty,
             # URL present, version present.
             assert citation.source, f"{name}.{rule.name}: empty citation.source"
-            assert citation.article, (
-                f"{name}.{rule.name}: empty citation.article"
-            )
+            assert citation.article, f"{name}.{rule.name}: empty citation.article"
             assert citation.url.startswith(("http://", "https://")), (
                 f"{name}.{rule.name}: citation.url must be absolute"
             )
-            assert citation.version, (
-                f"{name}.{rule.name}: citation.version must be set"
-            )
+            assert citation.version, f"{name}.{rule.name}: citation.version must be set"
 
     def test_build_pack_normalizes_case_and_separators(self):
         # Each of these should resolve to the GDPR pack.

@@ -4,7 +4,13 @@ import pytest
 from mcp.server.streamable_http import EventMessage
 from mcp.types import JSONRPCMessage, JSONRPCRequest
 
-from fastmcp.server.event_store import EventEntry, EventStore, StreamEventList
+from fastmcp.server.event_store import (
+    EventEntry,
+    EventStore,
+    SessionScopedEventStore,
+    StreamEventList,
+)
+from fastmcp.server.http import FastMCPStreamableHTTPSessionManager
 
 
 class TestEventEntry:
@@ -71,7 +77,7 @@ class TestEventStore:
     ):
         # Store some events
         first_event_id = await event_store.store_event("stream-1", sample_message)
-        await event_store.store_event("stream-1", sample_message)
+        second_event_id = await event_store.store_event("stream-1", sample_message)
 
         # Replay events after the first one
         replayed_events: list[EventMessage] = []
@@ -82,6 +88,10 @@ class TestEventStore:
         stream_id = await event_store.replay_events_after(first_event_id, callback)
         assert stream_id == "stream-1"
         assert len(replayed_events) == 1
+        assert replayed_events[0].event_id == second_event_id
+        replayed_message = replayed_events[0].message.root
+        assert isinstance(replayed_message, JSONRPCRequest)
+        assert replayed_message.method == "test"
 
     async def test_replay_events_after_skips_priming_events(self, event_store):
         """Priming events (message=None) should not be replayed."""
@@ -175,6 +185,80 @@ class TestEventStore:
         assert stream_id == "stream-2"
         assert len(stream2_replayed) == 1
 
+    @pytest.mark.parametrize("stream_id", ["_GET_stream", "1"])
+    async def test_session_scoped_stores_isolate_overlapping_stream_ids(
+        self, event_store, stream_id
+    ):
+        session_a_store = SessionScopedEventStore(event_store, "session-a")
+        session_b_store = SessionScopedEventStore(event_store, "session-b")
+        msg_a1 = JSONRPCMessage(
+            root=JSONRPCRequest(jsonrpc="2.0", method="session-a-1", id=1)
+        )
+        msg_a2 = JSONRPCMessage(
+            root=JSONRPCRequest(jsonrpc="2.0", method="session-a-2", id=2)
+        )
+        msg_b = JSONRPCMessage(
+            root=JSONRPCRequest(jsonrpc="2.0", method="session-b", id=3)
+        )
+
+        session_a_event = await session_a_store.store_event(stream_id, msg_a1)
+        await session_b_store.store_event(stream_id, msg_b)
+        session_a_second_event = await session_a_store.store_event(stream_id, msg_a2)
+
+        replayed_events: list[EventMessage] = []
+
+        async def callback(event: EventMessage):
+            replayed_events.append(event)
+
+        replayed_stream_id = await session_a_store.replay_events_after(
+            session_a_event, callback
+        )
+
+        assert replayed_stream_id == stream_id
+        assert [event.event_id for event in replayed_events] == [session_a_second_event]
+        replayed_message = replayed_events[0].message.root
+        assert isinstance(replayed_message, JSONRPCRequest)
+        assert replayed_message.method == "session-a-2"
+
+    async def test_session_scoped_replay_rejects_foreign_last_event_id(
+        self, event_store
+    ):
+        session_a_store = SessionScopedEventStore(event_store, "session-a")
+        session_b_store = SessionScopedEventStore(event_store, "session-b")
+        msg_b1 = JSONRPCMessage(
+            root=JSONRPCRequest(jsonrpc="2.0", method="session-b-1", id=1)
+        )
+        msg_b2 = JSONRPCMessage(
+            root=JSONRPCRequest(jsonrpc="2.0", method="session-b-2", id=2)
+        )
+
+        foreign_event_id = await session_b_store.store_event("_GET_stream", msg_b1)
+        await session_b_store.store_event("_GET_stream", msg_b2)
+
+        replayed_events: list[EventMessage] = []
+
+        async def callback(event: EventMessage):
+            replayed_events.append(event)
+
+        replayed_stream_id = await session_a_store.replay_events_after(
+            foreign_event_id, callback
+        )
+
+        assert replayed_stream_id is None
+        assert replayed_events == []
+
+    def test_session_manager_returns_scoped_event_stores(self, event_store):
+        session_manager = FastMCPStreamableHTTPSessionManager(
+            app=object(), event_store=event_store
+        )
+
+        first_transport_store = session_manager.event_store
+        second_transport_store = session_manager.event_store
+
+        assert isinstance(first_transport_store, SessionScopedEventStore)
+        assert isinstance(second_transport_store, SessionScopedEventStore)
+        assert first_transport_store is not second_transport_store
+
     async def test_default_storage_is_memory(self):
         """Test that EventStore defaults to in-memory storage."""
         event_store = EventStore()
@@ -233,6 +317,7 @@ class TestEventStoreIntegration:
         await event_store.replay_events_after(event_id, callback)
 
         assert len(replayed) == 1
+        assert replayed[0].event_id is not None
         assert isinstance(replayed[0].message.root, JSONRPCRequest)
         assert replayed[0].message.root.method == "tools/call"
         assert replayed[0].message.root.id == "request-456"

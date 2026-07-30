@@ -41,6 +41,23 @@ def test_tool_from_tool_no_change(add_tool):
     assert new_tool.description == add_tool.description
 
 
+def test_transformed_tool_required_order_is_deterministic():
+    """`required` must follow property order, not set iteration order.
+
+    Set iteration order varies with PYTHONHASHSEED, which broke snapshot
+    tests of tools/list output across processes.
+    """
+
+    def fn(alpha: int, beta: str, gamma: float, delta: bool, epsilon: int) -> str:
+        return "x"
+
+    base = Tool.from_function(fn)
+    transformed = Tool.from_tool(base, transform_args={"alpha": ArgTransform(name="a")})
+    props = list(transformed.parameters["properties"])
+    assert transformed.parameters["required"] == props
+    assert props == ["a", "beta", "gamma", "delta", "epsilon"]
+
+
 def test_from_tool_accepts_decorated_function():
     @tool
     def search(q: str, limit: int = 10) -> list[str]:
@@ -268,6 +285,81 @@ async def test_hidden_param_prunes_defs():
         "required": ["x"],
         "type": "object",
     }
+
+
+async def test_arg_transform_type_hoists_defs_to_root():
+    """Regression test for #4093: ArgTransform(type=...) must hoist any $defs
+    introduced by the new type to the schema root, not leave them nested
+    inside the property where $ref values like '#/$defs/...' would dangle.
+    """
+
+    class Filter(BaseModel):
+        value: str
+
+    @Tool.from_function
+    def search(query: str, filters: dict | None = None) -> str:
+        return ""
+
+    new_tool = Tool.from_tool(
+        search, transform_args={"filters": ArgTransform(type=list[Filter])}
+    )
+
+    schema = new_tool.parameters
+    assert "$defs" in schema
+    assert "Filter" in schema["$defs"]
+    assert "$defs" not in schema["properties"]["filters"]
+    assert schema["properties"]["filters"]["items"] == {"$ref": "#/$defs/Filter"}
+
+
+async def test_arg_transform_type_merges_with_parent_defs():
+    """When the parent tool already has $defs, ArgTransform(type=...) defs
+    should be merged into the existing root $defs alongside them."""
+
+    class Existing(BaseModel):
+        a: int
+
+    class Added(BaseModel):
+        b: int
+
+    @Tool.from_function
+    def tool_fn(x: Existing, y: dict | None = None) -> int:
+        return x.a + (y["b"] if y else 0)
+
+    new_tool = Tool.from_tool(
+        tool_fn, transform_args={"y": ArgTransform(type=list[Added])}
+    )
+
+    schema = new_tool.parameters
+    assert "Existing" in schema["$defs"]
+    assert "Added" in schema["$defs"]
+    assert "$defs" not in schema["properties"]["y"]
+
+
+async def test_arg_transform_type_raises_on_defs_name_collision():
+    """ArgTransform must not silently overwrite a parent's $defs entry when
+    the colliding name maps to a different schema; refs already copied from
+    the parent would then resolve to the wrong type."""
+
+    class Foo(BaseModel):
+        a: int
+
+    @Tool.from_function
+    def tool_fn(foo: Foo, other: dict | None = None) -> int:
+        return foo.a
+
+    # Parent already defines `Foo`; introduce a transform whose new type is
+    # also exposed under the `Foo` key in $defs but with a different schema.
+    # We do this by mutating the parent tool's parameters in place to plant a
+    # colliding definition, then applying a transform that re-introduces it.
+    tool_fn.parameters["$defs"]["Foo"] = {
+        "type": "object",
+        "properties": {"different": {"type": "string"}},
+        "required": ["different"],
+        "title": "Foo",
+    }
+
+    with pytest.raises(ValueError, match=r"\$defs collision for 'Foo'"):
+        Tool.from_tool(tool_fn, transform_args={"other": ArgTransform(type=list[Foo])})
 
 
 async def test_forward_with_argument_mapping(add_tool):
@@ -581,6 +673,53 @@ async def test_from_tool_decorated_function_via_client():
         result = await client.call_tool("find_items", {"query": "hello", "limit": 3})
         assert isinstance(result.content[0], TextContent)
         assert "Result 0 for hello" in result.content[0].text
+
+
+async def test_transform_fn_result_respects_serialize_by_alias():
+    """A model returned by a transform_fn honors serialize_by_alias when no schema."""
+    from pydantic import ConfigDict
+
+    class Item(BaseModel):
+        model_config = ConfigDict(serialize_by_alias=False)
+        id: str = Field(alias="_id")
+
+    def base() -> None:
+        pass
+
+    async def transform() -> Any:
+        return Item(_id="42")
+
+    transformed = Tool.from_tool(base, transform_fn=transform, output_schema=None)
+    result = await transformed.run({})
+
+    assert result.structured_content == {"id": "42"}
+
+
+async def test_transform_fn_wrapped_result_respects_serialize_by_alias():
+    """A wrapped transform result serializes the inner model before nesting.
+
+    Optional model returns get a wrap-result schema; the inner model must be
+    serialized with its own config before being placed under "result", or the
+    wrapped dict masks the config and the data no longer matches the schema.
+    """
+    from pydantic import ConfigDict
+
+    class Item(BaseModel):
+        model_config = ConfigDict(serialize_by_alias=False)
+        id: str = Field(alias="_id")
+
+    def base() -> None:
+        pass
+
+    async def transform() -> Item | None:
+        return Item(_id="42")
+
+    transformed = Tool.from_tool(base, transform_fn=transform)
+    assert transformed.output_schema is not None
+    assert transformed.output_schema.get("x-fastmcp-wrap-result")
+    result = await transformed.run({})
+
+    assert result.structured_content == {"result": {"id": "42"}}
 
 
 class TestProxy:

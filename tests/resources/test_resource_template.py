@@ -850,6 +850,25 @@ class TestMalformedURITemplates:
         assert result is not None
         assert result["user_id"] == "alice"
 
+    def test_query_param_with_blank_value_is_preserved(self):
+        """Regression for #4056: blank query values (e.g. ?format=) should
+        not be silently dropped. parse_qs without keep_blank_values=True
+        elides empty values, which loses caller intent."""
+        result = match_uri_template(
+            "resource://data/42?format=", "resource://data/{id}{?format}"
+        )
+        assert result is not None
+        assert result == {"id": "42", "format": ""}
+
+    def test_query_param_with_blank_and_present_values(self):
+        """Mix of blank and non-blank query values are both surfaced."""
+        result = match_uri_template(
+            "resource://data/42?format=&verbose=true",
+            "resource://data/{id}{?format,verbose}",
+        )
+        assert result is not None
+        assert result == {"id": "42", "format": "", "verbose": "true"}
+
     def test_from_function_rejects_hyphen_underscore_collision(self):
         """Two raw param names that normalize to the same key are rejected."""
 
@@ -932,6 +951,30 @@ class TestExpandUriTemplate:
         result = expand_uri_template("test://{x}", {"x": "foo", "unused": "bar"})
         assert result == "test://foo"
 
+    @pytest.mark.parametrize(
+        "template, params, expected",
+        [
+            # Simple {var} matches a single segment, so "/" must be encoded.
+            (
+                "data://{path}/info",
+                {"path": "hello/world"},
+                "data://hello%2Fworld/info",
+            ),
+            ("test://{x}", {"x": "a b"}, "test://a%20b"),
+            ("test://{x}", {"x": "a?b"}, "test://a%3Fb"),
+            ("test://{x}", {"x": "a#b"}, "test://a%23b"),
+            # Wildcard {var*} may span segments, so "/" is preserved but other
+            # reserved characters are still encoded.
+            ("test://{path*}", {"path": "a/b/c"}, "test://a/b/c"),
+            ("test://{path*}", {"path": "a b/c"}, "test://a%20b/c"),
+        ],
+    )
+    def test_expand_encodes_reserved_characters(
+        self, template: str, params: dict[str, str], expected: str
+    ):
+        """Path values are percent-encoded so the result round-trips through match."""
+        assert expand_uri_template(template, params) == expected
+
 
 class TestMatchExpandRoundTrip:
     """match_uri_template and expand_uri_template must agree on the template grammar."""
@@ -953,3 +996,21 @@ class TestMatchExpandRoundTrip:
         params = match_uri_template(uri, template)
         assert params is not None
         assert expand_uri_template(template, params) == uri
+
+    @pytest.mark.parametrize(
+        "template, params",
+        [
+            ("data://{path}/info", {"path": "hello/world"}),
+            ("test://{x}", {"x": "a b c"}),
+            ("test://{x}", {"x": "100%"}),
+            ("test://{x}/{y}", {"x": "a/b", "y": "c?d"}),
+            ("test://{path*}", {"path": "a/b/c"}),
+            ("test://pre/{rest*}", {"rest": "x y/z"}),
+        ],
+    )
+    def test_match_then_expand_recovers_params(
+        self, template: str, params: dict[str, str]
+    ):
+        """Expanding params and matching them back reproduces the original values."""
+        uri = expand_uri_template(template, params)
+        assert match_uri_template(uri, template) == params

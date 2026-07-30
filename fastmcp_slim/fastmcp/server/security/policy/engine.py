@@ -1,0 +1,694 @@
+"""Policy engine for SecureMCP.
+
+The PolicyEngine is the core evaluation component that coordinates policy
+providers, supports hot-swapping, and maintains an audit trail of decisions.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import inspect
+import logging
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Any, cast
+
+from fastmcp.server.security.policy.provider import (
+    AllowAllPolicy,
+    Citation,
+    PolicyDecision,
+    PolicyEvaluationContext,
+    PolicyProvider,
+    PolicyResult,
+)
+from fastmcp.server.security.policy.serialization import (
+    policy_snapshot,
+    providers_from_snapshot,
+)
+
+if TYPE_CHECKING:
+    from fastmcp.server.security.alerts.bus import SecurityEventBus
+    from fastmcp.server.security.policy.audit import PolicyAuditLog
+    from fastmcp.server.security.policy.invariants import InvariantRegistry
+    from fastmcp.server.security.policy.monitoring import PolicyMonitor
+    from fastmcp.server.security.policy.validator import PolicyValidator
+    from fastmcp.server.security.policy.versioning.manager import PolicyVersionManager
+
+logger = logging.getLogger(__name__)
+
+# Re-export for convenience
+__all__ = [
+    "PolicyDecision",
+    "PolicyEngine",
+    "PolicyEvaluationContext",
+    "PolicyResult",
+]
+
+
+@dataclass
+class PolicySwapRecord:
+    """Record of a policy hot-swap event."""
+
+    old_policy_id: str
+    old_version: str
+    new_policy_id: str
+    new_version: str
+    swapped_at: datetime
+    reason: str
+
+
+class PolicyViolationError(Exception):
+    """Raised when a policy evaluation results in DENY."""
+
+    def __init__(self, result: PolicyResult) -> None:
+        self.result = result
+        super().__init__(f"Policy violation ({result.policy_id}): {result.reason}")
+
+
+class PolicyEngine:
+    """Core policy evaluation engine with hot-swap and audit support.
+
+    The engine evaluates requests against one or more policy providers.
+    When multiple providers are configured, ALL must allow the request
+    (AND logic, fail-closed).
+
+    Args:
+        providers: One or more policy providers to evaluate against.
+        fail_closed: If True (default), deny access when evaluation fails
+            or raises an exception.
+        allow_hot_swap: If True (default), permit runtime policy replacement.
+
+    Example::
+
+        from fastmcp.server.security.policy import PolicyEngine, AllowAllPolicy
+
+        engine = PolicyEngine(providers=[AllowAllPolicy()])
+        result = await engine.evaluate(context)
+    """
+
+    def __init__(
+        self,
+        providers: list[PolicyProvider] | PolicyProvider | None = None,
+        *,
+        fail_closed: bool = True,
+        allow_hot_swap: bool = True,
+        event_bus: SecurityEventBus | None = None,
+        audit_log: PolicyAuditLog | None = None,
+        version_manager: PolicyVersionManager | None = None,
+    ) -> None:
+        if providers is None:
+            self._providers: list[PolicyProvider] = [AllowAllPolicy()]
+        elif isinstance(providers, list):
+            self._providers = list(providers)
+        else:
+            self._providers = [providers]
+
+        self.fail_closed = fail_closed
+        self.allow_hot_swap = allow_hot_swap
+        self._event_bus = event_bus
+        self._audit_log = audit_log
+        self._version_manager: PolicyVersionManager | None = None
+        self._invariant_registry: InvariantRegistry | None = None
+        self._monitor: PolicyMonitor | None = None
+        self._validator: PolicyValidator | None = None
+        self._swap_lock = asyncio.Lock()
+        self._swap_history: list[PolicySwapRecord] = []
+        self._invariant_tasks: set[asyncio.Task[Any]] = set()
+        self._evaluation_count: int = 0
+        self._deny_count: int = 0
+
+        if version_manager is not None:
+            self.attach_version_manager(version_manager)
+
+    @property
+    def providers(self) -> list[PolicyProvider]:
+        """Current active policy providers (read-only copy)."""
+        return list(self._providers)
+
+    @property
+    def evaluation_count(self) -> int:
+        """Total number of policy evaluations performed."""
+        return self._evaluation_count
+
+    @property
+    def deny_count(self) -> int:
+        """Total number of DENY decisions."""
+        return self._deny_count
+
+    @property
+    def audit_log(self) -> PolicyAuditLog | None:
+        """The attached audit log, if any."""
+        return self._audit_log
+
+    @property
+    def swap_history(self) -> list[PolicySwapRecord]:
+        """History of policy hot-swaps (read-only copy)."""
+        return list(self._swap_history)
+
+    @property
+    def version_manager(self) -> PolicyVersionManager | None:
+        """The attached version manager, if any."""
+        return self._version_manager
+
+    def attach_event_bus(self, event_bus: SecurityEventBus | None) -> None:
+        """Wire an event bus into this engine after construction.
+
+        Public alternative to assigning to the private ``_event_bus``
+        attribute, used by the orchestrator and by application code that
+        builds the engine before the bus exists.
+        """
+        self._event_bus = event_bus
+
+    def attach_version_manager(self, version_manager: PolicyVersionManager) -> None:
+        """Attach a version manager and sync the live provider state to it."""
+
+        self._version_manager = version_manager
+        current_version = version_manager.current_version
+        if current_version is not None and current_version.policy_data:
+            try:
+                self._providers = providers_from_snapshot(current_version.policy_data)
+                logger.info(
+                    "Restored policy engine '%s' from version %d",
+                    version_manager.policy_set_id,
+                    current_version.version_number,
+                )
+                return
+            except Exception:
+                logger.warning(
+                    "Failed to restore policy engine from version history",
+                    exc_info=True,
+                )
+
+        self._record_version_snapshot(
+            author="policy-engine",
+            description="Initial policy state",
+            metadata={"operation": "initial"},
+        )
+
+    @property
+    def monitor(self) -> PolicyMonitor | None:
+        """The attached policy monitor, if any."""
+        return self._monitor
+
+    @property
+    def invariant_registry(self) -> InvariantRegistry | None:
+        """The attached invariant registry, if any."""
+        return self._invariant_registry
+
+    @property
+    def validator(self) -> PolicyValidator | None:
+        """The attached policy validator, if any."""
+        return self._validator
+
+    async def evaluate(self, context: PolicyEvaluationContext) -> PolicyResult:
+        """Evaluate a request against all configured policy providers.
+
+        Aggregation semantics (precedence high→low):
+
+        - **DENY** — any provider that denies short-circuits the chain.
+          Overrides every other decision.
+        - **REQUIRE_APPROVAL** — if no provider denies, the first
+          provider to return REQUIRE_APPROVAL wins. Turned into ALLOW
+          only when the context already carries an approval token
+          *and* every provider that surfaced REQUIRE_APPROVAL accepts
+          that token (re-evaluated implicitly via the context).
+        - **ALLOW** — returned when at least one provider allows and
+          no provider denies or demands approval.
+        - **DEFER-only** — fail_closed decides between DENY and ALLOW.
+
+        Args:
+            context: The evaluation context with actor, action, resource details.
+
+        Returns:
+            The aggregate PolicyResult.
+        """
+        self._evaluation_count += 1
+        start_time = datetime.now(timezone.utc)
+
+        # Track the first REQUIRE_APPROVAL seen in this run — if no
+        # provider denies, it becomes the aggregate outcome. Cleared
+        # when a provider explicitly allows *after* consuming the
+        # approval_ticket (that path never materializes: once a
+        # REQUIRE_APPROVAL lands, we don't retro-promote to ALLOW).
+        pending_approval: PolicyResult | None = None
+
+        results: list[PolicyResult] = []
+        for provider in self._providers:
+            try:
+                raw_result = provider.evaluate(context)
+                if inspect.isawaitable(raw_result):
+                    raw_result = await raw_result
+                result = cast(PolicyResult, raw_result)
+                results.append(result)
+
+                if (
+                    result.decision == PolicyDecision.REQUIRE_APPROVAL
+                    and pending_approval is None
+                ):
+                    pending_approval = result
+
+                if result.decision == PolicyDecision.DENY:
+                    self._deny_count += 1
+                    if self._event_bus is not None:
+                        from fastmcp.server.security.alerts.models import (
+                            AlertSeverity,
+                            SecurityEvent,
+                            SecurityEventType,
+                        )
+
+                        # We're in an async path — use aemit() so a slow
+                        # subscriber can't block POLICY_DENIED delivery
+                        # to other subscribers (each handler is bounded
+                        # by its timeout).
+                        await self._event_bus.aemit(
+                            SecurityEvent(
+                                event_type=SecurityEventType.POLICY_DENIED,
+                                severity=AlertSeverity.WARNING,
+                                layer="policy",
+                                message=f"Policy denied: {result.reason}",
+                                actor_id=context.actor_id,
+                                resource_id=context.resource_id,
+                                data={
+                                    "policy_id": result.policy_id,
+                                    "action": context.action,
+                                },
+                            )
+                        )
+                    logger.info(
+                        "Policy DENY from %s: %s (action=%s, resource=%s)",
+                        result.policy_id,
+                        result.reason,
+                        context.action,
+                        context.resource_id,
+                    )
+                    self._record_audit(context, result, start_time)
+                    return result
+
+            except Exception:
+                logger.warning(
+                    "Policy provider raised exception during evaluation",
+                    exc_info=True,
+                )
+                if self.fail_closed:
+                    self._deny_count += 1
+                    fail_result = PolicyResult(
+                        decision=PolicyDecision.DENY,
+                        reason="Policy evaluation failed (fail-closed)",
+                        policy_id="engine-error",
+                    )
+                    self._record_audit(context, fail_result, start_time)
+                    return fail_result
+
+        # All providers evaluated without DENY
+        if not results:
+            if self.fail_closed:
+                self._deny_count += 1
+                no_prov_result = PolicyResult(
+                    decision=PolicyDecision.DENY,
+                    reason="No policy providers configured (fail-closed)",
+                    policy_id="engine-no-providers",
+                )
+                self._record_audit(context, no_prov_result, start_time)
+                return no_prov_result
+            no_prov_allow = PolicyResult(
+                decision=PolicyDecision.ALLOW,
+                reason="No policy providers configured",
+                policy_id="engine-no-providers",
+            )
+            self._record_audit(context, no_prov_allow, start_time)
+            return no_prov_allow
+
+        # Check if all deferred
+        all_deferred = all(r.decision == PolicyDecision.DEFER for r in results)
+        if all_deferred:
+            if self.fail_closed:
+                self._deny_count += 1
+                defer_result = PolicyResult(
+                    decision=PolicyDecision.DENY,
+                    reason="All providers deferred (fail-closed)",
+                    policy_id="engine-all-deferred",
+                )
+                self._record_audit(context, defer_result, start_time)
+                return defer_result
+            defer_allow = PolicyResult(
+                decision=PolicyDecision.ALLOW,
+                reason="All providers deferred (fail-open)",
+                policy_id="engine-all-deferred",
+            )
+            self._record_audit(context, defer_allow, start_time)
+            return defer_allow
+
+        # REQUIRE_APPROVAL wins over ALLOW when no provider denied.
+        # A provider can retract the demand by also returning ALLOW
+        # in the same chain — that's what "approval consumed" looks
+        # like: the CapabilityPolicy emits REQUIRE_APPROVAL when it
+        # sees a high-risk action, then re-emits ALLOW on the same
+        # context when approval_granted=True. We surface the approval
+        # only when no ALLOW explicitly acknowledged the high-risk
+        # path.
+        if pending_approval is not None:
+            approval_consumed = any(
+                r.decision == PolicyDecision.ALLOW and "approval" in r.reason.lower()
+                for r in results
+            )
+            if not approval_consumed:
+                if self._event_bus is not None:
+                    from fastmcp.server.security.alerts.models import (
+                        AlertSeverity,
+                        SecurityEvent,
+                        SecurityEventType,
+                    )
+
+                    await self._event_bus.aemit(
+                        SecurityEvent(
+                            event_type=SecurityEventType.POLICY_DENIED,
+                            severity=AlertSeverity.INFO,
+                            layer="policy",
+                            message=f"Approval required: {pending_approval.reason}",
+                            actor_id=context.actor_id,
+                            resource_id=context.resource_id,
+                            data={
+                                "policy_id": pending_approval.policy_id,
+                                "action": context.action,
+                                "outcome": "require_approval",
+                            },
+                        )
+                    )
+                logger.info(
+                    "Policy REQUIRE_APPROVAL from %s: %s (action=%s, resource=%s)",
+                    pending_approval.policy_id,
+                    pending_approval.reason,
+                    context.action,
+                    context.resource_id,
+                )
+                self._record_audit(context, pending_approval, start_time)
+                return pending_approval
+
+        # At least one ALLOW, no DENY → aggregate ALLOW
+        allow_result = next(r for r in results if r.decision == PolicyDecision.ALLOW)
+        # Merge constraints from all results
+        all_constraints = []
+        for r in results:
+            all_constraints.extend(r.constraints)
+
+        # Preserve regulation citations from every provider (compliance
+        # packs attach them on ALLOW). Without this merge, the audit log
+        # would show ALLOW with an empty citation tuple.
+        merged_citations: list[Citation] = []
+        seen: set[tuple[str, str, str]] = set()
+        for r in results:
+            for c in getattr(r, "citations", ()) or ():
+                key = (c.source, c.article, c.version)
+                if key not in seen:
+                    seen.add(key)
+                    merged_citations.append(c)
+
+        final_result = PolicyResult(
+            decision=PolicyDecision.ALLOW,
+            reason=allow_result.reason,
+            policy_id=allow_result.policy_id,
+            constraints=all_constraints,
+            citations=tuple(merged_citations),
+        )
+        self._record_audit(context, final_result, start_time)
+        return final_result
+
+    def _record_audit(
+        self,
+        context: PolicyEvaluationContext,
+        result: PolicyResult,
+        start_time: datetime,
+    ) -> None:
+        """Record an evaluation to the audit log and monitor."""
+        if self._audit_log is not None:
+            elapsed_ms = (
+                datetime.now(timezone.utc) - start_time
+            ).total_seconds() * 1000
+            try:
+                self._audit_log.record(context, result, elapsed_ms=elapsed_ms)
+            except Exception:
+                logger.warning("Failed to record audit entry", exc_info=True)
+
+        # Feed the monitor for anomaly detection
+        if self._monitor is not None:
+            try:
+                self._monitor.record_decision(
+                    decision=result.decision.value,
+                    resource_id=context.resource_id,
+                    actor_id=context.actor_id,
+                )
+                # Check anomalies after each decision (lightweight)
+                self._monitor.check_anomalies()
+            except Exception:
+                logger.debug("Failed to record monitor decision", exc_info=True)
+
+    async def hot_swap(
+        self,
+        index: int,
+        new_provider: PolicyProvider,
+        *,
+        reason: str = "Manual hot-swap",
+        author: str = "policy-engine",
+    ) -> PolicySwapRecord:
+        """Atomically replace a policy provider at runtime.
+
+        Args:
+            index: Index of the provider to replace.
+            new_provider: The new policy provider.
+            reason: Human-readable reason for the swap.
+
+        Returns:
+            A record of the swap event.
+
+        Raises:
+            RuntimeError: If hot-swapping is disabled.
+            IndexError: If the index is out of range.
+        """
+        if not self.allow_hot_swap:
+            raise RuntimeError("Hot-swapping is disabled for this engine")
+
+        if index < 0 or index >= len(self._providers):
+            raise IndexError(
+                f"Provider index {index} out of range (0-{len(self._providers) - 1})"
+            )
+
+        async with self._swap_lock:
+            old_provider = self._providers[index]
+            old_id = await self._resolve_async(old_provider.get_policy_id())
+            old_version = await self._resolve_async(old_provider.get_policy_version())
+            new_id = await self._resolve_async(new_provider.get_policy_id())
+            new_version = await self._resolve_async(new_provider.get_policy_version())
+
+            self._providers[index] = new_provider
+            self._record_version_snapshot(
+                author=author,
+                description=(
+                    f"Hot-swap: {old_id}@{old_version} → "
+                    f"{new_id}@{new_version} ({reason})"
+                ),
+                metadata={
+                    "operation": "hot_swap",
+                    "swapped_index": index,
+                    "old_policy_id": old_id,
+                    "old_version": old_version,
+                    "new_policy_id": new_id,
+                    "new_version": new_version,
+                    "reason": reason,
+                },
+            )
+
+            record = PolicySwapRecord(
+                old_policy_id=old_id,
+                old_version=old_version,
+                new_policy_id=new_id,
+                new_version=new_version,
+                swapped_at=datetime.now(timezone.utc),
+                reason=reason,
+            )
+            self._swap_history.append(record)
+
+            if self._event_bus is not None:
+                from fastmcp.server.security.alerts.models import (
+                    AlertSeverity,
+                    SecurityEvent,
+                    SecurityEventType,
+                )
+
+                self._event_bus.emit(
+                    SecurityEvent(
+                        event_type=SecurityEventType.POLICY_SWAPPED,
+                        severity=AlertSeverity.INFO,
+                        layer="policy",
+                        message=f"Policy swapped: {old_id}@{old_version} → {new_id}@{new_version}",
+                        data={
+                            "old_policy_id": old_id,
+                            "old_version": old_version,
+                            "new_policy_id": new_id,
+                            "new_version": new_version,
+                            "reason": reason,
+                        },
+                    )
+                )
+
+            # Run invariant verification after swap
+            if self._invariant_registry is not None:
+                try:
+                    invariant_context = {
+                        "provider_count": len(self._providers),
+                        "providers": self._providers,
+                        "swap_reason": reason,
+                        "old_policy_id": old_id,
+                        "new_policy_id": new_id,
+                    }
+                    # Fire-and-forget: don't block swap on invariant check
+                    import asyncio
+
+                    invariant_task = asyncio.create_task(
+                        self._invariant_registry.verify_all(invariant_context)
+                    )
+                    self._invariant_tasks.add(invariant_task)
+                    invariant_task.add_done_callback(self._invariant_tasks.discard)
+                except Exception:
+                    logger.debug(
+                        "Failed to run invariant verification after hot-swap",
+                        exc_info=True,
+                    )
+
+            logger.info(
+                "Policy hot-swap: %s@%s -> %s@%s (%s)",
+                old_id,
+                old_version,
+                new_id,
+                new_version,
+                reason,
+            )
+            return record
+
+    async def add_provider(
+        self,
+        provider: PolicyProvider,
+        *,
+        reason: str = "Manual add",
+        author: str = "policy-engine",
+    ) -> None:
+        """Add a new policy provider to the evaluation chain."""
+        async with self._swap_lock:
+            self._providers.append(provider)
+            pid = await self._resolve_async(provider.get_policy_id())
+            version = await self._resolve_async(provider.get_policy_version())
+            self._record_version_snapshot(
+                author=author,
+                description=f"Added provider: {pid}@{version} ({reason})",
+                metadata={
+                    "operation": "add",
+                    "policy_id": pid,
+                    "policy_version": version,
+                    "reason": reason,
+                },
+            )
+            logger.info("Added policy provider: %s", pid)
+
+    async def remove_provider(
+        self,
+        index: int,
+        *,
+        reason: str = "Manual remove",
+        author: str = "policy-engine",
+    ) -> PolicyProvider:
+        """Remove a policy provider by index."""
+        async with self._swap_lock:
+            if index < 0 or index >= len(self._providers):
+                raise IndexError(
+                    f"Provider index {index} out of range (0-{len(self._providers) - 1})"
+                )
+            removed = self._providers.pop(index)
+            pid = await self._resolve_async(removed.get_policy_id())
+            version = await self._resolve_async(removed.get_policy_version())
+            self._record_version_snapshot(
+                author=author,
+                description=f"Removed provider: {pid}@{version} ({reason})",
+                metadata={
+                    "operation": "remove",
+                    "removed_index": index,
+                    "policy_id": pid,
+                    "policy_version": version,
+                    "reason": reason,
+                },
+            )
+            logger.info("Removed policy provider: %s", pid)
+            return removed
+
+    async def replace_providers(
+        self,
+        providers: list[PolicyProvider],
+        *,
+        reason: str = "Manual replace",
+        author: str = "policy-engine",
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        """Replace the full provider chain as one atomic, versioned change."""
+        async with self._swap_lock:
+            self._providers = list(providers)
+            self._record_version_snapshot(
+                author=author,
+                description=f"Replaced provider chain ({reason})",
+                metadata={
+                    "operation": "replace_chain",
+                    "provider_count": len(self._providers),
+                    "reason": reason,
+                    **dict(metadata or {}),
+                },
+            )
+            logger.info(
+                "Replaced policy provider chain with %d providers (%s)",
+                len(self._providers),
+                reason,
+            )
+
+    async def restore_version(
+        self,
+        policy_data: dict[str, Any],
+        *,
+        reason: str = "Rollback",
+    ) -> None:
+        """Restore the live provider chain from a saved version snapshot."""
+
+        providers = providers_from_snapshot(policy_data)
+        async with self._swap_lock:
+            self._providers = providers
+            logger.info(
+                "Restored %d policy providers from version snapshot (%s)",
+                len(providers),
+                reason,
+            )
+
+    @staticmethod
+    async def _resolve_async(value: Any) -> Any:
+        """Resolve a value that might be a coroutine."""
+        if inspect.isawaitable(value):
+            return await value
+        return value
+
+    def _record_version_snapshot(
+        self,
+        *,
+        author: str,
+        description: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        """Persist the current provider chain as a policy version."""
+
+        if self._version_manager is None:
+            return
+
+        try:
+            self._version_manager.create_version(
+                policy_data=policy_snapshot(self._providers, metadata=metadata),
+                author=author,
+                description=description,
+            )
+        except Exception:
+            logger.warning(
+                "Failed to create policy version snapshot",
+                exc_info=True,
+            )

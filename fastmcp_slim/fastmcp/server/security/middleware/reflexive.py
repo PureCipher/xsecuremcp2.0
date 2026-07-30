@@ -1,0 +1,380 @@
+"""Reflexive monitoring middleware for SecureMCP.
+
+Observes MCP operation patterns, feeds them to the behavioral analyzer,
+and triggers escalation when drift is detected. When an IntrospectionEngine
+is attached, performs pre-execution gating: halting, throttling, or requiring
+confirmation before operations proceed.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import time
+from collections import defaultdict
+from collections.abc import Sequence
+from typing import TYPE_CHECKING
+
+import mcp.types as mt
+
+from fastmcp.prompts.base import Prompt, PromptResult
+from fastmcp.resources.base import Resource, ResourceResult
+from fastmcp.resources.template import ResourceTemplate
+from fastmcp.server.middleware.middleware import (
+    CallNext,
+    Middleware,
+    MiddlewareContext,
+)
+from fastmcp.server.security.reflexive.analyzer import (
+    BehavioralAnalyzer,
+    EscalationAction,
+    EscalationEngine,
+)
+from fastmcp.server.security.reflexive.models import (
+    DriftEvent,
+    ExecutionVerdict,
+)
+from fastmcp.server.security.reflexive.profiles import ActorProfileManager
+from fastmcp.tools.base import Tool, ToolResult
+
+if TYPE_CHECKING:
+    from fastmcp.server.security.reflexive.introspection import IntrospectionEngine
+
+logger = logging.getLogger(__name__)
+
+
+class ReflexiveMiddleware(Middleware):
+    """Middleware that monitors behavioral patterns and detects drift.
+
+    Feeds operation metrics (call frequency, error rates, latency)
+    to the BehavioralAnalyzer and triggers escalation via the
+    EscalationEngine when anomalies are detected.
+
+    If a SUSPEND_AGENT or SHUTDOWN escalation is triggered, subsequent
+    requests from that actor are blocked.
+
+    When an ``introspection_engine`` is provided, pre-execution gating
+    is performed: operations may be halted, throttled, or require
+    confirmation based on the actor's current behavioral state.
+
+    Args:
+        analyzer: The behavioral analyzer for drift detection.
+        escalation_engine: Engine for processing drift events.
+        bypass_stdio: If True, skip monitoring for STDIO transport.
+            Defaults to ``False`` so behavioural drift is caught on
+            STDIO; see ``v3-notes/mcp-stdio-hardening.md``.
+        profile_manager: Optional ActorProfileManager for scope tracking
+            and threat scoring. If None, one is created automatically.
+        introspection_engine: Optional IntrospectionEngine for pre-execution
+            gating. If None, the middleware operates in monitoring-only mode
+            (backward compatible).
+        throttle_delay_seconds: Delay in seconds when THROTTLE verdict is
+            returned. Defaults to 2.0.
+    """
+
+    def __init__(
+        self,
+        analyzer: BehavioralAnalyzer,
+        escalation_engine: EscalationEngine | None = None,
+        *,
+        bypass_stdio: bool = False,
+        profile_manager: ActorProfileManager | None = None,
+        introspection_engine: IntrospectionEngine | None = None,
+        throttle_delay_seconds: float = 2.0,
+    ) -> None:
+        self.analyzer = analyzer
+        self.escalation_engine = escalation_engine or EscalationEngine()
+        self.bypass_stdio = bypass_stdio
+        self.profile_manager = profile_manager or ActorProfileManager()
+        self.introspection_engine = introspection_engine
+        self.throttle_delay_seconds = throttle_delay_seconds
+        self._suspended_actors: set[str] = set()
+        self._call_timestamps: dict[str, list[float]] = defaultdict(list)
+
+    def _should_bypass(self) -> bool:
+        if not self.bypass_stdio:
+            return False
+        from fastmcp.server.context import _current_transport
+
+        return _current_transport.get() == "stdio"
+
+    def _get_actor_id(self, context: MiddlewareContext) -> str:
+        from fastmcp.server.dependencies import get_access_token
+
+        token = get_access_token()
+        if token is not None:
+            return token.token[:8] + "..."
+        return "anonymous"
+
+    def _check_suspended(self, actor_id: str) -> None:
+        """Raise if the actor has been suspended."""
+        if actor_id in self._suspended_actors:
+            raise PermissionError(
+                f"Agent '{actor_id}' has been suspended due to behavioral drift"
+            )
+
+    def _compute_call_rate(self, actor_id: str) -> float:
+        """Compute calls per minute for the actor over the last 60 seconds."""
+        now = time.monotonic()
+        window = 60.0
+        timestamps = self._call_timestamps[actor_id]
+
+        # Prune old entries
+        cutoff = now - window
+        self._call_timestamps[actor_id] = [t for t in timestamps if t > cutoff]
+
+        return len(self._call_timestamps[actor_id])
+
+    def _record_call(self, actor_id: str) -> None:
+        """Record a call timestamp for rate computation."""
+        self._call_timestamps[actor_id].append(time.monotonic())
+
+    async def _pre_execution_gate(
+        self, actor_id: str, operation: str, resource_id: str = ""
+    ) -> None:
+        """Check the introspection engine and enforce pre-execution gating.
+
+        Does nothing if no introspection_engine is configured.
+
+        Raises:
+            PermissionError: When the verdict is HALT.
+            ConfirmationRequiredError: When the verdict is REQUIRE_CONFIRMATION.
+        """
+        if self.introspection_engine is None:
+            return
+
+        verdict = self.introspection_engine.get_execution_verdict(
+            actor_id, operation, resource_id
+        )
+
+        if verdict == ExecutionVerdict.HALT:
+            result = self.introspection_engine.introspect(actor_id)
+            raise PermissionError(
+                f"Operation '{operation}' halted for actor '{actor_id}': "
+                f"threat_level={result.threat_level.value}, "
+                f"compliance={result.compliance_status.value}"
+            )
+
+        if verdict == ExecutionVerdict.REQUIRE_CONFIRMATION:
+            from fastmcp.server.security.reflexive.introspection import (
+                ConfirmationRequiredError,
+            )
+
+            result = self.introspection_engine.introspect(actor_id)
+            raise ConfirmationRequiredError(
+                f"Operation '{operation}' requires confirmation for actor "
+                f"'{actor_id}': threat_level={result.threat_level.value}",
+                introspection=result,
+                actor_id=actor_id,
+                operation=operation,
+            )
+
+        if verdict == ExecutionVerdict.THROTTLE:
+            logger.info(
+                "Throttling actor %s for %.1fs before %s",
+                actor_id,
+                self.throttle_delay_seconds,
+                operation,
+            )
+            await asyncio.sleep(self.throttle_delay_seconds)
+
+    def _post_execution_record(self, actor_id: str, operation_id: str = "") -> None:
+        """Record introspection after execution for accountability binding."""
+        if self.introspection_engine is None:
+            return
+        result = self.introspection_engine.introspect(actor_id)
+        self.introspection_engine.bind_to_provenance(actor_id, result, operation_id)
+
+    def _process_drift(self, events: list[DriftEvent]) -> None:
+        """Process drift events through escalation engine and profile manager."""
+        for event in events:
+            # Update actor threat score
+            self.profile_manager.record_drift(event.actor_id, event)
+
+            if self.escalation_engine is None:
+                continue
+            actions = self.escalation_engine.evaluate(event)
+            for action, rule in actions:
+                if action in (
+                    EscalationAction.SUSPEND_AGENT,
+                    EscalationAction.SHUTDOWN,
+                ):
+                    self._suspended_actors.add(event.actor_id)
+                    logger.warning(
+                        "Actor %s suspended due to escalation rule %s",
+                        event.actor_id,
+                        rule.rule_id,
+                    )
+
+    # ── Tool operations ──────────────────────────────────────────────
+
+    async def on_call_tool(
+        self,
+        context: MiddlewareContext[mt.CallToolRequestParams],
+        call_next: CallNext[mt.CallToolRequestParams, ToolResult],
+    ) -> ToolResult:
+        if self._should_bypass():
+            return await call_next(context)
+
+        actor_id = self._get_actor_id(context)
+        self._check_suspended(actor_id)
+
+        # Pre-execution gating
+        tool_name = context.message.name
+        await self._pre_execution_gate(actor_id, "call_tool", tool_name)
+
+        # Track tool scope
+        is_new_tool = self.profile_manager.record_tool_access(actor_id, tool_name)
+
+        # Record call and compute rate
+        self._record_call(actor_id)
+        call_rate = self._compute_call_rate(actor_id)
+
+        # Observe call frequency
+        drift_events = self.analyzer.observe(actor_id, "calls_per_minute", call_rate)
+
+        # Observe scope expansion
+        if is_new_tool:
+            scope_size = self.profile_manager.get_or_create(actor_id).scope_size
+            drift_events.extend(
+                self.analyzer.observe(
+                    actor_id,
+                    "scope_expansion",
+                    float(scope_size),
+                    metadata={"new_tool": tool_name},
+                )
+            )
+
+        # Measure latency
+        start = time.monotonic()
+        try:
+            result = await call_next(context)
+            latency = (time.monotonic() - start) * 1000  # ms
+
+            # Observe latency
+            drift_events.extend(self.analyzer.observe(actor_id, "latency_ms", latency))
+
+            # Observe success (0 = success for error rate)
+            drift_events.extend(self.analyzer.observe(actor_id, "error_rate", 0.0))
+
+            self._process_drift(drift_events)
+
+            # Post-execution accountability
+            self._post_execution_record(actor_id, f"tool:{tool_name}")
+
+            return result
+
+        except Exception:
+            latency = (time.monotonic() - start) * 1000
+            drift_events.extend(self.analyzer.observe(actor_id, "latency_ms", latency))
+            drift_events.extend(self.analyzer.observe(actor_id, "error_rate", 1.0))
+            self._process_drift(drift_events)
+            raise
+
+    async def on_list_tools(
+        self,
+        context: MiddlewareContext[mt.ListToolsRequest],
+        call_next: CallNext[mt.ListToolsRequest, Sequence[Tool]],
+    ) -> Sequence[Tool]:
+        return await call_next(context)
+
+    # ── Resource operations ──────────────────────────────────────────
+
+    async def on_read_resource(
+        self,
+        context: MiddlewareContext[mt.ReadResourceRequestParams],
+        call_next: CallNext[mt.ReadResourceRequestParams, ResourceResult],
+    ) -> ResourceResult:
+        if self._should_bypass():
+            return await call_next(context)
+
+        actor_id = self._get_actor_id(context)
+        self._check_suspended(actor_id)
+
+        # Pre-execution gating
+        resource_uri = str(context.message.uri)
+        await self._pre_execution_gate(actor_id, "read_resource", resource_uri)
+
+        # Track resource scope
+        is_new_resource = self.profile_manager.record_resource_access(
+            actor_id, resource_uri
+        )
+
+        self._record_call(actor_id)
+        call_rate = self._compute_call_rate(actor_id)
+        drift_events = self.analyzer.observe(actor_id, "calls_per_minute", call_rate)
+
+        # Observe scope expansion
+        if is_new_resource:
+            scope_size = self.profile_manager.get_or_create(actor_id).scope_size
+            drift_events.extend(
+                self.analyzer.observe(
+                    actor_id,
+                    "scope_expansion",
+                    float(scope_size),
+                    metadata={"new_resource": resource_uri},
+                )
+            )
+
+        try:
+            result = await call_next(context)
+            self._process_drift(drift_events)
+
+            # Post-execution accountability
+            self._post_execution_record(actor_id, f"resource:{resource_uri}")
+
+            return result
+        except Exception:
+            drift_events.extend(self.analyzer.observe(actor_id, "error_rate", 1.0))
+            self._process_drift(drift_events)
+            raise
+
+    async def on_list_resources(
+        self,
+        context: MiddlewareContext[mt.ListResourcesRequest],
+        call_next: CallNext[mt.ListResourcesRequest, Sequence[Resource]],
+    ) -> Sequence[Resource]:
+        return await call_next(context)
+
+    async def on_list_resource_templates(
+        self,
+        context: MiddlewareContext[mt.ListResourceTemplatesRequest],
+        call_next: CallNext[
+            mt.ListResourceTemplatesRequest, Sequence[ResourceTemplate]
+        ],
+    ) -> Sequence[ResourceTemplate]:
+        return await call_next(context)
+
+    # ── Prompt operations ────────────────────────────────────────────
+
+    async def on_get_prompt(
+        self,
+        context: MiddlewareContext[mt.GetPromptRequestParams],
+        call_next: CallNext[mt.GetPromptRequestParams, PromptResult],
+    ) -> PromptResult:
+        if self._should_bypass():
+            return await call_next(context)
+
+        actor_id = self._get_actor_id(context)
+        self._check_suspended(actor_id)
+
+        # Pre-execution gating
+        prompt_name = context.message.name
+        await self._pre_execution_gate(actor_id, "get_prompt", prompt_name)
+
+        # Track prompt scope
+        self.profile_manager.record_prompt_access(actor_id, prompt_name)
+
+        result = await call_next(context)
+
+        # Post-execution accountability
+        self._post_execution_record(actor_id, f"prompt:{prompt_name}")
+
+        return result
+
+    async def on_list_prompts(
+        self,
+        context: MiddlewareContext[mt.ListPromptsRequest],
+        call_next: CallNext[mt.ListPromptsRequest, Sequence[Prompt]],
+    ) -> Sequence[Prompt]:
+        return await call_next(context)

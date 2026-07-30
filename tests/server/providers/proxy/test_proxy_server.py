@@ -27,6 +27,8 @@ from fastmcp.tools.base import ToolResult
 from fastmcp.tools.tool_transform import (
     ToolTransformConfig,
 )
+from fastmcp.utilities.http import find_available_port
+from fastmcp.utilities.tests import run_server_async
 
 USERS = [
     {"id": "1", "name": "Alice", "active": True},
@@ -245,6 +247,58 @@ async def test_proxy_with_async_client_factory():
     assert client.transport.url == "http://example.com/mcp/"
 
 
+async def test_proxy_ping_forwards_to_remote_server(fastmcp_server):
+    proxy = create_proxy(fastmcp_server)
+
+    async with Client(proxy) as client:
+        assert await client.ping() is True
+
+
+async def test_proxy_ping_surfaces_wrong_remote_path():
+    remote = FastMCP("remote")
+    async with run_server_async(remote, transport="http") as url:
+        proxy = create_proxy(StreamableHttpTransport(url.removesuffix("/mcp")))
+
+        with pytest.raises(McpError, match="Session terminated"):
+            async with Client(proxy):
+                pass
+
+
+async def test_proxy_initialize_forwards_remote_connection_error():
+    port = find_available_port()
+    proxy = create_proxy(
+        StreamableHttpTransport(f"http://127.0.0.1:{port}/mcp"),
+        provider_error_strategy="raise",
+    )
+
+    with pytest.raises(McpError, match="Client failed to connect"):
+        async with Client(proxy):
+            pass
+
+
+async def test_proxy_list_tools_surfaces_remote_connection_error():
+    port = find_available_port()
+    proxy = create_proxy(
+        StreamableHttpTransport(f"http://127.0.0.1:{port}/mcp"),
+        provider_error_strategy="raise",
+    )
+
+    with pytest.raises(RuntimeError, match="Client failed to connect"):
+        await proxy.list_tools()
+
+
+async def test_proxy_list_tools_client_surfaces_remote_connection_error():
+    port = find_available_port()
+    proxy = create_proxy(
+        StreamableHttpTransport(f"http://127.0.0.1:{port}/mcp"),
+        provider_error_strategy="raise",
+    )
+
+    with pytest.raises(McpError, match="Client failed to connect"):
+        async with Client(proxy) as client:
+            await client.list_tools()
+
+
 class TestTools:
     async def test_get_tools(self, proxy_server):
         tools = await proxy_server.list_tools()
@@ -359,6 +413,28 @@ class TestTools:
             with pytest.raises(ToolError):
                 async with Client(proxy_server) as client:
                     await client.call_tool("error_tool", {})
+
+    async def test_error_tool_passthrough_preserves_content(self, proxy_server):
+        """Upstream error results pass through with content intact, not flattened."""
+        error_result = mcp_types.CallToolResult(
+            content=[
+                mcp_types.ImageContent(
+                    type="image", data="abc123", mimeType="image/png"
+                )
+            ],
+            structuredContent={"detail": "boom"},
+            isError=True,
+        )
+        with patch.object(
+            Client, "call_tool_mcp", new_callable=AsyncMock, return_value=error_result
+        ):
+            async with Client(proxy_server) as client:
+                result = await client.call_tool("error_tool", {}, raise_on_error=False)
+
+        assert result.is_error is True
+        assert isinstance(result.content[0], mcp_types.ImageContent)
+        assert result.content[0].data == "abc123"
+        assert result.structured_content == {"detail": "boom"}
 
     async def test_call_tool_forwards_meta(self, fastmcp_server, proxy_server):
         """Test that metadata from proxied tool results is properly forwarded."""
@@ -633,6 +709,96 @@ class TestResourceTemplates:
                 t for t in templates if t.uriTemplate == "data://user/{user_id}"
             )
             assert user_template.name == "overwritten_get_user"
+
+
+class TestResourceTemplateQueryParams:
+    """Resource templates with RFC 6570 {?param} query params work through proxy."""
+
+    async def test_query_param_forwarded(self):
+        remote = FastMCP("Remote")
+
+        @remote.resource("data://{id}{?format}")
+        def get_data(id: str, format: str = "json") -> str:
+            return f"id={id} format={format}"
+
+        proxy = create_proxy(Client(remote))
+        async with Client(proxy) as client:
+            result = await client.read_resource("data://123?format=xml")
+        assert isinstance(result[0], TextResourceContents)
+        assert result[0].text == "id=123 format=xml"
+
+    async def test_query_param_default_used_when_omitted(self):
+        remote = FastMCP("Remote")
+
+        @remote.resource("data://{id}{?format}")
+        def get_data(id: str, format: str = "json") -> str:
+            return f"id={id} format={format}"
+
+        proxy = create_proxy(Client(remote))
+        async with Client(proxy) as client:
+            result = await client.read_resource("data://123")
+        assert isinstance(result[0], TextResourceContents)
+        assert result[0].text == "id=123 format=json"
+
+    async def test_multiple_query_params_forwarded(self):
+        remote = FastMCP("Remote")
+
+        @remote.resource("data://{id}{?limit,offset}")
+        def get_data(id: str, limit: int = 10, offset: int = 0) -> str:
+            return f"id={id} limit={limit} offset={offset}"
+
+        proxy = create_proxy(Client(remote))
+        async with Client(proxy) as client:
+            result = await client.read_resource("data://abc?limit=5&offset=20")
+        assert isinstance(result[0], TextResourceContents)
+        assert result[0].text == "id=abc limit=5 offset=20"
+
+    async def test_encoded_path_param_preserved(self):
+        remote = FastMCP("Remote")
+
+        @remote.resource("data://{id}")
+        def get_data(id: str) -> str:
+            return f"id={id}"
+
+        proxy = create_proxy(Client(remote))
+        async with Client(proxy) as client:
+            result = await client.read_resource("data://a%2Fb")
+        assert isinstance(result[0], TextResourceContents)
+        assert result[0].text == "id=a/b"
+
+    async def test_hyphenated_query_param_forwarded(self):
+        remote = FastMCP("Remote")
+
+        @remote.resource("data://{id}{?api-version}")
+        def get_data(id: str, api_version: str = "v1") -> str:
+            return f"id={id} api_version={api_version}"
+
+        proxy = create_proxy(Client(remote))
+        async with Client(proxy) as client:
+            result = await client.read_resource("data://123?api-version=v2")
+        assert isinstance(result[0], TextResourceContents)
+        assert result[0].text == "id=123 api_version=v2"
+
+    def test_same_name_in_path_and_query_is_rejected(self):
+        remote = FastMCP("Remote")
+        with pytest.raises(ValueError, match="must be optional"):
+
+            @remote.resource("data://{id}{?id}")
+            def get_data(id: str) -> str:
+                return id
+
+    async def test_hyphenated_query_param_not_double_encoded(self):
+        remote = FastMCP("Remote")
+
+        @remote.resource("data://{id}{?api-version}")
+        def get_data(id: str, api_version: str = "v1") -> str:
+            return f"id={id} api_version={api_version}"
+
+        proxy = create_proxy(Client(remote))
+        async with Client(proxy) as client:
+            result = await client.read_resource("data://123?api-version=a%2Fb")
+        assert isinstance(result[0], TextResourceContents)
+        assert result[0].text == "id=123 api_version=a/b"
 
 
 class TestPrompts:
@@ -915,3 +1081,69 @@ class TestProxyProviderCache:
             result = await proxy.call_tool("greet", {"name": "Alice"})
             mock_list.assert_not_called()
         assert result.content[0].text == "Hello, Alice!"  # type: ignore[union-attr]  # ty:ignore[unresolved-attribute]
+
+
+class TestProxySpanAttributes:
+    """Regression tests for span attributes on un-renamed proxy components.
+
+    A proxy component's private ``_backend_*`` field is only populated when
+    the component is renamed via ``model_copy``. For un-renamed components it
+    stays ``None``, so ``get_span_attributes()`` would emit ``None`` for the
+    ``fastmcp.proxy.backend_*`` keys — which OpenTelemetry rejects with
+    ``Invalid type NoneType for attribute ... value`` and drops, producing
+    log spam on every proxied call.
+    """
+
+    async def test_proxy_tool_span_attributes_fall_back_to_name(self, proxy_server):
+        proxy_provider = next(
+            p for p in proxy_server.providers if isinstance(p, ProxyProvider)
+        )
+        tools = await proxy_provider._list_tools()
+        assert tools, "expected the fixture to expose at least one tool"
+        for tool in tools:
+            attrs = tool.get_span_attributes()
+            assert attrs["fastmcp.proxy.backend_name"] == tool.name
+            assert all(v is not None for v in attrs.values()), (
+                f"OpenTelemetry rejects None attribute values; got {attrs!r}"
+            )
+
+    async def test_proxy_resource_span_attributes_fall_back_to_uri(self, proxy_server):
+        proxy_provider = next(
+            p for p in proxy_server.providers if isinstance(p, ProxyProvider)
+        )
+        resources = await proxy_provider._list_resources()
+        assert resources, "expected the fixture to expose at least one resource"
+        for resource in resources:
+            attrs = resource.get_span_attributes()
+            assert attrs["fastmcp.proxy.backend_uri"] == str(resource.uri)
+            assert all(v is not None for v in attrs.values()), (
+                f"OpenTelemetry rejects None attribute values; got {attrs!r}"
+            )
+
+    async def test_proxy_template_span_attributes_fall_back_to_uri_template(
+        self, proxy_server
+    ):
+        proxy_provider = next(
+            p for p in proxy_server.providers if isinstance(p, ProxyProvider)
+        )
+        templates = await proxy_provider._list_resource_templates()
+        assert templates, "expected the fixture to expose at least one template"
+        for template in templates:
+            attrs = template.get_span_attributes()
+            assert attrs["fastmcp.proxy.backend_uri_template"] == template.uri_template
+            assert all(v is not None for v in attrs.values()), (
+                f"OpenTelemetry rejects None attribute values; got {attrs!r}"
+            )
+
+    async def test_proxy_prompt_span_attributes_fall_back_to_name(self, proxy_server):
+        proxy_provider = next(
+            p for p in proxy_server.providers if isinstance(p, ProxyProvider)
+        )
+        prompts = await proxy_provider._list_prompts()
+        assert prompts, "expected the fixture to expose at least one prompt"
+        for prompt in prompts:
+            attrs = prompt.get_span_attributes()
+            assert attrs["fastmcp.proxy.backend_name"] == prompt.name
+            assert all(v is not None for v in attrs.values()), (
+                f"OpenTelemetry rejects None attribute values; got {attrs!r}"
+            )

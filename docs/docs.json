@@ -12,7 +12,7 @@
     "decoration": "gradient"
   },
   "banner": {
-    "content": "Deploy FastMCP servers for free on [Prefect Horizon](https://www.prefect.io/horizon)"
+    "content": "Meet [Prefect Horizon](https://prefect.io/horizon?utm_source=gofastmcp&utm_medium=docs&utm_campaign=docs_banner&utm_content=sitewide_banner), the enterprise MCP gateway built by the team behind FastMCP"
   },
   "colors": {
     "dark": "#f72585",
@@ -20,10 +20,7 @@
     "primary": "#2d00f7"
   },
   "contextual": {
-    "options": [
-      "copy",
-      "view"
-    ]
+    "options": ["copy", "view"]
   },
   "description": "The fast, Pythonic way to build MCP servers and clients.",
   "errors": {
@@ -118,7 +115,8 @@
                       "servers/transforms/namespace",
                       "servers/visibility",
                       "servers/transforms/resources-as-tools",
-                      "servers/transforms/prompts-as-tools"
+                      "servers/transforms/prompts-as-tools",
+                      "servers/tool-fingerprinting"
                     ]
                   },
                   {
@@ -202,6 +200,7 @@
                     "pages": [
                       "deployment/running-server",
                       "deployment/http",
+                      "deployment/sandboxed-agents",
                       "deployment/prefect-horizon",
                       "deployment/server-configuration",
                       "servers/testing",
@@ -246,7 +245,9 @@
                 "group": "Clients",
                 "pages": [
                   "clients/client",
+                  "clients/client-only-package",
                   "clients/transports",
+                  "clients/fastmcp-remote",
                   {
                     "collapsed": true,
                     "group": "Operations",
@@ -295,6 +296,7 @@
                       "integrations/eunomia-authorization",
                       "integrations/github",
                       "integrations/google",
+                      "integrations/huggingface",
                       "integrations/keycloak",
                       "integrations/oci",
                       "integrations/permit",
@@ -308,10 +310,7 @@
                     "collapsed": true,
                     "group": "Web Frameworks",
                     "icon": "code",
-                    "pages": [
-                      "integrations/fastapi",
-                      "integrations/openapi"
-                    ]
+                    "pages": ["integrations/fastapi", "integrations/openapi"]
                   },
                   {
                     "collapsed": true,
@@ -333,7 +332,8 @@
                     "pages": [
                       "integrations/anthropic",
                       "integrations/gemini",
-                      "integrations/openai"
+                      "integrations/openai",
+                      "integrations/pydantic-ai"
                     ]
                   },
                   "integrations/mcp-json-configuration"
@@ -382,11 +382,9 @@
                     "collapsed": true,
                     "group": "What's New",
                     "icon": "sparkles",
-                    "pages": [
-                      "updates",
-                      "changelog"
-                    ]
-                  }
+                    "pages": ["updates", "changelog"]
+                  },
+                  "more/faq"
                 ]
               }
             ],

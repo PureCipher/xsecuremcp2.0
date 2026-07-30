@@ -146,9 +146,7 @@ class TestDestructiveProductionActionsRequireApproval:
     ]
 
     @pytest.mark.parametrize("resource_type", SENSITIVE_RESOURCES)
-    async def test_destructive_prod_action_requires_approval(
-        self, resource_type: str
-    ):
+    async def test_destructive_prod_action_requires_approval(self, resource_type: str):
         ctx = _ctx(
             action="delete",
             resource_id=f"prod-{resource_type}-1",
@@ -156,10 +154,7 @@ class TestDestructiveProductionActionsRequireApproval:
             environment="production",
             approval_granted=False,
         )
-        assert (
-            await _engine_decision(ctx)
-            == PolicyDecision.REQUIRE_APPROVAL
-        )
+        assert await _engine_decision(ctx) == PolicyDecision.REQUIRE_APPROVAL
 
     @pytest.mark.parametrize("resource_type", SENSITIVE_RESOURCES)
     async def test_destructive_prod_action_with_approval_is_allowed(
@@ -185,10 +180,7 @@ class TestDestructiveProductionActionsRequireApproval:
             environment="production",
             approval_granted=False,
         )
-        assert (
-            await _engine_decision(ctx)
-            == PolicyDecision.REQUIRE_APPROVAL
-        )
+        assert await _engine_decision(ctx) == PolicyDecision.REQUIRE_APPROVAL
 
     async def test_dns_record_update_requires_approval(self):
         ctx = _ctx(
@@ -198,10 +190,7 @@ class TestDestructiveProductionActionsRequireApproval:
             environment="production",
             approval_granted=False,
         )
-        assert (
-            await _engine_decision(ctx)
-            == PolicyDecision.REQUIRE_APPROVAL
-        )
+        assert await _engine_decision(ctx) == PolicyDecision.REQUIRE_APPROVAL
 
     async def test_firewall_rule_change_requires_approval(self):
         ctx = _ctx(
@@ -211,10 +200,7 @@ class TestDestructiveProductionActionsRequireApproval:
             environment="production",
             approval_granted=False,
         )
-        assert (
-            await _engine_decision(ctx)
-            == PolicyDecision.REQUIRE_APPROVAL
-        )
+        assert await _engine_decision(ctx) == PolicyDecision.REQUIRE_APPROVAL
 
     async def test_credential_rotate_requires_approval(self):
         ctx = _ctx(
@@ -224,10 +210,7 @@ class TestDestructiveProductionActionsRequireApproval:
             environment="production",
             approval_granted=False,
         )
-        assert (
-            await _engine_decision(ctx)
-            == PolicyDecision.REQUIRE_APPROVAL
-        )
+        assert await _engine_decision(ctx) == PolicyDecision.REQUIRE_APPROVAL
 
 
 # ── Requirement 5: production is read-only for agents by default ───
@@ -266,10 +249,7 @@ class TestProductionAgentsAreReadOnly:
             environment="production",
             approval_granted=False,
         )
-        assert (
-            await _engine_decision(ctx)
-            == PolicyDecision.REQUIRE_APPROVAL
-        )
+        assert await _engine_decision(ctx) == PolicyDecision.REQUIRE_APPROVAL
 
     async def test_prod_agent_write_with_approval_is_allowed(self):
         ctx = _ctx(
@@ -310,10 +290,7 @@ class TestDenyByDefault:
             environment="production",
             approval_granted=False,
         )
-        assert (
-            await _engine_decision(ctx)
-            == PolicyDecision.REQUIRE_APPROVAL
-        )
+        assert await _engine_decision(ctx) == PolicyDecision.REQUIRE_APPROVAL
 
 
 # ── Engine decision aggregation (REQUIRE_APPROVAL + DENY + ALLOW) ──
@@ -348,10 +325,7 @@ class TestDecisionAggregation:
             environment="production",
             approval_granted=False,
         )
-        assert (
-            await _engine_decision(ctx)
-            == PolicyDecision.REQUIRE_APPROVAL
-        )
+        assert await _engine_decision(ctx) == PolicyDecision.REQUIRE_APPROVAL
 
     async def test_approval_ticket_resolves_to_allow(self):
         ctx = _ctx(
@@ -482,13 +456,9 @@ class TestCedarEvaluator:
         """
         p = CedarPolicy(source, policy_id="custom-cedar")
         assert (
-            p.evaluate(_ctx(environment="production")).decision
-            == PolicyDecision.DENY
+            p.evaluate(_ctx(environment="production")).decision == PolicyDecision.DENY
         )
-        assert (
-            p.evaluate(_ctx(environment="staging")).decision
-            == PolicyDecision.ALLOW
-        )
+        assert p.evaluate(_ctx(environment="staging")).decision == PolicyDecision.ALLOW
 
     async def test_annotation_promotes_to_require_approval(self):
         source = """
@@ -581,10 +551,7 @@ class TestOPAHttpAdapter:
             transport=fake_transport,
         )
         result_no_approval = p.evaluate(_ctx(approval_granted=False))
-        assert (
-            result_no_approval.decision
-            == PolicyDecision.REQUIRE_APPROVAL
-        )
+        assert result_no_approval.decision == PolicyDecision.REQUIRE_APPROVAL
 
         result_with_approval = p.evaluate(
             _ctx(approval_granted=True, approval_ticket="tkt")

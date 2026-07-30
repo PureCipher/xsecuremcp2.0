@@ -7,10 +7,11 @@ on:
   push:
     branches: ["main"]
     paths:
-      - "src/**"
+      - "fastmcp_slim/**"
+      - "fastmcp_remote/**"
       - "tests/**"
-      - "uv.lock"
       - "pyproject.toml"
+      - "uv.lock"
       - ".github/workflows/**"
 
   # run on all pull requests because these checks are required and will block merges otherwise
@@ -27,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup uv
         uses: ./.github/actions/setup-uv
