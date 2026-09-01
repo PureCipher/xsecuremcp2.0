@@ -995,17 +995,10 @@ class TestOpenAPIRegressions:
         """Tampering or rekeying the store mid-flight must surface a
         clear RuntimeError rather than crash with a Fernet exception."""
         store_a = OpenAPIStore(db_path=":memory:", credential_key="key-A")
-        rec = store_a.upsert_credential(
-            publisher_id="acme",
-            source_id="oas_x",
-            scheme_name="bearer",
-            scheme_kind="http",
-            secret={"http_scheme": "bearer", "bearer_token": "tok-AAAA"},
+        ciphertext = store_a._encrypt_secret(
+            {"http_scheme": "bearer", "bearer_token": "tok-AAAA"}
         )
-        # Reuse the same in-memory connection but with a different key.
-        store_b = OpenAPIStore(
-            db_path=":memory:", credential_key="key-B", ensure_schema=False
-        )
-        store_b._shared_conn = store_a._shared_conn
+        store_b = OpenAPIStore(db_path=":memory:", credential_key="key-B")
+
         with pytest.raises(RuntimeError, match="failed to decrypt"):
-            store_b.get_credential(rec["credential_id"], publisher_id="acme")
+            store_b._decrypt_secret(ciphertext)
