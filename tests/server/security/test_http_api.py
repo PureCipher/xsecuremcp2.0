@@ -542,6 +542,23 @@ class TestMountSecurityRoutesAuth:
         )
         assert r.status_code == 401
 
+    def test_custom_auth_verifier_can_authenticate_from_request_cookie(self):
+        from fastmcp.server.security.http.api import mount_security_routes
+
+        def verify(request, token):
+            assert token == ""
+            if request.cookies.get("session") == "valid":
+                return {"actor": "cookie-user"}
+            return None
+
+        server = self._make_server()
+        mount_security_routes(server, auth_verifier=verify)
+        client = self._client(server)
+
+        assert client.get("/security/dashboard").status_code == 401
+        client.cookies.set("session", "valid")
+        assert client.get("/security/dashboard").status_code == 200
+
     def test_async_auth_verifier(self):
         from fastmcp.server.security.http.api import mount_security_routes
 

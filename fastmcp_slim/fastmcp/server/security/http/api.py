@@ -2940,6 +2940,11 @@ def mount_security_routes(
         assert verifier is not None  # require_auth=True implies verifier is set
         header = request.headers.get("authorization", "")
         if not header.lower().startswith("bearer "):
+            if auth_verifier is not None:
+                principal = await _resolve_principal(verifier, request, "")
+                if principal is not None:
+                    request.state.security_principal = principal
+                    return None
             return JSONResponse(
                 {"error": "Missing 'Authorization: Bearer <token>' header"},
                 status_code=401,

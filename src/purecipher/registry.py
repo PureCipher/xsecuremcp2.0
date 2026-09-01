@@ -414,7 +414,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         persistence_path: str | None = None,
         security: SecurityConfig | None = None,
         auth_settings: RegistryAuthSettings | None = None,
-        security_api_require_auth: bool = False,
+        security_api_require_auth: bool | None = None,
         security_api_bearer_token: str | None = None,
         security_api_auth_verifier: Any = None,
         # Control-plane opt-outs. As of Iter8 the registry's default
@@ -561,6 +561,16 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             server_id=name or "purecipher-registry",
         )
 
+        if security_api_require_auth is None:
+            security_api_require_auth = self.auth_enabled
+        if (
+            security_api_require_auth
+            and security_api_bearer_token is None
+            and security_api_auth_verifier is None
+            and self.auth_enabled
+        ):
+            security_api_auth_verifier = self._verify_security_api_request
+
         super().__init__(
             name=name or "purecipher-registry",
             security=resolved_security,
@@ -594,6 +604,19 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         # SQLite-backed registry would otherwise lose the MCP
         # ``tools/call`` bindings even though the listings persist.
         self._reattach_openapi_proxy_tools()
+
+    def _verify_security_api_request(
+        self, request: Request, _token: str
+    ) -> dict[str, Any] | None:
+        """Authorize SecureMCP control-plane access for registry admins."""
+        session = self._session_from_request(request)
+        if session is None or session.role is not RegistryRole.ADMIN:
+            return None
+        return {
+            "actor": session.username,
+            "role": session.role.value,
+            "auth": "registry-session",
+        }
 
     @property
     def minimum_certification(self) -> CertificationLevel:
