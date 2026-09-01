@@ -27,7 +27,7 @@ from starlette.types import ASGIApp, Lifespan, Receive, Scope, Send
 
 from fastmcp.server.auth import AuthProvider
 from fastmcp.server.auth.middleware import RequireAuthMiddleware
-from fastmcp.server.event_store import SessionScopedEventStore
+from fastmcp.server.session_scoped_event_store import SessionScopedEventStore
 from fastmcp.utilities.logging import get_logger
 
 if TYPE_CHECKING:
@@ -51,6 +51,7 @@ class FastMCPStreamableHTTPSessionManager(StreamableHTTPSessionManager):
         stateless: bool = False,
         security_settings: TransportSecuritySettings | None = None,
         retry_interval: int | None = None,
+        session_idle_timeout: float | None = None,
     ) -> None:
         self._shared_event_store: EventStore | None = None
         super().__init__(
@@ -60,6 +61,7 @@ class FastMCPStreamableHTTPSessionManager(StreamableHTTPSessionManager):
             stateless=stateless,
             security_settings=security_settings,
             retry_interval=retry_interval,
+            session_idle_timeout=session_idle_timeout,
         )
 
     @property
@@ -474,6 +476,7 @@ def create_sse_app(
                     handle_sse,
                     auth.required_scopes,
                     resource_metadata_url,
+                    auth.challenge_scopes,
                 ),
                 methods=["GET"],
             )
@@ -487,6 +490,7 @@ def create_sse_app(
                     sse.handle_post_message,
                     auth.required_scopes,
                     resource_metadata_url,
+                    auth.challenge_scopes,
                 ),
             )
         )
@@ -552,6 +556,7 @@ def create_streamable_http_app(
     host_origin_protection: HostOriginProtection = False,
     allowed_hosts: Sequence[str] | None = None,
     allowed_origins: Sequence[str] | None = None,
+    session_idle_timeout: float | None = None,
 ) -> StarletteWithLifespan:
     """Return an instance of the StreamableHTTP server app.
 
@@ -576,6 +581,10 @@ def create_streamable_http_app(
         allowed_origins: Additional browser origins trusted by the request guard.
             Configure CORS separately when browser JavaScript must read
             cross-origin responses.
+        session_idle_timeout: Maximum time in seconds a session may remain idle
+            before it is terminated. The deadline is pushed forward on every
+            request. When None, sessions never expire from inactivity. Not
+            supported in stateless mode.
 
     Returns:
         A Starlette application with StreamableHTTP support
@@ -615,6 +624,7 @@ def create_streamable_http_app(
                     streamable_http_app,
                     auth.required_scopes,
                     resource_metadata_url,
+                    auth.challenge_scopes,
                 ),
                 methods=http_methods,
             )
@@ -661,11 +671,20 @@ def create_streamable_http_app(
             retry_interval=retry_interval,
             json_response=json_response,
             stateless=stateless_http,
+            session_idle_timeout=session_idle_timeout,
+            # FastMCP owns DNS-rebinding protection via HostOriginGuardMiddleware,
+            # which is more expressive and already the documented surface. Always
+            # disable the SDK's own protection so the two layers don't
+            # double-block with confusing errors from two allowlists.
+            security_settings=TransportSecuritySettings(
+                enable_dns_rebinding_protection=False
+            ),
         )
-        async with (
-            server._lifespan_manager(),
-            streamable_http_app.session_manager.run(),
-        ):
+        # The session manager's `run()` enters `server._mcp_server.lifespan`
+        # (our `_lifespan_proxy`), which now drives `server._lifespan_manager()`.
+        # Entering it here too would double-stack the same lifespan, so we let
+        # the manager own the single entry.
+        async with streamable_http_app.session_manager.run():
             try:
                 yield
             finally:

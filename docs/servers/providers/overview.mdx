@@ -57,9 +57,9 @@ Transforms can be added to individual providers (affecting just that source) or 
 
 ## Provider Order
 
-When a client requests a tool, FastMCP queries providers in registration order. The first provider that has the tool handles the request.
+When a client requests a component by name or URI, FastMCP queries providers and returns the highest matching version across the providers that have it. For unversioned components, or for components with equal versions, provider registration order is the tie-breaker.
 
-`LocalProvider` is always first, so your decorator-defined tools take precedence. Additional providers are queried in the order you added them. This means if two providers have a tool with the same name, the first one wins.
+`LocalProvider` is always registered first, so your decorator-defined components take precedence over equal-version components from mounted or proxied providers. Additional providers are registered in the order you add them.
 
 ## When to Care About Providers
 
@@ -70,12 +70,6 @@ When a client requests a tool, FastMCP queries providers in registration order. 
 - [Proxy a remote server](/servers/providers/proxy) through yours
 - [Control visibility state](/servers/visibility) of components
 - [Build dynamic sources](/servers/providers/custom) like database-backed tools
+- [Transform components](/servers/transforms/transforms) to namespace, rename, or modify them
 
-## Next Steps
-
-- [Local](/servers/providers/local) - How decorators work
-- [Mounting](/servers/composition) - Compose servers together
-- [Proxying](/servers/providers/proxy) - Connect to remote servers
-- [Transforms](/servers/transforms/transforms) - Namespace, rename, and modify components
-- [Visibility](/servers/visibility) - Control which components clients can access
-- [Custom](/servers/providers/custom) - Build your own providers
+The decorators you already use are themselves a provider: [`LocalProvider`](/servers/providers/local) is what backs `@mcp.tool` and its siblings.

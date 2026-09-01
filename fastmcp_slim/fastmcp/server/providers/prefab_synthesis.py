@@ -2,7 +2,7 @@
 
 Tools marked as Prefab (via ``app=True``, ``PrefabAppConfig``, etc.) carry
 a placeholder ``meta.ui.resourceUri`` and optionally a hash in
-``meta.fastmcp._tool_hash``. This module synthesizes per-tool renderer
+``meta.fastmcp.tool_hash``. This module synthesizes per-tool renderer
 resources on demand at ``list_resources`` and ``read_resource`` time
 without storing or materializing anything.
 
@@ -15,10 +15,11 @@ the app name + tool name). CSP on the resource is the tool's
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from fastmcp.server.providers.addressing import (
     HASH_LENGTH,
+    TOOL_HASH_META_KEY,
     hash_tool,
     parse_hashed_resource_uri,
 )
@@ -48,7 +49,7 @@ def _get_tool_hash(tool: Tool) -> str | None:
     meta = tool.meta or {}
     fastmcp_meta = meta.get("fastmcp")
     if isinstance(fastmcp_meta, dict):
-        h = fastmcp_meta.get("_tool_hash")
+        h = fastmcp_meta.get(TOOL_HASH_META_KEY)
         if isinstance(h, str) and len(h) == HASH_LENGTH:
             return h
         # Fall back to computing from app name
@@ -142,7 +143,7 @@ def _build_resource_for_tool(tool: Tool) -> Resource | None:
     uri = f"ui://prefab/tool/{tool_hash}/renderer.html"
 
     return TextResource(
-        uri=uri,  # type: ignore[arg-type]  # ty:ignore[invalid-argument-type]
+        uri=cast(Any, uri),
         name=f"Prefab Renderer ({tool.name})",
         text=get_renderer_html(),
         mime_type=UI_MIME_TYPE,

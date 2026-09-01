@@ -12,12 +12,13 @@ This implementation is based on:
 from collections.abc import Sequence
 from typing import Any, Literal
 
-import httpx
+import httpx2
 from key_value.aio.protocols import AsyncKeyValue
 from pydantic import AnyHttpUrl, BaseModel, model_validator
 from typing_extensions import Self
 
 from fastmcp.server.auth import TokenVerifier
+from fastmcp.server.auth.identity_assertion import IdentityAssertion
 from fastmcp.server.auth.oauth_proxy import OAuthProxy
 from fastmcp.server.auth.oauth_proxy.models import UpstreamTokenSet
 from fastmcp.server.auth.providers.jwt import JWTVerifier
@@ -162,7 +163,7 @@ class OIDCConfiguration(BaseModel):
             get_kwargs["timeout"] = timeout_seconds
 
         try:
-            response = httpx.get(str(config_url), **get_kwargs)
+            response = httpx2.get(str(config_url), **get_kwargs)
             response.raise_for_status()
 
             config_data = response.json()
@@ -225,6 +226,7 @@ class OIDCProxy(OAuthProxy):
         redirect_path: str | None = None,
         # Client configuration
         allowed_client_redirect_uris: list[str] | None = None,
+        valid_scopes: list[str] | None = None,
         client_storage: AsyncKeyValue | None = None,
         # JWT and encryption keys
         jwt_signing_key: str | bytes | None = None,
@@ -246,6 +248,8 @@ class OIDCProxy(OAuthProxy):
         token_expiry_threshold_seconds: int = 0,
         # CIMD configuration
         enable_cimd: bool = True,
+        # Identity assertion (SEP-990 ID-JAG) support
+        identity_assertion: IdentityAssertion | None = None,
     ) -> None:
         """Initialize the OIDC proxy provider.
 
@@ -281,6 +285,15 @@ class OIDCProxy(OAuthProxy):
                 ports allowed to vary for MCP compatibility. Unsafe browser schemes are rejected.
                 If empty list, no redirect URIs are allowed.
                 These are for MCP clients performing loopback redirects, NOT for the upstream OAuth app.
+            valid_scopes: The complete set of scopes clients are allowed to request,
+                advertised to clients via the `/.well-known` endpoints (as
+                `scopes_supported`) and enforced at Dynamic Client Registration: a
+                client that registers requesting a scope outside this set is rejected.
+                This is a superset of `required_scopes`, which is only the floor
+                enforced during token validation. Defaults to `required_scopes` when
+                not provided, so permitting optional scopes beyond the required floor
+                means setting this explicitly. Valid whether or not a custom
+                `token_verifier` is supplied.
             client_storage: Storage backend for OAuth state (client registrations, encrypted tokens).
                 If None, an encrypted file store will be created in the data directory
                 (derived from `platformdirs`).
@@ -289,12 +302,13 @@ class OIDCProxy(OAuthProxy):
                 provided, the upstream client secret will be used to derive a 32-byte key using PBKDF2.
             token_endpoint_auth_method: Token endpoint authentication method for upstream server.
                 Common values: "client_secret_basic", "client_secret_post", "none".
-                If None, authlib will use its default (typically "client_secret_basic").
+                Defaults to "client_secret_basic".
             require_authorization_consent: Whether to require user consent before authorizing clients (default True).
                 When True, users see a consent screen before being redirected to the upstream IdP.
                 When False, authorization proceeds directly without user confirmation.
-                When "external", the built-in consent screen is skipped but no warning is
-                logged, indicating that consent is handled externally (e.g. by the upstream IdP).
+                When "external", authorization follows the same direct path as False,
+                but the warning is suppressed as an operator acknowledgment that
+                equivalent protections are enforced externally.
                 SECURITY WARNING: Only set to False for local development or testing environments.
             consent_csp_policy: Content Security Policy for the consent page.
                 If None (default), uses the built-in CSP policy with appropriate directives.
@@ -328,6 +342,9 @@ class OIDCProxy(OAuthProxy):
             enable_cimd: Whether to enable CIMD (Client ID Metadata Document) client support.
                 When True, clients can use their metadata document URL as client_id instead of
                 Dynamic Client Registration. Default is True.
+            identity_assertion: Optional SEP-990 identity assertion (ID-JAG) configuration.
+                When provided, the token endpoint accepts the RFC 7523 jwt-bearer grant
+                carrying an ID-JAG issued by one of the configured trusted issuers.
         """
         if not config_url:
             raise ValueError("Missing required config URL")
@@ -408,6 +425,7 @@ class OIDCProxy(OAuthProxy):
             "issuer_url": issuer_url or base_url,
             "service_documentation_url": self.oidc_config.service_documentation,
             "allowed_client_redirect_uris": allowed_client_redirect_uris,
+            "valid_scopes": valid_scopes,
             "client_storage": client_storage,
             "jwt_signing_key": jwt_signing_key,
             "token_endpoint_auth_method": token_endpoint_auth_method,
@@ -419,6 +437,7 @@ class OIDCProxy(OAuthProxy):
             "fastmcp_access_token_expiry_seconds": fastmcp_access_token_expiry_seconds,
             "token_expiry_threshold_seconds": token_expiry_threshold_seconds,
             "enable_cimd": enable_cimd,
+            "identity_assertion": identity_assertion,
         }
 
         if redirect_path:
@@ -447,14 +466,16 @@ class OIDCProxy(OAuthProxy):
 
         self._verify_id_token = verify_id_token
 
-        # When verify_id_token strips scopes from the verifier, restore
-        # them on the provider so they're still advertised to clients
-        # and enforced at the FastMCP token level.  We also need to
-        # recompute derived state that OAuthProxy.__init__ already built
-        # from the (empty) verifier scopes.
-        if verify_id_token and required_scopes:
-            self.required_scopes = required_scopes
-            self.update_default_scopes(required_scopes)
+        # When verify_id_token strips scopes from the verifier, restore the
+        # derived scope state OAuthProxy.__init__ built from the (empty) verifier
+        # scopes. required_scopes is the enforcement floor; the advertised and
+        # registerable set is the broader valid_scopes when one was given.
+        if verify_id_token:
+            if required_scopes:
+                self.required_scopes = required_scopes
+            advertised_scopes = valid_scopes or required_scopes
+            if advertised_scopes:
+                self.update_default_scopes(advertised_scopes)
 
     def _get_verification_token(
         self, upstream_token_set: UpstreamTokenSet

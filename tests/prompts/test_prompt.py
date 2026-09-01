@@ -1,6 +1,9 @@
+from pathlib import Path
+from typing import Annotated, Any
+
 import pytest
-from mcp.types import EmbeddedResource, TextResourceContents
-from pydantic import FileUrl
+from mcp_types import EmbeddedResource, TextResourceContents
+from pydantic import Field
 
 from fastmcp.prompts.base import (
     Message,
@@ -112,9 +115,9 @@ class TestRenderPrompt:
                     content=EmbeddedResource(
                         type="resource",
                         resource=TextResourceContents(
-                            uri=FileUrl("file://file.txt"),
+                            uri="file://file.txt",
                             text="File contents",
-                            mimeType="text/plain",
+                            mime_type="text/plain",
                         ),
                     ),
                     role="user",
@@ -128,9 +131,9 @@ class TestRenderPrompt:
                 content=EmbeddedResource(
                     type="resource",
                     resource=TextResourceContents(
-                        uri=FileUrl("file://file.txt"),
+                        uri="file://file.txt",
                         text="File contents",
-                        mimeType="text/plain",
+                        mime_type="text/plain",
                     ),
                 ),
                 role="user",
@@ -147,9 +150,9 @@ class TestRenderPrompt:
                     content=EmbeddedResource(
                         type="resource",
                         resource=TextResourceContents(
-                            uri=FileUrl("file://file.txt"),
+                            uri="file://file.txt",
                             text="File contents",
-                            mimeType="text/plain",
+                            mime_type="text/plain",
                         ),
                     ),
                     role="user",
@@ -165,9 +168,9 @@ class TestRenderPrompt:
                 content=EmbeddedResource(
                     type="resource",
                     resource=TextResourceContents(
-                        uri=FileUrl("file://file.txt"),
+                        uri="file://file.txt",
                         text="File contents",
-                        mimeType="text/plain",
+                        mime_type="text/plain",
                     ),
                 ),
                 role="user",
@@ -184,9 +187,9 @@ class TestRenderPrompt:
                     content=EmbeddedResource(
                         type="resource",
                         resource=TextResourceContents(
-                            uri=FileUrl("file://file.txt"),
+                            uri="file://file.txt",
                             text="File contents",
-                            mimeType="text/plain",
+                            mime_type="text/plain",
                         ),
                     ),
                     role="user",
@@ -200,9 +203,9 @@ class TestRenderPrompt:
                 content=EmbeddedResource(
                     type="resource",
                     resource=TextResourceContents(
-                        uri=FileUrl("file://file.txt"),
+                        uri="file://file.txt",
                         text="File contents",
-                        mimeType="text/plain",
+                        mime_type="text/plain",
                     ),
                 ),
                 role="user",
@@ -314,8 +317,75 @@ class TestPromptTypeConversion:
 
         assert result.messages == [Message("Hello world (repeated 3 times)")]
 
+    @pytest.mark.parametrize(
+        ("annotation", "value"),
+        [
+            (Annotated[str, Field(description="Text")], '"hello"'),
+            (str | None, "null"),
+            (Any, "123"),
+            (object, "true"),
+            (int | str, "42"),
+        ],
+    )
+    async def test_string_compatible_annotations_preserve_wire_strings(
+        self, annotation: Any, value: str
+    ):
+        def typed_prompt(value):
+            return f"{type(value).__name__}:{value!r}"
+
+        typed_prompt.__annotations__ = {"value": annotation, "return": str}
+        prompt = Prompt.from_function(typed_prompt)
+
+        result = await prompt.render(arguments={"value": value})
+
+        assert result.messages == [Message(f"str:{value!r}")]
+
+    async def test_optional_non_string_still_decodes_json_null(self):
+        def optional_integer_prompt(value: int | None) -> str:
+            return f"{type(value).__name__}:{value!r}"
+
+        prompt = Prompt.from_function(optional_integer_prompt)
+
+        result = await prompt.render(arguments={"value": "null"})
+
+        assert result.messages == [Message("NoneType:None")]
+
+    @pytest.mark.parametrize(
+        ("annotation", "value", "expected"),
+        [
+            (bytes, '"hello"', b"hello"),
+            (Path, '"folder/file.txt"', Path("folder/file.txt")),
+        ],
+    )
+    async def test_string_coercible_non_string_annotations_decode_json(
+        self, annotation: Any, value: str, expected: Any
+    ):
+        def typed_prompt(value):
+            return f"{type(value).__name__}:{value!r}"
+
+        typed_prompt.__annotations__ = {"value": annotation, "return": str}
+        prompt = Prompt.from_function(typed_prompt)
+
+        result = await prompt.render(arguments={"value": value})
+
+        assert result.messages == [Message(f"{type(expected).__name__}:{expected!r}")]
+
 
 class TestPromptArgumentDescriptions:
+    def test_string_compatible_annotation_guidance_preserves_raw_strings(self):
+        def documented_prompt(
+            text: Annotated[str, Field(description="Text")],
+        ) -> str:
+            return text
+
+        prompt = Prompt.from_function(documented_prompt)
+
+        assert prompt.arguments is not None
+        text_arg = next(arg for arg in prompt.arguments if arg.name == "text")
+        assert text_arg.description is not None
+        assert "Provide as a JSON string" not in text_arg.description
+        assert "Encode non-string values as JSON." in text_arg.description
+
     def test_enhanced_descriptions_for_non_string_types(self):
         """Test that non-string argument types get enhanced descriptions with JSON schema."""
 
@@ -344,7 +414,7 @@ class TestPromptArgumentDescriptions:
         assert numbers_arg is not None
         assert numbers_arg.description is not None
         assert (
-            "Provide as a JSON string matching the following schema:"
+            "Provide a value matching the following JSON schema:"
             in numbers_arg.description
         )
         assert '{"items":{"type":"integer"},"type":"array"}' in numbers_arg.description
@@ -355,7 +425,7 @@ class TestPromptArgumentDescriptions:
         assert metadata_arg is not None
         assert metadata_arg.description is not None
         assert (
-            "Provide as a JSON string matching the following schema:"
+            "Provide a value matching the following JSON schema:"
             in metadata_arg.description
         )
         assert (
@@ -369,7 +439,7 @@ class TestPromptArgumentDescriptions:
         assert threshold_arg is not None
         assert threshold_arg.description is not None
         assert (
-            "Provide as a JSON string matching the following schema:"
+            "Provide a value matching the following JSON schema:"
             in threshold_arg.description
         )
         assert '{"type":"number"}' in threshold_arg.description
@@ -380,7 +450,7 @@ class TestPromptArgumentDescriptions:
         assert active_arg is not None
         assert active_arg.description is not None
         assert (
-            "Provide as a JSON string matching the following schema:"
+            "Provide a value matching the following JSON schema:"
             in active_arg.description
         )
         assert '{"type":"boolean"}' in active_arg.description
@@ -411,7 +481,7 @@ class TestPromptArgumentDescriptions:
         assert "A list of integers to process" in numbers_arg.description
         assert "\n\n" in numbers_arg.description  # Should have newline separator
         assert (
-            "Provide as a JSON string matching the following schema:"
+            "Provide a value matching the following JSON schema:"
             in numbers_arg.description
         )
 
@@ -428,7 +498,7 @@ class TestPromptArgumentDescriptions:
             # String parameters should not have schema enhancement
             if arg.description is not None:
                 assert (
-                    "Provide as a JSON string matching the following schema:"
+                    "Provide a value matching the following JSON schema:"
                     not in arg.description
                 )
 
@@ -580,7 +650,7 @@ class TestPromptArgumentDescriptions:
 class TestMessage:
     def test_message_string_content(self):
         """Test Message with string content."""
-        from mcp.types import TextContent
+        from mcp_types import TextContent
 
         msg = Message("Hello, world!")
         assert msg.role == "user"
@@ -589,7 +659,7 @@ class TestMessage:
 
     def test_message_with_role(self):
         """Test Message with explicit role."""
-        from mcp.types import TextContent
+        from mcp_types import TextContent
 
         msg = Message("I can help.", role="assistant")
         assert msg.role == "assistant"
@@ -598,7 +668,7 @@ class TestMessage:
 
     def test_message_auto_serializes_dict(self):
         """Test Message auto-serializes dicts to JSON."""
-        from mcp.types import TextContent
+        from mcp_types import TextContent
 
         msg = Message({"key": "value", "nested": {"a": 1}})
         assert msg.role == "user"
@@ -608,7 +678,7 @@ class TestMessage:
 
     def test_message_auto_serializes_list(self):
         """Test Message auto-serializes lists to JSON."""
-        from mcp.types import TextContent
+        from mcp_types import TextContent
 
         msg = Message(["item1", "item2", "item3"])
         assert isinstance(msg.content, TextContent)
@@ -616,7 +686,7 @@ class TestMessage:
 
     def test_message_to_mcp_prompt_message(self):
         """Test conversion to MCP PromptMessage."""
-        from mcp.types import TextContent
+        from mcp_types import TextContent
 
         msg = Message("Hello", role="assistant")
         mcp_msg = msg.to_mcp_prompt_message()
@@ -626,29 +696,29 @@ class TestMessage:
 
     def test_message_passthrough_image_content(self):
         """Test Message passes through ImageContent without JSON serialization."""
-        from mcp.types import ImageContent
+        from mcp_types import ImageContent
 
-        img = ImageContent(type="image", data="base64data", mimeType="image/png")
+        img = ImageContent(type="image", data="base64data", mime_type="image/png")
         msg = Message(img, role="user")
         assert isinstance(msg.content, ImageContent)
         assert msg.content.data == "base64data"
-        assert msg.content.mimeType == "image/png"
+        assert msg.content.mime_type == "image/png"
 
     def test_message_passthrough_audio_content(self):
         """Test Message passes through AudioContent without JSON serialization."""
-        from mcp.types import AudioContent
+        from mcp_types import AudioContent
 
-        audio = AudioContent(type="audio", data="base64audio", mimeType="audio/wav")
+        audio = AudioContent(type="audio", data="base64audio", mime_type="audio/wav")
         msg = Message(audio, role="user")
         assert isinstance(msg.content, AudioContent)
         assert msg.content.data == "base64audio"
-        assert msg.content.mimeType == "audio/wav"
+        assert msg.content.mime_type == "audio/wav"
 
     def test_message_image_content_to_mcp_prompt_message(self):
         """Test that ImageContent round-trips through to_mcp_prompt_message."""
-        from mcp.types import ImageContent
+        from mcp_types import ImageContent
 
-        img = ImageContent(type="image", data="base64data", mimeType="image/png")
+        img = ImageContent(type="image", data="base64data", mime_type="image/png")
         msg = Message(img, role="user")
         mcp_msg = msg.to_mcp_prompt_message()
         assert isinstance(mcp_msg.content, ImageContent)
@@ -658,7 +728,7 @@ class TestMessage:
 class TestPromptResult:
     def test_promptresult_from_string(self):
         """Test PromptResult accepts string and wraps as Message."""
-        from mcp.types import TextContent
+        from mcp_types import TextContent
 
         result = PromptResult("Hello!")
         assert len(result.messages) == 1

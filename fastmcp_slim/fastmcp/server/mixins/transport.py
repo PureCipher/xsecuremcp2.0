@@ -11,13 +11,13 @@ import anyio
 import uvicorn
 from mcp.server.lowlevel.server import NotificationOptions
 from mcp.server.stdio import stdio_server
+from mcp.server.streamable_http import EventStore
 from starlette.middleware import Middleware as ASGIMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 from starlette.routing import BaseRoute, Route
 
 import fastmcp
-from fastmcp.server.event_store import EventStore
 from fastmcp.server.http import (
     HostOriginProtection,
     StarletteWithLifespan,
@@ -28,7 +28,6 @@ from fastmcp.server.http import (
 from fastmcp.server.providers.base import Provider
 from fastmcp.server.providers.fastmcp_provider import FastMCPProvider
 from fastmcp.server.providers.wrapped_provider import _WrappedProvider
-from fastmcp.utilities.cli import log_server_banner
 from fastmcp.utilities.logging import get_logger, temporary_log_level
 
 if TYPE_CHECKING:
@@ -230,6 +229,8 @@ class TransportMixin:
 
         # Display server banner
         if show_banner:
+            from fastmcp.utilities.cli import log_server_banner
+
             log_server_banner(server=self)
 
         token = set_transport("stdio")
@@ -250,7 +251,6 @@ class TransportMixin:
                                     tools_changed=True
                                 ),
                             ),
-                            stateless=stateless,
                         )
         finally:
             reset_transport(token)
@@ -338,6 +338,8 @@ class TransportMixin:
 
         # Display server banner
         if show_banner:
+            from fastmcp.utilities.cli import log_server_banner
+
             log_server_banner(server=self)
         uvicorn_config_from_user = uvicorn_config or {}
 
@@ -379,6 +381,7 @@ class TransportMixin:
         host_origin_protection: HostOriginProtection | None = None,
         allowed_hosts: list[str] | None = None,
         allowed_origins: list[str] | None = None,
+        session_idle_timeout: float | None = None,
     ) -> StarletteWithLifespan:
         """Create a Starlette app using the specified HTTP transport.
 
@@ -403,6 +406,9 @@ class TransportMixin:
             allowed_origins: Additional browser origins trusted by the request guard.
                 Configure CORS separately when browser JavaScript must read
                 cross-origin responses.
+            session_idle_timeout: Maximum time in seconds a streamable-HTTP
+                session may remain idle before it is terminated. When None,
+                falls back to the ``http_session_idle_timeout`` setting.
 
         Returns:
             A Starlette application configured with the specified transport
@@ -443,6 +449,11 @@ class TransportMixin:
                     allowed_origins
                     if allowed_origins is not None
                     else fastmcp.settings.http_allowed_origins
+                ),
+                session_idle_timeout=(
+                    session_idle_timeout
+                    if session_idle_timeout is not None
+                    else fastmcp.settings.http_session_idle_timeout
                 ),
             )
         elif transport == "sse":

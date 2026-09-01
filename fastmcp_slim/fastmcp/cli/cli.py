@@ -21,9 +21,9 @@ import fastmcp
 from fastmcp.cli import run as run_module
 from fastmcp.cli.auth import auth_app
 from fastmcp.cli.client import call_command, discover_command, list_command
+from fastmcp.cli.deploy.command import login, logout, whoami
 from fastmcp.cli.generate import generate_cli_command
 from fastmcp.cli.install import install_app
-from fastmcp.cli.tasks import tasks_app
 from fastmcp.utilities.cli import is_already_in_uv_subprocess, load_and_merge_config
 from fastmcp.utilities.inspect import (
     InspectFormat,
@@ -435,7 +435,7 @@ async def run(
         str | None,
         cyclopts.Parameter(
             "--path",
-            help="The route path for the server (default: /mcp/ for http transport, /sse/ for sse transport)",
+            help="The route path for the server (default: /mcp for http transport, /sse for sse transport)",
         ),
     ] = None,
     log_level: Annotated[
@@ -1126,9 +1126,6 @@ app.command(project_app)
 # Add install subcommands using proper Cyclopts pattern
 app.command(install_app)
 
-# Add tasks subcommand group
-app.command(tasks_app)
-
 # Add client query commands
 app.command(list_command, name="list")
 app.command(call_command, name="call")
@@ -1137,6 +1134,11 @@ app.command(generate_cli_command, name="generate-cli")
 
 # Add auth subcommand group (includes CIMD commands)
 app.command(auth_app)
+
+# Add Prefect Horizon account commands
+app.command(login)
+app.command(logout)
+app.command(whoami)
 
 
 if __name__ == "__main__":

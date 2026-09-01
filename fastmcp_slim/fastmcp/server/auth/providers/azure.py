@@ -10,7 +10,7 @@ import hashlib
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, Literal, cast
 
-import httpx
+import httpx2
 from key_value.aio.protocols import AsyncKeyValue
 
 from fastmcp.dependencies import Dependency
@@ -120,7 +120,7 @@ class AzureProvider(OAuthProxy):
         token_expiry_threshold_seconds: int = 0,
         base_authority: str = "login.microsoftonline.com",
         token_issuer: str | None = None,
-        http_client: httpx.AsyncClient | None = None,
+        http_client: httpx2.AsyncClient | None = None,
         enable_cimd: bool = True,
     ) -> None:
         """Initialize Azure OAuth provider.
@@ -173,10 +173,11 @@ class AzureProvider(OAuthProxy):
             require_authorization_consent: Whether to require user consent before authorizing clients (default True).
                 When True, users see a consent screen before being redirected to Azure.
                 When False, authorization proceeds directly without user confirmation.
-                When "external", the built-in consent screen is skipped but no warning is
-                logged, indicating that consent is handled externally (e.g. by the upstream IdP).
+                When "external", authorization follows the same direct path as False,
+                but the warning is suppressed as an operator acknowledgment that
+                equivalent protections are enforced externally.
                 SECURITY WARNING: Only set to False for local development or testing environments.
-            http_client: Optional httpx.AsyncClient for connection pooling in JWKS fetches.
+            http_client: Optional httpx2.AsyncClient for connection pooling in JWKS fetches.
                 When provided, the client is reused for JWT key fetches and the caller
                 is responsible for its lifecycle. When None (default), a fresh client is created per fetch.
             enable_cimd: Enable CIMD (Client ID Metadata Document) support for URL-based
@@ -782,10 +783,19 @@ class AzureJWTVerifier(JWTVerifier):
         property returns the full-URI form for OAuth metadata while
         ``required_scopes`` retains the short form for token validation.
         """
-        if not self.required_scopes:
+        return self.get_challenge_scopes()
+
+    def get_challenge_scopes(
+        self, required_scopes: list[str] | None = None
+    ) -> list[str]:
+        """Prefix any effective validation scopes for Azure authorization."""
+        effective_scopes = (
+            self.required_scopes if required_scopes is None else required_scopes
+        )
+        if not effective_scopes:
             return []
         prefixed = []
-        for scope in self.required_scopes:
+        for scope in effective_scopes:
             if scope in OIDC_SCOPES or "://" in scope or "/" in scope:
                 prefixed.append(scope)
             else:
@@ -881,13 +891,13 @@ def EntraOBOToken(scopes: list[str]) -> str:
     Example:
         ```python
         from fastmcp.server.auth.providers.azure import EntraOBOToken
-        import httpx
+        import httpx2
 
         @mcp.tool()
         async def get_my_emails(
             graph_token: str = EntraOBOToken(["https://graph.microsoft.com/Mail.Read"])
         ):
-            async with httpx.AsyncClient() as client:
+            async with httpx2.AsyncClient() as client:
                 resp = await client.get(
                     "https://graph.microsoft.com/v1.0/me/messages",
                     headers={"Authorization": f"Bearer {graph_token}"}

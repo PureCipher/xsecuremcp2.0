@@ -6,7 +6,7 @@ This module tests the ssrf.py module which provides SSRF-protected HTTP fetching
 import socket
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import httpx
+import httpx2
 import pytest
 
 import fastmcp
@@ -15,7 +15,6 @@ from fastmcp.server.auth.ssrf import (
     SSRFFetchError,
     is_ip_allowed,
     ssrf_safe_fetch,
-    ssrf_safe_fetch_response,
     validate_url,
 )
 from fastmcp.utilities.tests import temporary_settings
@@ -27,7 +26,7 @@ def _mock_httpx_client(
     headers: dict[str, str] | None = None,
     body_chunks: list[bytes] | None = None,
 ) -> AsyncMock:
-    """Build a mock httpx.AsyncClient whose stream() yields a canned response.
+    """Build a mock httpx2.AsyncClient whose stream() yields a canned response.
 
     The returned client's ``.stream.call_args`` exposes the request that was made.
     """
@@ -213,7 +212,7 @@ class TestSSRFSafeFetch:
                 "fastmcp.server.auth.ssrf.resolve_hostname",
                 return_value=[resolved_ip],
             ),
-            patch("httpx.AsyncClient") as mock_client_class,
+            patch("httpx2.AsyncClient") as mock_client_class,
         ):
             mock_stream = MagicMock()
             mock_stream.status_code = 200
@@ -248,13 +247,13 @@ class TestSSRFSafeFetch:
                 "fastmcp.server.auth.ssrf.resolve_hostname",
                 return_value=resolved_ips,
             ),
-            patch("httpx.AsyncClient") as mock_client_class,
+            patch("httpx2.AsyncClient") as mock_client_class,
         ):
-            request = httpx.Request("GET", "https://example.com/api")
+            request = httpx2.Request("GET", "https://example.com/api")
 
             first_client = AsyncMock()
             first_client.stream = MagicMock(
-                side_effect=httpx.RequestError("boom", request=request)
+                side_effect=httpx2.RequestError("boom", request=request)
             )
             first_client.__aenter__.return_value = first_client
             first_client.__aexit__ = AsyncMock(return_value=None)
@@ -294,7 +293,7 @@ class TestSSRFSafeFetch:
                 "fastmcp.server.auth.ssrf.resolve_hostname",
                 return_value=[resolved_ip],
             ),
-            patch("httpx.AsyncClient") as mock_client_class,
+            patch("httpx2.AsyncClient") as mock_client_class,
         ):
             mock_stream = MagicMock()
             mock_stream.status_code = 200
@@ -326,7 +325,7 @@ class TestSSRFSafeFetch:
                 "fastmcp.server.auth.ssrf.resolve_hostname",
                 return_value=["93.184.216.34"],
             ),
-            patch("httpx.AsyncClient") as mock_client_class,
+            patch("httpx2.AsyncClient") as mock_client_class,
         ):
             # Response larger than default 5KB (no Content-Length, so streaming enforces)
             mock_stream = MagicMock()
@@ -442,7 +441,7 @@ class TestIPv6URLFormatting:
                 "fastmcp.server.auth.ssrf.resolve_hostname",
                 return_value=[resolved_ipv6],
             ),
-            patch("httpx.AsyncClient") as mock_client_class,
+            patch("httpx2.AsyncClient") as mock_client_class,
         ):
             mock_stream = MagicMock()
             mock_stream.status_code = 200
@@ -483,7 +482,7 @@ class TestStreamingResponseSizeLimit:
                 "fastmcp.server.auth.ssrf.resolve_hostname",
                 return_value=["93.184.216.34"],
             ),
-            patch("httpx.AsyncClient") as mock_client_class,
+            patch("httpx2.AsyncClient") as mock_client_class,
         ):
             chunks_yielded = []
 
@@ -523,7 +522,7 @@ class TestStreamingResponseSizeLimit:
                 "fastmcp.server.auth.ssrf.resolve_hostname",
                 return_value=["93.184.216.34"],
             ),
-            patch("httpx.AsyncClient") as mock_client_class,
+            patch("httpx2.AsyncClient") as mock_client_class,
         ):
             mock_stream = MagicMock()
             mock_stream.status_code = 200
@@ -550,13 +549,12 @@ class TestProxyMode:
     """Tests for FASTMCP_SSRF_TRUST_PROXY (proxy trust) mode.
 
     In proxy mode FastMCP skips its own DNS resolution and IP blocklist. Rather than
-    predicting whether the HTTP client would route a request through a proxy -- a strategy
+    predicting whether httpx2 would route a request through a proxy -- a strategy
     that broke three times chasing different NO_PROXY forms (port-qualified, IPv6,
     scheme-qualified) -- it reads the proxy URL directly from the environment and
-    hands it to httpx explicitly, so the request is provably routed through that
-    proxy rather than predicted to be. NO_PROXY is therefore not evaluated, while
-    trust_env remains enabled for environment-provided CA trust. The scheme (HTTPS)
-    and host checks still apply.
+    hands it to httpx2 explicitly with trust_env=False, so the request is provably
+    routed through that proxy rather than predicted to be. NO_PROXY is therefore not
+    evaluated in this mode. The scheme (HTTPS) and host checks still apply.
     """
 
     @pytest.fixture(autouse=True)
@@ -635,7 +633,7 @@ class TestProxyMode:
         """
         with (
             temporary_settings(ssrf_trust_proxy=True),
-            patch("httpx.AsyncClient") as mock_client_class,
+            patch("httpx2.AsyncClient") as mock_client_class,
         ):
             with pytest.raises(SSRFError, match="no HTTPS_PROXY/ALL_PROXY"):
                 await ssrf_safe_fetch("https://example.com/api")
@@ -643,21 +641,19 @@ class TestProxyMode:
         mock_client_class.assert_not_called()
 
     async def test_https_proxy_used_explicitly(self, monkeypatch):
-        """HTTPS_PROXY is passed to httpx explicitly while CA environment handling
-        remains enabled, and a single request goes to the original hostname URL — not
-        an IP literal.
+        """HTTPS_PROXY is passed to httpx2 explicitly with trust_env disabled, and a
+        single request goes to the original hostname URL — not an IP literal.
 
-        This is the property the whole redesign rests on: an explicit proxy= fixes
-        httpx's proxy map without consulting NO_PROXY, while trust_env=True preserves
-        SSL_CERT_FILE and SSL_CERT_DIR handling.
+        This is the property the whole redesign rests on: with an explicit proxy=
+        and trust_env=False, httpx2 has no environment-based routing decision left
+        to make differently than assumed.
         """
         monkeypatch.setenv("HTTPS_PROXY", "http://proxy.internal:3128")
-        monkeypatch.setenv("SSL_CERT_FILE", "/corporate-ca.pem")
         mock_client = _mock_httpx_client()
         with (
             temporary_settings(ssrf_trust_proxy=True),
             patch("fastmcp.server.auth.ssrf.resolve_hostname") as mock_resolve,
-            patch("httpx.AsyncClient", return_value=mock_client) as mock_client_class,
+            patch("httpx2.AsyncClient", return_value=mock_client) as mock_client_class,
         ):
             content = await ssrf_safe_fetch("https://example.com/api")
 
@@ -666,7 +662,7 @@ class TestProxyMode:
 
         client_kwargs = mock_client_class.call_args[1]
         assert client_kwargs["proxy"] == "http://proxy.internal:3128"
-        assert client_kwargs["trust_env"] is True
+        assert client_kwargs["trust_env"] is False
 
         # A single request to the original hostname URL — not an IP literal.
         assert mock_client.stream.call_count == 1
@@ -689,14 +685,14 @@ class TestProxyMode:
         with (
             temporary_settings(ssrf_trust_proxy=True),
             patch("fastmcp.server.auth.ssrf.resolve_hostname"),
-            patch("httpx.AsyncClient", return_value=mock_client) as mock_client_class,
+            patch("httpx2.AsyncClient", return_value=mock_client) as mock_client_class,
         ):
             content = await ssrf_safe_fetch("https://example.com/api")
 
         assert content == b"ok"
         client_kwargs = mock_client_class.call_args[1]
         assert client_kwargs["proxy"] == "http://all-proxy.internal:3128"
-        assert client_kwargs["trust_env"] is True
+        assert client_kwargs["trust_env"] is False
 
     async def test_https_proxy_preferred_over_all_proxy(self, monkeypatch):
         """When both are set, HTTPS_PROXY takes priority."""
@@ -706,7 +702,7 @@ class TestProxyMode:
         with (
             temporary_settings(ssrf_trust_proxy=True),
             patch("fastmcp.server.auth.ssrf.resolve_hostname"),
-            patch("httpx.AsyncClient", return_value=mock_client) as mock_client_class,
+            patch("httpx2.AsyncClient", return_value=mock_client) as mock_client_class,
         ):
             await ssrf_safe_fetch("https://example.com/api")
 
@@ -726,23 +722,25 @@ class TestProxyMode:
         with (
             temporary_settings(ssrf_trust_proxy=True),
             patch("fastmcp.server.auth.ssrf.resolve_hostname"),
-            patch("httpx.AsyncClient", return_value=mock_client) as mock_client_class,
+            patch("httpx2.AsyncClient", return_value=mock_client) as mock_client_class,
         ):
             content = await ssrf_safe_fetch("https://example.com/api")
 
         assert content == b"ok"
         client_kwargs = mock_client_class.call_args[1]
         assert client_kwargs["proxy"] == "http://proxy.internal:3128"
-        assert client_kwargs["trust_env"] is True
+        assert client_kwargs["trust_env"] is False
 
     async def test_fetch_preserves_request_headers_but_drops_host(self, monkeypatch):
         """Caller headers pass through, but a caller-supplied Host is dropped."""
+        from fastmcp.server.auth.ssrf import ssrf_safe_fetch_response
+
         monkeypatch.setenv("HTTPS_PROXY", "http://proxy.internal:3128")
         mock_client = _mock_httpx_client()
         with (
             temporary_settings(ssrf_trust_proxy=True),
             patch("fastmcp.server.auth.ssrf.resolve_hostname"),
-            patch("httpx.AsyncClient", return_value=mock_client),
+            patch("httpx2.AsyncClient", return_value=mock_client),
         ):
             await ssrf_safe_fetch_response(
                 "https://example.com/api",
@@ -761,7 +759,7 @@ class TestProxyMode:
         with (
             temporary_settings(ssrf_trust_proxy=True),
             patch("fastmcp.server.auth.ssrf.resolve_hostname"),
-            patch("httpx.AsyncClient", return_value=mock_client),
+            patch("httpx2.AsyncClient", return_value=mock_client),
         ):
             with pytest.raises(SSRFFetchError, match="too large"):
                 await ssrf_safe_fetch("https://example.com/api", max_size=5120)
@@ -773,7 +771,7 @@ class TestProxyMode:
         with (
             temporary_settings(ssrf_trust_proxy=True),
             patch("fastmcp.server.auth.ssrf.resolve_hostname"),
-            patch("httpx.AsyncClient", return_value=mock_client),
+            patch("httpx2.AsyncClient", return_value=mock_client),
         ):
             with pytest.raises(SSRFFetchError, match="HTTP 404"):
                 await ssrf_safe_fetch("https://example.com/api")
@@ -798,14 +796,14 @@ class TestProxyMode:
         mock_client = _mock_httpx_client()
         with (
             temporary_settings(ssrf_trust_proxy=True),
-            patch("httpx.AsyncClient", return_value=mock_client) as mock_client_class,
+            patch("httpx2.AsyncClient", return_value=mock_client) as mock_client_class,
         ):
             content = await ssrf_safe_fetch("https://example.com/api")
 
         assert content == b"ok"
         client_kwargs = mock_client_class.call_args[1]
         assert client_kwargs["proxy"] == "http://proxy.internal:3128"
-        assert client_kwargs["trust_env"] is True
+        assert client_kwargs["trust_env"] is False
         assert mock_client.stream.call_args[0][1] == "https://example.com/api"
 
     async def test_default_mode_still_resolves_and_pins(self):
@@ -818,7 +816,7 @@ class TestProxyMode:
                 "fastmcp.server.auth.ssrf.resolve_hostname",
                 return_value=[resolved_ip],
             ) as mock_resolve,
-            patch("httpx.AsyncClient", return_value=mock_client) as mock_client_class,
+            patch("httpx2.AsyncClient", return_value=mock_client) as mock_client_class,
         ):
             assert fastmcp.settings.ssrf_trust_proxy is False
             await ssrf_safe_fetch("https://example.com/api")
@@ -850,7 +848,7 @@ class TestProxyMode:
                 "fastmcp.server.auth.ssrf.resolve_hostname",
                 return_value=[resolved_ip],
             ) as mock_resolve,
-            patch("httpx.AsyncClient", return_value=mock_client) as mock_client_class,
+            patch("httpx2.AsyncClient", return_value=mock_client) as mock_client_class,
         ):
             assert fastmcp.settings.ssrf_trust_proxy is False
             await ssrf_safe_fetch("https://example.com/api")

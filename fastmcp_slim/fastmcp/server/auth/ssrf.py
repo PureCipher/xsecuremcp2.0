@@ -9,10 +9,10 @@ When ``FASTMCP_SSRF_TRUST_PROXY`` is set, DNS resolution and the IP blocklist ar
 skipped and a single request is made to the hostname URL through the configured
 HTTPS_PROXY/ALL_PROXY, delegating DNS and egress to that trusted proxy (the scheme
 and hostname checks still apply). The proxy URL is read from the environment and
-passed to httpx explicitly, so environment proxy selection and NO_PROXY are not
-evaluated. ``trust_env`` remains enabled so SSL_CERT_FILE and SSL_CERT_DIR continue
-to provide corporate CA trust. If no proxy is configured, the fetch is refused
-rather than sent direct with the blocklist disabled.
+passed to httpx2 explicitly with ``trust_env`` disabled, so the request is provably
+routed through the proxy rather than predicted to be — NO_PROXY is not evaluated in
+this mode. If no proxy is configured, the fetch is refused rather than sent direct
+with the blocklist disabled.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
-import httpx
+import httpx2
 
 import fastmcp
 from fastmcp.utilities.logging import get_logger
@@ -78,10 +78,10 @@ def _configured_proxy_url() -> str | None:
 
     Reads ``HTTPS_PROXY``/``https_proxy`` first, falling back to ``ALL_PROXY``/
     ``all_proxy``. This is a simple presence check: no host matching, no ``NO_PROXY``
-    evaluation. The caller passes the returned URL to httpx explicitly, which takes
-    precedence over environment proxy selection and NO_PROXY while preserving
-    environment-provided CA trust — see the module docstring and :func:`validate_url`
-    for why that matters.
+    evaluation. The caller passes the returned URL to httpx2 explicitly (with
+    ``trust_env`` disabled) so there is no routing decision left for httpx2 to make
+    differently than this function assumed — see the module docstring and
+    :func:`validate_url` for why that matters.
 
     Returns:
         The configured proxy URL, or None if none of the supported variables are set.
@@ -311,25 +311,24 @@ async def validate_url(url: str, require_path: bool = False) -> ValidatedURL:
     if fastmcp.settings.ssrf_trust_proxy:
         # Skipping the blocklist is only safe if the request is *actually* routed
         # through a trusted proxy, so this does not try to predict whether it will
-        # be — it controls it. Earlier revisions predicted the HTTP client's routing
-        # decision, first by approximating NO_PROXY handling with urllib's proxy
-        # bypass helper,
-        # then by replicating the client's own environment-proxy matching
-        # internally. Both were still predictions of a library with
+        # be — it controls it. Earlier revisions predicted httpx2's routing decision,
+        # first by approximating NO_PROXY handling with urllib.request.proxy_bypass(),
+        # then by replicating httpx2's own get_environment_proxies()/URLPattern
+        # matching internally. Both were still predictions of a library with
         # open-ended NO_PROXY semantics, and each was found wrong for a different
         # NO_PROXY form (port-qualified, IPv6, scheme-qualified entries each broke a
         # different revision) — always in the dangerous direction of assuming
         # "proxied" for a request that actually went out direct.
         #
         # Instead, read the proxy URL directly from the environment and hand it to
-        # httpx explicitly below. An explicit `proxy=` fixes httpx's proxy map without
-        # consulting NO_PROXY, even with `trust_env=True`; keeping trust_env enabled
-        # preserves SSL_CERT_FILE and SSL_CERT_DIR for corporate CA trust. The request
-        # therefore goes through that proxy or the connection fails. A NO_PROXY'd
-        # host is routed through the proxy rather than fetched direct with the
-        # blocklist already disabled, which is strictly safer than the alternative
-        # (see the module docstring). If no proxy is configured, there is nothing to
-        # route through, so refuse rather than fetch unprotected.
+        # httpx2 explicitly below, with trust_env disabled. With an explicit
+        # `proxy=` and `trust_env=False`, httpx2 has no routing decision left to make
+        # differently than assumed here: the request provably goes through that
+        # proxy or the connection fails. NO_PROXY is therefore not evaluated in this
+        # mode at all — a NO_PROXY'd host is routed through the proxy rather than
+        # fetched direct with the blocklist already disabled, which is strictly safer
+        # than the alternative (see the module docstring). If no proxy is configured,
+        # there is nothing to route through, so refuse rather than fetch unprotected.
         proxy_url = _configured_proxy_url()
         if proxy_url is None:
             raise SSRFError(
@@ -465,8 +464,8 @@ async def ssrf_safe_fetch_response(
         try:
             # Use httpx with streaming to enforce size limit during download
             async with (
-                httpx.AsyncClient(
-                    timeout=httpx.Timeout(
+                httpx2.AsyncClient(
+                    timeout=httpx2.Timeout(
                         connect=min(timeout, remaining),
                         read=min(timeout, remaining),
                         write=min(timeout, remaining),
@@ -474,11 +473,13 @@ async def ssrf_safe_fetch_response(
                     ),
                     follow_redirects=False,
                     verify=True,
-                    # An explicit proxy_url controls routing without consulting
-                    # environment proxy selection or NO_PROXY. Keep trust_env enabled
-                    # in both modes so SSL_CERT_FILE and SSL_CERT_DIR remain effective.
+                    # Default (pinned) mode has no proxy_url and keeps trust_env's
+                    # normal default (True). Proxy-trust mode sets an explicit
+                    # proxy_url and turns trust_env off, so httpx2 has no environment
+                    # -based routing decision left to make — see validate_url() above
+                    # for why that matters.
                     proxy=target.proxy_url,
-                    trust_env=True,
+                    trust_env=target.proxy_url is None,
                 ) as client,
                 client.stream(
                     "GET",
@@ -524,15 +525,15 @@ async def ssrf_safe_fetch_response(
                     headers=dict(response.headers),
                 )
 
-        except httpx.TimeoutException as e:
+        except httpx2.TimeoutException as e:
             last_error = e
             continue
-        except httpx.RequestError as e:
+        except httpx2.RequestError as e:
             last_error = e
             continue
 
     if last_error is not None:
-        if isinstance(last_error, httpx.TimeoutException):
+        if isinstance(last_error, httpx2.TimeoutException):
             raise SSRFFetchError(f"Timeout fetching {url}") from last_error
         raise SSRFFetchError(f"Error fetching {url}: {last_error}") from last_error
 

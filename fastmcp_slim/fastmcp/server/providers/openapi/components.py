@@ -4,16 +4,12 @@ from __future__ import annotations
 
 import json
 import re
-import warnings
-from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
-import httpx
-from mcp.types import ToolAnnotations
+import httpx2
+from mcp_types import ToolAnnotations
 from pydantic.networks import AnyUrl
 
-import fastmcp
-from fastmcp.exceptions import FastMCPDeprecationWarning
 from fastmcp.resources import (
     Resource,
     ResourceContent,
@@ -21,11 +17,12 @@ from fastmcp.resources import (
     ResourceTemplate,
 )
 from fastmcp.server.dependencies import get_http_headers
-from fastmcp.server.tasks.config import TaskConfig
 from fastmcp.tools.base import Tool, ToolResult
+from fastmcp.utilities.exceptions import is_request_error, is_timeout_error
 from fastmcp.utilities.logging import get_logger
 from fastmcp.utilities.openapi import HTTPRoute
 from fastmcp.utilities.openapi.director import RequestDirector
+from fastmcp.utilities.tasks import TaskConfig
 
 if TYPE_CHECKING:
     from fastmcp.server import Context
@@ -45,7 +42,7 @@ _SAFE_HEADERS = frozenset(
 )
 
 
-def _redact_headers(headers: httpx.Headers) -> dict[str, str]:
+def _redact_headers(headers: httpx2.Headers) -> dict[str, str]:
     return {k: v if k.lower() in _SAFE_HEADERS else "***" for k, v in headers.items()}
 
 
@@ -60,6 +57,36 @@ logger = get_logger(__name__)
 
 # Default MIME type when no response content type can be inferred
 _DEFAULT_MIME_TYPE = "application/json"
+
+
+def _raise_for_status(response: httpx2.Response) -> None:
+    """Raise an OpenAPI-formatted error without relying on client exception types."""
+    if 200 <= response.status_code < 300:
+        return
+
+    error_message = f"HTTP error {response.status_code}: {response.reason_phrase}"
+    try:
+        error_data = response.json()
+        error_message += f" - {error_data}"
+    except (json.JSONDecodeError, ValueError):
+        if response.text:
+            error_message += f" - {response.text}"
+    raise ValueError(error_message)
+
+
+async def _send_request(
+    client: httpx2.AsyncClient,
+    request: httpx2.Request,
+) -> httpx2.Response:
+    """Send a request while preserving transitional legacy-client errors."""
+    try:
+        return await client.send(request)
+    except Exception as exc:
+        if is_timeout_error(exc):
+            raise ValueError(f"HTTP request timed out ({type(exc).__name__})") from exc
+        if is_request_error(exc):
+            raise ValueError(f"Request error ({type(exc).__name__}): {exc!s}") from exc
+        raise
 
 
 def _extract_mime_type_from_route(route: HTTPRoute) -> str:
@@ -142,7 +169,7 @@ class OpenAPITool(Tool):
 
     def __init__(
         self,
-        client: httpx.AsyncClient,
+        client: httpx2.AsyncClient,
         route: HTTPRoute,
         director: RequestDirector,
         name: str,
@@ -151,16 +178,7 @@ class OpenAPITool(Tool):
         output_schema: dict[str, Any] | None = None,
         tags: set[str] | None = None,
         annotations: ToolAnnotations | None = None,
-        serializer: Callable[[Any], str] | None = None,  # Deprecated
     ):
-        if serializer is not None and fastmcp.settings.deprecation_warnings:
-            warnings.warn(
-                "The `serializer` parameter is deprecated. "
-                "Return ToolResult from your tools for full control over serialization. "
-                "See https://gofastmcp.com/servers/tools#custom-serialization for migration examples.",
-                FastMCPDeprecationWarning,
-                stacklevel=2,
-            )
         super().__init__(
             name=name,
             description=description,
@@ -168,7 +186,6 @@ class OpenAPITool(Tool):
             output_schema=output_schema,
             tags=tags or set(),
             annotations=annotations,
-            serializer=serializer,
         )
         self._client = client
         self._route = route
@@ -183,12 +200,20 @@ class OpenAPITool(Tool):
         # not HTTP failures, so we catch them separately.
         try:
             base_url = str(self._client.base_url) or "http://localhost"
-            request = self._director.build(self._route, arguments, base_url)
+            directed_request = self._director.build(self._route, arguments, base_url)
 
-            if self._client.headers:
-                for key, value in self._client.headers.items():
-                    if key not in request.headers:
-                        request.headers[key] = value
+            # Rebuild through the configured client so its default headers are
+            # merged with the directed headers taking priority.
+            request = self._client.build_request(
+                method=directed_request.method,
+                url=str(directed_request.url.copy_with(query=None)),
+                params=list(directed_request.url.params.multi_items()),
+                headers=list(directed_request.headers.raw),
+                # read() materializes streaming bodies (multipart files=)
+                # that .content would refuse with RequestNotRead; idempotent
+                # for plain byte bodies.
+                content=directed_request.read(),
+            )
 
             mcp_headers = get_http_headers()
             if mcp_headers:
@@ -207,8 +232,8 @@ class OpenAPITool(Tool):
                 f"run - sending request; headers: {_redact_headers(request.headers)}"
             )
 
-            response = await self._client.send(request)
-            response.raise_for_status()
+            response = await _send_request(self._client, request)
+            _raise_for_status(response)
 
             # Try to parse as JSON first
             try:
@@ -235,23 +260,11 @@ class OpenAPITool(Tool):
             except json.JSONDecodeError:
                 return ToolResult(content=response.text)
 
-        except httpx.HTTPStatusError as e:
-            error_message = (
-                f"HTTP error {e.response.status_code}: {e.response.reason_phrase}"
-            )
-            try:
-                error_data = e.response.json()
-                error_message += f" - {error_data}"
-            except (json.JSONDecodeError, ValueError):
-                if e.response.text:
-                    error_message += f" - {e.response.text}"
-            raise ValueError(error_message) from e
+        except httpx2.TimeoutException as exc:
+            raise ValueError(f"HTTP request timed out ({type(exc).__name__})") from exc
 
-        except httpx.TimeoutException as e:
-            raise ValueError(f"HTTP request timed out ({type(e).__name__})") from e
-
-        except httpx.RequestError as e:
-            raise ValueError(f"Request error ({type(e).__name__}): {e!s}") from e
+        except httpx2.RequestError as exc:
+            raise ValueError(f"Request error ({type(exc).__name__}): {exc!s}") from exc
 
 
 class OpenAPIResource(Resource):
@@ -261,7 +274,7 @@ class OpenAPIResource(Resource):
 
     def __init__(
         self,
-        client: httpx.AsyncClient,
+        client: httpx2.AsyncClient,
         route: HTTPRoute,
         director: RequestDirector,
         uri: str,
@@ -293,20 +306,23 @@ class OpenAPIResource(Resource):
             directed_request = self._director.build(
                 self._route, self._arguments, base_url
             )
+            # Build through the configured client so its defaults are applied.
             request = self._client.build_request(
                 method=directed_request.method,
-                url=directed_request.url.copy_with(query=None),
-                params=directed_request.url.params,
-                headers=directed_request.headers,
-                content=directed_request.content,
-                extensions=directed_request.extensions,
+                url=str(directed_request.url.copy_with(query=None)),
+                params=list(directed_request.url.params.multi_items()),
+                headers=list(directed_request.headers.raw),
+                # read() materializes streaming bodies (multipart files=)
+                # that .content would refuse with RequestNotRead; idempotent
+                # for plain byte bodies.
+                content=directed_request.read(),
             )
             mcp_headers = get_http_headers()
             if mcp_headers:
                 request.headers.update(mcp_headers)
 
-            response = await self._client.send(request)
-            response.raise_for_status()
+            response = await _send_request(self._client, request)
+            _raise_for_status(response)
 
             content_type = response.headers.get("content-type", "").lower()
 
@@ -334,23 +350,11 @@ class OpenAPIResource(Resource):
                     ]
                 )
 
-        except httpx.HTTPStatusError as e:
-            error_message = (
-                f"HTTP error {e.response.status_code}: {e.response.reason_phrase}"
-            )
-            try:
-                error_data = e.response.json()
-                error_message += f" - {error_data}"
-            except (json.JSONDecodeError, ValueError):
-                if e.response.text:
-                    error_message += f" - {e.response.text}"
-            raise ValueError(error_message) from e
+        except httpx2.TimeoutException as exc:
+            raise ValueError(f"HTTP request timed out ({type(exc).__name__})") from exc
 
-        except httpx.TimeoutException as e:
-            raise ValueError(f"HTTP request timed out ({type(e).__name__})") from e
-
-        except httpx.RequestError as e:
-            raise ValueError(f"Request error ({type(e).__name__}): {e!s}") from e
+        except httpx2.RequestError as exc:
+            raise ValueError(f"Request error ({type(exc).__name__}): {exc!s}") from exc
 
 
 def _path_argument_name(route: HTTPRoute, parameter_name: str) -> str:
@@ -367,7 +371,7 @@ class OpenAPIResourceTemplate(ResourceTemplate):
 
     def __init__(
         self,
-        client: httpx.AsyncClient,
+        client: httpx2.AsyncClient,
         route: HTTPRoute,
         director: RequestDirector,
         uri_template: str,
