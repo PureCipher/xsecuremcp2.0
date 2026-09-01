@@ -11,27 +11,139 @@ MVP constraints:
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlencode
 
 import httpx
 from mcp.server.lowlevel.server import LifespanResultT
 
+from fastmcp.server.security.policy.policies.allowlist import AllowlistPolicy
 from purecipher.openapi_store import OpenAPIStore, extract_openapi_operations
-from purecipher.outbound_security import validate_outbound_url
+from purecipher.outbound_security import (
+    DEFAULT_MAX_RESPONSE_BYTES,
+    PinnedDNSAsyncTransport,
+    encode_outbound_path_segment,
+    read_response_body_limited,
+    validate_outbound_url,
+)
 from securemcp import SecureMCP
-from securemcp.config import SecurityConfig
+from securemcp.config import (
+    AlertConfig,
+    PolicyConfig,
+    ProvenanceConfig,
+    SecurityConfig,
+)
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from fastmcp.server.security.orchestrator import SecurityContext
+
+
+class UnsafeOutboundHeaderError(ValueError):
+    """Raised when a hosted caller tries to control a sensitive header."""
+
+
+_BLOCKED_REQUEST_HEADERS = frozenset(
+    {
+        "authorization",
+        "connection",
+        "content-length",
+        "cookie",
+        "cookie2",
+        "cf-connecting-ip",
+        "expect",
+        "forwarded",
+        "host",
+        "keep-alive",
+        "proxy-authorization",
+        "proxy-connection",
+        "origin",
+        "referer",
+        "te",
+        "trailer",
+        "transfer-encoding",
+        "true-client-ip",
+        "upgrade",
+        "x-client-ip",
+        "x-cluster-client-ip",
+        "x-http-method-override",
+        "x-method-override",
+        "x-original-url",
+        "x-real-ip",
+        "x-rewrite-url",
+    }
+)
+
+
+def _encode_path_segment(value: Any) -> str:
+    return encode_outbound_path_segment(str(value))
 
 
 def _format_path(path_template: str, values: dict[str, Any]) -> str:
     out = path_template
     for key, value in values.items():
-        out = out.replace(
-            "{" + str(key) + "}",
-            httpx.QueryParams({str(key): str(value)}).get(str(key)) or str(value),
-        )
+        out = out.replace("{" + str(key) + "}", _encode_path_segment(value))
     return out
+
+
+def _safe_request_headers(values: Mapping[Any, Any]) -> dict[str, str]:
+    headers: dict[str, str] = {}
+    for raw_name, raw_value in values.items():
+        name = str(raw_name).strip()
+        normalized = name.lower()
+        if (
+            not name
+            or normalized in _BLOCKED_REQUEST_HEADERS
+            or normalized.startswith("x-forwarded-")
+            or normalized.startswith("proxy-")
+        ):
+            raise UnsafeOutboundHeaderError(
+                f"Hosted callers may not forward the {name or '<empty>'!r} header"
+            )
+        value = str(raw_value)
+        if "\r" in value or "\n" in value:
+            raise UnsafeOutboundHeaderError(
+                f"Hosted caller header {name!r} contains a line break"
+            )
+        headers[name] = value
+    return headers
+
+
+def build_openapi_gateway_security(
+    toolset: Mapping[str, Any],
+    *,
+    shared_context: SecurityContext | None = None,
+) -> SecurityConfig:
+    """Create an isolated policy with shared registry audit components."""
+    toolset_id = str(toolset.get("toolset_id") or "unknown")
+    prefix = str(toolset.get("tool_name_prefix") or "").strip()
+    allowed = {
+        f"{prefix}.{operation}" if prefix else str(operation)
+        for operation in toolset.get("selected_operations") or []
+        if str(operation).strip()
+    }
+    shared_ledger = shared_context.provenance_ledger if shared_context else None
+    shared_event_bus = shared_context.event_bus if shared_context else None
+    return SecurityConfig(
+        policy=PolicyConfig(
+            providers=[
+                AllowlistPolicy(
+                    allowed=allowed,
+                    policy_id=f"hosted-toolset-allowlist-{toolset_id}",
+                )
+            ],
+            fail_closed=True,
+        ),
+        provenance=ProvenanceConfig(
+            ledger=shared_ledger,
+            ledger_id=f"hosted-toolset-{toolset_id}",
+        ),
+        alerts=AlertConfig(event_bus=shared_event_bus),
+        enabled=True,
+    )
 
 
 @dataclass
@@ -40,6 +152,7 @@ class OpenAPIGatewayConfig:
     persistence_path: str
     upstream_base_url: str
     timeout_seconds: float = 12.0
+    max_response_bytes: int = DEFAULT_MAX_RESPONSE_BYTES
 
 
 class OpenAPIGateway(SecureMCP[LifespanResultT]):
@@ -55,23 +168,31 @@ class OpenAPIGateway(SecureMCP[LifespanResultT]):
         **kwargs: Any,
     ) -> None:
         validate_outbound_url(config.upstream_base_url)
-        super().__init__(
-            name=name, security=security, mount_security_api=False, **kwargs
-        )
+        if config.max_response_bytes <= 0:
+            raise ValueError("max_response_bytes must be greater than zero")
         self._config = config
         self._store = OpenAPIStore(config.persistence_path)
+        toolset = self._store.get_toolset(config.toolset_id)
+        if toolset is None:
+            raise ValueError(f"Unknown toolset_id {config.toolset_id!r}")
+        effective_security = security or build_openapi_gateway_security(toolset)
+        kwargs.setdefault("bypass_stdio", False)
+        super().__init__(
+            name=name,
+            security=effective_security,
+            mount_security_api=False,
+            **kwargs,
+        )
+        self._http_client: httpx.AsyncClient
+        self._mount_toolset(toolset)
         self._http_client = http_client or httpx.AsyncClient(
-            base_url=config.upstream_base_url.rstrip("/"),
             timeout=config.timeout_seconds,
             headers={"accept": "application/json"},
+            transport=PinnedDNSAsyncTransport(),
         )
         self._owns_client = http_client is None
-        self._mount_toolset()
 
-    def _mount_toolset(self) -> None:
-        toolset = self._store.get_toolset(self._config.toolset_id)
-        if toolset is None:
-            raise ValueError(f"Unknown toolset_id {self._config.toolset_id!r}")
+    def _mount_toolset(self, toolset: Mapping[str, Any]) -> None:
         source_id = str(toolset.get("source_id") or "")
         spec = self._store.get_source_spec(source_id)
         if spec is None:
@@ -110,7 +231,7 @@ class OpenAPIGateway(SecureMCP[LifespanResultT]):
                     dict(query_values) if isinstance(query_values, dict) else {}
                 )
                 header_dict = (
-                    {str(k): str(v) for k, v in dict(header_values).items()}
+                    _safe_request_headers(header_values)
                     if isinstance(header_values, dict)
                     else {}
                 )
@@ -119,26 +240,25 @@ class OpenAPIGateway(SecureMCP[LifespanResultT]):
                 qs = urlencode(
                     {k: v for k, v in query_dict.items() if v is not None}, doseq=True
                 )
-                url = f"{url_path}{'?' + qs if qs else ''}"
+                upstream = self._config.upstream_base_url.rstrip("/")
+                url = f"{upstream}/{url_path.lstrip('/')}"
+                if qs:
+                    url = f"{url}?{qs}"
+                validate_outbound_url(url)
 
-                res = await self._http_client.request(
+                async with self._http_client.stream(
                     _m.upper(),
                     url,
                     headers=header_dict or None,
                     json=body_value if body_value is not None else None,
                     follow_redirects=False,
-                )
-
-                text = await res.aread()
-                # Best effort JSON decode; fall back to text.
-                parsed: Any
-                try:
-                    parsed = res.json()
-                except Exception:
-                    parsed = text.decode("utf-8", errors="replace")
-                return {
-                    "status_code": res.status_code,
-                    "headers": {
+                ) as res:
+                    response_body = await read_response_body_limited(
+                        res,
+                        max_bytes=self._config.max_response_bytes,
+                    )
+                    status_code = res.status_code
+                    response_headers = {
                         k: v
                         for k, v in res.headers.items()
                         if k.lower()
@@ -149,7 +269,18 @@ class OpenAPIGateway(SecureMCP[LifespanResultT]):
                             "content-type",
                             "etag",
                         }
-                    },
+                    }
+                    encoding = res.encoding or "utf-8"
+
+                # Best effort JSON decode; fall back to text.
+                parsed: Any
+                try:
+                    parsed = json.loads(response_body)
+                except ValueError:
+                    parsed = response_body.decode(encoding, errors="replace")
+                return {
+                    "status_code": status_code,
+                    "headers": response_headers,
                     "data": parsed,
                 }
 
@@ -165,4 +296,6 @@ class OpenAPIGateway(SecureMCP[LifespanResultT]):
 __all__ = [
     "OpenAPIGateway",
     "OpenAPIGatewayConfig",
+    "UnsafeOutboundHeaderError",
+    "build_openapi_gateway_security",
 ]

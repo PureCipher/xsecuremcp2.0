@@ -29,7 +29,7 @@ SecureMCP is organized into composable layers that can be used independently or 
 
 **Consent** — `ConsentGraph` tracks who granted what permissions to whom, with delegation chains and temporal scoping.
 
-**Marketplace** — `ToolMarketplace` provides publishing, discovery, reviews, and install tracking for MCP tools. `MarketplaceDataBridge` exports marketplace state as React-compatible JSON.
+**Marketplace** — `ToolMarketplace` provides publishing, discovery, reviews, and install tracking for MCP tools. When an install requests signature verification, the marketplace fails closed unless a trusted cryptographic attestation verifier is attached. `SecurityOrchestrator` wires the configured `CertificationPipeline` as that verifier automatically. `MarketplaceDataBridge` exports marketplace state as React-compatible JSON.
 
 **Alerts** — `SecurityEventBus` provides pub/sub with severity-based routing and composable filters. All components emit events to the bus.
 

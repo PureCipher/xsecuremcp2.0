@@ -3,8 +3,11 @@ from __future__ import annotations
 import json
 from typing import Any, cast
 
+import pytest
+from mcp.shared.exceptions import MCPError
 from starlette.testclient import TestClient
 
+from fastmcp import Client
 from fastmcp.server.security.certification.attestation import CertificationLevel
 from fastmcp.server.security.certification.manifest import (
     DataClassification,
@@ -277,6 +280,24 @@ class TestPureCipherRegistry:
         assert detail["attestation"]["tool_name"] == "weather-lookup"
         assert detail["trust_score"] is not None
         assert detail["verification"]["valid"] is True
+
+    def test_verified_install_uses_registry_certification_pipeline(self):
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
+        submission = registry.submit_tool(
+            _manifest(tool_name="verified-install"),
+            display_name="Verified Install",
+            categories={ToolCategory.NETWORK},
+            requested_level=CertificationLevel.BASIC,
+        )
+        assert submission.listing is not None
+
+        install = registry._marketplace().install(
+            submission.listing.listing_id,
+            verify_signature=True,
+        )
+
+        assert install is not None
+        assert install.signature_verified is True
 
     def test_registry_notifications_surface_after_submit(self):
         registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
@@ -4020,6 +4041,9 @@ class TestRuntimeControlPlaneToggles:
         assert not any(
             isinstance(m, ContractValidationMiddleware) for m in ctx.middleware
         )
+        assert not any(
+            isinstance(m, ContractValidationMiddleware) for m in registry.middleware
+        )
 
     def test_enable_attaches_plane_attribute_and_middleware(self):
         from fastmcp.server.security.middleware.consent_enforcement import (
@@ -4039,6 +4063,57 @@ class TestRuntimeControlPlaneToggles:
         registry.enable_plane("consent", actor_id="alice")
         assert ctx.consent_graph is not None
         assert any(isinstance(m, ConsentEnforcementMiddleware) for m in ctx.middleware)
+        assert any(
+            isinstance(m, ConsentEnforcementMiddleware) for m in registry.middleware
+        )
+
+    async def test_runtime_enable_changes_live_mcp_dispatch(self):
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            mount_registry_api=False,
+            mount_security_api=False,
+            enable_contracts=False,
+            enable_consent=False,
+            enable_provenance=False,
+            enable_reflexive=False,
+        )
+
+        @registry.tool
+        def runtime_enable_probe() -> str:
+            return "allowed"
+
+        async with Client(registry) as client:
+            result = await client.call_tool("runtime_enable_probe", {})
+            assert result.content[0].text == "allowed"
+
+            registry.enable_plane("consent", actor_id="alice")
+
+            with pytest.raises(MCPError):
+                await client.call_tool("runtime_enable_probe", {})
+
+    async def test_runtime_disable_changes_live_mcp_dispatch(self):
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            mount_registry_api=False,
+            mount_security_api=False,
+            enable_contracts=False,
+            enable_consent=True,
+            enable_provenance=False,
+            enable_reflexive=False,
+        )
+
+        @registry.tool
+        def runtime_disable_probe() -> str:
+            return "allowed"
+
+        async with Client(registry) as client:
+            with pytest.raises(MCPError):
+                await client.call_tool("runtime_disable_probe", {})
+
+            registry.disable_plane("consent", actor_id="alice")
+
+            result = await client.call_tool("runtime_disable_probe", {})
+            assert result.content[0].text == "allowed"
 
     def test_disable_then_enable_each_plane_independently(self):
         """All four opt-in planes must round-trip cleanly through
@@ -4388,11 +4463,13 @@ class TestRegistryClientIdentities:
         registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
         ctx = registry._required_context()
         chain = list(ctx.middleware)
+        live_chain = list(registry.middleware)
 
         assert isinstance(chain[0], ClientActorResolverMiddleware), (
             "ClientActorResolverMiddleware must run first so the "
             "downstream middlewares can read the resolved slug."
         )
+        assert isinstance(live_chain[0], ClientActorResolverMiddleware)
 
         chain_types = {type(m) for m in chain}
         assert ClientAwarePolicyEnforcementMiddleware in chain_types
@@ -4400,6 +4477,13 @@ class TestRegistryClientIdentities:
         assert ClientAwareConsentEnforcementMiddleware in chain_types
         assert ClientAwareProvenanceRecordingMiddleware in chain_types
         assert ClientAwareReflexiveMiddleware in chain_types
+
+        live_chain_types = {type(m) for m in live_chain}
+        assert ClientAwarePolicyEnforcementMiddleware in live_chain_types
+        assert ClientAwareContractValidationMiddleware in live_chain_types
+        assert ClientAwareConsentEnforcementMiddleware in live_chain_types
+        assert ClientAwareProvenanceRecordingMiddleware in live_chain_types
+        assert ClientAwareReflexiveMiddleware in live_chain_types
 
     def test_get_client_governance_projects_per_plane_summary(self):
         registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)

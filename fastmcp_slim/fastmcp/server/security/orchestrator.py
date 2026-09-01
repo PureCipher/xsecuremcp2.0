@@ -413,6 +413,10 @@ class SecurityOrchestrator:
                 ),
             )
             ctx.certification_pipeline = pipeline
+            if ctx.tool_marketplace is not None:
+                ctx.tool_marketplace.attach_attestation_verifier(
+                    pipeline.verify_attestation
+                )
             logger.debug("Certification pipeline enabled")
 
         # --- API Gateway ---

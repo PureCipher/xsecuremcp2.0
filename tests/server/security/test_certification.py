@@ -758,6 +758,18 @@ class TestAttestationVerification:
         assert not verification.valid
         assert any("revoked" in issue for issue in verification.issues)
 
+    def test_revocation_cannot_be_undone_by_mutating_unsigned_status(self):
+        pipeline = CertificationPipeline(crypto_handler=_crypto())
+        result = pipeline.certify(_good_manifest())
+        pipeline.revoke(result.attestation.attestation_id, reason="compromised")
+
+        result.attestation.status = AttestationStatus.VALID
+
+        verification = pipeline.verify_attestation(result.attestation)
+        assert verification.signature_valid
+        assert not verification.valid
+        assert any("revoked" in issue for issue in verification.issues)
+
     def test_verify_unsigned_attestation(self):
         pipeline = CertificationPipeline()  # no crypto
         result = pipeline.certify(_good_manifest())
