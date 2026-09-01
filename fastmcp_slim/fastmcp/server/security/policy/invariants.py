@@ -15,6 +15,8 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Protocol, cast, runtime_checkable
 
+from fastmcp.server.security.expression import evaluate_boolean_expression
+
 logger = logging.getLogger(__name__)
 
 
@@ -84,16 +86,11 @@ class InvariantVerifier(Protocol):
 
 
 class ExpressionInvariantVerifier:
-    """A simple invariant verifier that evaluates Python expressions.
+    """A simple invariant verifier for constrained data expressions.
 
-    The expression is evaluated in a restricted namespace with the
-    provided context. This is suitable for basic invariant checking
-    but NOT for untrusted input.
-
-    Warning:
-        Only use with trusted invariant expressions from your own
-        policy definitions. Never evaluate expressions from external
-        sources.
+    Expressions support comparisons, boolean/arithmetic operators, built-in
+    collections, comprehensions, and a small allowlist of data-only functions.
+    Attribute/method calls and context-provided callables are never executed.
     """
 
     def __init__(self, verifier_id: str = "expression-verifier") -> None:
@@ -115,38 +112,11 @@ class ExpressionInvariantVerifier:
             Verification result indicating whether the invariant holds.
         """
         try:
-            # Evaluate in restricted namespace
-            namespace: dict[str, Any] = {
-                "__builtins__": {
-                    "len": len,
-                    "all": all,
-                    "any": any,
-                    "min": min,
-                    "max": max,
-                    "sum": sum,
-                    "abs": abs,
-                    "isinstance": isinstance,
-                    "str": str,
-                    "int": int,
-                    "float": float,
-                    "bool": bool,
-                    "list": list,
-                    "dict": dict,
-                    "set": set,
-                    "tuple": tuple,
-                    "True": True,
-                    "False": False,
-                    "None": None,
-                },
-            }
-            namespace.update(context)
-
-            # Evaluate expression
-            result = eval(invariant.expression, namespace)
+            result = evaluate_boolean_expression(invariant.expression, context)
 
             return InvariantVerificationResult(
                 invariant=invariant,
-                satisfied=bool(result),
+                satisfied=result,
                 counter_example=None if result else {"context": context},
                 verifier_id=self._verifier_id,
             )
