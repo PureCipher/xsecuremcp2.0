@@ -42,6 +42,8 @@ SecureMCP is organized into composable layers that can be used independently or 
 If you're building a SecureMCP-first server, use `SecureMCP`. It wraps `FastMCP` and attaches the security layer through the same public hooks exposed by `attach_security()`, so the integration stays additive while giving SecureMCP its own server surface.
 
 ```python
+import os
+
 from fastmcp.server.security.gateway.tool_marketplace import ToolCategory
 from securemcp import SecureMCP
 from securemcp.config import (
@@ -70,6 +72,7 @@ server = SecureMCP(
     "my-secure-server",
     security=config,
     mount_security_api=True,
+    security_api_bearer_token=os.environ["SECUREMCP_API_TOKEN"],
 )
 ctx = server.security_context
 assert ctx is not None
@@ -88,9 +91,52 @@ ctx.tool_marketplace.publish(
 server.run(transport="streamable-http")
 ```
 
-After starting, visit `http://localhost:8000/security/health` to verify the security layer is active.
+After starting, request `http://localhost:8000/security/health` with `Authorization: Bearer <your SECUREMCP_API_TOKEN>` to verify the security layer is active.
 
-If you're attaching SecureMCP to an existing `FastMCP` server instead, use `attach_security(server, config)` and `mount_security_routes(server)`. `SecureMCP` is the higher-level facade; the helper path remains the low-level integration surface.
+If you're attaching SecureMCP to an existing `FastMCP` server instead, use `attach_security(server, config)` and `mount_security_routes(server, bearer_token=...)`. `SecureMCP` is the higher-level facade; the helper path remains the low-level integration surface.
+
+## HTTP API Authorization
+
+The SecureMCP HTTP API separates authentication from authorization. A static `bearer_token` authenticates one shared administrator identity. For OAuth, JWT, session, or API-key integrations, pass an `auth_verifier` that returns a verified principal dictionary.
+
+The built-in authorizer recognizes three hierarchical capabilities:
+
+- `security:read` permits observational endpoints.
+- `security:operate` also includes read access and permits bounded actions such as simulations, verification, marketplace installs, contract negotiation, and consent evaluation.
+- `security:admin` includes every capability and permits policy mutation, moderation, revocation, and consent administration.
+
+Custom principals can supply these values through `capabilities`, `permissions`, `scopes`, `scope`, or `scp`. A principal with no capability claim is read-only for compatibility. An explicit empty or invalid capability claim grants no access. Operations require a stable identity in `sub`, `actor`, `id`, or `client_id`.
+
+This runnable verifier illustrates the principal contract while keeping the shared secret outside source control:
+
+```python
+import hmac
+import os
+
+from fastmcp import FastMCP
+from fastmcp.server.security.http import mount_security_routes
+from starlette.requests import Request
+
+expected_token = os.environ["SECUREMCP_OPERATOR_TOKEN"]
+
+
+def verify_operator(request: Request, token: str) -> dict[str, object] | None:
+    del request
+    if not hmac.compare_digest(token, expected_token):
+        return None
+    return {
+        "sub": "deployment-agent",
+        "scope": "security:read security:operate",
+    }
+
+
+server = FastMCP("secure-server")
+mount_security_routes(server, auth_verifier=verify_operator)
+```
+
+Identity-bearing routes are bound to the verified principal: a non-admin cannot submit another `agent_id`, `installer_id`, or signer identity, and audit attribution fields such as policy authors and moderators are taken from the principal rather than the request body. Administrators may explicitly operate on a subject's behalf, but recorded administrative attribution remains the authenticated administrator.
+
+For an external authorization system, pass an `authorizer(request, principal, required_capability)` callback. It may be synchronous or asynchronous and must return exactly `True` to allow the route. False results and exceptions fail closed with HTTP 403. If that callback grants administrative routes, include `security:admin` in the principal as well when the caller needs administrator-only subject delegation.
 
 For local command-line workflows, this repo exposes both `fastmcp` and `securemcp` console entrypoints.
 

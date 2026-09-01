@@ -155,6 +155,24 @@ class TestPureCipherRegistry:
         assert "/registry/openapi/ingest" in paths
         assert "/registry/openapi/toolset" in paths
 
+    def test_registry_admin_session_can_use_security_admin_routes(self):
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            auth_settings=_auth_settings(),
+            persistence_path=":memory:",
+        )
+
+        with TestClient(registry.http_app()) as client:
+            login = client.post(
+                "/registry/login",
+                json={"username": "admin", "password": "admin123"},
+            )
+            assert login.status_code == 200
+
+            response = client.get("/security/marketplace/moderation")
+
+        assert response.status_code == 200
+
     def test_http_registry_openapi_ingest_and_toolset(self):
         registry = PureCipherRegistry(
             signing_secret=TEST_SIGNING_SECRET,

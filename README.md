@@ -50,6 +50,8 @@ So the right answer is:
 ## Quickstart
 
 ```python
+import os
+
 from securemcp import SecureMCP
 from securemcp.config import PolicyConfig, RegistryConfig, SecurityConfig
 
@@ -60,6 +62,7 @@ server = SecureMCP(
         registry=RegistryConfig(),
     ),
     mount_security_api=True,
+    security_api_bearer_token=os.environ["SECUREMCP_API_TOKEN"],
 )
 
 

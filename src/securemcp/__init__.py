@@ -3,7 +3,12 @@
 from importlib.metadata import version as _version
 
 from securemcp.config import SecurityConfig
-from securemcp.http import SecurityAPI, mount_security_routes
+from securemcp.http import (
+    SecurityAPI,
+    SecurityAuthorizer,
+    SecurityCapability,
+    mount_security_routes,
+)
 from securemcp.integration import (
     attach_security,
     attach_security_context,
@@ -18,6 +23,8 @@ __version__ = _version("fastmcp")
 __all__ = [
     "SecureMCP",
     "SecurityAPI",
+    "SecurityAuthorizer",
+    "SecurityCapability",
     "SecurityConfig",
     "SecuritySettings",
     "attach_security",

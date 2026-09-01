@@ -5,13 +5,18 @@ compliance, audit, trust, and provenance data to frontends.
 
 Usage with FastMCP::
 
+    import os
+
     from fastmcp import FastMCP
     from fastmcp.server.security import SecurityConfig, attach_security
     from fastmcp.server.security.http import mount_security_routes
 
     server = FastMCP("my-server")
     attach_security(server, SecurityConfig(...))
-    mount_security_routes(server)
+    mount_security_routes(
+        server,
+        bearer_token=os.environ["SECUREMCP_API_TOKEN"],
+    )
     # Now GET /security/dashboard, /security/marketplace, etc. are live.
 
 Standalone usage::
@@ -38,11 +43,20 @@ import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+from fastmcp.server.security.http.authorization import (
+    SecurityAuthorizer,
+    SecurityCapability,
+    principal_actor,
+    principal_has_capability,
+    request_principal,
+    request_principal_actor,
+    request_principal_is_admin,
+)
 from fastmcp.server.security.http.policy_routes import mount_policy_routes
 from fastmcp.server.security.integration import get_security_context
 from fastmcp.server.security.policy.serialization import (
@@ -133,9 +147,15 @@ class SecurityAPI:
         This is the recommended way to construct a SecurityAPI when
         using the SecurityOrchestrator::
 
+            import os
+
             ctx = SecurityOrchestrator.bootstrap(config)
             api = SecurityAPI.from_context(ctx)
-            mount_security_routes(server, api=api)
+            mount_security_routes(
+                server,
+                api=api,
+                bearer_token=os.environ["SECUREMCP_API_TOKEN"],
+            )
 
         Args:
             ctx: A SecurityContext returned by SecurityOrchestrator.bootstrap().
@@ -2826,7 +2846,11 @@ def _make_bearer_token_verifier(expected_token: str) -> SecurityAuthVerifier:
 
     def _verify(_request: Request, presented: str) -> dict[str, Any] | None:
         if hmac.compare_digest(expected, presented.encode("utf-8")):
-            return {"actor": "shared-secret", "auth": "bearer-token"}
+            return {
+                "actor": "shared-secret",
+                "auth": "bearer-token",
+                "capabilities": [SecurityCapability.ADMIN.value],
+            }
         return None
 
     return _verify
@@ -2840,8 +2864,9 @@ async def _resolve_principal(
     result = verifier(request, token)
     if inspect.isawaitable(result):
         result = await result
-    if result and isinstance(result, dict):
-        return result
+    if type(result) is dict and result:
+        if all(type(key) is str for key in result):
+            return cast(dict[str, Any], result.copy())
     return None
 
 
@@ -2853,13 +2878,12 @@ def mount_security_routes(
     require_auth: bool = True,
     bearer_token: str | None = None,
     auth_verifier: SecurityAuthVerifier | None = None,
+    authorizer: SecurityAuthorizer | None = None,
 ) -> SecurityAPI:
     """Mount SecureMCP HTTP routes on a FastMCP server.
 
-    All routes are authenticated by default. The destructive endpoints
-    (policy import, version rollback, marketplace moderation, contract
-    signing, etc.) require a verified bearer token before any handler
-    runs. There are three ways to configure auth, in order of precedence:
+    All routes are authenticated and capability-authorized by default.
+    Authentication is configured in this order of precedence:
 
     1. ``auth_verifier``: a callable returning a principal dict on
        success or ``None`` on failure. Use this for custom JWT, OAuth
@@ -2875,6 +2899,13 @@ def mount_security_routes(
     at mount time — the mount fails closed rather than silently
     accepting all callers.
 
+    The built-in authorizer reads ``capabilities``, ``permissions``,
+    ``scopes``, ``scope``, or ``scp`` from custom principal dictionaries.
+    ``security:admin`` grants every capability, ``security:operate`` also
+    grants ``security:read``, and principals without any capability claim
+    are read-only for compatibility. Static bearer tokens are administrators.
+    Supply ``authorizer`` to integrate an external authorization policy.
+
     Args:
         server: The FastMCP server instance.
         prefix: URL prefix for all security routes (default ``/security``).
@@ -2885,11 +2916,16 @@ def mount_security_routes(
             secret pattern. Mutually compatible with ``auth_verifier``;
             if both are passed, ``auth_verifier`` takes precedence.
         auth_verifier: Custom token verifier. See :data:`SecurityAuthVerifier`.
+        authorizer: Optional custom capability authorizer. It receives the
+            request, verified principal, and required capability. Exceptions
+            and false results fail closed with HTTP 403.
 
     Returns:
         The SecurityAPI instance (for further customization).
 
     Example::
+
+        import os
 
         from fastmcp import FastMCP
         from fastmcp.server.security import SecurityConfig, attach_security
@@ -2933,6 +2969,11 @@ def mount_security_routes(
 
     async def _enforce_auth(request: Request) -> JSONResponse | None:
         if not require_auth:
+            request.state.security_principal = {
+                "actor": "anonymous",
+                "auth": "disabled",
+                "capabilities": [SecurityCapability.ADMIN.value],
+            }
             return None
         assert verifier is not None  # require_auth=True implies verifier is set
         header = request.headers.get("authorization", "")
@@ -2962,8 +3003,62 @@ def mount_security_routes(
         request.state.security_principal = principal
         return None
 
-    def _secured_route(path: str, *, methods: list[str]):
-        """Wrap the user's route handler with the auth gate."""
+    async def _enforce_authorization(
+        request: Request,
+        required: SecurityCapability,
+    ) -> JSONResponse | None:
+        principal = request_principal(request)
+        if principal is None:
+            return JSONResponse(
+                {"error": "Authenticated principal is unavailable"},
+                status_code=401,
+            )
+        if (
+            required is not SecurityCapability.READ
+            and principal_actor(principal) is None
+        ):
+            return JSONResponse(
+                {
+                    "error": "A stable principal identity is required",
+                    "required_capability": required.value,
+                },
+                status_code=403,
+            )
+
+        if authorizer is None:
+            allowed = principal_has_capability(principal, required)
+        else:
+            try:
+                result = authorizer(request, principal, required)
+                if inspect.isawaitable(result):
+                    result = await result
+                allowed = result is True
+            except Exception:
+                logger.exception(
+                    "SecureMCP HTTP authorizer failed for %s %s",
+                    request.method,
+                    request.url.path,
+                )
+                allowed = False
+
+        if allowed:
+            request.state.security_required_capability = required.value
+            return None
+        return JSONResponse(
+            {
+                "error": "Principal is not authorized for this operation",
+                "required_capability": required.value,
+            },
+            status_code=403,
+        )
+
+    def _secured_route(
+        path: str,
+        *,
+        methods: list[str],
+        capability: SecurityCapability = SecurityCapability.READ,
+    ):
+        """Wrap the user's route handler with authentication and authorization."""
 
         def decorator(handler):
             @functools.wraps(handler)
@@ -2971,11 +3066,86 @@ def mount_security_routes(
                 denial = await _enforce_auth(request)
                 if denial is not None:
                     return denial
+                denial = await _enforce_authorization(request, capability)
+                if denial is not None:
+                    return denial
                 return await handler(request)
 
             return server.custom_route(path, methods=methods)(wrapped)
 
         return decorator
+
+    def _bind_subject(
+        request: Request,
+        requested: Any,
+        *,
+        field_name: str,
+    ) -> tuple[str | None, JSONResponse | None]:
+        actor = request_principal_actor(request)
+        if actor is None:
+            return None, JSONResponse(
+                {"error": "A stable principal identity is required"},
+                status_code=403,
+            )
+        requested_actor = requested.strip() if type(requested) is str else ""
+        if (
+            requested_actor
+            and requested_actor != actor
+            and not request_principal_is_admin(request)
+        ):
+            return None, JSONResponse(
+                {"error": f"Principal cannot act as a different {field_name}"},
+                status_code=403,
+            )
+        return (
+            requested_actor
+            if requested_actor and request_principal_is_admin(request)
+            else actor,
+            None,
+        )
+
+    def _authorize_contract_access(
+        request: Request,
+        contract_id: str,
+    ) -> JSONResponse | None:
+        if request_principal_is_admin(request):
+            return None
+        if api.broker is None:
+            return JSONResponse(
+                {"error": "Contract ownership cannot be verified"},
+                status_code=403,
+            )
+        contract = api.broker.get_contract(contract_id)
+        if contract is None:
+            return None
+        actor = request_principal_actor(request)
+        if actor in {contract.agent_id, contract.server_id}:
+            return None
+        return JSONResponse(
+            {"error": "Principal cannot access another agent's contract"},
+            status_code=403,
+        )
+
+    def _authorize_session_access(
+        request: Request,
+        session_id: str,
+    ) -> JSONResponse | None:
+        if request_principal_is_admin(request):
+            return None
+        if api.broker is None:
+            return JSONResponse(
+                {"error": "Session ownership cannot be verified"},
+                status_code=403,
+            )
+        session = api.broker.get_session(session_id)
+        if session is None:
+            return None
+        if request_principal_actor(request) in {session.agent_id, session.server_id}:
+            return None
+        return JSONResponse(
+            {"error": "Principal cannot access another agent's session"},
+            status_code=403,
+        )
 
     # Dashboard
     @_secured_route(f"{prefix}/dashboard", methods=["GET"])
@@ -2989,57 +3159,95 @@ def mount_security_routes(
         category = request.query_params.get("category")
         return JSONResponse(api.get_marketplace(query=query, category=category))
 
+    # Register this static path before /marketplace/{listing_id}; Starlette
+    # resolves routes in declaration order.
+    @_secured_route(
+        f"{prefix}/marketplace/moderation",
+        methods=["GET"],
+        capability=SecurityCapability.ADMIN,
+    )
+    async def marketplace_moderation_queue_endpoint(request: Request) -> JSONResponse:
+        return JSONResponse(api.marketplace_moderation_queue())
+
     @_secured_route(f"{prefix}/marketplace/{{listing_id}}", methods=["GET"])
     async def marketplace_detail_endpoint(request: Request) -> JSONResponse:
         lid = request.path_params.get("listing_id", "")
         return JSONResponse(api.get_marketplace_listing(lid))
 
-    @_secured_route(f"{prefix}/marketplace/{{listing_id}}/install", methods=["POST"])
+    @_secured_route(
+        f"{prefix}/marketplace/{{listing_id}}/install",
+        methods=["POST"],
+        capability=SecurityCapability.OPERATE,
+    )
     async def marketplace_install_endpoint(request: Request) -> JSONResponse:
         lid = request.path_params.get("listing_id", "")
         try:
             body = await request.json()
         except Exception:
             body = {}
+        if type(body) is not dict:
+            body = {}
+        installer_id, denial = _bind_subject(
+            request,
+            body.get("installer_id", ""),
+            field_name="installer",
+        )
+        if denial is not None:
+            return denial
         return JSONResponse(
             api.marketplace_install(
                 lid,
-                installer_id=body.get("installer_id", ""),
+                installer_id=installer_id or "",
                 version=body.get("version"),
                 verify_signature=body.get("verify_signature", False),
             )
         )
 
-    @_secured_route(f"{prefix}/marketplace/{{listing_id}}/uninstall", methods=["POST"])
+    @_secured_route(
+        f"{prefix}/marketplace/{{listing_id}}/uninstall",
+        methods=["POST"],
+        capability=SecurityCapability.OPERATE,
+    )
     async def marketplace_uninstall_endpoint(request: Request) -> JSONResponse:
         lid = request.path_params.get("listing_id", "")
         try:
             body = await request.json()
         except Exception:
             body = {}
+        if type(body) is not dict:
+            body = {}
+        installer_id, denial = _bind_subject(
+            request,
+            body.get("installer_id", ""),
+            field_name="installer",
+        )
+        if denial is not None:
+            return denial
         return JSONResponse(
-            api.marketplace_uninstall(lid, installer_id=body.get("installer_id", ""))
+            api.marketplace_uninstall(lid, installer_id=installer_id or "")
         )
 
-    @_secured_route(f"{prefix}/marketplace/{{listing_id}}/moderate", methods=["POST"])
+    @_secured_route(
+        f"{prefix}/marketplace/{{listing_id}}/moderate",
+        methods=["POST"],
+        capability=SecurityCapability.ADMIN,
+    )
     async def marketplace_moderate_endpoint(request: Request) -> JSONResponse:
         lid = request.path_params.get("listing_id", "")
         try:
             body = await request.json()
         except Exception:
             body = {}
+        if type(body) is not dict:
+            body = {}
         return JSONResponse(
             api.marketplace_moderate(
                 lid,
-                moderator_id=body.get("moderator_id", ""),
+                moderator_id=request_principal_actor(request) or "",
                 action=body.get("action", ""),
                 reason=body.get("reason", ""),
             )
         )
-
-    @_secured_route(f"{prefix}/marketplace/moderation", methods=["GET"])
-    async def marketplace_moderation_queue_endpoint(request: Request) -> JSONResponse:
-        return JSONResponse(api.marketplace_moderation_queue())
 
     @_secured_route(f"{prefix}/marketplace/{{listing_id}}/versions", methods=["GET"])
     async def marketplace_versions_endpoint(request: Request) -> JSONResponse:
@@ -3049,6 +3257,7 @@ def mount_security_routes(
     @_secured_route(
         f"{prefix}/marketplace/{{listing_id}}/versions/{{version}}/yank",
         methods=["POST"],
+        capability=SecurityCapability.ADMIN,
     )
     async def marketplace_yank_endpoint(request: Request) -> JSONResponse:
         lid = request.path_params.get("listing_id", "")
@@ -3056,6 +3265,8 @@ def mount_security_routes(
         try:
             body = await request.json()
         except Exception:
+            body = {}
+        if type(body) is not dict:
             body = {}
         return JSONResponse(
             api.marketplace_yank_version(lid, ver, reason=body.get("reason", ""))
@@ -3122,7 +3333,11 @@ def mount_security_routes(
     async def provenance_export_endpoint(request: Request) -> JSONResponse:
         return JSONResponse(api.get_provenance_export())
 
-    @_secured_route(f"{prefix}/provenance/verify", methods=["POST"])
+    @_secured_route(
+        f"{prefix}/provenance/verify",
+        methods=["POST"],
+        capability=SecurityCapability.OPERATE,
+    )
     async def provenance_verify_endpoint(request: Request) -> JSONResponse:
         body = await request.json()
         return JSONResponse(api.verify_provenance_bundle(body))
@@ -3131,47 +3346,103 @@ def mount_security_routes(
 
     # Health
     # Contracts
-    @_secured_route(f"{prefix}/contracts/negotiate", methods=["POST"])
+    @_secured_route(
+        f"{prefix}/contracts/negotiate",
+        methods=["POST"],
+        capability=SecurityCapability.OPERATE,
+    )
     async def contracts_negotiate_endpoint(request: Request) -> JSONResponse:
         try:
             body = await request.json()
         except Exception:
             body = {}
+        if type(body) is not dict:
+            body = {}
+        agent_id, denial = _bind_subject(
+            request,
+            body.get("agent_id", ""),
+            field_name="agent",
+        )
+        if denial is not None:
+            return denial
+        session_id = body.get("session_id", "")
+        if type(session_id) is str and session_id:
+            denial = _authorize_session_access(request, session_id)
+            if denial is not None:
+                return denial
+        body = dict(body)
+        body["agent_id"] = agent_id or ""
         return JSONResponse(await api.negotiate_contract(body))
 
-    @_secured_route(f"{prefix}/contracts/{{contract_id}}/sign", methods=["POST"])
+    @_secured_route(
+        f"{prefix}/contracts/{{contract_id}}/sign",
+        methods=["POST"],
+        capability=SecurityCapability.OPERATE,
+    )
     async def contracts_sign_endpoint(request: Request) -> JSONResponse:
         cid = request.path_params.get("contract_id", "")
+        denial = _authorize_contract_access(request, cid)
+        if denial is not None:
+            return denial
         try:
             body = await request.json()
         except Exception:
             body = {}
+        if type(body) is not dict:
+            body = {}
+        signer_id, denial = _bind_subject(
+            request,
+            body.get("signer_id", ""),
+            field_name="signer",
+        )
+        if denial is not None:
+            return denial
+        body = dict(body)
+        body["signer_id"] = signer_id or ""
         return JSONResponse(await api.agent_sign_contract_endpoint(cid, body))
-
-    @_secured_route(f"{prefix}/contracts/{{contract_id}}", methods=["GET"])
-    async def contracts_detail_endpoint(request: Request) -> JSONResponse:
-        cid = request.path_params.get("contract_id", "")
-        return JSONResponse(api.get_contract_details(cid))
 
     @_secured_route(f"{prefix}/contracts", methods=["GET"])
     async def contracts_list_endpoint(request: Request) -> JSONResponse:
-        agent_id = request.query_params.get("agent_id", "")
-        return JSONResponse(api.list_agent_contracts(agent_id))
+        agent_id, denial = _bind_subject(
+            request,
+            request.query_params.get("agent_id", ""),
+            field_name="agent",
+        )
+        if denial is not None:
+            return denial
+        return JSONResponse(api.list_agent_contracts(agent_id or ""))
 
-    @_secured_route(f"{prefix}/contracts/{{contract_id}}/revoke", methods=["POST"])
+    @_secured_route(
+        f"{prefix}/contracts/{{contract_id}}/revoke",
+        methods=["POST"],
+        capability=SecurityCapability.ADMIN,
+    )
     async def contracts_revoke_endpoint(request: Request) -> JSONResponse:
         cid = request.path_params.get("contract_id", "")
         try:
             body = await request.json()
         except Exception:
             body = {}
+        if type(body) is not dict:
+            body = {}
         return JSONResponse(
             await api.revoke_contract_endpoint(cid, reason=body.get("reason", ""))
         )
 
+    # Register this static path before /contracts/{contract_id}; Starlette
+    # resolves routes in declaration order.
     @_secured_route(f"{prefix}/contracts/exchange-log", methods=["GET"])
     async def contracts_exchange_log_endpoint(request: Request) -> JSONResponse:
         session_id = request.query_params.get("session_id")
+        if not session_id and not request_principal_is_admin(request):
+            return JSONResponse(
+                {"error": "A session_id is required for non-admin principals"},
+                status_code=403,
+            )
+        if session_id:
+            denial = _authorize_session_access(request, session_id)
+            if denial is not None:
+                return denial
         return JSONResponse(api.get_exchange_log_entries(session_id=session_id))
 
     @_secured_route(
@@ -3180,16 +3451,40 @@ def mount_security_routes(
     )
     async def contracts_verify_chain_endpoint(request: Request) -> JSONResponse:
         sid = request.path_params.get("session_id", "")
+        denial = _authorize_session_access(request, sid)
+        if denial is not None:
+            return denial
         return JSONResponse(api.verify_exchange_chain(sid))
 
+    @_secured_route(f"{prefix}/contracts/{{contract_id}}", methods=["GET"])
+    async def contracts_detail_endpoint(request: Request) -> JSONResponse:
+        cid = request.path_params.get("contract_id", "")
+        denial = _authorize_contract_access(request, cid)
+        if denial is not None:
+            return denial
+        return JSONResponse(api.get_contract_details(cid))
+
     # Federated Consent
-    @_secured_route(f"{prefix}/consent/federated/evaluate", methods=["POST"])
+    @_secured_route(
+        f"{prefix}/consent/federated/evaluate",
+        methods=["POST"],
+        capability=SecurityCapability.OPERATE,
+    )
     async def federated_consent_evaluate(request: Request) -> JSONResponse:
         body = await request.json()
+        if type(body) is not dict:
+            body = {}
+        target_id, denial = _bind_subject(
+            request,
+            body.get("target_id", ""),
+            field_name="agent",
+        )
+        if denial is not None:
+            return denial
         return JSONResponse(
             api.evaluate_federated_consent(
                 source_id=body.get("source_id", ""),
-                target_id=body.get("target_id", ""),
+                target_id=target_id or "",
                 scope=body.get("scope", ""),
                 geographic_context=body.get("geographic_context"),
                 jurisdictions=body.get("jurisdictions"),
@@ -3202,7 +3497,13 @@ def mount_security_routes(
         methods=["GET"],
     )
     async def federated_access_rights(request: Request) -> JSONResponse:
-        agent_id = request.path_params.get("agent_id", "")
+        agent_id, denial = _bind_subject(
+            request,
+            request.path_params.get("agent_id", ""),
+            field_name="agent",
+        )
+        if denial is not None:
+            return denial
         resource_id = request.path_params.get("resource_id", "")
         geo_param = request.query_params.get("geographic_context")
         geo: dict[str, Any] | None = None
@@ -3214,12 +3515,18 @@ def mount_security_routes(
             except Exception:
                 geo = None
         return JSONResponse(
-            api.get_access_rights(agent_id, resource_id, geographic_context=geo)
+            api.get_access_rights(agent_id or "", resource_id, geographic_context=geo)
         )
 
-    @_secured_route(f"{prefix}/consent/federated/propagate", methods=["POST"])
+    @_secured_route(
+        f"{prefix}/consent/federated/propagate",
+        methods=["POST"],
+        capability=SecurityCapability.ADMIN,
+    )
     async def federated_consent_propagate(request: Request) -> JSONResponse:
         body = await request.json()
+        if type(body) is not dict:
+            body = {}
         return JSONResponse(
             api.propagate_consent_endpoint(
                 edge_id=body.get("edge_id", ""),
@@ -3235,9 +3542,17 @@ def mount_security_routes(
     async def federated_institutions(request: Request) -> JSONResponse:
         return JSONResponse(api.list_institutions())
 
-    @_secured_route(f"{prefix}/consent/grant", methods=["POST"])
+    @_secured_route(
+        f"{prefix}/consent/grant",
+        methods=["POST"],
+        capability=SecurityCapability.ADMIN,
+    )
     async def consent_grant(request: Request) -> JSONResponse:
         body = await request.json()
+        if type(body) is not dict:
+            body = {}
+        body = dict(body)
+        body["granted_by"] = request_principal_actor(request) or ""
         return JSONResponse(api.grant_consent(body))
 
     @_secured_route(f"{prefix}/consent/graph", methods=["GET"])
@@ -3247,30 +3562,63 @@ def mount_security_routes(
     # Reflexive Introspection
     @_secured_route(f"{prefix}/reflexive/introspect/{{actor_id}}", methods=["GET"])
     async def reflexive_introspect(request: Request) -> JSONResponse:
-        actor_id = request.path_params.get("actor_id", "")
-        return JSONResponse(api.get_introspection(actor_id))
+        actor_id, denial = _bind_subject(
+            request,
+            request.path_params.get("actor_id", ""),
+            field_name="actor",
+        )
+        if denial is not None:
+            return denial
+        return JSONResponse(api.get_introspection(actor_id or ""))
 
     @_secured_route(
         f"{prefix}/reflexive/verdict/{{actor_id}}/{{operation}}", methods=["GET"]
     )
     async def reflexive_verdict(request: Request) -> JSONResponse:
-        actor_id = request.path_params.get("actor_id", "")
+        actor_id, denial = _bind_subject(
+            request,
+            request.path_params.get("actor_id", ""),
+            field_name="actor",
+        )
+        if denial is not None:
+            return denial
         operation = request.path_params.get("operation", "")
-        return JSONResponse(api.get_verdict(actor_id, operation))
+        return JSONResponse(api.get_verdict(actor_id or "", operation))
 
     @_secured_route(f"{prefix}/reflexive/threat-level/{{actor_id}}", methods=["GET"])
     async def reflexive_threat_level(request: Request) -> JSONResponse:
-        actor_id = request.path_params.get("actor_id", "")
-        return JSONResponse(api.get_actor_threat_level(actor_id))
+        actor_id, denial = _bind_subject(
+            request,
+            request.path_params.get("actor_id", ""),
+            field_name="actor",
+        )
+        if denial is not None:
+            return denial
+        return JSONResponse(api.get_actor_threat_level(actor_id or ""))
 
     @_secured_route(f"{prefix}/reflexive/constraints/{{actor_id}}", methods=["GET"])
     async def reflexive_constraints(request: Request) -> JSONResponse:
-        actor_id = request.path_params.get("actor_id", "")
-        return JSONResponse(api.get_actor_constraints(actor_id))
+        actor_id, denial = _bind_subject(
+            request,
+            request.path_params.get("actor_id", ""),
+            field_name="actor",
+        )
+        if denial is not None:
+            return denial
+        return JSONResponse(api.get_actor_constraints(actor_id or ""))
 
     @_secured_route(f"{prefix}/reflexive/accountability", methods=["GET"])
     async def reflexive_accountability(request: Request) -> JSONResponse:
-        actor_id = request.query_params.get("actor_id")
+        requested_actor = request.query_params.get("actor_id", "")
+        actor_id, denial = _bind_subject(
+            request,
+            requested_actor,
+            field_name="actor",
+        )
+        if denial is not None:
+            return denial
+        if request_principal_is_admin(request) and not requested_actor:
+            actor_id = None
         limit = int(request.query_params.get("limit", "100"))
         return JSONResponse(api.get_accountability(actor_id=actor_id, limit=limit))
 
