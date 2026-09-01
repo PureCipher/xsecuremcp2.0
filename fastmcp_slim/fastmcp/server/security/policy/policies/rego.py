@@ -77,9 +77,15 @@ from __future__ import annotations
 import json
 import logging
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
+from fastmcp.server.security.outbound import (
+    OutboundNetworkPolicy,
+    secure_outbound_request,
+)
 from fastmcp.server.security.policy.provider import (
     PolicyDecision,
     PolicyEvaluationContext,
@@ -698,17 +704,22 @@ class OPAHttpRegoPolicy:
         {"result": {"allow": bool, "deny": ["reason", ...],
                     "require_approval": ["reason", ...]}}
 
-    Every call times out after ``timeout_seconds``; failures
-    fail-closed to DENY so a sidecar outage can't accidentally open
-    up access. The adapter uses stdlib ``urllib`` so SecureMCP doesn't
-    take a new dep just to talk to OPA.
+    Every call times out after ``timeout_seconds``; failures fail closed to DENY
+    so a sidecar outage cannot open access. Public HTTPS destinations are the
+    default. A local sidecar must be enabled through an explicit
+    :class:`~fastmcp.server.security.outbound.OutboundNetworkPolicy` host
+    exception. Requests use DNS pinning, ignore environment proxies, reject
+    redirects, and enforce request and response byte limits.
 
     Args:
-        base_url: OPA service base URL (e.g. ``http://localhost:8181``).
+        base_url: OPA service base URL (e.g. ``https://opa.example.com``).
         package_path: Slash-joined OPA package (e.g. ``securemcp/capability``).
         policy_id: Stable id surfaced in results.
         version: Version tag.
         timeout_seconds: HTTP timeout for each evaluation.
+        outbound_policy: Optional destination policy. The default permits only
+            public HTTPS destinations.
+        max_response_bytes: Maximum OPA response size. Default 1 MiB.
         transport: Optional override used by tests — a callable
             ``(url, body) -> dict`` that mimics the OPA HTTP response.
     """
@@ -721,13 +732,21 @@ class OPAHttpRegoPolicy:
         policy_id: str = "opa-http",
         version: str = "1.0.0",
         timeout_seconds: float = 2.0,
-        transport: Any = None,
+        outbound_policy: OutboundNetworkPolicy | None = None,
+        max_response_bytes: int = 1024 * 1024,
+        transport: Callable[[str, dict[str, Any]], dict[str, Any]] | None = None,
     ) -> None:
-        self._base_url = base_url.rstrip("/")
-        self._package_path = package_path.strip("/").replace(".", "/")
+        if timeout_seconds <= 0:
+            raise ValueError("timeout_seconds must be greater than zero")
+        if max_response_bytes <= 0:
+            raise ValueError("max_response_bytes must be greater than zero")
+        self._base_url = _normalize_opa_base_url(base_url)
+        self._package_path = _normalize_opa_package_path(package_path)
         self._policy_id = policy_id
         self._version = version
         self._timeout = timeout_seconds
+        self._outbound_policy = outbound_policy or OutboundNetworkPolicy()
+        self._max_response_bytes = max_response_bytes
         self._transport = transport
 
     def evaluate(self, context: PolicyEvaluationContext) -> PolicyResult:
@@ -735,6 +754,15 @@ class OPAHttpRegoPolicy:
         body = {"input": _context_to_input(context)}
         try:
             payload = self._send(url, body)
+            raw_result = payload.get("result")
+            if raw_result is None:
+                result: dict[str, Any] = {}
+            elif type(raw_result) is dict:
+                result = raw_result
+            else:
+                raise ValueError("OPA result must be a JSON object")
+            deny_reasons = _opa_messages(result, "deny")
+            approval_reasons = _opa_messages(result, "require_approval")
         except Exception as exc:
             logger.warning("OPA evaluation failed: %s", exc)
             return PolicyResult(
@@ -742,15 +770,12 @@ class OPAHttpRegoPolicy:
                 reason=f"OPA unreachable (fail-closed): {exc}",
                 policy_id=self._policy_id,
             )
-        result = (payload or {}).get("result") or {}
-        deny_reasons = result.get("deny") or []
         if deny_reasons:
             return PolicyResult(
                 decision=PolicyDecision.DENY,
                 reason=_first_msg(deny_reasons, "OPA deny"),
                 policy_id=self._policy_id,
             )
-        approval_reasons = result.get("require_approval") or []
         if approval_reasons and not (
             context.approval_granted and context.approval_ticket
         ):
@@ -759,7 +784,14 @@ class OPAHttpRegoPolicy:
                 reason=_first_msg(approval_reasons, "OPA require_approval"),
                 policy_id=self._policy_id,
             )
-        if result.get("allow"):
+        allow = result.get("allow", False)
+        if type(allow) is not bool:
+            return PolicyResult(
+                decision=PolicyDecision.DENY,
+                reason="OPA returned a malformed allow decision (fail-closed)",
+                policy_id=self._policy_id,
+            )
+        if allow:
             return PolicyResult(
                 decision=PolicyDecision.ALLOW,
                 reason="OPA allow",
@@ -779,18 +811,76 @@ class OPAHttpRegoPolicy:
 
     def _send(self, url: str, body: dict[str, Any]) -> dict[str, Any]:
         if self._transport is not None:
-            return self._transport(url, body)
-        import urllib.error
-        import urllib.request
+            payload = self._transport(url, body)
+        else:
+            try:
+                request_body = json.dumps(
+                    body,
+                    separators=(",", ":"),
+                    allow_nan=False,
+                ).encode("utf-8")
+            except (TypeError, ValueError) as exc:
+                raise ValueError("OPA input is not JSON-compatible") from exc
+            response = secure_outbound_request(
+                url,
+                method="POST",
+                content=request_body,
+                headers={"Content-Type": "application/json"},
+                policy=self._outbound_policy,
+                timeout=self._timeout,
+                overall_timeout=self._timeout,
+                max_request_bytes=1024 * 1024,
+                max_response_bytes=self._max_response_bytes,
+            )
+            try:
+                payload = json.loads(response.content)
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise ValueError("OPA response is not valid JSON") from exc
+        if type(payload) is not dict or any(type(key) is not str for key in payload):
+            raise ValueError("OPA response must be a JSON object")
+        return payload
 
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(body).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=self._timeout) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+
+def _normalize_opa_package_path(package_path: str) -> str:
+    if type(package_path) is not str:
+        raise TypeError("package_path must be a string")
+    normalized = package_path.strip("/").replace(".", "/")
+    segments = normalized.split("/") if normalized else []
+    if not segments or any(
+        re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]*", segment) is None
+        for segment in segments
+    ):
+        raise ValueError("package_path must contain plain Rego package segments")
+    return "/".join(segments)
+
+
+def _normalize_opa_base_url(base_url: str) -> str:
+    if (
+        type(base_url) is not str
+        or not base_url
+        or any(character.isspace() for character in base_url)
+    ):
+        raise ValueError("base_url must be an HTTP(S) URL")
+    try:
+        parsed = urlsplit(base_url)
+        hostname = parsed.hostname
+        _port = parsed.port
+    except ValueError as exc:
+        raise ValueError("base_url must be a valid HTTP(S) URL") from exc
+    if parsed.scheme not in {"http", "https"} or not hostname:
+        raise ValueError("base_url must be an HTTP(S) URL")
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError("base_url may not contain credentials")
+    if parsed.query or parsed.fragment:
+        raise ValueError("base_url may not contain a query or fragment")
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path.rstrip("/"), "", ""))
+
+
+def _opa_messages(result: dict[str, Any], field_name: str) -> list[Any]:
+    value = result.get(field_name, [])
+    if type(value) is not list:
+        raise ValueError(f"OPA {field_name} result must be a list")
+    return value
 
 
 def _first_msg(values: list[Any], fallback: str) -> str:

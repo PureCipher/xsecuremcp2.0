@@ -1,46 +1,39 @@
-"""Broadcast transports for the trust federation.
-
-Concrete implementations of :class:`BroadcastTransport` that push
-federation messages out over the wire. The federation core is
-transport-agnostic; pick the transport that matches your deployment
-or implement your own.
-
-The default :class:`HTTPBroadcastTransport` POSTs JSON payloads to the
-peer's ``endpoint`` and expects the receiver to forward them into its
-own :meth:`TrustFederation.receive_revocation` call. The wire path
-defaults to ``/federation/revocations`` and is overridable.
-"""
+"""Hardened HTTP transports for trust-federation revocation broadcasts."""
 
 from __future__ import annotations
 
-import logging
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlsplit, urlunsplit
+
+from fastmcp.server.security.federation.messages import (
+    build_signed_federation_headers,
+    canonical_federation_body,
+)
+from fastmcp.server.security.outbound import (
+    OutboundNetworkPolicy,
+    async_secure_outbound_request,
+    secure_outbound_request,
+)
 
 if TYPE_CHECKING:
     from fastmcp.server.security.federation.federation import FederationPeer
 
-logger = logging.getLogger(__name__)
+DEFAULT_MAX_FEDERATION_RESPONSE_BYTES = 64 * 1024
 
 
 class HTTPBroadcastTransport:
-    """Default HTTP broadcast transport.
+    """Synchronously deliver signed revocations over hardened HTTP.
 
-    POSTs the broadcast payload as JSON to ``{peer.endpoint}{path}``.
-    A non-2xx response raises ``httpx.HTTPStatusError``; connection or
-    timeout failures raise the underlying ``httpx`` exception. The
-    federation captures these per-peer.
+    Destinations must be public HTTPS URLs by default. Supply an
+    :class:`~fastmcp.server.security.outbound.OutboundNetworkPolicy` with exact
+    host exceptions for an intentional local-development deployment. Redirects,
+    environment proxies, DNS rebinding, and unbounded responses are rejected by
+    the shared outbound request boundary.
 
-    Args:
-        path: URL path appended to ``peer.endpoint``. Default
-            ``/federation/revocations``.
-        timeout: Per-request timeout in seconds. Default 5.0.
-        signing_secret: Optional shared secret. When set, an
-            ``X-Federation-Signature`` header is attached carrying an
-            HMAC-SHA256 of the canonical JSON body. Receivers can
-            verify the signature before forwarding the payload to
-            :meth:`TrustFederation.receive_revocation`.
-        federation_id_header: Header used to identify the sending
-            federation. Default ``X-Federation-Id``.
+    Messages require an HMAC signing secret by default. Set
+    ``allow_unsigned=True`` only when a separate authenticated transport protects
+    the entire path.
     """
 
     def __init__(
@@ -48,26 +41,25 @@ class HTTPBroadcastTransport:
         *,
         path: str = "/federation/revocations",
         timeout: float = 5.0,
-        signing_secret: str | None = None,
+        signing_secret: bytes | str | None = None,
         federation_id_header: str = "X-Federation-Id",
+        outbound_policy: OutboundNetworkPolicy | None = None,
+        max_response_bytes: int = DEFAULT_MAX_FEDERATION_RESPONSE_BYTES,
+        allow_unsigned: bool = False,
     ) -> None:
+        if not path or "?" in path or "#" in path:
+            raise ValueError("Federation path must be a plain URL path")
+        if timeout <= 0:
+            raise ValueError("timeout must be greater than zero")
+        if max_response_bytes <= 0:
+            raise ValueError("max_response_bytes must be greater than zero")
         self._path = "/" + path.lstrip("/")
         self._timeout = float(timeout)
         self._signing_secret = signing_secret
         self._federation_id_header = federation_id_header
-
-    def _sign(self, body: bytes) -> str:
-        """Compute the canonical HMAC-SHA256 signature of the request body."""
-        import hashlib
-        import hmac
-
-        assert self._signing_secret is not None  # caller-guarded
-        digest = hmac.new(
-            self._signing_secret.encode("utf-8"),
-            body,
-            hashlib.sha256,
-        ).hexdigest()
-        return f"sha256={digest}"
+        self._outbound_policy = outbound_policy or OutboundNetworkPolicy()
+        self._max_response_bytes = max_response_bytes
+        self._allow_unsigned = allow_unsigned
 
     def _build_url(self, peer: FederationPeer) -> str:
         if not peer.endpoint:
@@ -75,61 +67,97 @@ class HTTPBroadcastTransport:
                 f"Federation peer '{peer.peer_id}' has no endpoint configured; "
                 "set endpoint=... when calling federation.add_peer()"
             )
-        return peer.endpoint.rstrip("/") + self._path
+        try:
+            parsed = urlsplit(peer.endpoint)
+        except ValueError as exc:
+            raise ValueError("Federation peer endpoint is invalid") from exc
+        if not parsed.scheme or not parsed.netloc or parsed.query or parsed.fragment:
+            raise ValueError(
+                "Federation peer endpoint must be an HTTP(S) origin or base path "
+                "without a query or fragment"
+            )
+        path = parsed.path.rstrip("/") + self._path
+        return urlunsplit((parsed.scheme, parsed.netloc, path, "", ""))
 
-    def _build_headers(self, body: bytes, payload: dict[str, Any]) -> dict[str, str]:
-        headers: dict[str, str] = {"Content-Type": "application/json"}
-        if self._signing_secret:
-            headers["X-Federation-Signature"] = self._sign(body)
+    def _build_headers(
+        self,
+        body: bytes,
+        payload: Mapping[str, Any],
+    ) -> dict[str, str]:
         federation_id = payload.get("federation_id")
-        if isinstance(federation_id, str) and federation_id:
-            headers[self._federation_id_header] = federation_id
+        if type(federation_id) is not str or not federation_id:
+            raise ValueError("Federation payload requires a federation_id")
+        if self._signing_secret is None:
+            return {
+                "Content-Type": "application/json",
+                self._federation_id_header: federation_id,
+            }
+
+        headers = build_signed_federation_headers(
+            body,
+            federation_id=federation_id,
+            signing_secret=self._signing_secret,
+        )
+        if self._federation_id_header != "X-Federation-Id":
+            headers[self._federation_id_header] = headers.pop("X-Federation-Id")
         return headers
+
+    def _prepare_request(
+        self,
+        payload: Mapping[str, Any],
+    ) -> tuple[bytes, dict[str, str]]:
+        if self._signing_secret is None and not self._allow_unsigned:
+            raise ValueError(
+                "Federation broadcasts require signing_secret; set "
+                "allow_unsigned=True only behind another authenticated transport"
+            )
+        body = canonical_federation_body(payload)
+        return body, self._build_headers(body, payload)
 
     def send_revocation(
         self,
         peer: FederationPeer,
         payload: dict[str, Any],
     ) -> None:
-        """Synchronously POST the payload to ``peer.endpoint``."""
-        # Lazy import keeps httpx optional for users who supply their
-        # own transport.
-        import json
-
-        import httpx
-
-        url = self._build_url(peer)
-        body = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode(
-            "utf-8"
+        """Synchronously POST one authenticated, bounded message."""
+        body, headers = self._prepare_request(payload)
+        secure_outbound_request(
+            self._build_url(peer),
+            method="POST",
+            content=body,
+            headers=headers,
+            policy=self._outbound_policy,
+            timeout=self._timeout,
+            overall_timeout=self._timeout,
+            max_request_bytes=256 * 1024,
+            max_response_bytes=self._max_response_bytes,
         )
-        headers = self._build_headers(body, payload)
-        with httpx.Client(timeout=self._timeout) as client:
-            response = client.post(url, content=body, headers=headers)
-            response.raise_for_status()
 
 
 class AsyncHTTPBroadcastTransport(HTTPBroadcastTransport):
-    """Async variant of :class:`HTTPBroadcastTransport`.
-
-    Uses ``httpx.AsyncClient`` so peer fan-out from
-    :meth:`TrustFederation.abroadcast_revocation` runs without blocking
-    the event loop.
-    """
+    """Asynchronously deliver signed revocations over hardened HTTP."""
 
     async def send_revocation(  # ty: ignore[invalid-method-override]
         self,
         peer: FederationPeer,
         payload: dict[str, Any],
     ) -> None:
-        import json
-
-        import httpx
-
-        url = self._build_url(peer)
-        body = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode(
-            "utf-8"
+        body, headers = self._prepare_request(payload)
+        await async_secure_outbound_request(
+            self._build_url(peer),
+            method="POST",
+            content=body,
+            headers=headers,
+            policy=self._outbound_policy,
+            timeout=self._timeout,
+            overall_timeout=self._timeout,
+            max_request_bytes=256 * 1024,
+            max_response_bytes=self._max_response_bytes,
         )
-        headers = self._build_headers(body, payload)
-        async with httpx.AsyncClient(timeout=self._timeout) as client:
-            response = await client.post(url, content=body, headers=headers)
-            response.raise_for_status()
+
+
+__all__ = [
+    "DEFAULT_MAX_FEDERATION_RESPONSE_BYTES",
+    "AsyncHTTPBroadcastTransport",
+    "HTTPBroadcastTransport",
+]
