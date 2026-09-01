@@ -191,7 +191,7 @@ class TestEngineVersionManagerWiring:
 
         vm = PolicyVersionManager(
             policy_set_id="test",
-            backend=BrokenBackend(),  # type: ignore[arg-type]
+            backend=BrokenBackend(),  # ty: ignore[invalid-argument-type]
         )
         engine = PolicyEngine(
             providers=[AllowAllPolicy()],

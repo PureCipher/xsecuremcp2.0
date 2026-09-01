@@ -7,7 +7,7 @@ toolsets as Streamable HTTP MCP endpoints without requiring a restart.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Mapping
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -120,7 +120,9 @@ class ToolsetGatewayRouter:
             return None
         return self._auth_settings.decode_token(token)
 
-    def _enforce_visibility(self, *, toolset: dict[str, Any], scope) -> Response | None:
+    def _enforce_visibility(
+        self, *, toolset: Mapping[str, Any], scope
+    ) -> Response | None:
         metadata = toolset.get("metadata") or {}
         metadata_dict = dict(metadata) if isinstance(metadata, dict) else {}
         visibility = (

@@ -116,7 +116,7 @@ class AsyncHTTPBroadcastTransport(HTTPBroadcastTransport):
     the event loop.
     """
 
-    async def send_revocation(  # type: ignore[override]
+    async def send_revocation(  # ty: ignore[invalid-method-override]
         self,
         peer: FederationPeer,
         payload: dict[str, Any],

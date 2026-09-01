@@ -604,11 +604,11 @@ _register_builtins()
 
 # ── Backward-compatible lookup ────────────────────────────────────
 # Kept for any code that references _POLICY_FACTORIES directly.
-_POLICY_FACTORIES: dict[str, Any] = {
-    key: (_registry.get(key).factory if _registry.get(key) else None)
-    for key in _registry.type_keys
-    if _registry.get(key) is not None
-}
+_POLICY_FACTORIES: dict[str, Any] = {}
+for key in _registry.type_keys:
+    descriptor = _registry.get(key)
+    if descriptor is not None:
+        _POLICY_FACTORIES[key] = descriptor.factory
 
 
 # ── Composition builders ──────────────────────────────────────────

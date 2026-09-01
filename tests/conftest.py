@@ -258,7 +258,7 @@ def registry_dsn(_postgres_available: bool, worker_id: str):
     dbname = dbname.replace("-", "_").lower()
 
     with psycopg.connect(admin, autocommit=True) as conn:
-        conn.execute(f'CREATE DATABASE "{dbname}"')
+        conn.execute(f'CREATE DATABASE "{dbname}"')  # ty: ignore[no-matching-overload]
 
     dsn = _dsn_with_dbname(admin, dbname)
     try:
@@ -274,7 +274,9 @@ def registry_dsn(_postgres_available: bool, worker_id: str):
                 "WHERE datname = %s AND pid <> pg_backend_pid()",
                 (dbname,),
             )
-            conn.execute(f'DROP DATABASE IF EXISTS "{dbname}"')
+            conn.execute(  # ty: ignore[no-matching-overload]
+                f'DROP DATABASE IF EXISTS "{dbname}"'
+            )
 
 
 @pytest.fixture

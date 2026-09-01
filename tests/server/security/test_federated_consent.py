@@ -404,7 +404,7 @@ class TestFederatedEvaluation:
         g = _make_graph()
         g.grant("owner", "agent-1", {"read", "execute"})
         f = _make_federation()
-        peer = f.add_peer("partner", peer_id="peer-1", trust_weight=0.8)
+        f.add_peer("partner", peer_id="peer-1", trust_weight=0.8)
         fed = FederatedConsentGraph(g, f, institution_id="inst-a")
         fed.register_jurisdiction_policy(_us_ca_policy())
 
@@ -473,7 +473,7 @@ class TestFederatedEvaluation:
         g = _make_graph()
         g.grant("owner", "agent-1", {"read"})
         f = _make_federation()
-        peer = f.add_peer("partner", peer_id="peer-1")
+        f.add_peer("partner", peer_id="peer-1")
         f.update_peer_status("peer-1", PeerStatus.SUSPENDED)
         fed = FederatedConsentGraph(g, f, institution_id="inst-a")
 
@@ -915,7 +915,7 @@ class TestFullLifecycle:
         )
 
         # 4. Add a federation peer
-        peer = f.add_peer("hospital-b-registry", peer_id="peer-b", trust_weight=0.8)
+        f.add_peer("hospital-b-registry", peer_id="peer-b", trust_weight=0.8)
 
         # 5. Evaluate federated consent (cross-jurisdiction)
         decision = fed.evaluate_federated_consent(

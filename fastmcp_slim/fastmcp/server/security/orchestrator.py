@@ -41,6 +41,7 @@ from fastmcp.server.security.reflexive.analyzer import (
     BehavioralAnalyzer,
     EscalationEngine,
 )
+from fastmcp.server.security.reflexive.introspection import IntrospectionEngine
 from fastmcp.server.security.registry.registry import TrustRegistry
 from fastmcp.server.security.sandbox.enforcer import SandboxedRunner
 
@@ -96,6 +97,7 @@ class SecurityContext:
     provenance_ledger: ProvenanceLedger | None = None
     behavioral_analyzer: BehavioralAnalyzer | None = None
     escalation_engine: EscalationEngine | None = None
+    introspection_engine: IntrospectionEngine | None = None
     consent_graph: ConsentGraph | None = None
     federated_consent_graph: Any = None
     audit_api: AuditAPI | None = None
@@ -303,7 +305,7 @@ class SecurityOrchestrator:
                     analyzer=analyzer,
                     escalation_engine=escalation_engine,
                 )
-                ctx.introspection_engine = introspection_engine  # type: ignore[attr-defined]
+                ctx.introspection_engine = introspection_engine
                 logger.debug("Introspection engine enabled")
 
             ctx.middleware.append(

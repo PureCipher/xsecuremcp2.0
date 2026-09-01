@@ -30,7 +30,7 @@ class MemoryBackend:
         self._exchange: dict[str, list[dict[str, Any]]] = {}
         # Contracts
         self._contracts: dict[str, dict[str, dict[str, Any]]] = {}
-        # Baselines: {analyzer_id: {actor_id: {metric_name: data}}}
+        # Baselines are nested by analyzer, actor, and metric name.
         self._baselines: dict[str, dict[str, dict[str, dict[str, Any]]]] = {}
         # Drift history
         self._drift: dict[str, list[dict[str, Any]]] = {}
@@ -38,7 +38,7 @@ class MemoryBackend:
         self._escalations: dict[str, list[dict[str, Any]]] = {}
         # Consent graph: {graph_id: {nodes, edges, groups, audit_log}}
         self._consent: dict[str, dict[str, Any]] = {}
-        # Marketplace: {mp_id: {servers, audit_log}}
+        # Marketplace records are grouped by marketplace identifier.
         self._marketplace: dict[str, dict[str, Any]] = {}
         # Tool marketplace: {mp_id: {listings, installs, reviews}}
         self._tool_marketplace: dict[str, dict[str, Any]] = {}

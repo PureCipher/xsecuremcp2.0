@@ -353,7 +353,7 @@ class FederatedConsentGraph:
             if decision.granted:
                 allowed.append(scope)
                 # Track jurisdiction constraints
-                for jcode, jresult in decision.jurisdiction_results.items():
+                for jcode in decision.jurisdiction_results:
                     if jcode not in jurisdiction_constraints:
                         jurisdiction_constraints[jcode] = []
                     jurisdiction_constraints[jcode].append(scope)
@@ -638,9 +638,9 @@ class FederatedConsentGraph:
         expires_at: datetime | None = None
         if local_decision.path:
             for edge in local_decision.path:
-                for cond in edge.conditions:
-                    if cond.description:
-                        conditions.append(cond.description)
+                conditions.extend(
+                    cond.description for cond in edge.conditions if cond.description
+                )
                 if edge.expires_at is not None:
                     if expires_at is None or edge.expires_at < expires_at:
                         expires_at = edge.expires_at

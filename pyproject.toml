@@ -233,6 +233,11 @@ known-first-party = ["fastmcp", "fastmcp_remote", "purecipher", "securemcp"]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "I001", "RUF013"]
+"fastmcp_slim/fastmcp/server/security/policy/compliance_packs/*.py" = [
+    "RUF001",
+    "RUF002",
+    "RUF003",
+]
 "fastmcp_slim/fastmcp/__init__.py" = ["E402"]
 "fastmcp_slim/fastmcp/cli/**.py" = ["T20"]
 "fastmcp_slim/fastmcp/client/oauth_callback.py" = ["T20"]
@@ -259,4 +264,4 @@ known-first-party = ["fastmcp", "fastmcp_remote", "purecipher", "securemcp"]
 ]
 
 [tool.codespell]
-ignore-words-list = "asend,shttp,te"
+ignore-words-list = "asend,pres,shttp,te"

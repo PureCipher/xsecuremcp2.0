@@ -65,7 +65,7 @@ class TestSecurityEvent:
     def test_event_is_frozen(self):
         e = _event()
         with pytest.raises(AttributeError):
-            e.message = "changed"  # type: ignore[misc]
+            e.message = "changed"  # ty: ignore[invalid-assignment]
 
     def test_event_fields(self):
         e = _event(

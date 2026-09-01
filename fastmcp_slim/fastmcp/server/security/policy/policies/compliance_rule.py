@@ -145,10 +145,7 @@ class ComplianceRulePolicy:
                 policy_id=self.policy_id,
             )
 
-        matched_rules: list[ComplianceRuleSpec] = []
-        for rule in self.rules:
-            if context.tags & rule.tags:
-                matched_rules.append(rule)
+        matched_rules = [rule for rule in self.rules if context.tags & rule.tags]
 
         if not matched_rules:
             framework_label = self.framework or "Compliance"

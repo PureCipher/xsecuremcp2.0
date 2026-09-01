@@ -267,7 +267,7 @@ class TestAttachSecuritySettings:
             captured.append(bus)
             original(bus)
 
-        engine.attach_event_bus = _spy  # type: ignore[method-assign]
+        engine.attach_event_bus = _spy  # ty: ignore[invalid-assignment]
 
         server = FastMCP("test")
         attach_security(

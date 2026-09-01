@@ -15,6 +15,7 @@ These cover three layers in turn:
 from __future__ import annotations
 
 import asyncio
+from typing import cast
 
 import httpx
 import pytest
@@ -24,7 +25,9 @@ from purecipher.openapi_executor import (
     OpenAPIToolExecutor,
 )
 from purecipher.openapi_store import (
+    OpenAPIOperationDetailed,
     OpenAPIStore,
+    SecuritySchemeKind,
     extract_openapi_operations_detailed,
 )
 
@@ -165,7 +168,7 @@ def _spec_pets() -> dict:
     }
 
 
-def _operation(spec: dict, operation_id: str) -> dict:
+def _operation(spec: dict, operation_id: str) -> OpenAPIOperationDetailed:
     ops = extract_openapi_operations_detailed(spec)
     return next(o for o in ops if o["operation_id"] == operation_id)
 
@@ -261,7 +264,7 @@ class TestCredentialApplication:
             publisher_id="acme",
             source_id="oas_pets",
             scheme_name=scheme_name,
-            scheme_kind=scheme_kind,
+            scheme_kind=cast(SecuritySchemeKind, scheme_kind),
             secret=secret,
         )
         return store

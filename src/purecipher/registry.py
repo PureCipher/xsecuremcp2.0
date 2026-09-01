@@ -6,7 +6,7 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Generic, TypedDict
+from typing import Any, Generic, TypedDict, cast
 from urllib.parse import quote, urlencode
 
 from mcp.server.lowlevel.server import LifespanResultT
@@ -40,23 +40,6 @@ from fastmcp.server.security.registry.registry import TrustRegistry
 from fastmcp.server.security.storage.pg_pool import is_postgres_dsn
 from fastmcp.server.security.storage.postgres import PostgresBackend
 from fastmcp.utilities.ui import create_secure_html_response
-
-
-def _make_security_backend(persistence_path: str | None) -> Any:
-    """Return the SecureMCP storage backend for a persistence target.
-
-    PostgreSQL is the registry's production persistence engine:
-
-    - A PostgreSQL DSN (``postgres://`` / ``postgresql://``) → PostgresBackend.
-    - Anything else (including ``None``) → ``None`` (ephemeral in-memory
-      registry). The registry does not persist to SQLite; durable state
-      requires a PostgreSQL DSN.
-    """
-    if is_postgres_dsn(persistence_path):
-        return PostgresBackend(persistence_path)  # type: ignore[arg-type]
-    return None
-
-
 from purecipher.account_activity import RegistryAccountActivityStore
 from purecipher.account_security import (
     LoginLockout,
@@ -84,7 +67,12 @@ from purecipher.middleware.client_aware_middleware import (
 )
 from purecipher.moderation import build_review_queue, moderation_action_from_name
 from purecipher.notification_feed import RegistryNotificationFeed
-from purecipher.openapi_store import OpenAPIStore, extract_openapi_operations
+from purecipher.openapi_store import (
+    OpenAPISourceRecord,
+    OpenAPIStore,
+    SecuritySchemeKind,
+    extract_openapi_operations,
+)
 from purecipher.policy_routes import mount_registry_policy_routes
 from purecipher.publishers import (
     get_public_publisher_profile,
@@ -121,6 +109,21 @@ from securemcp.config import (
 from securemcp.http import SecurityAPI
 
 logger = logging.getLogger(__name__)
+
+
+def _make_security_backend(persistence_path: str | None) -> Any:
+    """Return the SecureMCP storage backend for a persistence target.
+
+    PostgreSQL is the registry's production persistence engine:
+
+    - A PostgreSQL DSN (``postgres://`` / ``postgresql://``) → PostgresBackend.
+    - Anything else (including ``None``) → ``None`` (ephemeral in-memory
+      registry). The registry does not persist to SQLite; durable state
+      requires a PostgreSQL DSN.
+    """
+    if is_postgres_dsn(persistence_path):
+        return PostgresBackend(persistence_path)  # type: ignore[arg-type]
+    return None
 
 
 @dataclass
@@ -2399,10 +2402,11 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             raise ValueError(f"OpenAPI source {source_id!r} no longer exists")
         # Re-fetch the source record so we get spec_sha256, title,
         # source_url etc. without recomputing.
-        source_record: dict[str, Any] | None = None
+        source_record: OpenAPISourceRecord | None = None
         if not self._openapi_store.db_path:
-            source_record = dict(
-                self._openapi_store._memory_sources.get(source_id) or {}
+            source_record = cast(
+                OpenAPISourceRecord,
+                dict(self._openapi_store._memory_sources.get(source_id) or {}),
             )
         else:
             # Reconstruct the public-facing record from spec + sha. We
@@ -2458,7 +2462,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 raise ValueError(f"Operation {key!r} has no server URL declared")
             payload = build_listing_payload(
                 op,
-                source=source_record,  # type: ignore[arg-type]
+                source=source_record,
                 toolset=toolset,
                 server_url=server_url,
                 publisher_id=publisher_id,
@@ -2532,8 +2536,8 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
         publisher_id = listing.author or ""
         server_url = str(meta.get(META_OPENAPI_SERVER_URL) or "")
-        input_schema = (
-            meta.get(META_OPENAPI_INPUT_SCHEMA)
+        input_schema: dict[str, Any] = (
+            cast(dict[str, Any], meta.get(META_OPENAPI_INPUT_SCHEMA))
             if isinstance(meta.get(META_OPENAPI_INPUT_SCHEMA), dict)
             else {"type": "object"}
         )
@@ -7452,7 +7456,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     publisher_id=publisher_id,
                     source_id=source_id,
                     scheme_name=scheme_name,
-                    scheme_kind=scheme_kind,  # type: ignore[arg-type]
+                    scheme_kind=cast(SecuritySchemeKind, scheme_kind),
                     secret=cleaned,
                     label=label,
                 )
@@ -8168,7 +8172,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 headers = {"Retry-After": str(int(retry_after))}
                 if expects_json:
                     return JSONResponse(payload, status_code=429, headers=headers)
-                return create_secure_html_response(
+                response = create_secure_html_response(
                     self._render_login_ui(
                         prefix=prefix,
                         next_path=next_path,
@@ -8177,8 +8181,9 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                         notice_is_error=True,
                     ),
                     status_code=429,
-                    headers=headers,
                 )
+                response.headers.update(headers)
+                return response
 
             user = self._account_security.authenticate(username, password)
             if user is None:
@@ -8218,7 +8223,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     headers = {"Retry-After": str(int(retry_after))}
                     if expects_json:
                         return JSONResponse(payload, status_code=429, headers=headers)
-                    return create_secure_html_response(
+                    response = create_secure_html_response(
                         self._render_login_ui(
                             prefix=prefix,
                             next_path=next_path,
@@ -8227,8 +8232,9 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                             notice_is_error=True,
                         ),
                         status_code=429,
-                        headers=headers,
                     )
+                    response.headers.update(headers)
+                    return response
                 payload = {
                     "error": "Invalid username or password.",
                     "status": 401,

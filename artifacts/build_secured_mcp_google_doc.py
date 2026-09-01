@@ -2,11 +2,8 @@ from pathlib import Path
 
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.enum.section import WD_SECTION
-from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
-
 
 ROOT = Path(__file__).resolve().parent
 OUTPUT = ROOT / "secured-mcp-registry-user-journeys.docx"
@@ -37,7 +34,7 @@ def add_body(doc, text, *, bold_lead=None):
     if bold_lead and text.startswith(bold_lead):
         lead = p.add_run(bold_lead)
         set_font(lead, bold=True)
-        rest = p.add_run(text[len(bold_lead):])
+        rest = p.add_run(text[len(bold_lead) :])
         set_font(rest)
     else:
         run = p.add_run(text)

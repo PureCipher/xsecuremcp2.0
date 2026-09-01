@@ -739,32 +739,26 @@ class SecureMCPCLI:
         for p in data.get("permissions", []):
             permissions.add(PermissionScope(p))
 
-        data_flows: list[DataFlowDeclaration] = []
-        for df in data.get("data_flows", []):
-            data_flows.append(
-                DataFlowDeclaration(
-                    source=df["source"],
-                    destination=df["destination"],
-                    classification=DataClassification(
-                        df.get("classification", "internal")
-                    ),
-                    transforms=list(df.get("transforms", [])),
-                    retention=df.get("retention"),
-                )
+        data_flows = [
+            DataFlowDeclaration(
+                source=df["source"],
+                destination=df["destination"],
+                classification=DataClassification(df.get("classification", "internal")),
+                transforms=list(df.get("transforms", [])),
+                retention=df.get("retention"),
             )
+            for df in data.get("data_flows", [])
+        ]
 
-        resource_access: list[ResourceAccessDeclaration] = []
-        for ra in data.get("resource_access", []):
-            resource_access.append(
-                ResourceAccessDeclaration(
-                    resource_pattern=ra["resource_pattern"],
-                    access_type=ra.get("access_type", "read"),
-                    required=ra.get("required", True),
-                    classification=DataClassification(
-                        ra.get("classification", "internal")
-                    ),
-                )
+        resource_access = [
+            ResourceAccessDeclaration(
+                resource_pattern=ra["resource_pattern"],
+                access_type=ra.get("access_type", "read"),
+                required=ra.get("required", True),
+                classification=DataClassification(ra.get("classification", "internal")),
             )
+            for ra in data.get("resource_access", [])
+        ]
 
         return SecurityManifest(
             tool_name=data["tool_name"],

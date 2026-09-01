@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import ipaddress
 import logging
+import os
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlparse
@@ -40,11 +41,9 @@ logger = logging.getLogger(__name__)
 _ALLOWED_HTTP_SCHEMES = {"https", "http"}
 _LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
-import os as _os
-
 _EXTRA_HTTP_HOSTS = frozenset(
     h.strip().lower()
-    for h in _os.getenv("PURECIPHER_ALLOW_HTTP_HOSTS", "").split(",")
+    for h in os.getenv("PURECIPHER_ALLOW_HTTP_HOSTS", "").split(",")
     if h.strip()
 )
 _HTTP_ALLOWED_HOSTS = _LOOPBACK_HOSTS | _EXTRA_HTTP_HOSTS

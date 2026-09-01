@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, cast
 
 import mcp.types as mt
 
@@ -104,7 +104,7 @@ class PolicyEnforcementMiddleware(Middleware):
             metadata=metadata,
             timestamp=middleware_context.timestamp,
             tags=tags,
-            **capability,
+            **cast(Any, capability),
         )
 
     def _build_list_context(
@@ -120,7 +120,7 @@ class PolicyEnforcementMiddleware(Middleware):
             action=action,
             resource_id=resource_id,
             tags=tags,
-            **capability,
+            **cast(Any, capability),
         )
 
     # ── Tool operations ──────────────────────────────────────────────
@@ -170,7 +170,7 @@ class PolicyEnforcementMiddleware(Middleware):
                 metadata=eval_ctx.metadata,
                 timestamp=eval_ctx.timestamp,
                 tags=tool_tags,
-                **capability,
+                **cast(Any, capability),
             )
 
         result = await self.policy_engine.evaluate(eval_ctx)

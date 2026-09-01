@@ -30,6 +30,7 @@ Standalone usage::
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import hmac
 import inspect
@@ -359,17 +360,16 @@ class SecurityAPI:
             return {"error": "Registry not configured", "status": 503}
 
         records = self.registry.get_all()
-        tools = []
-        for record in records:
-            tools.append(
-                {
-                    "tool_name": record.tool_name,
-                    "trust_score": round(record.trust_score.overall, 3),
-                    "is_certified": record.is_certified,
-                    "registered_at": record.registered_at.isoformat(),
-                    "tags": sorted(record.tags) if record.tags else [],
-                }
-            )
+        tools = [
+            {
+                "tool_name": record.tool_name,
+                "trust_score": round(record.trust_score.overall, 3),
+                "is_certified": record.is_certified,
+                "registered_at": record.registered_at.isoformat(),
+                "tags": sorted(record.tags) if record.tags else [],
+            }
+            for record in records
+        ]
         tools.sort(key=lambda t: t["trust_score"], reverse=True)
 
         return {
@@ -443,10 +443,8 @@ class SecurityAPI:
 
         action_filter = None
         if action:
-            try:
+            with contextlib.suppress(ValueError):
                 action_filter = ProvenanceAction(action)
-            except ValueError:
-                pass
 
         records = self.provenance_ledger.get_records(
             resource_id=resource_id,
@@ -2270,18 +2268,17 @@ class SecurityAPI:
         """Convert plain payloads to simulation scenarios."""
         from fastmcp.server.security.policy.simulation import Scenario
 
-        scenarios: list[Scenario] = []
-        for item in scenarios_data:
-            scenarios.append(
-                Scenario(
-                    resource_id=str(item.get("resource_id", "unknown")),
-                    action=str(item.get("action", "call_tool")),
-                    actor_id=str(item.get("actor_id", "sim-actor")),
-                    metadata=dict(item.get("metadata", {})),
-                    tags=frozenset(item.get("tags", [])),
-                    label=str(item.get("label", "")),
-                )
+        scenarios = [
+            Scenario(
+                resource_id=str(item.get("resource_id", "unknown")),
+                action=str(item.get("action", "call_tool")),
+                actor_id=str(item.get("actor_id", "sim-actor")),
+                metadata=dict(item.get("metadata", {})),
+                tags=frozenset(item.get("tags", [])),
+                label=str(item.get("label", "")),
             )
+            for item in scenarios_data
+        ]
         return scenarios
 
     # ── Contracts ─────────────────────────────────────────────

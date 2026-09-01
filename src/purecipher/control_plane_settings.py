@@ -21,6 +21,7 @@ from __future__ import annotations
 import time
 from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import Any, cast
 
 from purecipher.pgdb import connection, dict_row, is_postgres_dsn
 
@@ -80,6 +81,7 @@ class RegistryControlPlaneStore:
             self._ensure_schema()
 
     def _ensure_schema(self) -> None:
+        assert self._db_path is not None
         with connection(self._db_path, row_factory=dict_row) as conn:
             conn.execute(
                 """
@@ -111,7 +113,8 @@ class RegistryControlPlaneStore:
             rows = cur.fetchall()
 
         result: dict[str, ControlPlaneSetting] = {}
-        for row in rows:
+        for raw_row in rows:
+            row = cast(dict[str, Any], raw_row)
             plane = row["plane"]
             if plane not in PLANE_NAMES:
                 # Unknown plane in the store — ignore rather than

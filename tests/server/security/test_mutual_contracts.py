@@ -79,7 +79,9 @@ class TestAgentKeyRegistry:
         registry = AgentKeyRegistry()
         registry.register_agent_key("a1", b"old", SigningAlgorithm.HMAC_SHA256)
         registry.register_agent_key("a1", b"new", SigningAlgorithm.HMAC_SHA256)
-        key_material, _ = registry.get_agent_key("a1")  # type: ignore[misc]
+        key_record = registry.get_agent_key("a1")
+        assert key_record is not None
+        key_material, _ = key_record
         assert key_material == b"new"
 
 

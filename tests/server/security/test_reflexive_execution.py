@@ -7,6 +7,8 @@ binding, HTTP endpoints, backward compatibility, and full lifecycle.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from fastmcp.server.security.reflexive.analyzer import (
     BehavioralAnalyzer,
     EscalationEngine,
@@ -31,6 +33,9 @@ from fastmcp.server.security.reflexive.models import (
 from fastmcp.server.security.reflexive.profiles import (
     ActorProfileManager,
 )
+
+if TYPE_CHECKING:
+    from fastmcp.server.security.http.api import SecurityAPI
 
 # ---------------------------------------------------------------------------
 # Helpers

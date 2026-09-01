@@ -124,8 +124,9 @@ class ContractCryptoHandler:
         canonical = _canonicalize(data)
 
         if self.algorithm == SigningAlgorithm.HMAC_SHA256:
+            assert self._secret_key is not None
             sig_bytes = hmac.new(
-                self._secret_key,  # type: ignore[arg-type]
+                self._secret_key,
                 canonical,
                 hashlib.sha256,
             ).digest()
@@ -163,8 +164,9 @@ class ContractCryptoHandler:
 
         try:
             if signature.algorithm == SigningAlgorithm.HMAC_SHA256:
+                assert self._secret_key is not None
                 expected = hmac.new(
-                    self._secret_key,  # type: ignore[arg-type]
+                    self._secret_key,
                     canonical,
                     hashlib.sha256,
                 ).digest()

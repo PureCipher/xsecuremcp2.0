@@ -492,7 +492,10 @@ class TestReconcileCuratorSelection:
         draft = self._draft()
         updated = reconcile_curator_selection(
             draft,
-            [{"scope": "garbage", "selected": True}, "not-a-dict"],
+            [  # ty: ignore[invalid-argument-type]
+                {"scope": "garbage", "selected": True},
+                "not-a-dict",
+            ],
         )
         # Original suggestion list shape unchanged.
         assert len(updated.permission_suggestions) == len(draft.permission_suggestions)
@@ -634,7 +637,7 @@ class TestCurateRoutes:
                 },
             )
             assert r.status_code == 201
-            permissions = (
+            (
                 r.json()["listing"]
                 # The manifest is embedded in the listing's serialized
                 # form via the marketplace; we instead read back the
@@ -1770,7 +1773,7 @@ class TestCuratorProxyHosting:
             upstream_ref=UpstreamRef(
                 channel=UpstreamChannel.PYPI,
                 identifier="markitdown-mcp",
-                version=None,
+                version=None,  # ty: ignore[invalid-argument-type]
             ),
         )
         factory = _build_client_factory(listing)
@@ -2147,6 +2150,8 @@ class TestCuratorProxyHosting:
         ]
 
         proxy = build_curator_proxy_server(listing)
+        assert proxy.security_context is not None
+        assert proxy.security_context.policy_engine is not None
         providers = proxy.security_context.policy_engine.providers
         allowlists = [p for p in providers if isinstance(p, AllowlistPolicy)]
         assert allowlists, (
@@ -2920,7 +2925,9 @@ class TestValidateIntrospectEnv:
         )
 
         with pytest.raises(CredentialValidationError, match="must be a string"):
-            validate_introspect_env({"GITHUB_TOKEN": 123})  # type: ignore[dict-item]
+            validate_introspect_env(
+                {"GITHUB_TOKEN": 123}  # ty: ignore[invalid-argument-type]
+            )
 
     def test_not_a_dict_rejected(self):
         from purecipher.curation import (
@@ -2929,7 +2936,9 @@ class TestValidateIntrospectEnv:
         )
 
         with pytest.raises(CredentialValidationError, match="JSON object"):
-            validate_introspect_env(["GITHUB_TOKEN=ghp"])  # type: ignore[arg-type]
+            validate_introspect_env(
+                ["GITHUB_TOKEN=ghp"]  # ty: ignore[invalid-argument-type]
+            )
 
 
 class TestStdioIntrospectorEnv:

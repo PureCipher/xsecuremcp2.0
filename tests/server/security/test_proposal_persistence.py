@@ -71,7 +71,7 @@ class TestMemoryBackendProposals:
         loaded = backend.load_policy_proposals("gov1")
         loaded["p1"]["status"] = "mutated"
         # Original should be unchanged (dict is shallow-copied at top level)
-        reloaded = backend.load_policy_proposals("gov1")
+        backend.load_policy_proposals("gov1")
         # Note: The inner dicts are the same references, which matches
         # the pattern used for contracts. This is expected behavior.
 

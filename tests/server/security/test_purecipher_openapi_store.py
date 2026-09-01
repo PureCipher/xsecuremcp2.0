@@ -13,6 +13,7 @@ import pytest
 
 from purecipher.openapi_store import (
     OpenAPIStore,
+    SecurityScheme,
     _coerce_openapi_doc,
     _coerce_openapi_json,
     _credential_secret_hint,
@@ -487,6 +488,7 @@ class TestExtractOpenAPIOperationsDetailed:
         assert len(ops) == 1
         op = ops[0]
         assert op["operation_id"] == "ping"
+        assert op["output_schema"] is not None
         assert op["output_schema"]["properties"]["ok"] == {"type": "boolean"}
 
 
@@ -613,7 +615,7 @@ class TestResolveOperationSecurity:
         assert resolve_operation_security([], {}) == []
 
     def test_alternatives_preserved_with_resolved_schemes(self):
-        scheme_map = {
+        scheme_map: dict[str, SecurityScheme] = {
             "Bearer": {
                 "scheme_name": "Bearer",
                 "kind": "http",
@@ -628,11 +630,12 @@ class TestResolveOperationSecurity:
         }
         result = resolve_operation_security(
             [{"Bearer": ["read"]}, {"ApiKey": []}],
-            scheme_map,  # type: ignore[arg-type]
+            scheme_map,
         )
         assert len(result) == 2
         assert result[0][0]["scheme_name"] == "Bearer"
         assert result[0][0]["scopes"] == ["read"]
+        assert result[0][0]["scheme"] is not None
         assert result[0][0]["scheme"]["kind"] == "http"
         assert result[1][0]["scheme_name"] == "ApiKey"
 

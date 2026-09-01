@@ -34,7 +34,7 @@ class TestConsentNode:
     def test_node_frozen(self):
         node = ConsentNode(node_id="test")
         try:
-            node.node_id = "changed"  # type: ignore[misc]
+            node.node_id = "changed"  # ty: ignore[invalid-assignment]
             assert False, "Should be frozen"
         except AttributeError:
             pass

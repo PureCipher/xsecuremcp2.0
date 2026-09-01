@@ -627,8 +627,9 @@ class TrustFederation:
         deliveries: list[BroadcastDelivery] = []
         transport = self._broadcast_transport
         if transport is not None:
-            for peer in peers:
-                deliveries.append(self._push_one_sync(transport, peer, payload))
+            deliveries.extend(
+                self._push_one_sync(transport, peer, payload) for peer in peers
+            )
 
         result = self._finalize_broadcast(
             tool_name=tool_name,
@@ -738,8 +739,9 @@ class TrustFederation:
             if inspect.isawaitable(result):
                 # Sync caller cannot await; drop the coroutine cleanly and
                 # surface the misuse rather than silently leaking it.
-                if hasattr(result, "close"):
-                    result.close()
+                close = getattr(result, "close", None)
+                if callable(close):
+                    close()
                 raise RuntimeError(
                     "broadcast_transport.send_revocation returned a "
                     "coroutine; use abroadcast_revocation() with an async "

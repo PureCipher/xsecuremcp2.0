@@ -395,7 +395,7 @@ class IntrospectionEngine:
         """
         actions: list[str] = []
         seen: set[str] = set()
-        for event, rule, action in self.escalation_engine.get_escalation_history():
+        for event, _rule, action in self.escalation_engine.get_escalation_history():
             if event.actor_id != actor_id:
                 continue
             if action.value not in seen:

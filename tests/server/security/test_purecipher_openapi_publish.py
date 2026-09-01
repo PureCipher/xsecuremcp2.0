@@ -13,6 +13,7 @@ Two layers of coverage:
 from __future__ import annotations
 
 import json
+from typing import cast
 
 from starlette.testclient import TestClient
 
@@ -31,7 +32,10 @@ from purecipher.openapi_publish import (
     sanitize_tool_name,
 )
 from purecipher.openapi_store import (
+    OpenAPIOperationDetailed,
+    OpenAPISourceRecord,
     OpenAPIStore,
+    OpenAPIToolsetRecord,
     extract_openapi_operations_detailed,
 )
 
@@ -165,19 +169,24 @@ class TestSanitizeToolName:
 class TestDeriveToolName:
     def test_uses_operation_id_when_present(self):
         op = {"operation_id": "listPets", "method": "GET", "path": "/pets"}
-        assert derive_tool_name(op) == "listPets"
+        assert derive_tool_name(cast(OpenAPIOperationDetailed, op)) == "listPets"
 
     def test_falls_back_to_method_path(self):
         op = {"operation_id": "", "method": "GET", "path": "/pets/{id}"}
-        assert derive_tool_name(op) == "GET-pets-id"
+        assert derive_tool_name(cast(OpenAPIOperationDetailed, op)) == "GET-pets-id"
 
     def test_prefix_is_applied(self):
         op = {"operation_id": "show", "method": "GET", "path": "/x"}
-        assert derive_tool_name(op, prefix="acme") == "acme-show"
+        assert (
+            derive_tool_name(cast(OpenAPIOperationDetailed, op), prefix="acme")
+            == "acme-show"
+        )
 
 
 class TestBuildManifest:
-    def _setup(self) -> tuple[dict, dict, dict]:
+    def _setup(
+        self,
+    ) -> tuple[dict, OpenAPISourceRecord, OpenAPIToolsetRecord]:
         store = OpenAPIStore()
         record, _ops = store.ingest_source(
             publisher_id="acme", title="Demo", raw_text=json.dumps(_SPEC)
@@ -188,9 +197,9 @@ class TestBuildManifest:
             title="Demo TS",
             selected_operations=["showPet", "createPet", "ping"],
         )
-        return _SPEC, dict(record), dict(toolset)
+        return _SPEC, record, toolset
 
-    def _op(self, operation_id: str) -> dict:
+    def _op(self, operation_id: str) -> OpenAPIOperationDetailed:
         ops = extract_openapi_operations_detailed(_SPEC)
         return next(o for o in ops if o["operation_id"] == operation_id)
 
