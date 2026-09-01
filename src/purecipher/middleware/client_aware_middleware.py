@@ -30,6 +30,7 @@ matching subclass after construction.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from fastmcp.server.security.middleware.consent_enforcement import (
@@ -67,14 +68,7 @@ class ClientAwarePolicyEnforcementMiddleware(PolicyEnforcementMiddleware):
         actor = current_client_actor()
         if not actor:
             return ctx
-        return PolicyEvaluationContext(
-            actor_id=actor,
-            action=ctx.action,
-            resource_id=ctx.resource_id,
-            metadata=ctx.metadata,
-            timestamp=ctx.timestamp,
-            tags=ctx.tags,
-        )
+        return replace(ctx, actor_id=actor)
 
 
 # ── Contracts ──────────────────────────────────────────────────────

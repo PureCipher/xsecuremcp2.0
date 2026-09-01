@@ -12,6 +12,7 @@ import pytest
 
 from fastmcp.server.security.middleware.policy_enforcement import (
     PolicyEnforcementMiddleware,
+    _capability_overrides,
     _tool_is_readonly,
 )
 from fastmcp.server.security.policy.engine import (
@@ -51,6 +52,24 @@ class TestReadOnlyTagDetection:
     def test_case_insensitive(self):
         assert _tool_is_readonly(frozenset({"READ_ONLY"})) is True
         assert _tool_is_readonly(frozenset({"Safe"})) is True
+
+
+class TestCapabilityActionClassification:
+    def test_action_tag_classifies_tool_operation(self):
+        overrides = _capability_overrides(
+            frozenset({"action:update", "resource:database"}), {}
+        )
+
+        assert overrides["action"] == "update"
+        assert overrides["resource_type"] == "database"
+
+    def test_structured_metadata_overrides_action_tag(self):
+        overrides = _capability_overrides(
+            frozenset({"action:update"}),
+            {"capability": {"action": "delete"}},
+        )
+
+        assert overrides["action"] == "delete"
 
 
 class TestReadOnlyConstraintEnforcement:

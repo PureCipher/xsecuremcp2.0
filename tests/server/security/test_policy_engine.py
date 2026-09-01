@@ -86,6 +86,42 @@ class TestPolicyEngineBasics:
         result = await engine.evaluate(_make_context())
         assert result.decision == PolicyDecision.ALLOW
 
+    async def test_unrelated_allow_reason_cannot_consume_required_approval(self):
+        class RequiresApproval:
+            async def evaluate(self, context):
+                return PolicyResult(
+                    decision=PolicyDecision.REQUIRE_APPROVAL,
+                    reason="Human approval required",
+                    policy_id="requires-approval",
+                )
+
+            async def get_policy_id(self):
+                return "requires-approval"
+
+            async def get_policy_version(self):
+                return "1.0.0"
+
+        class MentionsApproval:
+            async def evaluate(self, context):
+                return PolicyResult(
+                    decision=PolicyDecision.ALLOW,
+                    reason="Approval not applicable to this provider",
+                    policy_id="unrelated-allow",
+                )
+
+            async def get_policy_id(self):
+                return "unrelated-allow"
+
+            async def get_policy_version(self):
+                return "1.0.0"
+
+        engine = PolicyEngine(providers=[RequiresApproval(), MentionsApproval()])
+
+        result = await engine.evaluate(_make_context(action="delete"))
+
+        assert result.decision == PolicyDecision.REQUIRE_APPROVAL
+        assert result.policy_id == "requires-approval"
+
 
 # ── Fail-closed behavior ────────────────────────────────────────────
 

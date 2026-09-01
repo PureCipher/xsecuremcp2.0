@@ -19,6 +19,7 @@ import httpx
 from mcp.server.lowlevel.server import LifespanResultT
 
 from purecipher.openapi_store import OpenAPIStore, extract_openapi_operations
+from purecipher.outbound_security import validate_outbound_url
 from securemcp import SecureMCP
 from securemcp.config import SecurityConfig
 
@@ -53,6 +54,7 @@ class OpenAPIGateway(SecureMCP[LifespanResultT]):
         http_client: httpx.AsyncClient | None = None,
         **kwargs: Any,
     ) -> None:
+        validate_outbound_url(config.upstream_base_url)
         super().__init__(
             name=name, security=security, mount_security_api=False, **kwargs
         )
@@ -124,6 +126,7 @@ class OpenAPIGateway(SecureMCP[LifespanResultT]):
                     url,
                     headers=header_dict or None,
                     json=body_value if body_value is not None else None,
+                    follow_redirects=False,
                 )
 
                 text = await res.aread()
@@ -135,7 +138,18 @@ class OpenAPIGateway(SecureMCP[LifespanResultT]):
                     parsed = text.decode("utf-8", errors="replace")
                 return {
                     "status_code": res.status_code,
-                    "headers": {k: v for k, v in res.headers.items()},
+                    "headers": {
+                        k: v
+                        for k, v in res.headers.items()
+                        if k.lower()
+                        in {
+                            "cache-control",
+                            "content-language",
+                            "content-length",
+                            "content-type",
+                            "etag",
+                        }
+                    },
                     "data": parsed,
                 }
 

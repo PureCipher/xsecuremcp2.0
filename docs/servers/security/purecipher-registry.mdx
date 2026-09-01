@@ -225,6 +225,11 @@ PureCipher auth is product-layer auth owned by `src/purecipher`, not FastMCP cor
 
 Set `PURECIPHER_ENABLE_AUTH=true` and provide a signing key with `PURECIPHER_JWT_SECRET`. You can also configure static users through `PURECIPHER_USERS_JSON`.
 
+Environment-configured auth marks the session cookie `Secure` by default. Local
+HTTP development can explicitly opt out with
+`PURECIPHER_AUTH_COOKIE_SECURE=false`; do not use that override on an
+Internet-facing deployment.
+
 If auth is enabled and `PURECIPHER_USERS_JSON` is omitted, the registry falls back to development accounts:
 
 - `viewer / viewer123`
@@ -247,6 +252,18 @@ registry = PureCipherRegistry(
 ```
 
 The CLI and Docker launchers use the same setting through `PURECIPHER_REGISTRY_DB` or `--database-path`. Moderation mode can also be toggled through `PURECIPHER_REQUIRE_MODERATION=true`, and auth can be enabled through `PURECIPHER_ENABLE_AUTH=true`.
+
+## OpenAPI Proxy Egress
+
+OpenAPI proxy execution accepts HTTPS destinations that resolve only to public
+addresses. Cleartext HTTP, loopback, private, link-local, reserved, and cloud
+metadata destinations are rejected, and redirects are not followed.
+
+For isolated local development, exact hosts can be opted in with
+`PURECIPHER_OPENAPI_ALLOW_HTTP_HOSTS` and
+`PURECIPHER_OPENAPI_ALLOW_PRIVATE_HOSTS`. Both settings are comma-separated
+hostname lists. Treat either override as a network-security exception and keep
+it out of production configuration.
 
 ## Moderation Mode
 

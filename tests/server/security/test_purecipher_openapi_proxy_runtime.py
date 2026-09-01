@@ -13,6 +13,7 @@ import asyncio
 import json
 
 import httpx
+import pytest
 
 from purecipher import PureCipherRegistry
 
@@ -117,6 +118,17 @@ def _registry_no_contracts() -> PureCipherRegistry:
 
 
 class TestPublishedToolAppearsInToolsList:
+    def test_publisher_cannot_set_reserved_security_tags(self):
+        registry = _registry_no_contracts()
+        _source, toolset_id = _seed_publisher(registry)
+
+        with pytest.raises(ValueError, match="reserved security attributes"):
+            registry.publish_toolset_as_listings(
+                toolset_id,
+                publisher_id="acme",
+                extra_tags={"action:call_tool"},
+            )
+
     def test_published_listing_is_visible_via_list_tools(self):
         registry = _registry_no_contracts()
         _source, toolset_id = _seed_publisher(registry)

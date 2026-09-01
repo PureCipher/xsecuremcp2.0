@@ -63,6 +63,7 @@ class TestPureCipherPublisherCLI:
             enabled=True,
             issuer="purecipher-registry",
             jwt_secret=TEST_JWT_SECRET,
+            cookie_secure=False,
             users_json=TEST_USERS_JSON,
         )
 

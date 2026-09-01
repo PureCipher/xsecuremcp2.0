@@ -81,11 +81,34 @@ def _auth_settings() -> RegistryAuthSettings:
         enabled=True,
         issuer="purecipher-registry",
         jwt_secret=TEST_JWT_SECRET,
+        cookie_secure=False,
         users_json=TEST_USERS_JSON,
     )
 
 
 class TestPureCipherRegistryAuth:
+    def test_environment_auth_cookies_are_secure_by_default(self, monkeypatch):
+        monkeypatch.setenv("PURECIPHER_ENABLE_AUTH", "true")
+        monkeypatch.delenv("PURECIPHER_AUTH_COOKIE_SECURE", raising=False)
+
+        settings = RegistryAuthSettings.from_env(
+            issuer="purecipher-registry",
+            signing_secret=TEST_JWT_SECRET,
+        )
+
+        assert settings.cookie_secure is True
+
+    def test_environment_can_explicitly_allow_local_http_cookie(self, monkeypatch):
+        monkeypatch.setenv("PURECIPHER_ENABLE_AUTH", "true")
+        monkeypatch.setenv("PURECIPHER_AUTH_COOKIE_SECURE", "false")
+
+        settings = RegistryAuthSettings.from_env(
+            issuer="purecipher-registry",
+            signing_secret=TEST_JWT_SECRET,
+        )
+
+        assert settings.cookie_secure is False
+
     def test_security_api_defaults_to_admin_registry_auth(self):
         registry = PureCipherRegistry(
             signing_secret=TEST_SIGNING_SECRET,
@@ -116,6 +139,7 @@ class TestPureCipherRegistryAuth:
                 enabled=True,
                 issuer="purecipher-registry",
                 jwt_secret=TEST_JWT_SECRET,
+                cookie_secure=False,
             ),
             persistence_path=registry_dsn,
         )

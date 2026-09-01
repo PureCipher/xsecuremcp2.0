@@ -23,6 +23,7 @@ from fastmcp.server.middleware.middleware import (
 from fastmcp.server.security.contracts.broker import ContextBroker
 from fastmcp.server.security.contracts.exchange_log import ExchangeEventType
 from fastmcp.server.security.contracts.schema import Contract
+from fastmcp.server.security.principal import principal_id_from_access_token
 from fastmcp.tools.base import Tool, ToolResult
 
 logger = logging.getLogger(__name__)
@@ -83,7 +84,7 @@ class ContractValidationMiddleware(Middleware):
         from fastmcp.server.dependencies import get_access_token
 
         token = get_access_token()
-        return token.token[:8] + "..." if token is not None else None
+        return principal_id_from_access_token(token)
 
     def _find_valid_contract(self, agent_id: str | None) -> Contract | None:
         """Find a valid active contract for the agent."""

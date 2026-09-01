@@ -30,6 +30,7 @@ from fastmcp.server.security.policy.provider import (
     PolicyEvaluationContext,
     PolicyResult,
 )
+from fastmcp.server.security.principal import principal_id_from_access_token
 from fastmcp.tools.base import Tool, ToolResult
 
 logger = logging.getLogger(__name__)
@@ -89,17 +90,17 @@ class PolicyEnforcementMiddleware(Middleware):
         from fastmcp.server.dependencies import get_access_token
 
         token = get_access_token()
-        if token is not None:
-            actor_id = token.token[:8] + "..."  # Redacted token prefix
+        actor_id = principal_id_from_access_token(token)
 
         metadata: dict = extra_metadata or {}
         metadata["method"] = middleware_context.method
         metadata["source"] = middleware_context.source
 
         capability = _capability_overrides(tags, metadata)
+        policy_action = cast(str, capability.pop("action", action))
         return PolicyEvaluationContext(
             actor_id=actor_id,
-            action=action,
+            action=policy_action,
             resource_id=resource_id,
             metadata=metadata,
             timestamp=middleware_context.timestamp,
@@ -115,9 +116,10 @@ class PolicyEnforcementMiddleware(Middleware):
     ) -> PolicyEvaluationContext:
         """Build a lightweight context for list-level filtering."""
         capability = _capability_overrides(tags, {})
+        policy_action = cast(str, capability.pop("action", action))
         return PolicyEvaluationContext(
             actor_id=None,
-            action=action,
+            action=policy_action,
             resource_id=resource_id,
             tags=tags,
             **cast(Any, capability),
@@ -163,9 +165,10 @@ class PolicyEnforcementMiddleware(Middleware):
         if tool is not None:
             tool_tags = frozenset(tool.tags)
             capability = _capability_overrides(tool_tags, eval_ctx.metadata)
+            policy_action = cast(str, capability.pop("action", eval_ctx.action))
             eval_ctx = PolicyEvaluationContext(
                 actor_id=eval_ctx.actor_id,
-                action=eval_ctx.action,
+                action=policy_action,
                 resource_id=eval_ctx.resource_id,
                 metadata=eval_ctx.metadata,
                 timestamp=eval_ctx.timestamp,
@@ -558,6 +561,7 @@ _TAG_PREFIX_RESOURCE_TYPE = "resource:"
 _TAG_PREFIX_ENVIRONMENT = "env:"
 _TAG_PREFIX_RISK = "risk:"
 _TAG_PREFIX_PRINCIPAL_TYPE = "principal:"
+_TAG_PREFIX_ACTION = "action:"
 
 
 def _capability_overrides(tags: frozenset[str], metadata: dict) -> dict[str, object]:
@@ -587,11 +591,14 @@ def _capability_overrides(tags: frozenset[str], metadata: dict) -> dict[str, obj
             overrides["risk"] = lowered[len(_TAG_PREFIX_RISK) :]
         elif lowered.startswith(_TAG_PREFIX_PRINCIPAL_TYPE):
             overrides["principal_type"] = lowered[len(_TAG_PREFIX_PRINCIPAL_TYPE) :]
+        elif lowered.startswith(_TAG_PREFIX_ACTION):
+            overrides["action"] = lowered[len(_TAG_PREFIX_ACTION) :]
 
     # Path 1: explicit metadata wins (overrides tags).
     cap_md = metadata.get("capability") if isinstance(metadata, dict) else None
     if isinstance(cap_md, dict):
         for field_name in (
+            "action",
             "principal_type",
             "resource_type",
             "environment",

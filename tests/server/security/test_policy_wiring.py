@@ -341,6 +341,20 @@ class TestSecurityAPIWiring:
 
 
 class TestPolicyConfigEnhancements:
+    async def test_empty_fail_closed_config_denies(self):
+        config = PolicyConfig(fail_closed=True)
+
+        result = await config.get_engine().evaluate(
+            PolicyEvaluationContext(
+                actor_id="agent-1",
+                action="call_tool",
+                resource_id="tool-a",
+            )
+        )
+
+        assert result.decision == PolicyDecision.DENY
+        assert result.policy_id == "engine-no-providers"
+
     def test_get_audit_log_default(self):
         config = PolicyConfig()
         audit = config.get_audit_log()
