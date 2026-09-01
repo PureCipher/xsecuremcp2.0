@@ -30,6 +30,10 @@ from purecipher.openapi_store import (
     SecuritySchemeKind,
     extract_openapi_operations_detailed,
 )
+from purecipher.outbound_security import (
+    OutboundResponseTooLargeError,
+    UnsafeOutboundPathError,
+)
 
 
 def _spec_pets() -> dict:
@@ -188,6 +192,18 @@ class TestRequestBuilder:
         b = ex.build_request({"path": {"petId": "abc/def"}})
         assert b.url == "https://api.pets.example/v1/pets/abc%2Fdef"
         assert b.method == "GET"
+
+    def test_path_param_rejects_dot_segment(self):
+        spec = _spec_pets()
+        operation = _operation(spec, "showPet")
+        executor = OpenAPIToolExecutor(
+            spec=spec,
+            operation=operation,
+            server_url="https://api.pets.example/v1",
+        )
+
+        with pytest.raises(UnsafeOutboundPathError, match="dot segments"):
+            executor.build_request({"path": {"petId": ".."}})
 
     def test_query_array_explodes_by_default(self):
         spec = _spec_pets()
@@ -649,3 +665,23 @@ class TestExecute:
                 assert result.body == "hello world"
 
         asyncio.run(run())
+
+    async def test_response_body_is_bounded_while_streaming(self):
+        spec = _spec_pets()
+        executor = self._make_executor(spec, "showPet")
+        store = self._store_with_bearer()
+        transport = httpx.MockTransport(
+            lambda request: httpx.Response(200, content=b"x" * 11)
+        )
+
+        async with httpx.AsyncClient(transport=transport) as client:
+            with pytest.raises(
+                OutboundResponseTooLargeError,
+                match="10-byte limit",
+            ):
+                await executor.execute(
+                    {"path": {"petId": "x"}},
+                    store=store,
+                    client=client,
+                    max_response_bytes=10,
+                )

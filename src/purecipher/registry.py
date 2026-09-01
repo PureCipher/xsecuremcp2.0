@@ -2852,18 +2852,17 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             ],
         }
 
-    def _session_from_request(self, request: Request) -> RegistrySession | None:
+    def resolve_registry_session(
+        self,
+        *,
+        cookie_token: str = "",
+        bearer_token: str = "",
+    ) -> RegistrySession | None:
+        """Resolve a registry session through the canonical revocation checks."""
         if not self.auth_enabled:
             return None
 
-        token = request.cookies.get(self._auth_settings.cookie_name, "")
-        bearer_token = ""
-        if not token:
-            authorization = request.headers.get("authorization", "")
-            scheme, _, candidate = authorization.partition(" ")
-            if scheme.lower() == "bearer":
-                bearer_token = candidate.strip()
-                token = bearer_token
+        token = cookie_token or bearer_token
         if not token:
             return None
         session = self._auth_settings.decode_token(token)
@@ -2886,6 +2885,16 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     session_id="",
                 )
         return None
+
+    def _session_from_request(self, request: Request) -> RegistrySession | None:
+        cookie_token = request.cookies.get(self._auth_settings.cookie_name, "")
+        authorization = request.headers.get("authorization", "")
+        scheme, _, candidate = authorization.partition(" ")
+        bearer_token = candidate.strip() if scheme.lower() == "bearer" else ""
+        return self.resolve_registry_session(
+            cookie_token=cookie_token,
+            bearer_token=bearer_token,
+        )
 
     @staticmethod
     def _session_payload(session: RegistrySession | None) -> dict[str, Any] | None:

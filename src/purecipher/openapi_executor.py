@@ -25,7 +25,6 @@ import json
 import logging
 from dataclasses import dataclass, field
 from typing import Any
-from urllib.parse import quote
 
 from purecipher.openapi_store import (
     OpenAPICredentialRecord,
@@ -36,6 +35,10 @@ from purecipher.openapi_store import (
     SecurityScheme,
     extract_security_schemes,
     resolve_operation_security,
+)
+from purecipher.outbound_security import (
+    DEFAULT_MAX_RESPONSE_BYTES,
+    encode_outbound_path_segment,
 )
 
 logger = logging.getLogger(__name__)
@@ -107,16 +110,17 @@ def _encode_path_value(value: Any) -> str:
     values are joined with commas.
     """
     if isinstance(value, list):
-        joined = ",".join(_stringify(item) for item in value)
-        return quote(joined, safe="")
-    if isinstance(value, dict):
+        raw_value = ",".join(_stringify(item) for item in value)
+    elif isinstance(value, dict):
         # OpenAPI "simple" style for objects: ``key,value,key,value``
         parts: list[str] = []
         for k, v in value.items():
             parts.append(_stringify(k))
             parts.append(_stringify(v))
-        return quote(",".join(parts), safe="")
-    return quote(_stringify(value), safe="")
+        raw_value = ",".join(parts)
+    else:
+        raw_value = _stringify(value)
+    return encode_outbound_path_segment(raw_value)
 
 
 def _encode_query_pairs(
@@ -478,6 +482,7 @@ class OpenAPIToolExecutor:
         store: OpenAPIStore | None = None,
         *,
         timeout_seconds: float = 15.0,
+        max_response_bytes: int = DEFAULT_MAX_RESPONSE_BYTES,
         validate_input: bool = True,
         validate_output: bool = True,
         client: Any | None = None,
@@ -496,7 +501,11 @@ class OpenAPIToolExecutor:
         """
         import httpx
 
-        from purecipher.outbound_security import validate_outbound_url
+        from purecipher.outbound_security import (
+            PinnedDNSAsyncTransport,
+            read_response_body_limited,
+            validate_outbound_url,
+        )
 
         if validate_input:
             self.validate_arguments(args)
@@ -538,10 +547,26 @@ class OpenAPIToolExecutor:
 
         owns_client = client is None
         active_client: httpx.AsyncClient = (
-            client if client is not None else httpx.AsyncClient(timeout=timeout_seconds)
+            client
+            if client is not None
+            else httpx.AsyncClient(
+                timeout=timeout_seconds,
+                transport=PinnedDNSAsyncTransport(),
+            )
         )
         try:
-            response = await active_client.send(request, follow_redirects=False)
+            response = await active_client.send(
+                request,
+                follow_redirects=False,
+                stream=True,
+            )
+            try:
+                response_body = await read_response_body_limited(
+                    response,
+                    max_bytes=max_response_bytes,
+                )
+            finally:
+                await response.aclose()
         finally:
             if owns_client:
                 await active_client.aclose()
@@ -554,11 +579,17 @@ class OpenAPIToolExecutor:
         raw_bytes: bytes | None = None
         if "json" in response_ct:
             try:
-                parsed_body = response.json()
+                parsed_body = json.loads(response_body)
             except ValueError:
-                parsed_body = response.text
+                parsed_body = response_body.decode(
+                    response.encoding or "utf-8",
+                    errors="replace",
+                )
         elif response_ct.startswith("text/") or response_ct == "":
-            text = response.text
+            text = response_body.decode(
+                response.encoding or "utf-8",
+                errors="replace",
+            )
             # Be forgiving: if the upstream forgot to set CT but
             # returned valid JSON, try to decode it anyway.
             stripped = text.strip()
@@ -570,7 +601,7 @@ class OpenAPIToolExecutor:
             else:
                 parsed_body = text
         else:
-            raw_bytes = response.content
+            raw_bytes = response_body
             parsed_body = None
 
         result = ExecutorResult(
