@@ -12,6 +12,8 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
+from fastmcp.server.security.expression import evaluate_boolean_expression
+
 
 class ConsentStatus(Enum):
     """Status of a consent grant."""
@@ -62,27 +64,13 @@ class ConsentCondition:
     def evaluate(self, context: dict[str, Any]) -> bool:
         """Evaluate the condition against a context dict.
 
-        Uses a restricted eval for simple expressions. Returns False
-        on any evaluation error (fail-closed).
+        Uses the shared constrained expression evaluator. Returns False on any
+        unsupported syntax or evaluation error (fail-closed).
         """
         if not self.expression:
             return True
         try:
-            allowed_builtins = {
-                "len": len,
-                "str": str,
-                "int": int,
-                "float": float,
-                "bool": bool,
-                "all": all,
-                "any": any,
-                "True": True,
-                "False": False,
-                "None": None,
-            }
-            return bool(
-                eval(self.expression, {"__builtins__": allowed_builtins}, context)
-            )
+            return evaluate_boolean_expression(self.expression, context)
         except Exception:
             return False
 
