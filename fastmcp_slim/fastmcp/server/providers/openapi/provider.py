@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import warnings
 from collections import Counter
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from typing import Any, Literal, cast
 
-import httpx
+import httpx2
 from jsonschema_path import SchemaPath
 
+from fastmcp._warnings import FastMCPDeprecationWarning
 from fastmcp.prompts import Prompt
 from fastmcp.resources import Resource, ResourceTemplate
 from fastmcp.server.providers.base import Provider
@@ -48,6 +50,14 @@ logger = get_logger(__name__)
 DEFAULT_TIMEOUT: float = 30.0
 
 
+def _is_legacy_httpx_client(client: object) -> bool:
+    """Detect a legacy httpx client without importing the legacy package."""
+    return any(
+        cls.__module__.partition(".")[0] == "httpx" and cls.__name__ == "AsyncClient"
+        for cls in type(client).__mro__
+    )
+
+
 class OpenAPIProvider(Provider):
     """Provider that creates MCP components from an OpenAPI specification.
 
@@ -58,9 +68,9 @@ class OpenAPIProvider(Provider):
         ```python
         from fastmcp import FastMCP
         from fastmcp.server.providers.openapi import OpenAPIProvider
-        import httpx
+        import httpx2
 
-        client = httpx.AsyncClient(base_url="https://api.example.com")
+        client = httpx2.AsyncClient(base_url="https://api.example.com")
         provider = OpenAPIProvider(openapi_spec=spec, client=client)
 
         mcp = FastMCP("API Server")
@@ -71,7 +81,7 @@ class OpenAPIProvider(Provider):
     def __init__(
         self,
         openapi_spec: dict[str, Any],
-        client: httpx.AsyncClient | None = None,
+        client: httpx2.AsyncClient | None = None,
         *,
         route_maps: list[RouteMap] | None = None,
         route_map_fn: RouteMapFn | None = None,
@@ -84,10 +94,12 @@ class OpenAPIProvider(Provider):
 
         Args:
             openapi_spec: OpenAPI schema as a dictionary
-            client: Optional httpx AsyncClient for making HTTP requests.
+            client: Optional httpx2 AsyncClient for making HTTP requests.
                 If not provided, a default client is created using the first
                 server URL from the OpenAPI spec with a 30-second timeout.
                 To customize timeout or other settings, pass your own client.
+                Legacy httpx clients are temporarily accepted with a deprecation
+                warning.
             route_maps: Optional list of RouteMap objects defining route mappings
             route_map_fn: Optional callable for advanced route type mapping
             mcp_component_fn: Optional callable for component customization
@@ -103,6 +115,14 @@ class OpenAPIProvider(Provider):
         self._owns_client = client is None
         if client is None:
             client = self._create_default_client(openapi_spec)
+        elif _is_legacy_httpx_client(client):
+            warnings.warn(
+                "Passing an httpx.AsyncClient to OpenAPIProvider is deprecated "
+                "and will be removed in a future release. Pass an "
+                "httpx2.AsyncClient instead.",
+                FastMCPDeprecationWarning,
+                stacklevel=2,
+            )
         self._client = client
         self._mcp_component_fn = mcp_component_fn
         self._validate_output = validate_output
@@ -166,19 +186,19 @@ class OpenAPIProvider(Provider):
         logger.debug(f"Created OpenAPIProvider with {len(http_routes)} routes")
 
     @classmethod
-    def _create_default_client(cls, openapi_spec: dict[str, Any]) -> httpx.AsyncClient:
+    def _create_default_client(cls, openapi_spec: dict[str, Any]) -> httpx2.AsyncClient:
         """Create a default httpx client from the OpenAPI spec's server URL."""
         servers = openapi_spec.get("servers", [])
         if not servers or not servers[0].get("url"):
             raise ValueError(
                 "No server URL found in OpenAPI spec. Either add a 'servers' "
-                "entry to the spec or provide an httpx.AsyncClient explicitly."
+                "entry to the spec or provide an httpx2.AsyncClient explicitly."
             )
         base_url = servers[0]["url"]
         variables = servers[0].get("variables", {})
         for name, var in variables.items():
             base_url = base_url.replace(f"{{{name}}}", var.get("default", ""))
-        return httpx.AsyncClient(base_url=base_url, timeout=DEFAULT_TIMEOUT)
+        return httpx2.AsyncClient(base_url=base_url, timeout=DEFAULT_TIMEOUT)
 
     @asynccontextmanager
     async def lifespan(self) -> AsyncIterator[None]:

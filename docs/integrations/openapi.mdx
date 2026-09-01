@@ -26,14 +26,14 @@ We recommend using the FastAPI integration for bootstrapping and prototyping, no
 To convert an OpenAPI specification to an MCP server, use the `FastMCP.from_openapi()` class method:
 
 ```python server.py
-import httpx
+import httpx2
 from fastmcp import FastMCP
 
 # Create an HTTP client for your API
-client = httpx.AsyncClient(base_url="https://api.example.com")
+client = httpx2.AsyncClient(base_url="https://api.example.com")
 
 # Load your OpenAPI spec 
-openapi_spec = httpx.get("https://api.example.com/openapi.json").json()
+openapi_spec = httpx2.get("https://api.example.com/openapi.json").json()
 
 # Create the MCP server
 mcp = FastMCP.from_openapi(
@@ -51,20 +51,19 @@ if __name__ == "__main__":
 If your API requires authentication, configure it on the HTTP client:
 
 ```python
-import httpx
+import httpx2
 from fastmcp import FastMCP
 
 # Bearer token authentication
-api_client = httpx.AsyncClient(
+api_client = httpx2.AsyncClient(
     base_url="https://api.example.com",
     headers={"Authorization": "Bearer YOUR_TOKEN"}
 )
 
 # Create MCP server with authenticated client
 mcp = FastMCP.from_openapi(
-    openapi_spec=spec, 
+    openapi_spec=spec,
     client=api_client,
-    timeout=30.0  # 30 second timeout for all requests
 )
 ```
 
@@ -404,7 +403,7 @@ FastMCP intelligently handles different types of parameters in OpenAPI requests:
 
 ### Query Parameters
 
-By default, FastMCP only includes query parameters that have non-empty values. Parameters with `None` values or empty strings are automatically filtered out.
+By default, FastMCP skips parameters whose value is `None`. Empty strings are still sent as empty query values, which is useful for APIs that distinguish between an omitted parameter and an explicitly blank one.
 
 ```python
 # When calling this tool...
@@ -412,10 +411,10 @@ await client.call_tool("search_products", {
     "category": "electronics",  # ✅ Included
     "min_price": 100,           # ✅ Included  
     "max_price": None,          # ❌ Excluded
-    "brand": "",                # ❌ Excluded
+    "brand": "",                # ✅ Included as an empty value
 })
 
-# The HTTP request will be: GET /products?category=electronics&min_price=100
+# The HTTP request will be: GET /products?category=electronics&min_price=100&brand=
 ```
 
 ### Path Parameters
@@ -454,3 +453,20 @@ FastMCP handles array parameters according to OpenAPI specifications:
 ### Headers
 
 Header parameters are automatically converted to strings and included in the HTTP request.
+
+### Composed Request Bodies
+
+A request body becomes a flat set of tool arguments, which is the shape LLM tool-calling APIs fill in most reliably. Schemas composed with `allOf` are resolved first, following `$ref` members, so fields inherited from a parent schema appear alongside the ones a schema declares itself.
+
+Schemas that use a `discriminator` are flattened the same way. FastMCP merges in the fields of every subtype named in the discriminator's `mapping`, marks them optional, and names the accepted values on the discriminator's own description. Given a `Pet` body discriminated by `petType` and mapped onto `Cat` and `Dog`, the tool takes the discriminator plus whichever fields that variant uses:
+
+```python
+await client.call_tool("create_pet", {
+    "petType": "cat",
+    "meowVolume": 11,
+})
+```
+
+The discriminator stays required; every variant field is optional, because only one variant applies to any given call.
+
+This trades local strictness for a schema models complete accurately. The generated schema permits any combination of variant fields, so sending `packSize` with `petType: "cat"` passes FastMCP's validation and is rejected by the API itself, exactly as it would be for any other HTTP client. Where two variants declare the same field differently, the declarations are combined with `anyOf` so that neither variant's constraints are advertised as applying to both.

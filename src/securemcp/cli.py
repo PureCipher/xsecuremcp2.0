@@ -17,6 +17,7 @@ import cyclopts
 import mcp.types
 import pyperclip
 from cyclopts import Parameter
+from fastmcp_tasks.worker_cli import tasks_app as fastmcp_tasks_app
 from rich.console import Console
 from rich.table import Table
 
@@ -56,7 +57,6 @@ from fastmcp.cli.install.gemini_cli import (
 from fastmcp.cli.install.goose import goose_command as fastmcp_goose_command
 from fastmcp.cli.install.mcp_json import mcp_json_command as fastmcp_mcp_json_command
 from fastmcp.cli.install.stdio import stdio_command as fastmcp_stdio_command
-from fastmcp.cli.tasks import tasks_app as fastmcp_tasks_app
 from fastmcp.client.transports.base import ClientTransport
 from fastmcp.client.transports.stdio import StdioTransport
 from fastmcp.utilities.mcp_server_config.v1.environments.uv import UVEnvironment

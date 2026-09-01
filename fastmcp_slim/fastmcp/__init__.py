@@ -6,15 +6,13 @@ from importlib.metadata import PackageNotFoundError, version as _version
 from typing import TYPE_CHECKING
 
 from fastmcp import _install_hints
+from fastmcp._warnings import FastMCPDeprecationWarning
 from fastmcp.settings import Settings
 from fastmcp.utilities.logging import configure_logging as _configure_logging
 
 if TYPE_CHECKING:
     from fastmcp.client import Client as Client
     from fastmcp.apps.app import FastMCPApp as FastMCPApp
-    from fastmcp.exceptions import (
-        FastMCPDeprecationWarning as FastMCPDeprecationWarning,
-    )
     from fastmcp.server.context import Context as Context
     from fastmcp.server.server import FastMCP as FastMCP
 
@@ -25,18 +23,21 @@ if settings.log_enabled:
         enable_rich_tracebacks=settings.enable_rich_tracebacks,
     )
 
+# Install camelCase compatibility shims for MCP SDK v2's snake_case rename.
+# Installed unconditionally; each shim's getter checks the live
+# `mcp_camelcase_compat` setting at read time, so the bridge can be toggled at
+# runtime. Patches only mcp_types model classes, no client chain.
+from fastmcp import _compat
+
+_compat.install()
+
 try:
     __version__ = _version("fastmcp-slim")
 except PackageNotFoundError:
     __version__ = _version("fastmcp")
 
 if settings.deprecation_warnings:
-    try:
-        from fastmcp.exceptions import FastMCPDeprecationWarning
-    except ImportError:
-        pass
-    else:
-        warnings.simplefilter("default", FastMCPDeprecationWarning)
+    warnings.simplefilter("default", FastMCPDeprecationWarning)
 
 
 # --- Lazy imports for performance (see #3292) ---
@@ -73,10 +74,6 @@ def __getattr__(name: str) -> object:
             raise ImportError(_install_hints.APP_SUPPORT) from exc
 
         return FastMCPApp
-    if name == "FastMCPDeprecationWarning":
-        from fastmcp.exceptions import FastMCPDeprecationWarning
-
-        return FastMCPDeprecationWarning
     if name == "client":
         try:
             return importlib.import_module("fastmcp.client")

@@ -22,8 +22,8 @@ from fastmcp import Client
 
 async def message_handler(message):
     """Handle MCP notifications from the server."""
-    if hasattr(message, 'root'):
-        method = message.root.method
+    if hasattr(message, 'method'):
+        method = message.method
 
         if method == "notifications/tools/list_changed":
             print("Tools have changed - refresh tool cache")
@@ -31,6 +31,8 @@ async def message_handler(message):
             print("Resources have changed")
         elif method == "notifications/prompts/list_changed":
             print("Prompts have changed")
+        elif method == "notifications/resources/updated":
+            print("A resource was updated")
 
 client = Client(
     "my_mcp_server.py",
@@ -113,6 +115,18 @@ class MyMessageHandler(MessageHandler):
         """Called for progress updates during long-running operations."""
         pass
 
+    async def on_resource_updated(
+        self, notification: mcp.types.ResourceUpdatedNotification
+    ) -> None:
+        """Called when a specific resource changes."""
+        pass
+
+    async def on_cancelled(
+        self, notification: mcp.types.CancelledNotification
+    ) -> None:
+        """Called when a request is cancelled."""
+        pass
+
     async def on_logging_message(
         self, notification: mcp.types.LoggingMessageNotification
     ) -> None:
@@ -125,6 +139,7 @@ class MyMessageHandler(MessageHandler):
 A practical example of maintaining a tool cache that refreshes when tools change:
 
 ```python
+from pathlib import Path
 from fastmcp import Client
 from fastmcp.client.messages import MessageHandler
 import mcp.types
@@ -140,7 +155,7 @@ class ToolCacheHandler(MessageHandler):
         print("Tools changed - clearing cache")
         self.cached_tools = []  # Force refresh on next access
 
-client = Client("server.py", message_handler=ToolCacheHandler())
+client = Client(Path("server.py"), message_handler=ToolCacheHandler())
 ```
 
 ## Server Requests

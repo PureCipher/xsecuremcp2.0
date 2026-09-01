@@ -86,6 +86,29 @@ def _auth_settings() -> RegistryAuthSettings:
 
 
 class TestPureCipherRegistryAuth:
+    def test_security_api_defaults_to_admin_registry_auth(self):
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            auth_settings=_auth_settings(),
+        )
+
+        with TestClient(registry.http_app()) as client:
+            assert client.get("/security/health").status_code == 401
+
+            viewer_login = client.post(
+                "/registry/login",
+                json={"username": "viewer", "password": "viewer123"},
+            )
+            assert viewer_login.status_code == 200
+            assert client.get("/security/health").status_code == 401
+
+            admin_login = client.post(
+                "/registry/login",
+                json={"username": "admin", "password": "admin123"},
+            )
+            assert admin_login.status_code == 200
+            assert client.get("/security/health").status_code == 200
+
     def test_bootstrap_setup_creates_first_admin(self, registry_dsn):
         registry = PureCipherRegistry(
             signing_secret=TEST_SIGNING_SECRET,

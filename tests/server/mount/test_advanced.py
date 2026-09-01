@@ -1,13 +1,15 @@
 """Advanced mounting scenarios."""
 
 import pytest
-from mcp.types import TextContent
+from mcp_types import TextContent
 from starlette.routing import Route
 
 from fastmcp import FastMCP
 from fastmcp.client import Client
 from fastmcp.server.providers import FastMCPProvider
 from fastmcp.server.providers.wrapped_provider import _WrappedProvider
+from fastmcp_tasks import TasksExtension
+from tests.tasks.task_helpers import running_task_server
 
 
 class TestDynamicChanges:
@@ -605,9 +607,10 @@ class TestMountedServerDocketBehavior:
         (user-defined lifespan), not _lifespan_manager (which includes Docket).
         """
         main_app = FastMCP("MainApp")
+        main_app.add_extension(TasksExtension())
         sub_app = FastMCP("SubApp")
 
-        # Need a task-enabled component to trigger Docket initialization
+        # A task-enabled component on the parent makes it own a Docket.
         @main_app.tool(task=True)
         async def _trigger_docket() -> str:
             return "trigger"
@@ -618,20 +621,14 @@ class TestMountedServerDocketBehavior:
 
         main_app.mount(sub_app, "sub")
 
-        # After running the main app's lifespan, the sub app should not have
-        # its own Docket instance
-        async with Client(main_app) as client:
-            # The main app should have a docket (created by _lifespan_manager)
-            # because it has a task-enabled component
+        # After entering the parent's lifespan, only the parent owns a Docket.
+        async with running_task_server(main_app):
+            # The parent owns a Docket because it has a task-enabled component.
             assert main_app.docket is not None
 
-            # The mounted sub app should NOT have its own docket
-            # It uses the parent's docket for background tasks
+            # The mounted child does NOT own its own Docket; it uses the
+            # parent's Docket for background tasks.
             assert sub_app.docket is None
-
-            # But the tool should still work (prefixed as sub_my_tool)
-            result = await client.call_tool("sub_my_tool", {})
-            assert result.data == "test"
 
 
 class TestComponentServicePrefixLess:

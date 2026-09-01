@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import time
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from pydantic import AnyHttpUrl, ValidationError
@@ -14,6 +15,7 @@ from fastmcp.server.auth.cimd import (
     CIMDFetchError,
     CIMDValidationError,
 )
+from fastmcp.server.auth.ssrf import SSRFFetchResponse
 
 # Standard public IP used for DNS mocking in tests
 TEST_PUBLIC_IP = "93.184.216.34"
@@ -93,7 +95,9 @@ class TestCIMDDocument:
     def test_missing_redirect_uris_rejected(self):
         """Test that redirect_uris is required for CIMD."""
         with pytest.raises(ValidationError) as exc_info:
-            CIMDDocument(client_id=AnyHttpUrl("https://example.com/client.json"))
+            CIMDDocument.model_validate(
+                {"client_id": "https://example.com/client.json"}
+            )
         assert "redirect_uris" in str(exc_info.value)
 
     def test_empty_redirect_uris_rejected(self):
@@ -254,6 +258,31 @@ class TestCIMDFetcherHTTP:
 
         assert first.client_id == second.client_id
         assert len(httpx_mock.get_requests()) == 1
+
+    async def test_fetch_cache_evicts_oldest_document(self, fetcher: CIMDFetcher):
+        """Distinct client URLs cannot grow the document cache without bound."""
+        fetcher.MAX_CACHE_SIZE = 2
+
+        async def fake_fetch(url: str, **kwargs) -> SSRFFetchResponse:
+            document = {
+                "client_id": url,
+                "redirect_uris": ["http://localhost:3000/callback"],
+            }
+            return SSRFFetchResponse(
+                content=json.dumps(document).encode(),
+                status_code=200,
+                headers={"cache-control": "max-age=3600"},
+            )
+
+        urls = [f"https://example.com/client-{index}.json" for index in range(3)]
+        with patch(
+            "fastmcp.server.auth.cimd.ssrf_safe_fetch_response",
+            new=AsyncMock(side_effect=fake_fetch),
+        ):
+            for url in urls:
+                await fetcher.fetch(url)
+
+        assert list(fetcher._cache) == urls[1:]
 
     async def test_fetch_cache_control_max_age(
         self, fetcher: CIMDFetcher, httpx_mock, mock_dns
