@@ -569,7 +569,7 @@ return weighted_sum / total_weight   # 0.0 when total_weight == 0
 
 The local registry always carries full weight; peers are advisory in proportion to how much they are trusted. **Revocation checks are strictly local** — `is_revoked` consults `self._local_crl`, so a peer cannot directly revoke on another operator's behalf. Peer revocations arrive through `receive_revocation` and enter the local CRL as propagated entries, keeping the local operator in the loop.
 
-Revocation broadcast is available in both synchronous (`broadcast_revocation`) and asynchronous (`abroadcast_revocation`) form over a pluggable `BroadcastTransport` protocol.
+Revocation broadcast is available in both synchronous (`broadcast_revocation`) and asynchronous (`abroadcast_revocation`) form over a pluggable `BroadcastTransport` protocol. The built-in HTTP transports require signed messages by default and use the shared outbound network policy: public HTTPS destinations, DNS-pinned connections, disabled redirects and environment proxies, and bounded bodies. `mount_federation_receiver` provides the matching inbound boundary, verifying the HMAC-covered timestamp, nonce, body, and peer-specific key before applying a fresh message from an active peer. Its bounded replay cache fails closed rather than evicting an unexpired nonce.
 
 ---
 
@@ -690,6 +690,7 @@ Threats the architecture addresses:
 - **Behavioural compromise** — sigma-based drift detection with graduated response
 - **Supply-chain claims** — signed attestations; unsigned certification cannot move trust
 - **Compromised-tool response** — CRL with federated propagation
+- **Control-plane SSRF and replay** — DNS-pinned OPA/federation egress plus fresh, signed federation messages
 
 The limits, stated plainly:
 

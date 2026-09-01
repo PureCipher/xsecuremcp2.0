@@ -138,6 +138,62 @@ Identity-bearing routes are bound to the verified principal: a non-admin cannot 
 
 For an external authorization system, pass an `authorizer(request, principal, required_capability)` callback. It may be synchronous or asynchronous and must return exactly `True` to allow the route. False results and exceptions fail closed with HTTP 403. If that callback grants administrative routes, include `security:admin` in the principal as well when the caller needs administrator-only subject delegation.
 
+## Outbound Control-Plane Security
+
+SecureMCP applies one hardened network boundary to remote OPA evaluation and HTTP federation broadcasts. By default these clients permit only public HTTPS destinations. Hostnames are resolved once, every returned address must be globally routable, and the connection is pinned to an approved address while retaining the original HTTP `Host` and TLS SNI identity. Environment proxies and redirects are disabled, and request and response bodies have byte limits.
+
+Local OPA sidecars therefore require two independent, exact-host development exceptions: one for cleartext HTTP and one for a protected address. Keeping these controls separate prevents an HTTP exception from silently becoming private-network access.
+
+```python
+from fastmcp.server.security.outbound import OutboundNetworkPolicy
+from fastmcp.server.security.policy.policies.rego import OPAHttpRegoPolicy
+
+local_sidecar = OutboundNetworkPolicy(
+    allow_http_hosts={"localhost"},
+    allow_private_hosts={"localhost"},
+)
+
+opa = OPAHttpRegoPolicy(
+    base_url="http://localhost:8181",
+    package_path="securemcp/capability",
+    outbound_policy=local_sidecar,
+)
+```
+
+Federation HTTP messages are HMAC-signed by default. The signature covers the timestamp, nonce, and exact JSON body. The built-in receiver enforces freshness, rejects replayed nonces through a bounded fail-closed cache, validates the authenticated schema and peer status, and streams requests under a body-size limit before changing the local CRL.
+
+```python
+import os
+
+from fastmcp import FastMCP
+from fastmcp.server.security.federation.federation import TrustFederation
+from fastmcp.server.security.federation.http import mount_federation_receiver
+from fastmcp.server.security.federation.transport import HTTPBroadcastTransport
+
+west_secret = os.environ["SECUREMCP_WEST_FEDERATION_SECRET"]
+east_secret = os.environ["SECUREMCP_EAST_FEDERATION_SECRET"]
+server = FastMCP("east-federation-node")
+federation = TrustFederation(federation_id="east")
+federation.add_peer(
+    "West",
+    peer_id="west",
+    endpoint="https://west.example.com",
+)
+
+mount_federation_receiver(
+    server,
+    federation,
+    signing_secrets={"west": west_secret},
+)
+federation.set_broadcast_transport(
+    HTTPBroadcastTransport(signing_secret=east_secret)
+)
+```
+
+Use a distinct receiver secret for every peer, as shown above, so a member cannot impersonate another member. A single `bytes` or `str` value is also accepted by `signing_secrets` for a deliberately shared federation-wide key.
+
+`HTTPBroadcastTransport(allow_unsigned=True)` is an explicit escape hatch for deployments where another mutually authenticated transport protects the complete path. It is not appropriate for an unauthenticated HTTP route.
+
 For local command-line workflows, this repo exposes both `fastmcp` and `securemcp` console entrypoints.
 
 - Use `fastmcp` for upstream FastMCP examples and project workflows.

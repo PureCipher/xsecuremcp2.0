@@ -12,7 +12,7 @@ import inspect
 import logging
 import time
 import uuid
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -22,6 +22,15 @@ from fastmcp.server.security.federation.crl import (
     CertificateRevocationList,
     CRLEntry,
     RevocationReason,
+)
+from fastmcp.server.security.federation.messages import (
+    DEFAULT_FEDERATION_CLOCK_SKEW_SECONDS,
+    DEFAULT_FEDERATION_MESSAGE_MAX_AGE_SECONDS,
+    DEFAULT_MAX_FEDERATION_MESSAGE_BYTES,
+    FederationMessageError,
+    FederationReplayGuard,
+    FederationSigningSecrets,
+    verify_federation_message,
 )
 from fastmcp.server.security.registry.models import TrustScore
 
@@ -300,6 +309,7 @@ class TrustFederation:
         self._peer_scores: dict[str, dict[str, TrustScore]] = {}
         self._broadcast_transport: BroadcastTransport | None = broadcast_transport
         self._last_broadcast_result: BroadcastResult | None = None
+        self._federation_replay_guard = FederationReplayGuard()
 
     @property
     def federation_id(self) -> str:
@@ -480,6 +490,66 @@ class TrustFederation:
         )
 
         return entry
+
+    def receive_signed_revocation(
+        self,
+        body: bytes,
+        headers: Mapping[str, str],
+        *,
+        signing_secrets: FederationSigningSecrets,
+        max_age_seconds: int = DEFAULT_FEDERATION_MESSAGE_MAX_AGE_SECONDS,
+        max_clock_skew_seconds: int = DEFAULT_FEDERATION_CLOCK_SKEW_SECONDS,
+        max_message_bytes: int = DEFAULT_MAX_FEDERATION_MESSAGE_BYTES,
+        federation_id_header: str = "X-Federation-Id",
+        now: float | None = None,
+    ) -> CRLEntry | None:
+        """Authenticate a wire message before applying its revocation.
+
+        The signature covers the timestamp, nonce, and exact request body.
+        Fresh nonces are reserved in a bounded process-local replay cache before
+        the message reaches federation state. Invalid schemas raise
+        :class:`FederationMessageError`; authenticated messages from unknown or
+        suspended peers retain :meth:`receive_revocation`'s ``None`` result.
+        """
+        payload = verify_federation_message(
+            body,
+            headers,
+            signing_secrets=signing_secrets,
+            replay_guard=self._federation_replay_guard,
+            max_age_seconds=max_age_seconds,
+            max_clock_skew_seconds=max_clock_skew_seconds,
+            max_message_bytes=max_message_bytes,
+            federation_id_header=federation_id_header,
+            now=now,
+        )
+        peer_id = _required_wire_text(payload, "federation_id")
+        tool_name = _required_wire_text(payload, "tool_name")
+        attestation_id = _optional_wire_text(payload, "attestation_id")
+        description = _optional_wire_text(payload, "description")
+        emergency = payload.get("emergency", False)
+        if type(emergency) is not bool:
+            raise FederationMessageError("Federation emergency flag must be boolean")
+        raw_reason = payload.get(
+            "reason",
+            RevocationReason.FEDERATION_PROPAGATION.value,
+        )
+        if type(raw_reason) is not str:
+            raise FederationMessageError("Federation revocation reason must be text")
+        try:
+            reason = RevocationReason(raw_reason)
+        except ValueError as exc:
+            raise FederationMessageError(
+                "Federation revocation reason is not recognized"
+            ) from exc
+
+        return self.receive_revocation(
+            peer_id,
+            tool_name,
+            attestation_id=attestation_id,
+            reason=reason,
+            emergency=emergency,
+            description=description,
+        )
 
     # ── Querying federated trust ──────────────────────────────────
 
@@ -760,19 +830,15 @@ class TrustFederation:
         """Asynchronously push a payload to a single peer."""
         start = time.monotonic()
         try:
-            result = transport.send_revocation(peer, payload)
+            send = transport.send_revocation
+            if inspect.iscoroutinefunction(send):
+                result = send(peer, payload)
+            else:
+                # A synchronous network transport must never block the event loop
+                # used for concurrent federation fan-out.
+                result = await asyncio.to_thread(send, peer, payload)
             if inspect.isawaitable(result):
                 await result
-            else:
-                # Sync transport — already executed inline. To avoid
-                # blocking the loop we re-dispatch it on a worker thread
-                # if the caller actually expected async semantics. The
-                # cheapest correct path here is to run the call again
-                # off-thread, but that would double-deliver; instead we
-                # accept that a sync transport runs inline for the first
-                # call. Subsequent pushes already iterate concurrently
-                # via gather, so loop blocking is bounded.
-                pass
         except Exception as exc:
             return self._record_push_failure(peer, exc, start)
         return self._record_push_success(peer, start)
@@ -889,3 +955,21 @@ class TrustFederation:
             "revoked_tools": self._local_crl.revoked_tool_count,
             "peers": [p.to_dict() for p in self._peers.values()],
         }
+
+
+def _required_wire_text(payload: Mapping[str, Any], field_name: str) -> str:
+    value = payload.get(field_name)
+    if type(value) is not str or not value.strip():
+        raise FederationMessageError(
+            f"Federation payload field {field_name!r} must not be empty"
+        )
+    return value.strip()
+
+
+def _optional_wire_text(payload: Mapping[str, Any], field_name: str) -> str:
+    value = payload.get(field_name, "")
+    if type(value) is not str:
+        raise FederationMessageError(
+            f"Federation payload field {field_name!r} must be text"
+        )
+    return value.strip()
