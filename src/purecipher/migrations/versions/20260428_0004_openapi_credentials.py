@@ -34,8 +34,8 @@ def upgrade() -> None:
         op.create_table(
             "purecipher_openapi_credentials",
             sa.Column("credential_id", sa.Text(), primary_key=True),
-            sa.Column("created_at", sa.REAL(), nullable=False),
-            sa.Column("updated_at", sa.REAL(), nullable=False),
+            sa.Column("created_at", sa.Float(), nullable=False),
+            sa.Column("updated_at", sa.Float(), nullable=False),
             sa.Column("publisher_id", sa.Text(), nullable=False),
             sa.Column("source_id", sa.Text(), nullable=False),
             sa.Column("scheme_name", sa.Text(), nullable=False),

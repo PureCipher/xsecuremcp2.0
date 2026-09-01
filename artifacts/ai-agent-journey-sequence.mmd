@@ -1,0 +1,30 @@
+sequenceDiagram
+    actor U as User
+    participant A as AI Agent / MCP Client
+    participant R as Secured MCP Registry
+    participant G as SecureMCP Safety Pillars
+    participant M as Approved MCP Service
+
+    U->>A: 1. Ask the AI application to complete a task
+    A->>A: 2. Identify the MCP capability needed
+    A->>R: 3. Sign in and search approved services
+    R->>G: 4. Check identity, trust, policy and permission
+    G-->>R: 5. Return the access decision
+    R-->>A: 6. Provide an approved service configuration
+    A->>M: 7. Request the MCP capability
+    M->>G: 8. Apply safety rules during use
+    G->>G: 9. Reflexive Core checks behaviour and risk
+
+    alt Normal behaviour
+        G-->>M: 10A. Allow the action to continue
+        M-->>A: 11A. Return the result
+        A-->>U: 12A. Complete the user's task
+    else Elevated risk
+        G-->>A: 10B. Request approval or return a limited response
+    else Critical risk
+        G-->>M: 10C. Stop the action
+        G->>R: 11C. Recommend suspension or revocation
+        R-->>A: 12C. Disable the affected connection
+    end
+
+    G->>G: 13. Record provenance, audit and alerts

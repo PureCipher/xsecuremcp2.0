@@ -278,7 +278,7 @@ class TestRepublishIsIdempotent:
 
 
 class TestPersistenceReattach:
-    def test_reattach_runs_during_init(self, tmp_path):
+    def test_reattach_runs_during_init(self, registry_dsn):
         """A SQLite-backed registry that's restarted should expose its
         previously-published OpenAPI tools without the publisher
         having to re-run the publish flow.
@@ -288,14 +288,12 @@ class TestPersistenceReattach:
         rehydrates from disk; ``_reattach_openapi_proxy_tools`` then
         re-binds the FunctionTools.
         """
-        db = str(tmp_path / "registry.sqlite")
-
         # First boot — publish.
         registry_a = PureCipherRegistry(
             signing_secret="proxy-runtime-test-secret",
             enable_contracts=False,
             enable_consent=False,
-            persistence_path=db,
+            persistence_path=registry_dsn,
         )
         _source, toolset_id = _seed_publisher(registry_a)
         registry_a._openapi_invoke_client = httpx.AsyncClient(
@@ -310,7 +308,7 @@ class TestPersistenceReattach:
             signing_secret="proxy-runtime-test-secret",
             enable_contracts=False,
             enable_consent=False,
-            persistence_path=db,
+            persistence_path=registry_dsn,
         )
 
         async def run() -> list[str]:

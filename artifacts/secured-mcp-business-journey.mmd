@@ -1,0 +1,23 @@
+flowchart LR
+    subgraph P["Publisher journey"]
+        P1["1. Create and describe<br/>an MCP service"] --> P2["2. Submit it to the<br/>Secured MCP Registry"]
+        P2 --> P3["3. Complete safety<br/>and quality checks"]
+        P3 --> P4["4. Publish the<br/>approved service"]
+    end
+
+    subgraph R["Secured MCP Registry"]
+        R1["Confirms identity"]
+        R2["Checks safety and permissions"]
+        R3["Publishes approved services"]
+        R4["Monitors trust and risk"]
+    end
+
+    subgraph A["AI agent journey"]
+        A1["5. Find an approved<br/>MCP service"] --> A2["6. Request permission<br/>to use it"]
+        A2 --> A3["7. Use the service<br/>for the user's task"]
+        A3 --> A4["8. Continue, restrict<br/>or stop safely"]
+    end
+
+    P4 --> R1
+    R1 --> R2 --> R3 --> A1
+    A3 --> R4 --> A4

@@ -219,6 +219,7 @@ from fastmcp.server.security.registry import (
 from fastmcp.server.security.orchestrator import SecurityContext, SecurityOrchestrator
 from fastmcp.server.security.storage import (
     MemoryBackend,
+    PostgresBackend,
     SQLiteBackend,
     StorageBackend,
 )

@@ -1,24 +1,24 @@
 from __future__ import annotations
 
-import sqlite3
+import psycopg
 
 from purecipher.db_migrations import migrate_registry_database
 
 
-def test_alembic_migration_creates_registry_tables(tmp_path):
-    db_path = tmp_path / "registry.sqlite"
+def test_alembic_migration_creates_registry_tables(registry_dsn):
+    # The registry_dsn fixture already migrates to head; re-running is
+    # idempotent and mirrors how the CLI/registry invoke the migration.
+    migrate_registry_database(registry_dsn)
 
-    migrate_registry_database(str(db_path))
-
-    conn = sqlite3.connect(db_path)
-    tables = {
-        row[0]
-        for row in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type = 'table'"
-        ).fetchall()
-    }
-    version = conn.execute("SELECT version_num FROM alembic_version").fetchone()
-    conn.close()
+    with psycopg.connect(registry_dsn) as conn:
+        tables = {
+            row[0]
+            for row in conn.execute(
+                "SELECT table_name FROM information_schema.tables "
+                "WHERE table_schema = 'public'"
+            ).fetchall()
+        }
+        version = conn.execute("SELECT version_num FROM alembic_version").fetchone()
 
     assert version == ("20260428_0004",)
     assert "purecipher_registry_accounts" in tables
@@ -38,43 +38,18 @@ def test_alembic_migration_creates_registry_tables(tmp_path):
     assert "purecipher_openapi_credentials" in tables
 
 
-def test_alembic_migration_upgrades_legacy_account_table(tmp_path):
-    db_path = tmp_path / "registry.sqlite"
-    conn = sqlite3.connect(db_path)
-    conn.execute(
-        """
-        CREATE TABLE purecipher_registry_accounts (
-            username TEXT PRIMARY KEY,
-            password_hash TEXT NOT NULL,
-            role TEXT NOT NULL,
-            display_name TEXT NOT NULL,
-            source TEXT NOT NULL,
-            updated_at REAL NOT NULL
-        )
-        """
-    )
-    conn.execute(
-        """
-        INSERT INTO purecipher_registry_accounts
-            (username, password_hash, role, display_name, source, updated_at)
-        VALUES ('admin', 'hash', 'admin', 'Registry Admin', 'seed', 42.0)
-        """
-    )
-    conn.commit()
-    conn.close()
+def test_alembic_migration_creates_account_activity_columns(registry_dsn):
+    migrate_registry_database(registry_dsn)
 
-    migrate_registry_database(str(db_path))
-
-    conn = sqlite3.connect(db_path)
-    columns = {
-        row[1]
-        for row in conn.execute("PRAGMA table_info(purecipher_registry_accounts)")
-    }
-    created_at = conn.execute(
-        "SELECT created_at FROM purecipher_registry_accounts WHERE username = 'admin'"
-    ).fetchone()
-    conn.close()
+    with psycopg.connect(registry_dsn) as conn:
+        columns = {
+            row[0]
+            for row in conn.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_schema = 'public' "
+                "AND table_name = 'purecipher_registry_accounts'"
+            ).fetchall()
+        }
 
     assert "created_at" in columns
     assert "disabled_at" in columns
-    assert created_at == (42.0,)

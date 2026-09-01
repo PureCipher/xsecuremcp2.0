@@ -37,8 +37,26 @@ from fastmcp.server.security.gateway.tool_marketplace import (
 )
 from fastmcp.server.security.orchestrator import SecurityContext
 from fastmcp.server.security.registry.registry import TrustRegistry
-from fastmcp.server.security.storage.sqlite import SQLiteBackend
+from fastmcp.server.security.storage.pg_pool import is_postgres_dsn
+from fastmcp.server.security.storage.postgres import PostgresBackend
 from fastmcp.utilities.ui import create_secure_html_response
+
+
+def _make_security_backend(persistence_path: str | None) -> Any:
+    """Return the SecureMCP storage backend for a persistence target.
+
+    PostgreSQL is the registry's production persistence engine:
+
+    - A PostgreSQL DSN (``postgres://`` / ``postgresql://``) → PostgresBackend.
+    - Anything else (including ``None``) → ``None`` (ephemeral in-memory
+      registry). The registry does not persist to SQLite; durable state
+      requires a PostgreSQL DSN.
+    """
+    if is_postgres_dsn(persistence_path):
+        return PostgresBackend(persistence_path)  # type: ignore[arg-type]
+    return None
+
+
 from purecipher.account_activity import RegistryAccountActivityStore
 from purecipher.account_security import (
     LoginLockout,
@@ -444,9 +462,10 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         self._auth_settings.validate()
 
         self._persistence_path = persistence_path
-        schema_managed_by_migrations = (
-            bool(persistence_path) and persistence_path != ":memory:"
-        )
+        # PostgreSQL is the only durable engine: its schema is created by the
+        # Alembic migration chain. Any non-Postgres target runs ephemeral
+        # (each store falls back to in-memory), so no migration is needed.
+        schema_managed_by_migrations = is_postgres_dsn(persistence_path)
         if schema_managed_by_migrations:
             migrate_registry_database(persistence_path)
         self._notification_feed = RegistryNotificationFeed(
@@ -610,7 +629,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         if secret_bytes is None:
             raise ValueError("`signing_secret` must resolve to bytes.")
 
-        backend = SQLiteBackend(persistence_path) if persistence_path else None
+        backend = _make_security_backend(persistence_path)
         registry = TrustRegistry()
         marketplace = ToolMarketplace(
             trust_registry=registry,
@@ -2128,15 +2147,13 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         return False
 
     def _backend_for_runtime_planes(self) -> Any:
-        """Return the SQLite backend matching the registry's
+        """Return the storage backend matching the registry's
         persistence config, or ``None`` for ephemeral registries.
 
         Used by the runtime attach helpers so newly-instantiated
         planes share storage with their original counterparts.
         """
-        if not self._persistence_path:
-            return None
-        return SQLiteBackend(self._persistence_path)
+        return _make_security_backend(self._persistence_path)
 
     def _attach_plane(self, plane: str, ctx: SecurityContext) -> None:
         """Construct a fresh plane + its middleware and attach both.
@@ -3424,9 +3441,42 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             min_certification=level,
             limit=limit,
         )
+        # Enrich each listing with live, data-backed counts the public
+        # catalog surfaces:
+        #   - ``tool_count``: how many tools the curator observed on the
+        #     server (the enforced allowlist size).
+        #   - ``connected_clients``: distinct client actors that have
+        #     actually called one of this server's tools, read from the
+        #     provenance ledger. Drives the "Idle / In operation" state
+        #     and the "Most clients" sort on the public grid.
+        # The ledger is scanned once per request and indexed by resource
+        # (tool name) → set of actors, so per-listing lookup is O(tools).
+        ledger = self._ledger_or_none()
+        actors_by_tool: dict[str, set[str]] = {}
+        if ledger is not None:
+            try:
+                for rec in ledger.get_records(limit=10000):
+                    resource = getattr(rec, "resource_id", "") or ""
+                    actor = getattr(rec, "actor_id", "") or ""
+                    if resource and actor:
+                        actors_by_tool.setdefault(resource, set()).add(actor)
+            except Exception:
+                actors_by_tool = {}
+
+        tools_payload: list[dict[str, Any]] = []
+        for listing in listings:
+            detail = self._serialize_listing_detail(listing)
+            observed = self._observed_tool_allowlist(listing)
+            detail["tool_count"] = len(observed)
+            clients: set[str] = set()
+            for tool_name in observed:
+                clients |= actors_by_tool.get(tool_name, set())
+            detail["connected_clients"] = len(clients)
+            tools_payload.append(detail)
+
         return {
             "count": len(listings),
-            "tools": [self._serialize_listing_detail(listing) for listing in listings],
+            "tools": tools_payload,
             "minimum_certification": level.value,
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
@@ -3438,7 +3488,66 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         if listing is None:
             return {"error": f"Tool '{tool_name}' not found", "status": 404}
 
-        return self._serialize_listing_detail(listing)
+        detail = self._serialize_listing_detail(listing)
+        # Enrich with live signals for the public detail page.
+        observed = sorted(self._observed_tool_allowlist(listing))
+        detail["tools_observed"] = observed
+        detail["tool_count"] = len(observed)
+
+        # Per-tool spec (name/description/input schema) persisted at submit.
+        tools_detail: list[dict[str, Any]] = []
+        metadata = listing.metadata if isinstance(listing.metadata, dict) else {}
+        introspection = metadata.get("introspection")
+        if isinstance(introspection, dict) and isinstance(
+            introspection.get("tools"), list
+        ):
+            for spec in introspection["tools"]:
+                if isinstance(spec, dict) and spec.get("name"):
+                    tools_detail.append(
+                        {
+                            "name": str(spec.get("name")),
+                            "description": str(spec.get("description") or ""),
+                            "input_schema": spec.get("input_schema")
+                            if isinstance(spec.get("input_schema"), dict)
+                            else {},
+                        }
+                    )
+        detail["tools_detail"] = tools_detail
+
+        # Single ledger pass → connected clients + a 7-day daily usage series.
+        clients: set[str] = set()
+        now = datetime.now(timezone.utc)
+        buckets = [0, 0, 0, 0, 0, 0, 0]  # index 6 = today
+        total = 0
+        last_at = None
+        ledger = self._ledger_or_none()
+        if ledger is not None and observed:
+            allow = set(observed)
+            try:
+                for rec in ledger.get_records(limit=10000):
+                    if getattr(rec, "resource_id", "") not in allow:
+                        continue
+                    actor = getattr(rec, "actor_id", "") or ""
+                    if actor:
+                        clients.add(actor)
+                    total += 1
+                    ts = getattr(rec, "timestamp", None)
+                    if ts is not None:
+                        if last_at is None or ts > last_at:
+                            last_at = ts
+                        try:
+                            delta = (now.date() - ts.date()).days
+                            if 0 <= delta < 7:
+                                buckets[6 - delta] += 1
+                        except Exception:
+                            pass
+            except Exception:
+                clients = set()
+        detail["connected_clients"] = len(clients)
+        detail["usage_7d"] = buckets
+        detail["usage_total"] = total
+        detail["last_call_at"] = last_at.isoformat() if last_at is not None else None
+        return detail
 
     def list_publishers(self, *, limit: int = 200) -> dict[str, Any]:
         """Return public publisher summaries for published listings."""
@@ -5811,6 +5920,20 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     exc_info=True,
                 )
 
+        # Persist the full spec (name, description, input schema) of each
+        # vouched tool so the public detail page can render inputs/outputs
+        # without a live tools/list round-trip. Bounded to the vouched set.
+        _vouched_set = set(vouched_tool_names)
+        vouched_tool_specs = [
+            {
+                "name": t.name,
+                "description": t.description,
+                "input_schema": dict(t.input_schema or {}),
+            }
+            for t in introspection.tools
+            if t.name in _vouched_set
+        ]
+
         result = self.submit_tool(
             manifest,
             display_name=display_name,
@@ -5825,6 +5948,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     "tool_count": introspection.tool_count,
                     "resource_count": introspection.resource_count,
                     "prompt_count": introspection.prompt_count,
+                    "tools": vouched_tool_specs,
                     # Iter 14.10 — ``tool_names`` is the *vouched*
                     # subset (what the curator selected), not the full
                     # observed surface. Proxy mode reads this to build

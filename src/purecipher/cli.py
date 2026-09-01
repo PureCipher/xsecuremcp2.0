@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 from collections.abc import Sequence
 
 import uvicorn
@@ -15,8 +16,59 @@ from purecipher.registry import PureCipherRegistry
 
 
 def _env_flag(name: str) -> bool:
-    value = os.getenv(name, "")
+    value = _env_or_file(name) or ""
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_or_file(name: str) -> str | None:
+    """Read a config value from ``$NAME`` or, failing that, ``$NAME_FILE``.
+
+    The ``*_FILE`` convention lets container secrets (Docker/Kubernetes) be
+    mounted as files and read without ever placing the value in an environment
+    variable or an env file. ``$NAME`` takes precedence when both are set.
+    """
+
+    value = os.getenv(name)
+    if value not in (None, ""):
+        return value
+    file_path = os.getenv(f"{name}_FILE")
+    if file_path:
+        try:
+            with open(file_path, encoding="utf-8") as handle:
+                return handle.read().strip()
+        except OSError:
+            return None
+    return value
+
+
+def _resolve_persistence_target(
+    database_url: str | None,
+    database_path: str | None,
+) -> str | None:
+    """Resolve the registry's effective persistence target.
+
+    PostgreSQL is the production engine. Resolution order:
+
+    1. ``--database-url`` / ``DATABASE_URL`` (a PostgreSQL DSN) — used as-is.
+    2. ``--database-path`` / ``PURECIPHER_REGISTRY_DB`` — a legacy single-file
+       SQLite path, kept for local development. ``:memory:`` stays ephemeral.
+    3. Nothing configured → ``None`` (ephemeral, in-memory registry).
+
+    Returns the target string (a Postgres DSN or a SQLite path) or ``None``.
+    """
+
+    url = (database_url or "").strip()
+    if url:
+        return url
+
+    path = (database_path or "").strip()
+    if not path:
+        return None
+    if path != ":memory:":
+        parent = os.path.dirname(os.path.abspath(path))
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+    return path
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -29,8 +81,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--name", default="purecipher-registry")
     parser.add_argument(
         "--signing-secret",
-        default=os.getenv("PURECIPHER_SIGNING_SECRET"),
-        help="Registry signing secret. Defaults to PURECIPHER_SIGNING_SECRET.",
+        default=_env_or_file("PURECIPHER_SIGNING_SECRET"),
+        help=(
+            "Registry signing secret. Defaults to PURECIPHER_SIGNING_SECRET "
+            "(or PURECIPHER_SIGNING_SECRET_FILE for a mounted secret)."
+        ),
     )
     parser.add_argument("--issuer-id", default="purecipher-registry")
     parser.add_argument(
@@ -39,7 +94,7 @@ def build_parser() -> argparse.ArgumentParser:
         choices=[level.value for level in CertificationLevel],
     )
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--port", type=int, default=8001)
     parser.add_argument("--registry-prefix", default="/registry")
     parser.add_argument(
         "--enable-legacy-ui",
@@ -51,9 +106,24 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--database-url",
+        default=_env_or_file("DATABASE_URL"),
+        help=(
+            "PostgreSQL DSN for persistence (postgresql://user:pass@host:port/db). "
+            "This is the production engine. Defaults to DATABASE_URL (or "
+            "DATABASE_URL_FILE for a mounted secret). When set, published "
+            "listings persist until withdrawn/unregistered."
+        ),
+    )
+    parser.add_argument(
         "--database-path",
         default=os.getenv("PURECIPHER_REGISTRY_DB"),
-        help="SQLite database path for persistence. Defaults to PURECIPHER_REGISTRY_DB.",
+        help=(
+            "Legacy single-file SQLite path for local development, used only when "
+            "--database-url/DATABASE_URL is not set. Defaults to "
+            "PURECIPHER_REGISTRY_DB. Use ':memory:' for ephemeral storage. "
+            "Omit both to run an ephemeral in-memory registry."
+        ),
     )
     parser.add_argument(
         "--disable-security-api",
@@ -74,8 +144,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--jwt-secret",
-        default=os.getenv("PURECIPHER_JWT_SECRET", ""),
-        help="JWT secret for registry auth. Defaults to PURECIPHER_JWT_SECRET.",
+        default=_env_or_file("PURECIPHER_JWT_SECRET") or "",
+        help=(
+            "JWT secret for registry auth. Defaults to PURECIPHER_JWT_SECRET "
+            "(or PURECIPHER_JWT_SECRET_FILE for a mounted secret)."
+        ),
     )
     parser.add_argument(
         "--jwt-audience",
@@ -145,6 +218,22 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     parser = build_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)
+
+    # Resolve the effective persistence target. PostgreSQL is the only durable
+    # engine; anything else makes the registry run ephemeral (in-memory).
+    from fastmcp.server.security.storage.pg_pool import is_postgres_dsn
+
+    target = _resolve_persistence_target(
+        getattr(args, "database_url", None), args.database_path
+    )
+    if target and not is_postgres_dsn(target):
+        print(
+            f"warning: '{target}' is not a PostgreSQL DSN; the registry persists "
+            "only to PostgreSQL. Running ephemeral (in-memory) — set "
+            "--database-url/DATABASE_URL to a postgresql:// DSN for durable state.",
+            file=sys.stderr,
+        )
+    args.database_path = target
 
     registry = build_registry_from_args(args)
     if not args.host_toolsets:

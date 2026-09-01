@@ -5,14 +5,13 @@ from __future__ import annotations
 import hashlib
 import hmac
 import secrets
-import sqlite3
 import time
-from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
 from purecipher.auth import RegistryRole, RegistryUser
+from purecipher.pgdb import connection, dict_row, is_postgres_dsn
 
 _PBKDF2_ITERATIONS = 210_000
 _TOKEN_PREFIX = "pcat_"
@@ -87,66 +86,54 @@ class RegistryAccountSecurityStore:
         self._memory_accounts: dict[str, dict[str, Any]] = {}
         self._memory_sessions: dict[str, dict[str, Any]] = {}
         self._memory_tokens: dict[str, dict[str, Any]] = {}
-        if self._db_path and ensure_schema:
-            self._ensure_sqlite()
+        if is_postgres_dsn(self._db_path) and ensure_schema:
+            self._ensure_schema()
         self.seed_users(seed_users)
 
-    def _ensure_sqlite(self) -> None:
-        conn = sqlite3.connect(self._db_path)
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS purecipher_registry_accounts (
-                username TEXT PRIMARY KEY,
-                password_hash TEXT NOT NULL,
-                role TEXT NOT NULL,
-                display_name TEXT NOT NULL,
-                source TEXT NOT NULL,
-                updated_at REAL NOT NULL,
-                created_at REAL,
-                disabled_at REAL
-            );
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS purecipher_registry_sessions (
-                session_id TEXT PRIMARY KEY,
-                username TEXT NOT NULL,
-                role TEXT NOT NULL,
-                display_name TEXT NOT NULL,
-                created_at REAL NOT NULL,
-                expires_at REAL NOT NULL,
-                revoked_at REAL
-            );
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS purecipher_registry_api_tokens (
-                token_id TEXT PRIMARY KEY,
-                token_hash TEXT NOT NULL UNIQUE,
-                username TEXT NOT NULL,
-                name TEXT NOT NULL,
-                role TEXT NOT NULL,
-                display_name TEXT NOT NULL,
-                created_at REAL NOT NULL,
-                last_used_at REAL,
-                revoked_at REAL
-            );
-            """
-        )
-        conn.commit()
-        for statement in (
-            "ALTER TABLE purecipher_registry_accounts ADD COLUMN created_at REAL",
-            "ALTER TABLE purecipher_registry_accounts ADD COLUMN disabled_at REAL",
-        ):
-            with suppress(sqlite3.OperationalError):
-                conn.execute(statement)
-        conn.execute(
-            "UPDATE purecipher_registry_accounts SET created_at = updated_at WHERE created_at IS NULL"
-        )
-        conn.commit()
-        conn.close()
+    def _ensure_schema(self) -> None:
+        with connection(self._db_path) as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS purecipher_registry_accounts (
+                    username TEXT PRIMARY KEY,
+                    password_hash TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    display_name TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    updated_at DOUBLE PRECISION NOT NULL,
+                    created_at DOUBLE PRECISION,
+                    disabled_at DOUBLE PRECISION
+                );
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS purecipher_registry_sessions (
+                    session_id TEXT PRIMARY KEY,
+                    username TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    display_name TEXT NOT NULL,
+                    created_at DOUBLE PRECISION NOT NULL,
+                    expires_at DOUBLE PRECISION NOT NULL,
+                    revoked_at DOUBLE PRECISION
+                );
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS purecipher_registry_api_tokens (
+                    token_id TEXT PRIMARY KEY,
+                    token_hash TEXT NOT NULL UNIQUE,
+                    username TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    display_name TEXT NOT NULL,
+                    created_at DOUBLE PRECISION NOT NULL,
+                    last_used_at DOUBLE PRECISION,
+                    revoked_at DOUBLE PRECISION
+                );
+                """
+            )
 
     def seed_users(self, users: tuple[RegistryUser, ...]) -> None:
         for user in users:
@@ -161,12 +148,10 @@ class RegistryAccountSecurityStore:
             )
 
     def has_accounts(self) -> bool:
-        if self._db_path:
-            conn = sqlite3.connect(self._db_path)
-            cur = conn.execute("SELECT 1 FROM purecipher_registry_accounts LIMIT 1")
-            has_account = cur.fetchone() is not None
-            conn.close()
-            return has_account
+        if is_postgres_dsn(self._db_path):
+            with connection(self._db_path) as conn:
+                cur = conn.execute("SELECT 1 FROM purecipher_registry_accounts LIMIT 1")
+                return cur.fetchone() is not None
         return bool(self._memory_accounts)
 
     def create_bootstrap_admin(
@@ -333,24 +318,22 @@ class RegistryAccountSecurityStore:
             "expires_at": now + ttl_seconds,
             "revoked_at": None,
         }
-        if self._db_path:
-            conn = sqlite3.connect(self._db_path)
-            conn.execute(
-                "INSERT INTO purecipher_registry_sessions "
-                "(session_id, username, role, display_name, created_at, expires_at, revoked_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (
-                    record["session_id"],
-                    record["username"],
-                    record["role"],
-                    record["display_name"],
-                    record["created_at"],
-                    record["expires_at"],
-                    record["revoked_at"],
-                ),
-            )
-            conn.commit()
-            conn.close()
+        if is_postgres_dsn(self._db_path):
+            with connection(self._db_path) as conn:
+                conn.execute(
+                    "INSERT INTO purecipher_registry_sessions "
+                    "(session_id, username, role, display_name, created_at, expires_at, revoked_at) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                    (
+                        record["session_id"],
+                        record["username"],
+                        record["role"],
+                        record["display_name"],
+                        record["created_at"],
+                        record["expires_at"],
+                        record["revoked_at"],
+                    ),
+                )
         else:
             self._memory_sessions[str(record["session_id"])] = record
         return _session_record(record)
@@ -439,16 +422,13 @@ class RegistryAccountSecurityStore:
         if not any(str(row["token_id"]) == token_id for row in rows):
             return False
         now = _now()
-        if self._db_path:
-            conn = sqlite3.connect(self._db_path)
-            conn.execute(
-                "UPDATE purecipher_registry_api_tokens SET revoked_at = ? WHERE token_id = ? AND username = ?",
-                (now, token_id, username),
-            )
-            changed = conn.total_changes > 0
-            conn.commit()
-            conn.close()
-            return changed
+        if is_postgres_dsn(self._db_path):
+            with connection(self._db_path) as conn:
+                cur = conn.execute(
+                    "UPDATE purecipher_registry_api_tokens SET revoked_at = %s WHERE token_id = %s AND username = %s",
+                    (now, token_id, username),
+                )
+                return cur.rowcount > 0
         record = self._memory_tokens.get(token_id)
         if record is None:
             return False
@@ -463,17 +443,14 @@ class RegistryAccountSecurityStore:
             if row.get("revoked_at") is not None:
                 continue
             token_id = str(row["token_id"])
-            if self._db_path:
-                conn = sqlite3.connect(self._db_path)
-                conn.execute(
-                    "UPDATE purecipher_registry_api_tokens SET revoked_at = ? WHERE token_id = ? AND username = ? AND revoked_at IS NULL",
-                    (now, token_id, username),
-                )
-                changed = conn.total_changes > 0
-                conn.commit()
-                conn.close()
-                if changed:
-                    count += 1
+            if is_postgres_dsn(self._db_path):
+                with connection(self._db_path) as conn:
+                    cur = conn.execute(
+                        "UPDATE purecipher_registry_api_tokens SET revoked_at = %s WHERE token_id = %s AND username = %s AND revoked_at IS NULL",
+                        (now, token_id, username),
+                    )
+                    if cur.rowcount > 0:
+                        count += 1
             else:
                 record = self._memory_tokens.get(token_id)
                 if record is not None and record.get("revoked_at") is None:
@@ -489,14 +466,12 @@ class RegistryAccountSecurityStore:
         if record is None or record.get("revoked_at") is not None:
             return None
         now = _now()
-        if self._db_path:
-            conn = sqlite3.connect(self._db_path)
-            conn.execute(
-                "UPDATE purecipher_registry_api_tokens SET last_used_at = ? WHERE token_id = ?",
-                (now, record["token_id"]),
-            )
-            conn.commit()
-            conn.close()
+        if is_postgres_dsn(self._db_path):
+            with connection(self._db_path) as conn:
+                conn.execute(
+                    "UPDATE purecipher_registry_api_tokens SET last_used_at = %s WHERE token_id = %s",
+                    (now, record["token_id"]),
+                )
         else:
             record["last_used_at"] = now
         return RegistryUser(
@@ -510,37 +485,17 @@ class RegistryAccountSecurityStore:
         key = username.strip()
         if not key:
             return None
-        if self._db_path:
-            conn = sqlite3.connect(self._db_path)
-            cur = conn.execute(
-                "SELECT username, password_hash, role, display_name, source, updated_at, created_at, disabled_at "
-                "FROM purecipher_registry_accounts WHERE username = ?",
-                (key,),
-            )
-            row = cur.fetchone()
-            conn.close()
+        if is_postgres_dsn(self._db_path):
+            with connection(self._db_path, row_factory=dict_row) as conn:
+                cur = conn.execute(
+                    "SELECT username, password_hash, role, display_name, source, updated_at, created_at, disabled_at "
+                    "FROM purecipher_registry_accounts WHERE username = %s",
+                    (key,),
+                )
+                row = cur.fetchone()
             if row is None:
                 return None
-            (
-                username_v,
-                password_hash,
-                role,
-                display_name,
-                source,
-                updated_at,
-                created_at,
-                disabled_at,
-            ) = row
-            return {
-                "username": username_v,
-                "password_hash": password_hash,
-                "role": role,
-                "display_name": display_name,
-                "source": source,
-                "updated_at": updated_at,
-                "created_at": created_at,
-                "disabled_at": disabled_at,
-            }
+            return dict(row)
         return self._memory_accounts.get(key)
 
     def _save_account(
@@ -556,35 +511,33 @@ class RegistryAccountSecurityStore:
     ) -> None:
         now = _now()
         resolved_created_at = created_at if created_at is not None else now
-        if self._db_path:
-            conn = sqlite3.connect(self._db_path)
-            conn.execute(
-                """
-                INSERT INTO purecipher_registry_accounts
-                    (username, password_hash, role, display_name, source, updated_at, created_at, disabled_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(username) DO UPDATE SET
-                    password_hash = excluded.password_hash,
-                    role = excluded.role,
-                    display_name = excluded.display_name,
-                    source = excluded.source,
-                    updated_at = excluded.updated_at,
-                    created_at = COALESCE(purecipher_registry_accounts.created_at, excluded.created_at),
-                    disabled_at = excluded.disabled_at
-                """,
-                (
-                    username,
-                    password_hash,
-                    role.value,
-                    display_name,
-                    source,
-                    now,
-                    resolved_created_at,
-                    disabled_at,
-                ),
-            )
-            conn.commit()
-            conn.close()
+        if is_postgres_dsn(self._db_path):
+            with connection(self._db_path) as conn:
+                conn.execute(
+                    """
+                    INSERT INTO purecipher_registry_accounts
+                        (username, password_hash, role, display_name, source, updated_at, created_at, disabled_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (username) DO UPDATE SET
+                        password_hash = EXCLUDED.password_hash,
+                        role = EXCLUDED.role,
+                        display_name = EXCLUDED.display_name,
+                        source = EXCLUDED.source,
+                        updated_at = EXCLUDED.updated_at,
+                        created_at = COALESCE(purecipher_registry_accounts.created_at, EXCLUDED.created_at),
+                        disabled_at = EXCLUDED.disabled_at
+                    """,
+                    (
+                        username,
+                        password_hash,
+                        role.value,
+                        display_name,
+                        source,
+                        now,
+                        resolved_created_at,
+                        disabled_at,
+                    ),
+                )
             return
         self._memory_accounts[username] = {
             "username": username,
@@ -598,15 +551,13 @@ class RegistryAccountSecurityStore:
         }
 
     def _list_account_rows(self) -> list[dict[str, Any]]:
-        if self._db_path:
-            conn = sqlite3.connect(self._db_path)
-            cur = conn.execute(
-                "SELECT username, password_hash, role, display_name, source, updated_at, created_at, disabled_at "
-                "FROM purecipher_registry_accounts ORDER BY username ASC"
-            )
-            rows = [_account_row(row) for row in cur.fetchall()]
-            conn.close()
-            return rows
+        if is_postgres_dsn(self._db_path):
+            with connection(self._db_path, row_factory=dict_row) as conn:
+                cur = conn.execute(
+                    "SELECT username, password_hash, role, display_name, source, updated_at, created_at, disabled_at "
+                    "FROM purecipher_registry_accounts ORDER BY username ASC"
+                )
+                return [dict(row) for row in cur.fetchall()]
         return [
             dict(row)
             for row in sorted(
@@ -616,30 +567,26 @@ class RegistryAccountSecurityStore:
         ]
 
     def _get_session(self, session_id: str) -> dict[str, Any] | None:
-        if self._db_path:
-            conn = sqlite3.connect(self._db_path)
-            cur = conn.execute(
-                "SELECT session_id, username, role, display_name, created_at, expires_at, revoked_at "
-                "FROM purecipher_registry_sessions WHERE session_id = ?",
-                (session_id,),
-            )
-            row = cur.fetchone()
-            conn.close()
-            return _session_row(row) if row is not None else None
+        if is_postgres_dsn(self._db_path):
+            with connection(self._db_path, row_factory=dict_row) as conn:
+                cur = conn.execute(
+                    "SELECT session_id, username, role, display_name, created_at, expires_at, revoked_at "
+                    "FROM purecipher_registry_sessions WHERE session_id = %s",
+                    (session_id,),
+                )
+                row = cur.fetchone()
+            return dict(row) if row is not None else None
         return self._memory_sessions.get(session_id)
 
     def _revoke_session_id(self, session_id: str) -> bool:
         now = _now()
-        if self._db_path:
-            conn = sqlite3.connect(self._db_path)
-            conn.execute(
-                "UPDATE purecipher_registry_sessions SET revoked_at = ? WHERE session_id = ? AND revoked_at IS NULL",
-                (now, session_id),
-            )
-            changed = conn.total_changes > 0
-            conn.commit()
-            conn.close()
-            return changed
+        if is_postgres_dsn(self._db_path):
+            with connection(self._db_path) as conn:
+                cur = conn.execute(
+                    "UPDATE purecipher_registry_sessions SET revoked_at = %s WHERE session_id = %s AND revoked_at IS NULL",
+                    (now, session_id),
+                )
+                return cur.rowcount > 0
         record = self._memory_sessions.get(session_id)
         if record is None or record.get("revoked_at") is not None:
             return False
@@ -647,16 +594,14 @@ class RegistryAccountSecurityStore:
         return True
 
     def _list_session_rows(self, *, username: str, limit: int) -> list[dict[str, Any]]:
-        if self._db_path:
-            conn = sqlite3.connect(self._db_path)
-            cur = conn.execute(
-                "SELECT session_id, username, role, display_name, created_at, expires_at, revoked_at "
-                "FROM purecipher_registry_sessions WHERE username = ? ORDER BY created_at DESC LIMIT ?",
-                (username, limit),
-            )
-            rows = [_session_row(row) for row in cur.fetchall()]
-            conn.close()
-            return rows
+        if is_postgres_dsn(self._db_path):
+            with connection(self._db_path, row_factory=dict_row) as conn:
+                cur = conn.execute(
+                    "SELECT session_id, username, role, display_name, created_at, expires_at, revoked_at "
+                    "FROM purecipher_registry_sessions WHERE username = %s ORDER BY created_at DESC LIMIT %s",
+                    (username, limit),
+                )
+                return [dict(row) for row in cur.fetchall()]
         return [
             dict(row)
             for row in sorted(
@@ -668,40 +613,36 @@ class RegistryAccountSecurityStore:
         ][:limit]
 
     def _save_token(self, record: dict[str, Any]) -> None:
-        if self._db_path:
-            conn = sqlite3.connect(self._db_path)
-            conn.execute(
-                "INSERT INTO purecipher_registry_api_tokens "
-                "(token_id, token_hash, username, name, role, display_name, created_at, last_used_at, revoked_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    record["token_id"],
-                    record["token_hash"],
-                    record["username"],
-                    record["name"],
-                    record["role"],
-                    record["display_name"],
-                    record["created_at"],
-                    record["last_used_at"],
-                    record["revoked_at"],
-                ),
-            )
-            conn.commit()
-            conn.close()
+        if is_postgres_dsn(self._db_path):
+            with connection(self._db_path) as conn:
+                conn.execute(
+                    "INSERT INTO purecipher_registry_api_tokens "
+                    "(token_id, token_hash, username, name, role, display_name, created_at, last_used_at, revoked_at) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    (
+                        record["token_id"],
+                        record["token_hash"],
+                        record["username"],
+                        record["name"],
+                        record["role"],
+                        record["display_name"],
+                        record["created_at"],
+                        record["last_used_at"],
+                        record["revoked_at"],
+                    ),
+                )
             return
         self._memory_tokens[str(record["token_id"])] = record
 
     def _list_token_rows(self, *, username: str, limit: int) -> list[dict[str, Any]]:
-        if self._db_path:
-            conn = sqlite3.connect(self._db_path)
-            cur = conn.execute(
-                "SELECT token_id, token_hash, username, name, role, display_name, created_at, last_used_at, revoked_at "
-                "FROM purecipher_registry_api_tokens WHERE username = ? ORDER BY created_at DESC LIMIT ?",
-                (username, limit),
-            )
-            rows = [_token_row(row) for row in cur.fetchall()]
-            conn.close()
-            return rows
+        if is_postgres_dsn(self._db_path):
+            with connection(self._db_path, row_factory=dict_row) as conn:
+                cur = conn.execute(
+                    "SELECT token_id, token_hash, username, name, role, display_name, created_at, last_used_at, revoked_at "
+                    "FROM purecipher_registry_api_tokens WHERE username = %s ORDER BY created_at DESC LIMIT %s",
+                    (username, limit),
+                )
+                return [dict(row) for row in cur.fetchall()]
         return [
             dict(row)
             for row in sorted(
@@ -713,16 +654,15 @@ class RegistryAccountSecurityStore:
         ][:limit]
 
     def _get_token_by_hash(self, token_hash: str) -> dict[str, Any] | None:
-        if self._db_path:
-            conn = sqlite3.connect(self._db_path)
-            cur = conn.execute(
-                "SELECT token_id, token_hash, username, name, role, display_name, created_at, last_used_at, revoked_at "
-                "FROM purecipher_registry_api_tokens WHERE token_hash = ?",
-                (token_hash,),
-            )
-            row = cur.fetchone()
-            conn.close()
-            return _token_row(row) if row is not None else None
+        if is_postgres_dsn(self._db_path):
+            with connection(self._db_path, row_factory=dict_row) as conn:
+                cur = conn.execute(
+                    "SELECT token_id, token_hash, username, name, role, display_name, created_at, last_used_at, revoked_at "
+                    "FROM purecipher_registry_api_tokens WHERE token_hash = %s",
+                    (token_hash,),
+                )
+                row = cur.fetchone()
+            return dict(row) if row is not None else None
         for row in self._memory_tokens.values():
             if hmac.compare_digest(str(row["token_hash"]), token_hash):
                 return row
@@ -764,42 +704,6 @@ class RegistryAccountSecurityStore:
         }
 
 
-def _session_row(row: tuple[Any, ...]) -> dict[str, Any]:
-    session_id, username, role, display_name, created_at, expires_at, revoked_at = row
-    return {
-        "session_id": session_id,
-        "username": username,
-        "role": role,
-        "display_name": display_name,
-        "created_at": created_at,
-        "expires_at": expires_at,
-        "revoked_at": revoked_at,
-    }
-
-
-def _account_row(row: tuple[Any, ...]) -> dict[str, Any]:
-    (
-        username,
-        password_hash,
-        role,
-        display_name,
-        source,
-        updated_at,
-        created_at,
-        disabled_at,
-    ) = row
-    return {
-        "username": username,
-        "password_hash": password_hash,
-        "role": role,
-        "display_name": display_name,
-        "source": source,
-        "updated_at": updated_at,
-        "created_at": created_at,
-        "disabled_at": disabled_at,
-    }
-
-
 def _session_record(row: dict[str, Any]) -> RegistrySessionRecord:
     return RegistrySessionRecord(
         session_id=str(row["session_id"]),
@@ -812,31 +716,6 @@ def _session_record(row: dict[str, Any]) -> RegistrySessionRecord:
         if row.get("revoked_at") is not None
         else None,
     )
-
-
-def _token_row(row: tuple[Any, ...]) -> dict[str, Any]:
-    (
-        token_id,
-        token_hash,
-        username,
-        name,
-        role,
-        display_name,
-        created_at,
-        last_used_at,
-        revoked_at,
-    ) = row
-    return {
-        "token_id": token_id,
-        "token_hash": token_hash,
-        "username": username,
-        "name": name,
-        "role": role,
-        "display_name": display_name,
-        "created_at": created_at,
-        "last_used_at": last_used_at,
-        "revoked_at": revoked_at,
-    }
 
 
 @dataclass

@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 import time
 from typing import Any
+
+from purecipher.pgdb import connection, is_postgres_dsn
 
 DEFAULT_USER_PREFERENCES: dict[str, Any] = {
     "notifications": {
@@ -51,45 +52,42 @@ def _deep_merge_defaults(value: dict[str, Any] | None) -> dict[str, Any]:
 class RegistryUserPreferenceStore:
     """Store registry UI preferences per username.
 
-    Uses the registry SQLite file when available and falls back to in-memory
-    storage for test/dev registries without persistence.
+    Uses the registry PostgreSQL database when available and falls back to
+    in-memory storage for test/dev registries without persistence.
     """
 
     def __init__(self, db_path: str | None, *, ensure_schema: bool = True) -> None:
         self._db_path = db_path
         self._memory: dict[str, dict[str, Any]] = {}
-        if self._db_path and ensure_schema:
-            self._ensure_sqlite()
+        if is_postgres_dsn(self._db_path) and ensure_schema:
+            self._ensure_schema()
 
-    def _ensure_sqlite(self) -> None:
-        conn = sqlite3.connect(self._db_path)
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS purecipher_registry_user_preferences (
-                username TEXT PRIMARY KEY,
-                preferences_json TEXT NOT NULL,
-                updated_at REAL NOT NULL
-            );
-            """
-        )
-        conn.commit()
-        conn.close()
+    def _ensure_schema(self) -> None:
+        with connection(self._db_path) as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS purecipher_registry_user_preferences (
+                    username TEXT PRIMARY KEY,
+                    preferences_json TEXT NOT NULL,
+                    updated_at DOUBLE PRECISION NOT NULL
+                );
+                """
+            )
 
     def get(self, username: str) -> dict[str, Any]:
         key = username.strip()
         if not key:
             return _deep_merge_defaults(None)
 
-        if not self._db_path:
+        if not is_postgres_dsn(self._db_path):
             return _deep_merge_defaults(self._memory.get(key))
 
-        conn = sqlite3.connect(self._db_path)
-        cur = conn.execute(
-            "SELECT preferences_json FROM purecipher_registry_user_preferences WHERE username = ?",
-            (key,),
-        )
-        row = cur.fetchone()
-        conn.close()
+        with connection(self._db_path) as conn:
+            cur = conn.execute(
+                "SELECT preferences_json FROM purecipher_registry_user_preferences WHERE username = %s",
+                (key,),
+            )
+            row = cur.fetchone()
         if row is None:
             return _deep_merge_defaults(None)
         try:
@@ -104,24 +102,22 @@ class RegistryUserPreferenceStore:
             raise ValueError("username is required")
         merged = _deep_merge_defaults(preferences)
 
-        if not self._db_path:
+        if not is_postgres_dsn(self._db_path):
             self._memory[key] = merged
             return merged
 
-        conn = sqlite3.connect(self._db_path)
-        conn.execute(
-            """
-            INSERT INTO purecipher_registry_user_preferences
-                (username, preferences_json, updated_at)
-            VALUES (?, ?, ?)
-            ON CONFLICT(username) DO UPDATE SET
-                preferences_json = excluded.preferences_json,
-                updated_at = excluded.updated_at
-            """,
-            (key, json.dumps(merged, sort_keys=True), time.time()),
-        )
-        conn.commit()
-        conn.close()
+        with connection(self._db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO purecipher_registry_user_preferences
+                    (username, preferences_json, updated_at)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (username) DO UPDATE SET
+                    preferences_json = EXCLUDED.preferences_json,
+                    updated_at = EXCLUDED.updated_at
+                """,
+                (key, json.dumps(merged, sort_keys=True), time.time()),
+            )
         return merged
 
     def reset(self, username: str) -> dict[str, Any]:
@@ -129,17 +125,15 @@ class RegistryUserPreferenceStore:
         if not key:
             raise ValueError("username is required")
 
-        if not self._db_path:
+        if not is_postgres_dsn(self._db_path):
             self._memory.pop(key, None)
             return _deep_merge_defaults(None)
 
-        conn = sqlite3.connect(self._db_path)
-        conn.execute(
-            "DELETE FROM purecipher_registry_user_preferences WHERE username = ?",
-            (key,),
-        )
-        conn.commit()
-        conn.close()
+        with connection(self._db_path) as conn:
+            conn.execute(
+                "DELETE FROM purecipher_registry_user_preferences WHERE username = %s",
+                (key,),
+            )
         return _deep_merge_defaults(None)
 
 

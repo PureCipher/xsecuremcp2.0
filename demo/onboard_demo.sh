@@ -1,19 +1,52 @@
 #!/usr/bin/env bash
 # Onboard the demo MCP server through PureCipher's curator flow,
 # register a client identity, and generate Claude Code MCP config.
-set -euo pipefail
+#
+# Recommended: run the registry on :8000 with auth enabled so the full
+# governed story works (curation under an admin, agent registration):
+#   PURECIPHER_SIGNING_SECRET=dev PURECIPHER_BOOTSTRAP_ADMIN_PASSWORD=admin123 \
+#     uv run purecipher-registry --port 8000
+# The script also works with auth disabled (it proceeds tokenless) and
+# auto-detects a registry on :8001 if :8000 is down.
+set -uo pipefail
 
 REGISTRY_URL="${REGISTRY_URL:-http://localhost:8000}"
 ADMIN_USER="${ADMIN_USER:-admin}"
 ADMIN_PASS="${ADMIN_PASS:-admin123}"
 
+echo "=== Step 0: Health check ==="
+probe() { curl -s -o /dev/null -w "%{http_code}" "$1/registry/health" 2>/dev/null; }
+if [ "$(probe "$REGISTRY_URL")" != "200" ]; then
+  echo "No registry at $REGISTRY_URL."
+  for ALT in "http://localhost:8001" "http://localhost:8000" "http://127.0.0.1:8001" "http://127.0.0.1:8000"; do
+    if [ "$ALT" != "$REGISTRY_URL" ] && [ "$(probe "$ALT")" = "200" ]; then
+      echo "  → Found a registry at $ALT. Re-run with: REGISTRY_URL=$ALT bash demo/onboard_demo.sh"
+      exit 1
+    fi
+  done
+  echo "  Is the registry running?"
+  exit 1
+fi
+echo "Registry healthy at $REGISTRY_URL"
+
+echo ""
 echo "=== Step 1: Authenticate ==="
-LOGIN_RESPONSE=$(curl -sf -X POST "$REGISTRY_URL/registry/login" \
+AUTH="X-PureCipher-Demo: 1"
+HTTP=$(curl -s -o /tmp/pc_login.json -w "%{http_code}" -X POST "$REGISTRY_URL/registry/login" \
   -H "Content-Type: application/json" \
   -d "{\"username\":\"$ADMIN_USER\",\"password\":\"$ADMIN_PASS\"}")
-TOKEN=$(echo "$LOGIN_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
-AUTH="Authorization: Bearer $TOKEN"
-echo "Authenticated as $ADMIN_USER"
+LOGIN_RESPONSE=$(cat /tmp/pc_login.json 2>/dev/null)
+if [ "$HTTP" = "200" ]; then
+  TOKEN=$(echo "$LOGIN_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
+  AUTH="Authorization: Bearer $TOKEN"
+  echo "Authenticated as $ADMIN_USER"
+elif echo "$LOGIN_RESPONSE" | grep -q "auth is disabled"; then
+  echo "Registry auth is disabled — proceeding without a token."
+else
+  echo "Login failed (HTTP $HTTP): $LOGIN_RESPONSE"
+  echo "  Start the registry with PURECIPHER_BOOTSTRAP_ADMIN_PASSWORD=admin123, or pass ADMIN_USER/ADMIN_PASS."
+  exit 1
+fi
 
 echo ""
 echo "=== Step 2: Submit demo server via curator flow (hosting_mode=proxy) ==="

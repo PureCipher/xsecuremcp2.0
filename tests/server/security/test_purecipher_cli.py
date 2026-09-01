@@ -31,6 +31,45 @@ class TestPureCipherCLI:
         assert args.database_path == "/tmp/purecipher.db"
         assert args.minimum_certification == "strict"
 
+    def test_parser_reads_database_url_flag(self, monkeypatch):
+        # DATABASE_URL is the preferred, production persistence target.
+        monkeypatch.delenv("DATABASE_URL", raising=False)
+        parser = build_parser()
+
+        args = parser.parse_args(
+            [
+                "--signing-secret",
+                "test-secret",
+                "--database-url",
+                "postgresql://u:p@h:5432/db",
+            ]
+        )
+
+        assert args.database_url == "postgresql://u:p@h:5432/db"
+
+    def test_parser_reads_database_url_from_env(self, monkeypatch):
+        monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@h:5432/db")
+        parser = build_parser()
+
+        args = parser.parse_args(["--signing-secret", "test-secret"])
+
+        assert args.database_url == "postgresql://u:p@h:5432/db"
+
+    def test_persistence_resolution_prefers_database_url(self):
+        from purecipher.cli import _resolve_persistence_target
+
+        # DATABASE_URL wins over the legacy SQLite path.
+        target = _resolve_persistence_target(
+            "postgresql://u:p@h:5432/db", "/tmp/legacy.db"
+        )
+        assert target == "postgresql://u:p@h:5432/db"
+
+    def test_persistence_resolution_is_ephemeral_when_unset(self):
+        from purecipher.cli import _resolve_persistence_target
+
+        # No URL and no path → ephemeral (no built-in SQLite default).
+        assert _resolve_persistence_target(None, None) is None
+
     def test_parser_reads_require_moderation_from_env(self, monkeypatch):
         monkeypatch.setenv("PURECIPHER_REQUIRE_MODERATION", "true")
         parser = build_parser()

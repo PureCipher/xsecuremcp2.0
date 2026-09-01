@@ -1,0 +1,751 @@
+<!DOCTYPE html><html><head><meta charset='utf-8'><title>A Layered Architecture for Governed MCP — The SecureMCP Design</title><style>
+@page {
+  size: A4;
+  margin: 20mm 18mm 22mm 18mm;
+  @bottom-center {
+    content: counter(page);
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 8.5pt;
+    color: #8a8f98;
+  }
+  @bottom-right {
+    content: "A Layered Architecture for Governed MCP";
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 7.5pt;
+    color: #b0b5bd;
+  }
+}
+@page :first {
+  margin-top: 42mm;
+  @bottom-center { content: ""; }
+  @bottom-right { content: ""; }
+}
+
+html { font-size: 10.2pt; }
+body {
+  font-family: "Charter", "Georgia", "Times New Roman", serif;
+  line-height: 1.52;
+  color: #1c1e21;
+  hyphens: auto;
+}
+
+h1, h2, h3, h4 {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  color: #0f1114;
+  line-height: 1.22;
+  break-after: avoid;
+}
+h1 {
+  font-size: 25pt;
+  letter-spacing: -0.4pt;
+  margin: 0 0 6pt 0;
+  padding-bottom: 10pt;
+  border-bottom: 2.5pt solid #1c1e21;
+}
+h2 {
+  font-size: 14pt;
+  margin: 22pt 0 7pt 0;
+  padding-bottom: 3pt;
+  border-bottom: 0.6pt solid #d7dae0;
+  break-before: auto;
+}
+h3 { font-size: 11.4pt; margin: 15pt 0 5pt 0; }
+h4 { font-size: 10.2pt; margin: 12pt 0 4pt 0; color: #33373d; }
+
+p { margin: 0 0 7.5pt 0; orphans: 2; widows: 2; }
+strong { color: #0f1114; }
+
+/* Title block: h1 → subtitle → descriptor. */
+h1 + p {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 13pt;
+  font-weight: 500;
+  line-height: 1.35;
+  color: #2b3038;
+  margin-bottom: 9pt;
+}
+h1 + p strong { font-weight: 500; }
+h1 + p + p {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 10pt;
+  line-height: 1.48;
+  color: #6c727b;
+  margin-bottom: 18pt;
+}
+
+ul, ol { margin: 0 0 8pt 0; padding-left: 17pt; }
+li { margin-bottom: 3pt; }
+
+code {
+  font-family: "SF Mono", "Menlo", "Consolas", monospace;
+  font-size: 8.6pt;
+  background: #f2f3f5;
+  padding: 0.5pt 2.5pt;
+  border-radius: 2pt;
+  color: #1f2328;
+}
+pre {
+  background: #f7f8fa;
+  border: 0.6pt solid #e1e4e9;
+  border-left: 2.5pt solid #6b7280;
+  border-radius: 3pt;
+  padding: 8pt 10pt;
+  margin: 0 0 9pt 0;
+  break-inside: avoid;
+  white-space: pre-wrap;
+}
+pre code {
+  background: none;
+  padding: 0;
+  font-size: 8.1pt;
+  line-height: 1.42;
+  color: #24282e;
+}
+
+blockquote {
+  margin: 9pt 0;
+  padding: 7pt 11pt;
+  background: #fbf8f1;
+  border-left: 2.5pt solid #c99a3d;
+  color: #3d3831;
+  break-inside: avoid;
+}
+blockquote p { margin: 0 0 4pt 0; }
+blockquote p:last-child { margin-bottom: 0; }
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0 0 10pt 0;
+  font-size: 8.9pt;
+  break-inside: avoid;
+}
+th, td {
+  border-bottom: 0.5pt solid #dfe2e7;
+  padding: 4pt 6pt;
+  text-align: left;
+  vertical-align: top;
+}
+th {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 8.4pt;
+  background: #f2f3f5;
+  border-bottom: 1pt solid #b9bec6;
+  color: #1c1e21;
+}
+tbody tr:nth-child(even) { background: #fafbfc; }
+
+hr {
+  border: none;
+  border-top: 0.6pt solid #dfe2e7;
+  margin: 18pt 0;
+}
+
+a { color: #1c1e21; text-decoration: none; }
+em { color: #33373d; }
+</style></head><body><h1>A Layered Architecture for Governed MCP</h1>
+<p><strong>The SecureMCP Design</strong></p>
+<p>Fourteen opt-in layers, five enforcement middleware, and one bootstrap that wires them together.</p>
+<hr />
+<h2>1. Thesis</h2>
+<p>The Model Context Protocol solved <em>exposure</em>. A server declares tools, resources, and prompts; a client discovers and invokes them. FastMCP made that exposure ergonomic — decorate a Python function, get an MCP tool.</p>
+<p>What the protocol does not define is <em>governance</em>. MCP has no notion of who may call a tool, under what terms, with whose consent, subject to which regulation, with what tamper-evident record, or what should happen when an agent's behaviour changes shape mid-session. Those questions are left entirely to the server author, which in practice means they are answered ad hoc or not at all.</p>
+<p>SecureMCP is the layer that answers them. The one-line framing:</p>
+<blockquote>
+<p><strong>FastMCP exposes capability. SecureMCP governs capability.</strong></p>
+</blockquote>
+<p>SecureMCP is not a fork of FastMCP and not a proxy in front of it. It is a subclass, a middleware chain, and fourteen independently-enableable subsystems, wired together by a single stateless bootstrap function. What follows is the architecture as built: the request path, the data structures, the failure modes, and the points where the design deliberately stops short of what a reader might otherwise assume.</p>
+<p><strong>Scope.</strong> The subject is the SecureMCP server framework — <code>fastmcp_slim/fastmcp/server/security/</code> and the <code>securemcp</code> facade at <code>src/securemcp/</code>. The separate product layers that ship from the same source tree are out of scope.</p>
+<hr />
+<h2>2. Design Principles</h2>
+<p>Five commitments govern nearly every implementation decision in the platform.</p>
+<p><strong>Additive, not invasive.</strong> SecureMCP must never require a change to FastMCP core semantics. Where SecureMCP needs per-server state, it lives in module-level <code>WeakKeyDictionary</code> maps keyed by the server object — never in fields FastMCP owns. A FastMCP server with security attached is still a FastMCP server, and the security state is garbage-collected with it.</p>
+<p><strong>Opt-in per layer.</strong> There is no monolithic "security mode." Each of the fourteen subsystems is enabled if and only if its config object is non-<code>None</code> <em>and</em> the master switch is on. The predicate is uniform:</p>
+<pre><code class="language-python">def is_policy_enabled(self) -&gt; bool:
+    &quot;&quot;&quot;Check if the policy kernel is configured and active.&quot;&quot;&quot;
+    return self.enabled and self.policy is not None
+</code></pre>
+<p>A server can run the provenance ledger with nothing else, or the policy kernel with nothing else, and pay only for what it turns on.</p>
+<p><strong>Fail closed on the enforcement path.</strong> When the policy kernel cannot reach a decision — a provider raised, the request context is missing, every provider deferred — the default outcome is DENY. This is a configurable default (<code>fail_closed=True</code>), not a hard rule, but the enforcement path is written so that the safe outcome is the one that requires no correct behaviour from anything else.</p>
+<p><strong>Explainability as a first-class output.</strong> Every decision carries structured provenance for <em>why</em>. A policy result carries a reason, a <code>policy_id</code>, and a deduplicated list of <code>Citation</code> objects pointing at the regulation clause that produced it. A consent decision carries the full graph path that granted or denied it. A drift event carries the metric, the baseline, and the sigma distance. The system is designed to be auditable by someone who was not present when the decision was made.</p>
+<p><strong>Honest about its boundaries.</strong> The platform is deliberately explicit about what it does <em>not</em> enforce. The sandbox module's own docstring states that it provides no kernel boundary. Section 15 treats this in full, because a governance layer that overstates its guarantees is worse than one that claims fewer.</p>
+<hr />
+<h2>3. Architecture at a Glance</h2>
+<pre><code>                        ┌──────────────────────────────────────┐
+   MCP client ─────────▶│         SecureMCP(FastMCP)           │
+                        └──────────────────────────────────────┘
+                                        │
+                        ┌───────────────▼──────────────────────┐
+                        │        Middleware chain              │
+                        │  1. PolicyEnforcement                │
+                        │  2. ContractValidation               │
+                        │  3. ProvenanceRecording              │
+                        │  4. Reflexive                        │
+                        │  5. ConsentEnforcement               │
+                        └───────────────┬──────────────────────┘
+                                        │
+                        ┌───────────────▼──────────────────────┐
+                        │     FastMCP core handler             │
+                        │   (tool / resource / prompt)         │
+                        └──────────────────────────────────────┘
+
+   Bootstrapped by SecurityOrchestrator into a SecurityContext:
+
+   Event Bus → Policy Kernel → Context Broker → Provenance →
+   Reflexive → Consent → Trust Registry → CRL → Federation →
+   Tool Marketplace → Compliance → Sandbox → Certification →
+   Gateway → Dashboard
+</code></pre>
+<h3>3.1 The orchestrator / context pattern</h3>
+<p>Wiring security once meant a long stretch of inline conditional construction inside <code>server.py</code>. That has been replaced by a single stateless factory:</p>
+<pre><code class="language-python">ctx = SecurityOrchestrator.bootstrap(security_config, server_name=&quot;my-server&quot;)
+middleware = ctx.middleware
+</code></pre>
+<p><code>SecurityOrchestrator.bootstrap()</code> is a classmethod with no instance state. It reads a <code>SecurityConfig</code>, walks the fifteen construction blocks in dependency order, and returns a <code>SecurityContext</code> — a dataclass whose every field is optional. A field is populated if and only if its layer was enabled.</p>
+<p>Three properties follow from this:</p>
+<ul>
+<li><strong>Testability.</strong> Bootstrap is a pure function from config to context. Tests construct exactly the layers they exercise.</li>
+<li><strong>Introspectability.</strong> <code>ctx.policy_engine is None</code> is the authoritative answer to "is policy on?" There is no second source of truth.</li>
+<li><strong>Order safety.</strong> Dependencies are expressed by construction order in one readable function rather than scattered across a class hierarchy.</li>
+</ul>
+<p>Two details of the bootstrap carry more weight than their size suggests.</p>
+<p>Event-bus propagation is <em>gated</em>. Components receive the bus only if propagation is enabled:</p>
+<pre><code class="language-python">bus_for_components = event_bus if propagate else None
+</code></pre>
+<p>Every subsequent <code>attach_event_bus</code> call is guarded by <code>if bus_for_components is not None</code>. Disabling propagation genuinely detaches the subsystems rather than leaving them emitting into a discarded sink.</p>
+<p>The dashboard is always constructed. It is a read-only projection over whatever else exists, so there is no configuration in which asking "what is the security posture of this server?" fails for lack of a dashboard.</p>
+<h3>3.2 The fourteen layers</h3>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Predicate</th>
+<th>Core object</th>
+<th>On the request path?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Policy kernel</td>
+<td><code>is_policy_enabled</code></td>
+<td><code>PolicyEngine</code></td>
+<td>Yes — middleware 1</td>
+</tr>
+<tr>
+<td>Contracts</td>
+<td><code>is_contracts_enabled</code></td>
+<td><code>ContextBroker</code></td>
+<td>Yes — middleware 2</td>
+</tr>
+<tr>
+<td>Provenance</td>
+<td><code>is_provenance_enabled</code></td>
+<td><code>ProvenanceLedger</code></td>
+<td>Yes — middleware 3</td>
+</tr>
+<tr>
+<td>Reflexive</td>
+<td><code>is_reflexive_enabled</code></td>
+<td><code>BehavioralAnalyzer</code> + <code>EscalationEngine</code></td>
+<td>Yes — middleware 4</td>
+</tr>
+<tr>
+<td>Consent</td>
+<td><code>is_consent_enabled</code></td>
+<td><code>ConsentGraph</code></td>
+<td>Yes — middleware 5</td>
+</tr>
+<tr>
+<td>Alerts</td>
+<td><code>is_alerts_enabled</code></td>
+<td><code>SecurityEventBus</code></td>
+<td>Indirect</td>
+</tr>
+<tr>
+<td>Certification</td>
+<td><code>is_certification_enabled</code></td>
+<td><code>CertificationPipeline</code></td>
+<td>No — publish-time</td>
+</tr>
+<tr>
+<td>Trust registry</td>
+<td><code>is_registry_enabled</code></td>
+<td><code>TrustRegistry</code></td>
+<td>No — query-time</td>
+</tr>
+<tr>
+<td>Tool marketplace</td>
+<td><code>is_tool_marketplace_enabled</code></td>
+<td><code>ToolMarketplace</code></td>
+<td>No</td>
+</tr>
+<tr>
+<td>Federation</td>
+<td><code>is_federation_enabled</code></td>
+<td><code>TrustFederation</code></td>
+<td>No</td>
+</tr>
+<tr>
+<td>CRL</td>
+<td><code>is_crl_enabled</code></td>
+<td><code>CertificateRevocationList</code></td>
+<td>Sandbox start / trust query</td>
+</tr>
+<tr>
+<td>Compliance</td>
+<td><code>is_compliance_enabled</code></td>
+<td><code>ComplianceReporter</code></td>
+<td>No — reporting</td>
+</tr>
+<tr>
+<td>Sandbox</td>
+<td><code>is_sandbox_enabled</code></td>
+<td><code>SandboxedRunner</code></td>
+<td>Cooperative only (§15)</td>
+</tr>
+<tr>
+<td>Gateway</td>
+<td><code>is_gateway_enabled</code></td>
+<td><code>AuditAPI</code>, <code>Marketplace</code></td>
+<td>No — observability</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>4. Integration: Attaching Without Forking</h2>
+<p><code>src/securemcp/server.py</code> is deliberately thin:</p>
+<pre><code class="language-python">class SecureMCP(FastMCP[LifespanResultT], Generic[LifespanResultT]):
+    ...
+</code></pre>
+<p>It adds a small set of keyword arguments (<code>security</code>, <code>mount_security_api</code>, <code>security_api_prefix="/security"</code>, <code>security_api_require_auth=True</code>, <code>bypass_stdio</code>, <code>register_gateway_tools</code>) and two properties (<code>security_context</code>, <code>security_api</code>). It raises <code>ValueError</code> if <code>register_gateway_tools=True</code> is passed without a <code>security=</code> config, because gateway tools with nothing to report on is a configuration error rather than a degraded mode.</p>
+<p>Everything else lives in <code>integration.py</code>, which is where the "additive" principle is mechanised:</p>
+<pre><code class="language-python">_ATTACHED_SECURITY_CONTEXTS: WeakKeyDictionary[FastMCP, SecurityContext] = WeakKeyDictionary()
+_REGISTERED_GATEWAY_TOOLS: WeakKeyDictionary[FastMCP, set[str]] = WeakKeyDictionary()
+</code></pre>
+<p>This is what makes <code>attach_security(server, config)</code> work on a <em>plain</em> <code>FastMCP</code> instance, not just a <code>SecureMCP</code> subclass. Security is a capability attached to a server, and <code>SecureMCP</code> is a convenience constructor that attaches it on the caller's behalf.</p>
+<h3>4.1 Settings precedence</h3>
+<p>Three sources can configure security, resolved in this order:</p>
+<ol>
+<li>Explicit keyword arguments to the constructor or <code>attach_security</code></li>
+<li>Explicitly-set <code>SECUREMCP_*</code> environment variables</li>
+<li>The code-level <code>SecurityConfig</code></li>
+</ol>
+<p>"Explicitly set" is load-bearing. <code>_apply_settings_overrides</code> consults <code>settings.model_fields_set</code> rather than reading values, so a Pydantic default is never mistaken for an operator decision. <code>SECUREMCP_POLICY_FAIL_CLOSED</code> and <code>SECUREMCP_POLICY_HOT_SWAP</code> (with <code>FASTMCP_SECURITY_*</code> aliases retained for compatibility) are honoured, and — importantly — replicated onto a live pre-built engine, not only onto the config that would have built one. If an override has nothing to bind to, the code warns rather than failing silently.</p>
+<h3>4.2 The STDIO warning</h3>
+<p><code>bypass_stdio</code> exists because STDIO transport historically implies a trusted local parent process. But bypassing policy on STDIO while believing policy is enforced is exactly the kind of gap that governance layers are supposed to close, so attaching with <code>bypass_stdio=True</code> and policy enabled emits a loud <code>WARNING</code> once per attach.</p>
+<p>The default across all five middleware is <code>bypass_stdio=False</code>. STDIO is treated as a privileged execution surface that still deserves an audit trail.</p>
+<hr />
+<h2>5. The Request Path</h2>
+<p>This is where the architecture earns its keep, because it is what runs on every call.</p>
+<p>The orchestrator appends middleware in a fixed order, and that order is the enforcement semantics:</p>
+<pre><code>PolicyEnforcement → ContractValidation → ProvenanceRecording → Reflexive → ConsentEnforcement → core handler
+</code></pre>
+<p>The sequence is deliberate:</p>
+<ol>
+<li><strong>Policy first.</strong> The cheapest and most categorical rejection happens before anything else does work.</li>
+<li><strong>Contracts second.</strong> Terms of engagement are checked once the caller is known to be permitted in principle.</li>
+<li><strong>Provenance third.</strong> Positioned so that it records operations that <em>passed</em> admission control, and — because it wraps <code>call_next</code> in <code>try/except</code> — records failures from everything downstream of it, including the handler itself.</li>
+<li><strong>Reflexive fourth.</strong> Behavioural observation and pre-execution gating, which needs to be close to actual execution to measure it.</li>
+<li><strong>Consent last.</strong> The final owner-authorisation check immediately before the handler runs.</li>
+</ol>
+<h3>5.1 Actor identity</h3>
+<p>All five middleware derive actor identity the same way, and all five redact it:</p>
+<pre><code class="language-python">token = get_access_token()
+if token is not None:
+    return token.token[:8] + &quot;...&quot;
+return &quot;anonymous&quot;
+</code></pre>
+<p>An eight-character prefix is enough to correlate a session across the ledger, the drift baselines, and the consent audit log, without writing bearer tokens into a durable append-only store. It is a correlation identifier, not a credential.</p>
+<h3>5.2 Policy enforcement middleware</h3>
+<p>The first middleware is fail-closed at the outermost level: if <code>fastmcp_ctx is None</code>, it denies. A request it cannot describe is a request it will not authorise.</p>
+<p>Its most important behaviour is that it <strong>rebuilds</strong> the evaluation context rather than trusting what arrived. It re-fetches the tool from the server and derives the capability fields from the tool's own tags, using a prefix convention:</p>
+<pre><code class="language-python">_READ_ONLY_TAGS: frozenset[str] = frozenset({&quot;read_only&quot;, &quot;readonly&quot;, &quot;safe&quot;})
+_TAG_PREFIX_RESOURCE_TYPE = &quot;resource:&quot;
+_TAG_PREFIX_ENVIRONMENT   = &quot;env:&quot;
+_TAG_PREFIX_RISK          = &quot;risk:&quot;
+_TAG_PREFIX_PRINCIPAL_TYPE = &quot;principal:&quot;
+</code></pre>
+<p>So a tool tagged <code>resource:phi</code>, <code>env:production</code>, <code>risk:high</code> is evaluated as a high-risk PHI operation in production regardless of what the caller asserted.</p>
+<p>The asymmetry here is deliberate and documented in the source: <strong>tags can describe a tool, but tags cannot claim approval.</strong> The approval fields on the evaluation context are only ever populated from request metadata. A tool author cannot self-authorise by tagging themselves as approved.</p>
+<p>Both <code>DENY</code> and <code>REQUIRE_APPROVAL</code> raise <code>PolicyViolationError</code> for execution operations. <code>REQUIRE_APPROVAL</code> is a denial <em>with a remedy</em> — the error tells the caller what approval to obtain — not a soft warning.</p>
+<p><strong>List operations behave differently.</strong> They call <code>call_next</code> first, then filter the result, removing any component that evaluates to DENY or REQUIRE_APPROVAL, and removing any component whose evaluation raised. Callers do not see the existence of tools they cannot use. Discovery therefore reflects authorisation rather than leaking the catalogue.</p>
+<p>Post-decision, the middleware enforces the constraints the policy attached:</p>
+<table>
+<thead>
+<tr>
+<th>Constraint</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>read_only</code></td>
+<td>Rejects the call unless the tool is tagged read-only</td>
+</tr>
+<tr>
+<td><code>max_args:N</code></td>
+<td>Rejects calls with more than N arguments</td>
+</tr>
+<tr>
+<td><code>require_metadata:KEY</code></td>
+<td>Rejects calls whose metadata lacks KEY</td>
+</tr>
+<tr>
+<td><code>log_access</code></td>
+<td>Emits an access log line</td>
+</tr>
+</tbody>
+</table>
+<p>Unknown constraints are debug-logged and non-blocking. This is a considered trade-off: a policy provider that emits a constraint this version does not understand will not brick the server, but it also will not be enforced. Operators should treat unrecognised-constraint debug lines as a version-skew signal.</p>
+<h3>5.3 Contract validation middleware</h3>
+<p>Resolves the agent's active contract via <code>broker.get_active_contracts_for_agent(agent_id)</code> and checks the requested action against each term's <code>constraint</code> dictionary:</p>
+<ul>
+<li><code>denied_actions</code> — action present ⇒ denied</li>
+<li><code>allowed_actions</code> — present and action absent ⇒ denied (allow-list semantics)</li>
+<li><code>denied_resources</code> / <code>allowed_resources</code> — same shape for resource identifiers</li>
+</ul>
+<p>Absent a valid contract, the middleware fails closed. <code>require_for_list</code> defaults to <code>False</code>, so listing is unrestricted by contracts unless explicitly configured otherwise.</p>
+<h3>5.4 Provenance recording middleware</h3>
+<p>Wraps <code>call_next</code> and records on both paths. Success:</p>
+<pre><code class="language-python">self.ledger.record(
+    action=ProvenanceAction.TOOL_CALLED,
+    actor_id=actor_id,
+    resource_id=tool_name,
+    input_data={&quot;tool&quot;: tool_name, &quot;arguments&quot;: arguments},
+    output_data={&quot;status&quot;: &quot;success&quot;},
+    metadata={&quot;input_tokens&quot;: input_tokens, &quot;output_tokens&quot;: output_tokens},
+)
+</code></pre>
+<p>Failure records <code>ProvenanceAction.ERROR</code> with <code>error</code> and <code>error_type</code>, then <strong>re-raises</strong>. Recording never swallows an exception, and a failed operation is as much a matter of record as a successful one.</p>
+<p>Note what is recorded and what is not: inputs are captured in full, outputs are reduced to <code>{"status": "success"}</code>. The ledger is a record that an operation occurred with given inputs, not a copy of the data it returned — which keeps result payloads out of a durable append-only structure.</p>
+<p>Token counts come from a <code>chars // 4</code> heuristic (<code>_estimate_call_tokens</code>). Useful for cost attribution and volumetric drift detection; not a substitute for a tokeniser.</p>
+<p><code>record_list_operations</code> defaults to <code>False</code> — discovery traffic would otherwise dominate the ledger.</p>
+<h3>5.5 Reflexive middleware</h3>
+<p>Two modes, depending on whether an <code>IntrospectionEngine</code> was configured.</p>
+<p><em>Monitoring-only</em> (no engine): feeds operation metrics — call frequency from <code>_call_timestamps</code>, error rates, latency — to the <code>BehavioralAnalyzer</code>, and routes resulting drift events to the <code>EscalationEngine</code>.</p>
+<p><em>Gating</em> (engine attached): performs a <strong>pre-execution</strong> check and acts on the verdict:</p>
+<table>
+<thead>
+<tr>
+<th>Verdict</th>
+<th>Middleware behaviour</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>PROCEED</code></td>
+<td>Continue normally</td>
+</tr>
+<tr>
+<td><code>REQUIRE_CONFIRMATION</code></td>
+<td>Raise <code>ConfirmationRequiredError</code></td>
+</tr>
+<tr>
+<td><code>THROTTLE</code></td>
+<td>Sleep <code>throttle_delay_seconds</code> (default 2.0), then continue</td>
+</tr>
+<tr>
+<td><code>HALT</code></td>
+<td>Block the operation</td>
+</tr>
+</tbody>
+</table>
+<p>The middleware also maintains a <code>_suspended_actors</code> set. Once a <code>SUSPEND_AGENT</code> or <code>SHUTDOWN</code> escalation fires, subsequent requests from that actor are blocked without re-deriving the verdict.</p>
+<h3>5.6 Consent enforcement middleware</h3>
+<p>Constructs a <code>ConsentQuery</code> from <code>(resource_owner, actor_id, scope)</code> and evaluates it against the graph. Scope is derived from operation type: <code>EXECUTE</code> for tool calls, <code>READ</code> for resource reads and prompt renders, <code>LIST</code> for listings (only when <code>require_for_list=True</code>).</p>
+<p>A denial raises <code>ConsentRequiredError</code> carrying <code>source_id</code>, <code>target_id</code>, <code>scope</code>, and the graph's own reason string — so the caller learns which grant is missing, not merely that something was refused.</p>
+<hr />
+<h2>6. The Policy Kernel</h2>
+<p>The largest subsystem in the platform, and its primary decision authority.</p>
+<h3>6.1 Providers and aggregation</h3>
+<p>Policy is pluggable. A <code>PolicyProvider</code> returns a <code>PolicyResult</code> carrying one of four decisions:</p>
+<pre><code>ALLOW · DENY · DEFER · REQUIRE_APPROVAL
+</code></pre>
+<p><code>PolicyEngine.evaluate()</code> runs providers and aggregates with AND semantics and this precedence:</p>
+<ol>
+<li><strong><code>DENY</code> short-circuits.</strong> Any deny is final; no later provider can overturn it.</li>
+<li><strong><code>REQUIRE_APPROVAL</code> wins</strong> in the absence of a DENY — unless approval has already been consumed.</li>
+<li><strong><code>ALLOW</code></strong> if at least one provider allows and nothing denies or requires approval.</li>
+<li><strong><code>DEFER</code>-only</strong> ⇒ <code>fail_closed</code> decides (default: DENY).</li>
+</ol>
+<p>Sentinel <code>policy_id</code> values make the non-obvious outcomes diagnosable rather than mysterious: <code>engine-no-providers</code> when nothing is registered, <code>engine-all-deferred</code> when every provider abstained.</p>
+<blockquote>
+<p><strong>Engineering note.</strong> The "approval consumed" case is detected by substring-matching a provider's free-text reason: <code>"approval" in r.reason.lower()</code> on an ALLOW result. It works, but it couples aggregation semantics to human-readable prose. A structured flag on <code>PolicyResult</code> is the more durable design and is the intended direction.</p>
+</blockquote>
+<h3>6.2 Fail-closed on provider error</h3>
+<p>A provider raising is treated as a denial, not skipped:</p>
+<pre><code class="language-python">PolicyResult(
+    decision=PolicyDecision.DENY,
+    reason=&quot;Policy evaluation failed (fail-closed)&quot;,
+    policy_id=&quot;engine-error&quot;,
+)
+</code></pre>
+<p>A broken policy provider therefore reduces availability rather than silently reducing enforcement.</p>
+<h3>6.3 The evaluation context</h3>
+<p><code>PolicyEvaluationContext</code> is a frozen dataclass. Its capability fields (<code>principal_type</code>, <code>resource_type</code>, <code>environment</code>, <code>risk</code>, <code>approval_granted</code>) all have defaults, so capability-aware providers no-op cleanly against call sites that predate them. The defaults are chosen to be safe rather than permissive — <code>environment</code> defaults to <code>ENVIRONMENT_PRODUCTION</code> so that a forgotten plumbing step errs toward deny-by-default, and <code>approval_granted</code> defaults to <code>False</code>.</p>
+<p>Risk and environment markers are plain strings rather than enums, deliberately: external policy engines (Rego, Cedar) can consume them without importing Python types.</p>
+<h3>6.4 Citations</h3>
+<pre><code class="language-python">@dataclass(frozen=True)
+class Citation:
+    source: str
+    article: str
+    url: str
+    version: str
+</code></pre>
+<p>Every decision can carry citations, and the engine deduplicates them by <code>(source, article, version)</code>. Two conventions are enforced by documentation: URLs must point at the primary regulation body rather than an aggregator, and <code>version</code> records which revision of the text was enforced — so an audit years later can reconstruct not just <em>that</em> a rule applied but <em>which wording</em> of it did.</p>
+<p>Built-in providers: <code>TagBasedPolicy</code>, <code>ActionBasedPolicy</code>, <code>GDPRPolicy</code>, <code>HIPAAPolicy</code>.</p>
+<h3>6.5 Hot swap, versioning, and invariants</h3>
+<p>Policy sets can be replaced at runtime. <code>hot_swap</code> holds an <code>asyncio.Lock</code>, emits <code>POLICY_SWAPPED</code>, snapshots a new version, and fires invariant verification as a <em>tracked</em> fire-and-forget task — tracked so the task is not garbage-collected mid-flight, fire-and-forget so verification does not sit in the swap's critical section.</p>
+<p>Around this core sit the governance modules: a declarative policy language, a validator, a simulation harness for testing scenarios against a policy set before promoting it, an invariant checker, an audit log (default cap 10,000 entries), a monitoring surface, and a workbench with bundles, packs, environment profiles, and promotion flows. Versioning, monitoring, and governance are <strong>off by default</strong> — the kernel's default posture is "enforce, with an audit log," and the policy-lifecycle machinery is opt-in.</p>
+<h3>6.6 Event emission</h3>
+<p>The engine emits with <code>await self._event_bus.aemit(...)</code> rather than the synchronous <code>emit</code>. This is intentional: a slow alert subscriber must not be able to stall a <code>POLICY_DENIED</code> notification and, through it, the request that produced it.</p>
+<hr />
+<h2>7. Contracts: Negotiated Terms of Engagement</h2>
+<p>The <code>ContextBroker</code> implements a propose / counter / accept protocol under an <code>asyncio.Lock</code>.</p>
+<p>An agent proposes terms. The broker prepends the server's <code>default_terms</code> — so server-side non-negotiables are always present in the term set, not merely hoped for — evaluates the combination, and either accepts, counters, or rejects. Guard rails: <code>max_rounds=5</code>, <code>session_timeout=30 min</code>, <code>contract_duration=1 h</code>.</p>
+<h3>7.1 Mutual signing</h3>
+<p>If <em>both</em> a <code>crypto_handler</code> and an <code>agent_registry</code> are available, contracts require countersignature. The state machine is:</p>
+<pre><code>NEGOTIATING → PENDING_COUNTERSIGN → ACTIVE
+</code></pre>
+<p>The server signs first, moving the contract to <code>PENDING_COUNTERSIGN</code>. <code>agent_sign_contract</code> then verifies the agent's signature via <code>crypto_handler.verify_with_external_key(...)</code> against key material from the <code>AgentKeyRegistry</code> before flipping the contract to <code>ACTIVE</code>. A contract only becomes enforceable once both parties have cryptographically committed to the same terms.</p>
+<h3>7.2 Non-repudiation</h3>
+<p>Every step is written to an <code>ExchangeLog</code>: <code>SESSION_STARTED</code>, <code>PROPOSAL_RECEIVED</code>, <code>COUNTER_SENT</code>, <code>COUNTER_RECEIVED</code>, <code>ACCEPTED</code>, <code>REJECTED</code>, <code>CONTRACT_SIGNED</code>, <code>AGENT_SIGNED</code>, <code>VERIFICATION_FAILED</code>, <code>CONTRACT_REVOKED</code>. The negotiation itself is auditable, not just its outcome.</p>
+<blockquote>
+<p><strong>Known divergence.</strong> <code>_evaluate_terms</code> swallows evaluator exceptions and returns <code>(terms, [])</code> — that is, <strong>it accepts all terms when evaluation fails.</strong> This is fail-<em>open</em>, the opposite of the policy engine's default. The practical mitigation is that contracts are checked <em>after</em> policy in the middleware chain, so a permissive contract still cannot admit an operation policy denied. The asymmetry is nonetheless real, and it is disclosed here because operators deploying contracts as a primary control need to account for it.</p>
+</blockquote>
+<hr />
+<h2>8. Provenance: Dual Integrity</h2>
+<p>The ledger provides two independent integrity structures over the same records.</p>
+<p><strong>A SHA-256 hash chain</strong> gives sequential tamper-evidence: altering record <em>n</em> invalidates every hash from <em>n</em> onward.</p>
+<p><strong>An incremental Merkle tree</strong> gives efficient inclusion proofs: a single record can be proven to belong to the ledger without disclosing the rest of it.</p>
+<h3>8.1 Genesis hardening</h3>
+<pre><code class="language-python">_LEGACY_GENESIS_SENTINEL = &quot;genesis&quot;
+self._genesis_hash = f&quot;genesis-{self.ledger_id}-{secrets.token_hex(32)}&quot;
+</code></pre>
+<p>Each ledger's chain is rooted at a random 32-byte nonce. The reasoning is recorded in the source: an attacker who knows the format cannot forge a fresh, internally-consistent chain rooted at a guessable sentinel and pass it off as the real ledger. <code>verify_chain</code> still accepts the legacy <code>"genesis"</code> sentinel so existing ledgers remain verifiable.</p>
+<h3>8.2 Merkle mechanics</h3>
+<p><code>_hash_pair</code> is <code>sha256((left + right).encode())</code>. Odd node counts duplicate the last node. The tree tracks a <code>_dirty</code> flag and rebuilds lazily, so a burst of appends costs one rebuild rather than one per record. <code>MerkleProof.verify()</code> walks sibling hashes using explicit <code>"left"</code> / <code>"right"</code> direction markers.</p>
+<h3>8.3 Exportable verification bundles</h3>
+<p><code>export_verification_bundle(record_id)</code> is the piece that makes the ledger externally auditable. It emits:</p>
+<ul>
+<li>the record itself</li>
+<li>its Merkle proof (leaf, sibling hashes, directions, root)</li>
+<li>its chain predecessor and successor hashes</li>
+<li>the ledger root and record count</li>
+</ul>
+<p>An auditor can recompute both the inclusion proof and the local chain linkage <strong>without access to the running server</strong>. Integrity is verifiable by a third party, not asserted by the system that produced the record.</p>
+<p>Pluggable schemes support both local Merkle operation and blockchain-anchored roots.</p>
+<hr />
+<h2>9. The Consent Graph</h2>
+<p>A directed graph of consent relationships with indices for nodes, outgoing edges, incoming edges, edges by id, groups, and an audit log.</p>
+<p>Edges are <strong>scoped</strong> (<code>EXECUTE</code>, <code>READ</code>, <code>LIST</code>, …), may carry <strong>conditions</strong> evaluated against request context, and may <strong>expire</strong>.</p>
+<h3>9.1 Delegation</h3>
+<p><code>delegate()</code> enforces four invariants:</p>
+<ol>
+<li>The parent edge must be valid (not expired, not revoked)</li>
+<li>The parent must be marked <code>can_delegate()</code></li>
+<li><code>effective_scopes.issubset(parent.scopes)</code> — <strong>no scope expansion through delegation</strong></li>
+<li>Depth must be within the configured limit</li>
+</ol>
+<p>Invariant 3 is the structurally important one. A delegated grant can only ever be a subset of what was delegated, so authority strictly narrows as it propagates.</p>
+<h3>9.2 Cascading revocation</h3>
+<p><code>revoke()</code> follows <code>parent_edge_id</code> links and revokes children transitively. Revoking a grant revokes everything that was derived from it — no orphaned delegated authority survives its source.</p>
+<h3>9.3 Four-step resolution</h3>
+<p><code>evaluate()</code> tries, in order:</p>
+<ol>
+<li>A direct edge from source to target</li>
+<li>The target's group membership</li>
+<li>The source's group membership</li>
+<li>A BFS over delegation chains (<code>max_depth=10</code>), traversing only edges marked <code>delegatable</code></li>
+</ol>
+<p>It returns <code>ConsentDecision(granted, path, reason)</code>. The <code>path</code> matters: a grant obtained three delegation hops away is explainable rather than magical, and the same structure explains denials.</p>
+<hr />
+<h2>10. The Reflexive Core</h2>
+<p>Behavioural anomaly detection using per-actor, per-metric statistical baselines.</p>
+<h3>10.1 Sigma thresholds</h3>
+<pre><code class="language-python">_DEFAULT_SIGMA_THRESHOLDS = {
+    LOW: 2.0, MEDIUM: 3.0, HIGH: 4.0, CRITICAL: 5.0,
+}
+</code></pre>
+<p>Each <code>(actor, metric)</code> pair accumulates a running baseline. Deviations are classified by standard-deviation distance. <code>min_samples=10</code> prevents an actor's first few operations from generating noise before the baseline means anything.</p>
+<p>One ordering detail carries real weight: <strong>drift is checked before <code>baseline.update(value)</code>.</strong> If the update came first, a large anomaly would partly absorb itself into the baseline it is being measured against, dulling detection precisely when it matters.</p>
+<h3>10.2 Escalation</h3>
+<p><code>EscalationEngine.evaluate</code> gates each rule through three conditions in sequence:</p>
+<ol>
+<li><code>rule.matches(event)</code></li>
+<li>Cooldown has elapsed</li>
+<li><code>_trigger_counts[f"{actor_id}:{rule_id}"] &gt;= rule.threshold_count</code></li>
+</ol>
+<p>The cooldown plus threshold combination is what makes escalation usable in production: a single transient spike does not suspend an agent, and a genuinely misbehaving actor still escalates promptly. <code>ESCALATION_TRIGGERED</code> is emitted at <code>CRITICAL</code>.</p>
+<h3>10.3 Introspection and pre-execution verdicts</h3>
+<p>The <code>IntrospectionEngine</code> converts an actor's behavioural state into an actionable verdict:</p>
+<pre><code class="language-python"># HALT
+if halt_actions &amp; set(active_escalations):     return ExecutionVerdict.HALT   # SUSPEND_AGENT / SHUTDOWN
+if threat_level == ThreatLevel.CRITICAL:       return ExecutionVerdict.HALT
+# THROTTLE
+if threat_level == ThreatLevel.HIGH:           return ExecutionVerdict.THROTTLE
+if THROTTLE in active_escalations:             return ExecutionVerdict.THROTTLE
+# REQUIRE_CONFIRMATION
+if threat_level == ThreatLevel.MEDIUM:         return ExecutionVerdict.REQUIRE_CONFIRMATION
+if REQUIRE_CONFIRMATION in active_escalations: return ExecutionVerdict.REQUIRE_CONFIRMATION
+return ExecutionVerdict.PROCEED
+</code></pre>
+<p>Two inputs — the numeric threat level and the set of currently-active escalations — collapse into one of four actions. The engine can also <code>bind_to_provenance</code>, so introspection results and the accountability log are themselves part of the tamper-evident record.</p>
+<p>Detectors are pluggable, and an <code>ActorProfileManager</code> tracks per-actor scope usage and threat scores.</p>
+<hr />
+<h2>11. Certification and Attestation</h2>
+<p>A seven-step pipeline turns a declared manifest into a signed attestation:</p>
+<pre><code>validate → digest → determine level → build attestation
+         → sign → publish to marketplace → emit event
+</code></pre>
+<p>Certification levels: <code>STRICT</code>, <code>STANDARD</code>, <code>BASIC</code>, <code>SELF_ATTESTED</code>, <code>UNCERTIFIED</code>, plus <code>UNSIGNED</code>.</p>
+<h3>11.1 The crypto requirement</h3>
+<p><code>require_crypto_for_valid</code> defaults to <strong><code>True</code></strong>. With no crypto handler available, the result is <code>UNSIGNED</code>, <code>is_valid()</code> returns <code>False</code>, and — critically — <strong>marketplace trust is not updated.</strong> An unsigned attestation cannot influence trust scoring.</p>
+<p>Setting it to <code>False</code> produces attestations that report as valid without a signature. The pipeline logs a warning, and the docstring states plainly that this is suitable only for development or test environments. It should never be <code>False</code> in production; an unsigned "valid" attestation is an unfalsifiable claim.</p>
+<p>Default attestation validity is 90 days.</p>
+<h3>11.2 Level-to-trust mapping</h3>
+<pre><code class="language-python">STRICT        → auditor_verified
+STANDARD      → community_verified
+BASIC         → self_certified
+SELF_ATTESTED → self_certified
+UNCERTIFIED   → unverified
+</code></pre>
+<hr />
+<h2>12. Trust Scoring</h2>
+<p><code>TrustRegistry</code> maintains a composite score per tool:</p>
+<pre><code class="language-python">DEFAULT_SCORE_WEIGHTS = {&quot;certification&quot;: 0.50, &quot;reputation&quot;: 0.35, &quot;age&quot;: 0.15}
+DEFAULT_AGE_HALF_SATURATION_DAYS = 30.0
+</code></pre>
+<p><strong>Certification (0.50)</strong> — the dominant term, because a cryptographic attestation is stronger evidence than accumulated opinion.</p>
+<p><strong>Reputation (0.35)</strong> — starts at <code>0.5</code> (neutral, not trusted), moves by <code>event.impact * 0.1</code> per event, clamped to <code>[0, 1]</code>. New tools are neither trusted nor suspected.</p>
+<p><strong>Age (0.15)</strong> — <code>1.0 - math.exp(-age_days / tau)</code>. Exponential saturation, so age contributes quickly at first and then plateaus. Longevity is weak evidence of trustworthiness, and this shape refuses to let it become strong evidence.</p>
+<p>Scores are recomputed on read rather than cached, so a certification or reputation change takes effect immediately. <code>TRUST_CHANGED</code> is emitted only when <code>abs(new - old) &gt;= 0.05</code>, suppressing event noise from insignificant drift; a drop below <code>0.3</code> is emitted at <code>CRITICAL</code>.</p>
+<p>The registry is in-memory (<code>dict[str, TrustRecord]</code> keyed by tool name).</p>
+<hr />
+<h2>13. Revocation and Federation</h2>
+<h3>13.1 CRL</h3>
+<p><code>CertificateRevocationList</code> supports revocation by tool name or attestation id, with typed reasons (<code>SECURITY_INCIDENT</code>, <code>MANUAL_REVOCATION</code>, …), emergency entries, propagated entries, and <code>unrevoke</code>. <code>is_revoked</code> / <code>is_attestation_revoked</code> are the hot-path queries.</p>
+<h3>13.2 Federation</h3>
+<p><code>TrustFederation</code> lets independently-operated registries share evidence without merging authority. Peers have a <code>trust_weight</code> and a status (<code>ACTIVE</code>, <code>SYNCING</code>, …).</p>
+<p><code>query(tool_name)</code> collects the local score plus scores from peers that are active-or-syncing and meet <code>min_peer_weight</code>, then merges:</p>
+<pre><code class="language-python"># local score gets weight 1.0; each peer contributes its configured trust_weight
+return weighted_sum / total_weight   # 0.0 when total_weight == 0
+</code></pre>
+<p>The local registry always carries full weight; peers are advisory in proportion to how much they are trusted. <strong>Revocation checks are strictly local</strong> — <code>is_revoked</code> consults <code>self._local_crl</code>, so a peer cannot directly revoke on another operator's behalf. Peer revocations arrive through <code>receive_revocation</code> and enter the local CRL as propagated entries, keeping the local operator in the loop.</p>
+<p>Revocation broadcast is available in both synchronous (<code>broadcast_revocation</code>) and asynchronous (<code>abroadcast_revocation</code>) form over a pluggable <code>BroadcastTransport</code> protocol.</p>
+<hr />
+<h2>14. Compliance Mapping</h2>
+<p>Six frameworks are modelled: <strong>GDPR, HIPAA, SOC 2, ISO 27001, PCI-DSS, NIST 800-53</strong>, alongside a default SecureMCP framework.</p>
+<p>The model is <code>ComplianceFramework</code> → <code>ComplianceRequirement</code> → <code>RequirementCategory</code> (ten categories) → <code>ComplianceStatus</code>. Combined with the <code>Citation</code> type on policy results, this is what allows a compliance report to answer "which control does this denial satisfy, and under which version of the text?" as a query rather than as an exercise in institutional memory.</p>
+<hr />
+<h2>15. The Sandbox: What It Is and Is Not</h2>
+<p>Precision matters more here than anywhere else, because the word "sandbox" invites assumptions this implementation does not meet. The module's own docstring is unambiguous:</p>
+<blockquote>
+<p>There is no seccomp, no process isolation, no Python RestrictedPython, and no kernel-level boundary.</p>
+</blockquote>
+<p>The sandbox is <strong>cooperative</strong>. Tools must call <code>runner.check(...)</code> to be governed. A tool that does not call it bypasses every declared policy.</p>
+<p><strong>What it does provide:</strong></p>
+<ul>
+<li>Declarative permission manifests, mapped deny-by-default into an <code>ExecutionPolicy</code> via <code>policy_from_manifest</code></li>
+<li>Drift visibility — divergence between declared and actual behaviour becomes observable</li>
+<li>Pre- and post-execution hooks</li>
+<li>A violation audit trail</li>
+<li>A CRL gate: <code>SandboxedRunner.start</code> refuses to start when <code>crl.is_revoked(manifest.tool_name)</code></li>
+</ul>
+<p><strong>What it does not provide:</strong></p>
+<ul>
+<li>Mandatory enforcement</li>
+<li>Protection from a deliberately malicious tool</li>
+<li>Syscall interception</li>
+</ul>
+<p>The module recommends a real OS-level sandbox — seccomp plus namespaces on Linux, Seatbelt on macOS, AppContainer on Windows — with these checks layered on top as a second, semantic layer. That is the intended reading: SecureMCP's sandbox is a <em>declaration and observation</em> mechanism for tools that participate, not a containment boundary for tools that do not.</p>
+<hr />
+<h2>16. The Event Bus</h2>
+<p><code>SecurityEventBus</code> exposes two emission paths with materially different guarantees.</p>
+<p><strong><code>emit()</code> (sync)</strong> cannot interrupt a synchronous handler. When one exceeds <code>_DEFAULT_HANDLER_TIMEOUT_MS = 1_000</code>, the bus warns, increments <code>_slow_count</code>, and lets it finish — the honest behaviour, since pretending to time out a blocking call would not stop it. It refuses coroutine handlers outright, and defensively <code>close()</code>s any awaitable a sync-typed handler returns to avoid "never awaited" leaks.</p>
+<p><strong><code>aemit()</code> (async)</strong> gathers handlers concurrently, hard-caps each with <code>asyncio.wait_for</code>, and runs sync handlers via <code>asyncio.to_thread</code> so they cannot block the loop.</p>
+<p>This is why the policy engine uses <code>aemit</code>: on the request path, a slow subscriber must be <em>bounded</em>, not merely reported.</p>
+<p>Counters for events, errors, slow handlers, and timeouts are exposed for operational monitoring — the bus reports on its own health rather than degrading silently.</p>
+<hr />
+<h2>17. Persistence</h2>
+<p>Storage is defined by a <code>Protocol</code>, not a base class:</p>
+<pre><code class="language-python">@runtime_checkable
+class StorageBackend(Protocol):
+    ...
+</code></pre>
+<p>Three properties define the contract:</p>
+<p><strong>Synchronous.</strong> Deliberately. Storage calls happen inside middleware and event handlers; a sync interface keeps the backend implementable without an event loop, and <code>aemit</code>'s <code>to_thread</code> handling covers the async path.</p>
+<p><strong>JSON-safe dicts at the boundary.</strong> No ORM types cross the interface, so a backend can be a dict, a SQL table, or a remote service without changing callers.</p>
+<p><strong>Append-only versus mutable are distinct verbs.</strong> <code>append_*</code> for provenance records and exchange logs; <code>save_*</code> / <code>remove_*</code> for mutable state. The interface itself encodes which data is history and which is current state — a backend cannot accidentally offer <code>remove</code> semantics on the ledger.</p>
+<p>Coverage: provenance, exchange log, contracts, behavioural baselines, drift events, escalations, the consent graph, marketplace state, policy versioning, workbench, and proposals.</p>
+<p>Implementations: in-memory, SQLite, and PostgreSQL (with connection pooling). A single <code>backend</code> on <code>SecurityConfig</code> is propagated in <code>__post_init__</code> to the policy, contracts, provenance, reflexive, consent, and gateway layers, so one setting configures persistence for everything that needs it.</p>
+<hr />
+<h2>18. Cryptography</h2>
+<p>One function underpins every signature in the system:</p>
+<pre><code class="language-python">def _canonicalize(data):
+    return json.dumps(data, sort_keys=True, separators=(&quot;,&quot;, &quot;:&quot;)).encode(&quot;utf-8&quot;)
+</code></pre>
+<p>Sorted keys, no whitespace. Without canonicalisation, two semantically identical payloads serialise differently and signatures become unverifiable across languages, versions, or dict ordering. Every signed artefact — contracts, attestations — is signed over this canonical form.</p>
+<p>Supported algorithms:</p>
+<table>
+<thead>
+<tr>
+<th>Algorithm</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>HMAC-SHA256</td>
+<td>Verified with <code>hmac.compare_digest</code> (constant-time)</td>
+</tr>
+<tr>
+<td>RSA-PSS</td>
+<td>MGF1-SHA256, <code>MAX_LENGTH</code> salt</td>
+</tr>
+<tr>
+<td>ECDSA P-256</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p>RSA and ECDSA require the optional <code>cryptography</code> package; HMAC works from the standard library alone. <code>verify_with_external_key</code> constructs a temporary handler from <code>AgentKeyRegistry</code> key material — this is the mechanism behind agent countersignatures in §7.1.</p>
+<hr />
+<h2>19. Observability Surfaces</h2>
+<p>Three ways to see what the governance layer is doing.</p>
+<p><strong>MCP tools (the gateway).</strong> <code>create_audit_tools</code> and <code>create_marketplace_tools</code> expose governance as <em>tools</em>, so an agent can query the ledger, drift events, the consent audit log, policy status, and overall security health through the same protocol it uses for everything else. Governance is introspectable by the agents being governed.</p>
+<p><strong>HTTP API.</strong> <code>mount_security_routes(server)</code> mounts a JSON API — dashboard, provenance (including chain status, Merkle proofs, export, and bundle verification), trust registry and scores, federation status, revocations, compliance reports, and an extensive policy surface: status, audit, simulate, schema, bundles, packs, environment profiles, promotions, versions, rollback, diff, snapshot import/export, analytics, and migration preview. Default <code>security_api_require_auth=True</code>, default prefix <code>/security</code>.</p>
+<p><strong>Dashboard.</strong> Always constructed; a read-only aggregate projection over whatever layers are active.</p>
+<hr />
+<h2>20. Threat Model and Honest Limits</h2>
+<p>Threats the architecture addresses:</p>
+<ul>
+<li><strong>Unauthorised invocation</strong> — policy kernel, fail-closed, with list filtering so unauthorised capability is not even discoverable</li>
+<li><strong>Tampering with history</strong> — hash chain plus Merkle tree plus randomised genesis, independently verifiable off-server</li>
+<li><strong>Authority creep</strong> — consent delegation cannot expand scope; revocation cascades</li>
+<li><strong>Behavioural compromise</strong> — sigma-based drift detection with graduated response</li>
+<li><strong>Supply-chain claims</strong> — signed attestations; unsigned certification cannot move trust</li>
+<li><strong>Compromised-tool response</strong> — CRL with federated propagation</li>
+</ul>
+<p>The limits, stated plainly:</p>
+<ol>
+<li><strong>The sandbox is not a boundary.</strong> Cooperative only. Pair it with a real OS sandbox (§15).</li>
+<li><strong>Contract term evaluation fails open.</strong> <code>_evaluate_terms</code> accepts all terms if the evaluator raises, unlike the policy engine's fail-closed default. Policy runs first, which limits the blast radius, but the asymmetry is real (§7.2).</li>
+<li><strong><code>require_crypto_for_valid=False</code> is development-only.</strong> It yields attestations that report valid without a signature (§11.1).</li>
+<li><strong><code>bypass_stdio=True</code> disables enforcement on STDIO.</strong> Off by default, and warned about loudly when combined with policy.</li>
+<li><strong>Unknown policy constraints are not enforced.</strong> They are debug-logged and pass through. Treat those log lines as version skew (§5.2).</li>
+<li><strong>Approval consumption is detected via substring matching</strong> on a provider's free-text reason. Functional, but a structured field would be more durable (§6.1).</li>
+<li><strong>Actor identity is a token prefix.</strong> Eight characters is a correlation key, not an authenticated principal. Real principal identity comes from the auth layer.</li>
+<li><strong>The trust registry is in-memory.</strong> Trust scores do not survive a restart unless the backing marketplace state is persisted.</li>
+<li><strong>Token counts are heuristic.</strong> <code>chars // 4</code>, useful for volumetrics, not for billing.</li>
+</ol>
+<p>One wiring defect is outstanding, and is recorded here rather than left to discovery. In <code>SecurityOrchestrator.bootstrap</code>, the consent block constructs <code>FederatedConsentGraph(..., federation=ctx.federation, ...)</code> before the federation block has run, so <code>ctx.federation</code> is still <code>None</code> at that point. Federated consent therefore does not receive a federation reference under the default bootstrap ordering. Remediation is to move federation construction ahead of the consent block, or to inject the reference once both exist.</p>
+<hr />
+<h2>21. Summary</h2>
+<p>SecureMCP's architecture reduces to a small number of decisions, applied consistently across the platform.</p>
+<p><strong>One bootstrap.</strong> A stateless factory turns config into an all-optional context. Fourteen layers, each independently enableable, one authoritative source of truth for what is on.</p>
+<p><strong>One request path.</strong> Five middleware in a fixed order — policy, contracts, provenance, reflexive, consent — each with a clear responsibility and each fail-closed on the enforcement path.</p>
+<p><strong>Two integrity structures.</strong> A hash chain for sequential tamper-evidence, a Merkle tree for inclusion proofs, and exportable bundles so a third party can verify both without trusting the server.</p>
+<p><strong>Explainability throughout.</strong> Cited policy decisions, path-carrying consent decisions, sigma-quantified drift events. Every outcome can be reconstructed after the fact.</p>
+<p><strong>Documented boundaries.</strong> The sandbox says it is not a kernel boundary. The dev-only crypto bypass says it is dev-only. The fail-open contract path is a known divergence rather than a hidden one.</p>
+<p>That last property is what makes the rest usable. A governance layer is only as good as the accuracy of its claims — an operator who knows exactly where enforcement stops can put a real boundary there. Publishing that boundary precisely is a design obligation of this platform, not a caveat appended to it.</p></body></html>

@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 import time
 from collections import deque
 from datetime import datetime, timezone
 from typing import Any
+
+from purecipher.pgdb import connection, is_postgres_dsn
 
 _MAX_ITEMS = 200
 _FETCH_MULTIPLIER = 4
@@ -30,32 +31,30 @@ def _visible_to_session(
 
 
 class RegistryNotificationFeed:
-    """Append-only feed stored in the registry SQLite file or in memory."""
+    """Append-only feed stored in the registry PostgreSQL database or in memory."""
 
     def __init__(self, db_path: str | None, *, ensure_schema: bool = True) -> None:
         self._db_path = db_path
         self._memory: deque[dict[str, Any]] = deque(maxlen=_MAX_ITEMS)
         self._mem_seq = 0
-        if self._db_path and ensure_schema:
-            self._ensure_sqlite()
+        if is_postgres_dsn(self._db_path) and ensure_schema:
+            self._ensure_schema()
 
-    def _ensure_sqlite(self) -> None:
-        conn = sqlite3.connect(self._db_path)
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS purecipher_registry_notifications (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                created_at REAL NOT NULL,
-                event_kind TEXT NOT NULL,
-                title TEXT NOT NULL,
-                body TEXT NOT NULL,
-                link_path TEXT,
-                audiences_json TEXT NOT NULL
-            );
-            """
-        )
-        conn.commit()
-        conn.close()
+    def _ensure_schema(self) -> None:
+        with connection(self._db_path) as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS purecipher_registry_notifications (
+                    id BIGSERIAL PRIMARY KEY,
+                    created_at DOUBLE PRECISION NOT NULL,
+                    event_kind TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    body TEXT NOT NULL,
+                    link_path TEXT,
+                    audiences_json TEXT NOT NULL
+                );
+                """
+            )
 
     def append(
         self,
@@ -68,16 +67,14 @@ class RegistryNotificationFeed:
     ) -> None:
         audiences_json = json.dumps(list(audiences) if audiences else [])
         now = time.time()
-        if self._db_path:
-            conn = sqlite3.connect(self._db_path)
-            conn.execute(
-                "INSERT INTO purecipher_registry_notifications "
-                "(created_at, event_kind, title, body, link_path, audiences_json) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (now, event_kind, title, body, link_path, audiences_json),
-            )
-            conn.commit()
-            conn.close()
+        if is_postgres_dsn(self._db_path):
+            with connection(self._db_path) as conn:
+                conn.execute(
+                    "INSERT INTO purecipher_registry_notifications "
+                    "(created_at, event_kind, title, body, link_path, audiences_json) "
+                    "VALUES (%s, %s, %s, %s, %s, %s)",
+                    (now, event_kind, title, body, link_path, audiences_json),
+                )
         else:
             self._mem_seq += 1
             self._memory.appendleft(
@@ -101,16 +98,15 @@ class RegistryNotificationFeed:
     ) -> list[dict[str, Any]]:
         cap = min(limit * _FETCH_MULTIPLIER, _MAX_ITEMS * _FETCH_MULTIPLIER)
         rows: list[tuple[Any, ...]]
-        if self._db_path:
-            conn = sqlite3.connect(self._db_path)
-            cur = conn.execute(
-                "SELECT id, created_at, event_kind, title, body, link_path, audiences_json "
-                "FROM purecipher_registry_notifications "
-                "ORDER BY id DESC LIMIT ?",
-                (cap,),
-            )
-            rows = cur.fetchall()
-            conn.close()
+        if is_postgres_dsn(self._db_path):
+            with connection(self._db_path) as conn:
+                cur = conn.execute(
+                    "SELECT id, created_at, event_kind, title, body, link_path, audiences_json "
+                    "FROM purecipher_registry_notifications "
+                    "ORDER BY id DESC LIMIT %s",
+                    (cap,),
+                )
+                rows = cur.fetchall()
         else:
             rows = []
             for row in list(self._memory)[:cap]:

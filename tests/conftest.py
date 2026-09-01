@@ -89,6 +89,105 @@ def worker_id(request):
     return getattr(request.config, "workerinput", {}).get("workerid", "master")
 
 
+# ── PostgreSQL persistence fixtures ───────────────────────────────
+#
+# The PureCipher registry persists to PostgreSQL. Persistence tests run
+# against a real database: each test gets its own freshly-created, migrated
+# database so xdist workers never collide and state never leaks between tests.
+#
+# Point the suite at a server with PURECIPHER_TEST_DATABASE_URL (a maintenance
+# DSN, e.g. the compose Postgres:
+#   postgresql://purecipher:purecipher@localhost:5432/purecipher
+# ). When no server is reachable the persistence tests are skipped rather than
+# failed, so contributors without Postgres aren't blocked; CI runs them with a
+# postgres service.
+
+_DEFAULT_TEST_DSN = "postgresql://purecipher:purecipher@localhost:5432/purecipher"
+
+
+def _maintenance_dsn() -> str:
+    import os
+
+    return (
+        os.getenv("PURECIPHER_TEST_DATABASE_URL")
+        or os.getenv("DATABASE_URL")
+        or _DEFAULT_TEST_DSN
+    )
+
+
+def _dsn_with_dbname(dsn: str, dbname: str) -> str:
+    """Return ``dsn`` with its database (path) replaced by ``dbname``."""
+    from urllib.parse import urlsplit, urlunsplit
+
+    parts = urlsplit(dsn)
+    return urlunsplit(parts._replace(path=f"/{dbname}"))
+
+
+@pytest.fixture(scope="session")
+def _postgres_available() -> bool:
+    """Session probe: is the configured PostgreSQL server reachable?"""
+    try:
+        import psycopg
+    except ImportError:  # pragma: no cover - psycopg is a hard dependency
+        return False
+    try:
+        with psycopg.connect(_maintenance_dsn(), connect_timeout=3) as conn:
+            conn.execute("SELECT 1")
+        return True
+    except Exception:  # noqa: BLE001 - any failure means "not available"
+        return False
+
+
+@pytest.fixture
+def registry_dsn(_postgres_available: bool, worker_id: str):
+    """A fresh, migrated PostgreSQL database dedicated to a single test.
+
+    Yields a DSN string suitable for any registry store, the SecureMCP
+    ``PostgresBackend``, or ``PureCipherRegistry(persistence_path=...)``. The
+    database is created on entry, migrated to head, and dropped on exit.
+    Skips the test when no PostgreSQL server is reachable.
+    """
+    import secrets
+    import time
+
+    import psycopg
+
+    if not _postgres_available:
+        pytest.skip(
+            "PostgreSQL not reachable. Start one (e.g. "
+            "`docker compose -f docker-compose.purecipher-registry.yml up -d postgres`) "
+            "and set PURECIPHER_TEST_DATABASE_URL."
+        )
+
+    from fastmcp.server.security.storage.pg_pool import close_all_pools
+    from purecipher.db_migrations import migrate_registry_database
+
+    admin = _maintenance_dsn()
+    dbname = (
+        f"pctest_{worker_id}_{int(time.time() * 1000) % 100000}_{secrets.token_hex(4)}"
+    )
+    dbname = dbname.replace("-", "_").lower()
+
+    with psycopg.connect(admin, autocommit=True) as conn:
+        conn.execute(f'CREATE DATABASE "{dbname}"')
+
+    dsn = _dsn_with_dbname(admin, dbname)
+    try:
+        migrate_registry_database(dsn)
+        yield dsn
+    finally:
+        # Drop the per-test database. Close pools first so no live connection
+        # blocks the DROP, then terminate any stragglers.
+        close_all_pools()
+        with psycopg.connect(admin, autocommit=True) as conn:
+            conn.execute(
+                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                "WHERE datname = %s AND pid <> pg_backend_pid()",
+                (dbname,),
+            )
+            conn.execute(f'DROP DATABASE IF EXISTS "{dbname}"')
+
+
 @pytest.fixture
 def free_port():
     """Get a free port for the test to use."""

@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PureCipher Agent Client</title>
+<style>
+  :root{
+    --navy:#0B2027; --deep:#0E3B43; --teal:#028090; --seafoam:#00A896;
+    --mint:#02C39A; --ice:#CDEDEE; --ink:#12343B; --mute:#6E8a90;
+    --line:#1c4a52; --card:#0f323a; --lock:#0c262c;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    background:var(--navy);color:var(--ice);line-height:1.5}
+  header{padding:18px 28px;border-bottom:1px solid var(--line);display:flex;
+    align-items:center;justify-content:space-between}
+  header .sub{color:var(--mint);font-size:11px;font-weight:700;letter-spacing:2px}
+  header h1{font-size:18px;margin:2px 0 0}
+  .chip{font-size:12px;color:var(--mute);text-align:right}
+  .chip b{color:var(--ice)} .chip .dot{color:var(--mint)}
+  main{max-width:760px;margin:0 auto;padding:22px 24px 70px}
+  .intro{background:var(--deep);border:1px solid var(--line);border-radius:12px;
+    padding:14px 16px;font-size:13.5px;margin-bottom:8px}
+  .intro b{color:#fff}
+
+  /* progress rail */
+  .rail{display:flex;align-items:center;gap:6px;margin:18px 2px 22px}
+  .rail .node{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;
+    justify-content:center;font-size:12px;font-weight:700;background:var(--lock);
+    color:var(--mute);border:1px solid var(--line);flex:0 0 auto}
+  .rail .node.active{background:var(--teal);color:#fff;border-color:var(--teal)}
+  .rail .node.done{background:var(--mint);color:var(--navy);border-color:var(--mint)}
+  .rail .bar{height:2px;flex:1;background:var(--line)}
+  .rail .bar.done{background:var(--mint)}
+
+  .step{border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:14px;
+    background:var(--card);transition:.15s}
+  .step.locked{opacity:.5;background:var(--lock)}
+  .step.active{border-color:var(--teal);box-shadow:0 0 0 1px var(--teal) inset}
+  .step.done{border-color:#16424a}
+  .step .head{display:flex;align-items:center;gap:12px}
+  .step .num{width:30px;height:30px;border-radius:50%;background:var(--lock);color:var(--mute);
+    border:1px solid var(--line);display:flex;align-items:center;justify-content:center;
+    font-weight:700;font-size:14px;flex:0 0 auto}
+  .step.active .num{background:var(--teal);color:#fff;border-color:var(--teal)}
+  .step.done .num{background:var(--mint);color:var(--navy);border-color:var(--mint)}
+  .step h2{font-size:15.5px;margin:0;color:#fff}
+  .step .why{color:var(--mute);font-size:12.5px;margin:2px 0 0}
+  .body{margin-top:14px}
+  .locked .body{display:none}
+
+  label{display:block;font-size:11px;color:var(--mute);margin:10px 0 4px;
+    text-transform:uppercase;letter-spacing:1px}
+  input,select,textarea{width:100%;background:#06161b;color:var(--ice);
+    border:1px solid var(--line);border-radius:8px;padding:10px;font-size:13.5px;font-family:inherit}
+  textarea{font-family:ui-monospace,Menlo,Consolas,monospace;min-height:60px}
+  .row{display:flex;gap:10px}
+  button{background:var(--teal);color:#fff;border:0;border-radius:8px;padding:10px 18px;
+    font-weight:600;cursor:pointer;font-size:13.5px;margin-top:14px}
+  button:hover{background:var(--seafoam)} button:disabled{opacity:.45;cursor:not-allowed}
+  button.ghost{background:transparent;border:1px solid var(--teal);color:var(--ice);padding:8px 14px}
+
+  .done-line{display:flex;align-items:center;gap:8px;color:var(--mint);font-size:13.5px;
+    margin-top:12px;font-weight:600}
+  .pill{display:inline-block;font-size:10.5px;padding:2px 8px;border-radius:20px;background:var(--deep);
+    color:var(--mint);border:1px solid var(--line);margin-left:6px}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
+  .server{border:1px solid var(--line);border-radius:10px;padding:11px 13px;margin-bottom:8px;cursor:pointer}
+  .server:hover{border-color:var(--teal)} .server.sel{border-color:var(--mint);background:#0c2a31}
+  .server.dim{opacity:.55}
+  .server .nm{font-weight:600;color:#fff;font-size:13.5px}
+  .server .ds{color:var(--mute);font-size:12px;margin-top:2px}
+  .result{background:#06161b;border:1px solid var(--line);border-radius:10px;padding:13px;margin-top:12px;
+    white-space:pre-wrap;font-family:ui-monospace,Menlo,monospace;font-size:12px;max-height:300px;overflow:auto}
+  .note{background:#0c2a31;border:1px solid var(--line);border-radius:10px;padding:10px 13px;
+    font-size:12.5px;color:var(--ice);margin-top:12px}
+  .err{color:#ffb4b4}
+  .gov{display:flex;gap:12px;margin-top:12px;flex-wrap:wrap}
+  .gov .stat{background:var(--deep);border:1px solid var(--line);border-radius:10px;padding:10px 14px;min-width:108px}
+  .gov .stat .v{font-size:22px;font-weight:700;color:#fff} .gov .stat .l{font-size:10px;color:var(--mute);
+    text-transform:uppercase;letter-spacing:1px}
+  a{color:var(--mint)}
+  .banner{background:#3a1414;border:1px solid #7a2a2a;border-radius:10px;padding:10px 14px;
+    font-size:13px;color:#ffd9d9;margin-bottom:14px;display:none}
+</style>
+</head>
+<body>
+<header>
+  <div><div class="sub">SECURED MCP REGISTRY · AGENT CLIENT</div><h1>PureCipher Agent Client</h1></div>
+  <div class="chip" id="chip">connecting…</div>
+</header>
+
+<main>
+  <div class="banner" id="banner"></div>
+
+  <div class="intro">
+    This app is a <b>governed agent</b>. Follow the steps below — it will register an identity,
+    connect to a server <b>through the registry</b>, and run a tool. You never touch the server
+    directly, and every call is checked and recorded.
+  </div>
+
+  <div class="rail">
+    <div class="node active" id="n1">1</div><div class="bar" id="b1"></div>
+    <div class="node" id="n2">2</div><div class="bar" id="b2"></div>
+    <div class="node" id="n3">3</div><div class="bar" id="b3"></div>
+    <div class="node" id="n4">4</div>
+  </div>
+
+  <!-- STEP 1 -->
+  <section class="step active" id="step1">
+    <div class="head"><div class="num">1</div>
+      <div><h2>Register this agent</h2>
+        <div class="why">Gives the app an identity the registry can govern and audit.</div></div>
+    </div>
+    <div class="body">
+      <label>Agent name</label>
+      <input id="displayName" value="Agent Client Demo" />
+      <div id="adminFields" style="display:none">
+        <div class="row">
+          <div style="flex:1"><label>Admin user</label><input id="adminUser" value="admin" /></div>
+          <div style="flex:1"><label>Admin password</label><input id="adminPass" type="password" value="admin123" /></div>
+        </div>
+      </div>
+      <button id="btnRegister">Register agent</button>
+      <div class="done-line" id="done1" style="display:none"></div>
+    </div>
+  </section>
+
+  <!-- STEP 2 -->
+  <section class="step locked" id="step2">
+    <div class="head"><div class="num">2</div>
+      <div><h2>Choose a server</h2>
+        <div class="why">Pick a governed MCP server from the registry's catalog.</div></div>
+    </div>
+    <div class="body">
+      <div id="serverList"></div>
+      <button class="ghost" id="btnRefresh">Refresh catalog</button>
+      <div class="done-line" id="done2" style="display:none"></div>
+    </div>
+  </section>
+
+  <!-- STEP 3 -->
+  <section class="step locked" id="step3">
+    <div class="head"><div class="num">3</div>
+      <div><h2>Connect</h2>
+        <div class="why">Opens a session through the governance proxy — not to the server directly.</div></div>
+    </div>
+    <div class="body">
+      <div class="mono" style="color:var(--mute)" id="proxyUrl">—</div>
+      <button id="btnConnect">Connect</button>
+      <div class="done-line" id="done3" style="display:none"></div>
+    </div>
+  </section>
+
+  <!-- STEP 4 -->
+  <section class="step locked" id="step4">
+    <div class="head"><div class="num">4</div>
+      <div><h2>Use a tool</h2>
+        <div class="why">Run a tool. The registry checks it against the allowlist and records it.</div></div>
+    </div>
+    <div class="body">
+      <label>Tool</label><select id="toolSelect"></select>
+      <div class="why" id="toolHint" style="margin-top:6px"></div>
+      <label>Inputs (JSON)</label>
+      <textarea id="toolArgs">{}</textarea>
+      <button id="btnCall">Run through the registry</button>
+      <div id="callResult"></div>
+      <div class="gov" id="govBox" style="display:none">
+        <div class="stat"><div class="v" id="govLedger">–</div><div class="l">Ledger records</div></div>
+        <div class="stat"><div class="v" id="govEvals">–</div><div class="l">Policy checks</div></div>
+        <div class="stat"><div class="v" id="govDenies">–</div><div class="l">Denied</div></div>
+        <div class="stat" style="display:flex;align-items:center"><a id="govLink" href="#" target="_blank">Provenance ledger →</a></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+const $=id=>document.getElementById(id);
+const state={registry:"",auth:null,token:"",slug:"",servers:[],selected:null,tools:[]};
+
+// Example inputs keyed by tool name, so step 4 isn't a blank JSON box.
+const EXAMPLES={
+  ask_question:{repoName:"PureCipher/xsecuremcp2.0",question:"What is this project?"},
+  read_wiki_structure:{repoName:"modelcontextprotocol/servers"},
+  read_wiki_contents:{repoName:"modelcontextprotocol/servers"},
+  fetch:{url:"https://example.com"},
+  search_repositories:{query:"fastmcp"},
+  get_issue:{owner:"github",repo:"github-mcp-server",issue_number:1},
+  echo:{message:"hello from the agent app"},
+  get_weather:{city:"Amsterdam"},
+};
+
+async function jget(u){const r=await fetch(u);return r.json();}
+async function jpost(u,b){const r=await fetch(u,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)});return{status:r.status,body:await r.json()};}
+
+function friendly(msg){
+  const m=String(msg||"");
+  if(/session terminated|connection closed/i.test(m))
+    return "Couldn't open a session. The registry is likely running without --host-toolsets. Restart the demo: ./demo/start_demo.sh --stop then ./demo/start_demo.sh";
+  if(/cannot reach|reachable|URLError|Failed to fetch/i.test(m))
+    return "Can't reach the registry. Start the demo with ./demo/start_demo.sh";
+  return m;
+}
+function showBanner(msg){const b=$("banner");b.textContent=msg;b.style.display=msg?"block":"none";}
+
+function setStep(n,cls){ // cls: 'active' | 'done' | 'locked'
+  const s=$("step"+n); s.classList.remove("active","done","locked");
+  s.classList.add(cls);
+  const node=$("n"+n); node.classList.remove("active","done");
+  if(cls==="active")node.classList.add("active");
+  if(cls==="done"){node.classList.add("done");node.textContent="✓";}
+  else node.textContent=String(n);
+  if(n>1){const bar=$("b"+(n-1)); if(cls==="done"||cls==="active")bar.classList.add("done");}
+}
+
+async function loadState(){
+  let s; try{s=await jget("/api/state");}catch(e){showBanner(friendly("Failed to fetch"));return;}
+  state.registry=s.registry_url; state.auth=s.auth_enabled;
+  $("chip").innerHTML = s.reachable
+    ? `registry <b>${s.registry_url}</b> · <span class="dot">${s.auth_enabled?"auth on":"auth off"}</span>`
+    : `<span class="err">registry unreachable</span>`;
+  if(!s.reachable) showBanner(friendly("cannot reach"));
+  $("adminFields").style.display = s.auth_enabled ? "block" : "none";
+}
+
+$("btnRegister").onclick=async()=>{
+  $("btnRegister").disabled=true;$("btnRegister").textContent="Registering…";
+  const {status,body}=await jpost("/api/register",{
+    display_name:$("displayName").value,
+    admin_user:$("adminUser")?.value, admin_pass:$("adminPass")?.value});
+  $("btnRegister").disabled=false;$("btnRegister").textContent="Register agent";
+  if(status!==200){showBanner(friendly(body.error));return;}
+  showBanner("");
+  state.token=body.secret||""; state.slug=body.slug||"";
+  $("done1").style.display="flex";
+  $("done1").innerHTML = `✓ Registered as <span class="mono" style="margin:0 4px">${state.slug}</span>` +
+    (state.token?` — token issued`:` — (auth off; runs as the proxy default)`);
+  setStep(1,"done"); setStep(2,"active");
+  await loadServers();
+};
+
+$("btnRefresh").onclick=loadServers;
+async function loadServers(){
+  const s=await jget("/api/servers");
+  if(s.error){$("serverList").innerHTML=`<div class="err">${s.error}</div>`;return;}
+  state.servers=s.servers||[];
+  if(!state.servers.length){
+    $("serverList").innerHTML=`<div class="note">No servers in the catalog yet. They're registered by the launcher — re-run <span class="mono">./demo/start_demo.sh</span>.</div>`;return;
+  }
+  $("serverList").innerHTML=state.servers.map((x,i)=>{
+    const callable=x.hosting_mode==="proxy"&&x.proxy_url;
+    return `<div class="server${callable?"":" dim"}" data-i="${i}">
+      <div class="nm">${x.display_name}<span class="pill">${x.hosting_mode||"?"}</span></div>
+      <div class="ds">${x.description||""}${callable?"":" — not callable"}</div></div>`;
+  }).join("");
+  [...document.querySelectorAll(".server")].forEach(el=>el.onclick=()=>pickServer(state.servers[+el.dataset.i],el));
+}
+function pickServer(srv,el){
+  if(!(srv.hosting_mode==="proxy"&&srv.proxy_url))return;
+  state.selected=srv;
+  [...document.querySelectorAll(".server")].forEach(e=>e.classList.remove("sel"));
+  el.classList.add("sel");
+  $("done2").style.display="flex"; $("done2").textContent=`✓ Selected ${srv.display_name}`;
+  $("proxyUrl").textContent=srv.proxy_url;
+  setStep(2,"done"); setStep(3,"active");
+}
+
+$("btnConnect").onclick=async()=>{
+  $("btnConnect").disabled=true;$("btnConnect").textContent="Connecting…";
+  const {status,body}=await jpost("/api/connect",{proxy_url:state.selected.proxy_url,token:state.token});
+  $("btnConnect").disabled=false;$("btnConnect").textContent="Connect";
+  if(status!==200){showBanner(friendly(body.error));$("done3").style.display="none";return;}
+  showBanner("");
+  state.tools=body.tools||[];
+  $("done3").style.display="flex";
+  $("done3").textContent=`✓ Connected — ${state.tools.length} tool(s) available`;
+  $("toolSelect").innerHTML=state.tools.map(t=>`<option>${t.name}</option>`).join("");
+  setStep(3,"done"); setStep(4,"active");
+  updateTool();
+};
+
+$("toolSelect").onchange=updateTool;
+function updateTool(){
+  const name=$("toolSelect").value;
+  const t=state.tools.find(x=>x.name===name);
+  $("toolHint").textContent=t?(t.description||""):"";
+  if(EXAMPLES[name]){$("toolArgs").value=JSON.stringify(EXAMPLES[name],null,2);return;}
+  const props=t&&t.input_schema&&t.input_schema.properties;
+  if(props){const sk={};Object.keys(props).forEach(k=>sk[k]="");$("toolArgs").value=JSON.stringify(sk,null,2);}
+  else $("toolArgs").value="{}";
+}
+
+$("btnCall").onclick=async()=>{
+  let args; try{args=JSON.parse($("toolArgs").value||"{}");}
+  catch(e){$("callResult").innerHTML=`<div class="result err">Inputs must be valid JSON.</div>`;return;}
+  $("btnCall").disabled=true;$("btnCall").textContent="Running…";
+  const {status,body}=await jpost("/api/call",{proxy_url:state.selected.proxy_url,token:state.token,tool:$("toolSelect").value,arguments:args});
+  $("btnCall").disabled=false;$("btnCall").textContent="Run through the registry";
+  if(status!==200||body.ok===false){
+    $("callResult").innerHTML=`<div class="result err">${friendly(body.error)}</div>`;return;
+  }
+  const r=body.result||{};
+  const txt=r.structured?JSON.stringify(r.structured,null,2):(r.text||"(empty)");
+  $("callResult").innerHTML=`<div class="note">✓ The agent called <b>${$("toolSelect").value}</b> through the registry. It was checked against the allowlist and written to the provenance ledger — the agent never reached the server directly.</div><div class="result">${esc(txt)}</div>`;
+  loadGov();
+};
+
+async function loadGov(){
+  if(!state.slug)return;
+  const g=await jget("/api/governance?slug="+encodeURIComponent(state.slug));
+  if(g.error)return;
+  $("govBox").style.display="flex";
+  $("govLedger").textContent=g.ledger_records??"–";
+  $("govEvals").textContent=g.policy_evaluations??"–";
+  $("govDenies").textContent=g.policy_denies??"–";
+  if(g.provenance_url)$("govLink").href=g.provenance_url;
+}
+function esc(s){return String(s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
+
+loadState();
+</script>
+</body>
+</html>

@@ -59,9 +59,11 @@ RUN uv sync --frozen --no-dev
 
 EXPOSE 8000
 
-VOLUME ["/data"]
-
 ENV PURECIPHER_SIGNING_SECRET=development-secret
-ENV PURECIPHER_REGISTRY_DB=/data/purecipher-registry.db
+# PostgreSQL is the persistence engine. DATABASE_URL is supplied by the
+# compose stack (pointing at the ``postgres`` service); when unset the
+# registry runs ephemeral (in-memory). The registry creates its schema
+# automatically via the bundled Alembic migrations on startup.
+ENV DATABASE_URL=""
 
 CMD ["uv", "run", "--no-sync", "purecipher-registry", "--host", "0.0.0.0", "--port", "8000"]

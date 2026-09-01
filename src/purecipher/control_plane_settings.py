@@ -11,17 +11,18 @@ disables a plane via the UI doesn't have it spring back to "on" the
 next time the process restarts.
 
 The store is intentionally tiny — one row per plane, with the last
-actor and timestamp preserved for audit. We use the same SQLite
-file the rest of the registry persistence layer uses; in-memory
-fallback applies when no ``persistence_path`` is configured.
+actor and timestamp preserved for audit. We use the same PostgreSQL
+database the rest of the registry persistence layer uses; in-memory
+fallback applies when no PostgreSQL DSN is configured.
 """
 
 from __future__ import annotations
 
-import sqlite3
 import time
 from collections.abc import Iterable
 from dataclasses import dataclass
+
+from purecipher.pgdb import connection, dict_row, is_postgres_dsn
 
 # Canonical plane names. These are the keys used everywhere in the
 # Iter 9 surface — keep this set in sync with
@@ -54,10 +55,11 @@ class RegistryControlPlaneStore:
     """Persistent control-plane toggle settings.
 
     Mirrors the shape of the existing ``RegistryUserPreferenceStore``:
-    SQLite-backed when ``db_path`` is set, in-memory otherwise.
+    PostgreSQL-backed when ``db_path`` is a Postgres DSN, in-memory
+    otherwise.
 
     Args:
-        db_path: SQLite path, or ``None`` for in-memory.
+        db_path: PostgreSQL DSN, or ``None`` for in-memory.
         ensure_schema: When ``True`` (default), create the table on
             construction. Set ``False`` when migrations manage the
             schema (matches the existing pattern).
@@ -65,35 +67,30 @@ class RegistryControlPlaneStore:
 
     def __init__(self, db_path: str | None, *, ensure_schema: bool = True) -> None:
         # ``:memory:`` is the registry's convention for "no real
-        # persistence" — its other settings stores treat it as a
-        # signal that the SQLite layer isn't available across
-        # connections (each ``sqlite3.connect(":memory:")`` opens a
-        # fresh isolated DB). Map it to the in-memory dict mode so
-        # we don't confuse callers with sqlite3 errors when the
-        # registry happens to be in ephemeral mode.
+        # persistence". Under Postgres-only, any non-DSN value (None,
+        # a file path, ``:memory:``) routes to the pure-Python
+        # in-memory dict fallback rather than to PostgreSQL, so we
+        # don't confuse callers when the registry is in ephemeral
+        # mode. Normalize ``:memory:`` to ``None`` for clarity.
         if db_path == ":memory:":
             db_path = None
         self._db_path = db_path
         self._memory: dict[str, ControlPlaneSetting] = {}
-        if self._db_path and ensure_schema:
-            self._ensure_sqlite()
+        if is_postgres_dsn(self._db_path) and ensure_schema:
+            self._ensure_schema()
 
-    def _ensure_sqlite(self) -> None:
-        conn = sqlite3.connect(self._db_path)
-        try:
+    def _ensure_schema(self) -> None:
+        with connection(self._db_path, row_factory=dict_row) as conn:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS purecipher_registry_control_planes (
                     plane TEXT PRIMARY KEY,
                     enabled INTEGER NOT NULL,
-                    updated_at REAL NOT NULL,
+                    updated_at DOUBLE PRECISION NOT NULL,
                     updated_by TEXT NOT NULL
                 );
                 """
             )
-            conn.commit()
-        finally:
-            conn.close()
 
     def get_all(self) -> dict[str, ControlPlaneSetting]:
         """Return every persisted plane setting, keyed by plane name.
@@ -102,10 +99,9 @@ class RegistryControlPlaneStore:
         callers should treat absence as "no override, use the
         constructor default."
         """
-        if not self._db_path:
+        if not is_postgres_dsn(self._db_path):
             return dict(self._memory)
-        conn = sqlite3.connect(self._db_path)
-        try:
+        with connection(self._db_path, row_factory=dict_row) as conn:
             cur = conn.execute(
                 """
                 SELECT plane, enabled, updated_at, updated_by
@@ -113,31 +109,26 @@ class RegistryControlPlaneStore:
                 """
             )
             rows = cur.fetchall()
-        finally:
-            conn.close()
 
         result: dict[str, ControlPlaneSetting] = {}
         for row in rows:
-            try:
-                plane, enabled, updated_at, updated_by = row
-            except ValueError:
-                continue
+            plane = row["plane"]
             if plane not in PLANE_NAMES:
                 # Unknown plane in the store — ignore rather than
                 # let stale data confuse the runtime model.
                 continue
             result[str(plane)] = ControlPlaneSetting(
                 plane=str(plane),
-                enabled=bool(enabled),
-                updated_at=float(updated_at),
-                updated_by=str(updated_by),
+                enabled=bool(row["enabled"]),
+                updated_at=float(row["updated_at"]),
+                updated_by=str(row["updated_by"]),
             )
         return result
 
     def get(self, plane: str) -> ControlPlaneSetting | None:
         if plane not in PLANE_NAMES:
             return None
-        if not self._db_path:
+        if not is_postgres_dsn(self._db_path):
             return self._memory.get(plane)
         return self.get_all().get(plane)
 
@@ -166,17 +157,16 @@ class RegistryControlPlaneStore:
             updated_by=str(updated_by) or "unknown",
         )
 
-        if not self._db_path:
+        if not is_postgres_dsn(self._db_path):
             self._memory[plane] = record
             return record
 
-        conn = sqlite3.connect(self._db_path)
-        try:
+        with connection(self._db_path, row_factory=dict_row) as conn:
             conn.execute(
                 """
                 INSERT INTO purecipher_registry_control_planes
                     (plane, enabled, updated_at, updated_by)
-                VALUES (?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s)
                 ON CONFLICT(plane) DO UPDATE SET
                     enabled = excluded.enabled,
                     updated_at = excluded.updated_at,
@@ -189,9 +179,6 @@ class RegistryControlPlaneStore:
                     record.updated_by,
                 ),
             )
-            conn.commit()
-        finally:
-            conn.close()
         return record
 
     def known_planes(self) -> Iterable[str]:

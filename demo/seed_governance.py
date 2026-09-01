@@ -9,10 +9,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
-REGISTRY = "http://127.0.0.1:8000"
+# Override with REGISTRY_URL=http://localhost:8001 if your registry runs on the
+# CLI default port. Auth-disabled registries are handled in main() (token="").
+REGISTRY = os.getenv("REGISTRY_URL", "http://127.0.0.1:8000").rstrip("/")
 CLIENT_SLUG = "claude-code-demo"
 TOOLS = ["get_weather", "calculate", "lookup_company", "generate_uuid", "echo"]
 
@@ -162,11 +165,21 @@ def generate_tool_calls() -> None:
 
 
 def main() -> None:
+    admin_user = os.getenv("ADMIN_USER", "admin")
+    admin_pass = os.getenv("ADMIN_PASS", "admin123")
     login = api(
-        "POST", "/registry/login", {"username": "admin", "password": "admin123"}
+        "POST", "/registry/login", {"username": admin_user, "password": admin_pass}
     )
-    token = login["token"]
-    print("Authenticated")
+    token = login.get("token", "")
+    if token:
+        print(f"Authenticated as {admin_user}")
+    elif "auth is disabled" in str(login.get("error", "")).lower():
+        # Auth off: every endpoint runs without a token. api() omits the
+        # Authorization header when token is empty.
+        print("Registry auth is disabled — proceeding without a token.")
+    else:
+        print(f"Login failed: {login}")
+        return
 
     seed_consent_graph()
     seed_contracts()

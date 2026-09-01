@@ -3,9 +3,8 @@ from __future__ import annotations
 from purecipher.notification_feed import RegistryNotificationFeed
 
 
-def test_notification_feed_filters_by_persona(tmp_path) -> None:
-    db_path = str(tmp_path / "n.db")
-    feed = RegistryNotificationFeed(db_path)
+def test_notification_feed_filters_by_persona(registry_dsn) -> None:
+    feed = RegistryNotificationFeed(registry_dsn)
     feed.append(
         event_kind="public",
         title="Catalog",
@@ -31,9 +30,8 @@ def test_notification_feed_filters_by_persona(tmp_path) -> None:
     assert "governance" in kinds_reviewer
 
 
-def test_notification_feed_open_auth_shows_all(tmp_path) -> None:
-    db_path = str(tmp_path / "o.db")
-    feed = RegistryNotificationFeed(db_path)
+def test_notification_feed_open_auth_shows_all(registry_dsn) -> None:
+    feed = RegistryNotificationFeed(registry_dsn)
     feed.append(
         event_kind="governance",
         title="Policy",

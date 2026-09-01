@@ -1,0 +1,44 @@
+sequenceDiagram
+    actor A as AI Agent / LLM Application
+    participant H as Agent Host / MCP Client
+    participant R as Secured MCP Registry
+    participant V as Trust & Verification Service
+    participant P as Policy Enforcement Service
+    participant X as Reflexive Core
+    participant S as Secured MCP Server
+    participant L as Provenance & Audit Service
+    participant N as Alerts & Notifications
+
+    A->>H: 1. Request an MCP capability
+    H->>R: 2. Authenticate and discover MCP servers
+    R->>V: 3. Verify publisher, version and attestation
+    V-->>R: 4. Return verification status
+    R->>P: 5. Evaluate access and usage policy
+    P-->>R: 6. Return policy decision
+    R->>X: 7. Request behavioral risk assessment
+    X-->>R: 8. Return actor and server risk state
+    R-->>H: 9. Return approved server configuration
+
+    H->>S: 10. Invoke MCP capability
+    S->>P: 11. Enforce runtime policy
+    P->>X: 12. Submit execution context
+    X->>X: 13. Analyze behavior and detect drift
+
+    alt Normal behavior
+        X-->>P: 14A. Permit execution
+        P-->>S: 15A. Continue execution
+        S-->>H: 16A. Return MCP result
+        H-->>A: 17A. Deliver result
+        S->>L: 18A. Record execution provenance
+    else Elevated risk
+        X-->>P: 14B. Require approval or restriction
+        P-->>H: 15B. Return restricted response
+        X->>L: 16B. Record anomaly and decision
+        X->>N: 17B. Emit risk alert
+    else Critical risk
+        X-->>P: 14C. Block execution
+        X->>R: 15C. Recommend suspension or revocation
+        R->>V: 16C. Update security status
+        X->>L: 17C. Record critical security event
+        N-->>H: 18C. Notify client owner or administrator
+    end

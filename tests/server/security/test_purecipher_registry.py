@@ -251,12 +251,10 @@ class TestPureCipherRegistry:
         assert catalog["count"] == 1
         assert catalog["tools"][0]["tool_name"] == "weather-lookup"
 
-    def test_persistence_reloads_verified_tools(self, tmp_path):
-        db_path = tmp_path / "purecipher-registry.db"
-
+    def test_persistence_reloads_verified_tools(self, registry_dsn):
         registry1 = PureCipherRegistry(
             signing_secret=TEST_SIGNING_SECRET,
-            persistence_path=str(db_path),
+            persistence_path=registry_dsn,
         )
         result = registry1.submit_tool(
             _manifest(),
@@ -268,7 +266,7 @@ class TestPureCipherRegistry:
 
         registry2 = PureCipherRegistry(
             signing_secret=TEST_SIGNING_SECRET,
-            persistence_path=str(db_path),
+            persistence_path=registry_dsn,
         )
         catalog = registry2.list_verified_tools(query="weather")
         detail = registry2.get_verified_tool("weather-lookup")
@@ -3909,18 +3907,18 @@ class TestDefaultControlPlanesEnabled:
         assert ctx.provenance_ledger is None
         assert ctx.behavioral_analyzer is None
 
-    def test_iter9_runtime_toggle_persists_then_reapplies_on_restart(self, tmp_path):
+    def test_iter9_runtime_toggle_persists_then_reapplies_on_restart(
+        self, registry_dsn
+    ):
         """The persistence path of the runtime toggle: a registry
         constructed with all planes default-on, then toggled off,
         then *reconstructed* with the same persistence path should
         come up with the plane already disabled. This is the whole
         point of persisting toggles — operator intent survives
         restart."""
-        db_path = str(tmp_path / "purecipher-registry.sqlite")
-
         first = PureCipherRegistry(
             signing_secret=TEST_SIGNING_SECRET,
-            persistence_path=db_path,
+            persistence_path=registry_dsn,
         )
         # Default-on: contracts is wired.
         assert first._required_context().broker is not None
@@ -3931,7 +3929,7 @@ class TestDefaultControlPlanesEnabled:
         # should override the constructor default.
         second = PureCipherRegistry(
             signing_secret=TEST_SIGNING_SECRET,
-            persistence_path=db_path,
+            persistence_path=registry_dsn,
         )
         assert second._required_context().broker is None
 
@@ -3941,7 +3939,7 @@ class TestDefaultControlPlanesEnabled:
         assert second._required_context().broker is not None
         third = PureCipherRegistry(
             signing_secret=TEST_SIGNING_SECRET,
-            persistence_path=db_path,
+            persistence_path=registry_dsn,
         )
         assert third._required_context().broker is not None
 

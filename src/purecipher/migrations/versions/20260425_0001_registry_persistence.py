@@ -27,7 +27,7 @@ def upgrade() -> None:
         op.create_table(
             "purecipher_registry_notifications",
             sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
-            sa.Column("created_at", sa.REAL(), nullable=False),
+            sa.Column("created_at", sa.Float(), nullable=False),
             sa.Column("event_kind", sa.Text(), nullable=False),
             sa.Column("title", sa.Text(), nullable=False),
             sa.Column("body", sa.Text(), nullable=False),
@@ -39,7 +39,7 @@ def upgrade() -> None:
         op.create_table(
             "purecipher_openapi_sources",
             sa.Column("source_id", sa.Text(), primary_key=True),
-            sa.Column("created_at", sa.REAL(), nullable=False),
+            sa.Column("created_at", sa.Float(), nullable=False),
             sa.Column("publisher_id", sa.Text(), nullable=False),
             sa.Column("title", sa.Text(), nullable=False),
             sa.Column("source_url", sa.Text(), nullable=False),
@@ -52,7 +52,7 @@ def upgrade() -> None:
         op.create_table(
             "purecipher_openapi_toolsets",
             sa.Column("toolset_id", sa.Text(), primary_key=True),
-            sa.Column("created_at", sa.REAL(), nullable=False),
+            sa.Column("created_at", sa.Float(), nullable=False),
             sa.Column("publisher_id", sa.Text(), nullable=False),
             sa.Column("source_id", sa.Text(), nullable=False),
             sa.Column("title", sa.Text(), nullable=False),
@@ -66,14 +66,14 @@ def upgrade() -> None:
             "purecipher_registry_user_preferences",
             sa.Column("username", sa.Text(), primary_key=True),
             sa.Column("preferences_json", sa.Text(), nullable=False),
-            sa.Column("updated_at", sa.REAL(), nullable=False),
+            sa.Column("updated_at", sa.Float(), nullable=False),
         )
 
     if "purecipher_registry_account_activity" not in tables:
         op.create_table(
             "purecipher_registry_account_activity",
             sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
-            sa.Column("created_at", sa.REAL(), nullable=False),
+            sa.Column("created_at", sa.Float(), nullable=False),
             sa.Column("username", sa.Text(), nullable=False),
             sa.Column("event_kind", sa.Text(), nullable=False),
             sa.Column("title", sa.Text(), nullable=False),
@@ -89,9 +89,9 @@ def upgrade() -> None:
             sa.Column("role", sa.Text(), nullable=False),
             sa.Column("display_name", sa.Text(), nullable=False),
             sa.Column("source", sa.Text(), nullable=False),
-            sa.Column("updated_at", sa.REAL(), nullable=False),
-            sa.Column("created_at", sa.REAL(), nullable=True),
-            sa.Column("disabled_at", sa.REAL(), nullable=True),
+            sa.Column("updated_at", sa.Float(), nullable=False),
+            sa.Column("created_at", sa.Float(), nullable=True),
+            sa.Column("disabled_at", sa.Float(), nullable=True),
         )
     else:
         _add_missing_account_columns()
@@ -103,9 +103,9 @@ def upgrade() -> None:
             sa.Column("username", sa.Text(), nullable=False),
             sa.Column("role", sa.Text(), nullable=False),
             sa.Column("display_name", sa.Text(), nullable=False),
-            sa.Column("created_at", sa.REAL(), nullable=False),
-            sa.Column("expires_at", sa.REAL(), nullable=False),
-            sa.Column("revoked_at", sa.REAL(), nullable=True),
+            sa.Column("created_at", sa.Float(), nullable=False),
+            sa.Column("expires_at", sa.Float(), nullable=False),
+            sa.Column("revoked_at", sa.Float(), nullable=True),
         )
 
     if "purecipher_registry_api_tokens" not in tables:
@@ -117,9 +117,9 @@ def upgrade() -> None:
             sa.Column("name", sa.Text(), nullable=False),
             sa.Column("role", sa.Text(), nullable=False),
             sa.Column("display_name", sa.Text(), nullable=False),
-            sa.Column("created_at", sa.REAL(), nullable=False),
-            sa.Column("last_used_at", sa.REAL(), nullable=True),
-            sa.Column("revoked_at", sa.REAL(), nullable=True),
+            sa.Column("created_at", sa.Float(), nullable=False),
+            sa.Column("last_used_at", sa.Float(), nullable=True),
+            sa.Column("revoked_at", sa.Float(), nullable=True),
         )
 
 
@@ -144,12 +144,12 @@ def _add_missing_account_columns() -> None:
     if "created_at" not in columns:
         op.add_column(
             "purecipher_registry_accounts",
-            sa.Column("created_at", sa.REAL(), nullable=True),
+            sa.Column("created_at", sa.Float(), nullable=True),
         )
     if "disabled_at" not in columns:
         op.add_column(
             "purecipher_registry_accounts",
-            sa.Column("disabled_at", sa.REAL(), nullable=True),
+            sa.Column("disabled_at", sa.Float(), nullable=True),
         )
     bind.execute(
         sa.text(

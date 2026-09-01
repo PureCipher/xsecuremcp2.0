@@ -1,0 +1,21 @@
+flowchart TB
+    P["1. PUBLISH<br/><small>A publisher submits an MCP service</small>"]
+    R["2. VERIFY & APPROVE<br/><small>The Secured MCP Registry checks identity, safety and permissions</small>"]
+    D["3. DISCOVER<br/><small>An AI application finds an approved capability</small>"]
+    U["4. USE SAFELY<br/><small>The MCP Client connects to the Secured MCP Server and exchanges tool requests and results</small>"]
+    M["5. MONITOR & ADAPT<br/><small>SecureMCP records activity and can allow, restrict or stop access as risk changes</small>"]
+
+    subgraph TOP[" "]
+        direction LR
+        P --> R --> D
+    end
+
+    subgraph BOTTOM[" "]
+        direction LR
+        U --> M
+    end
+
+    D --> U
+
+    style TOP fill:none,stroke:none
+    style BOTTOM fill:none,stroke:none

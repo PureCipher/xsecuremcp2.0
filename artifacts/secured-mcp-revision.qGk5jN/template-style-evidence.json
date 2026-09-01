@@ -1,0 +1,70 @@
+{
+  "input": "/Users/purecipher/Downloads/Secured MCP Registry.docx",
+  "fonts_by_char_count": {
+    "Arial": 469,
+    "Times New Roman": 3
+  },
+  "direct_run_formatting_runs": 169,
+  "direct_paragraph_formatting_paragraphs": 34,
+  "heading_like_paragraphs_not_heading_style": [],
+  "examples": {
+    "direct_paragraph_formatting": [
+      {
+        "para_index": 1,
+        "text": "Secured MCP Registry",
+        "style": "Normal"
+      },
+      {
+        "para_index": 2,
+        "text": "Publisher and AI Agent User Journeys",
+        "style": "Normal"
+      },
+      {
+        "para_index": 7,
+        "text": "",
+        "style": "Normal"
+      },
+      {
+        "para_index": 8,
+        "text": "How publishers, the registry and AI agents work together",
+        "style": "Normal"
+      },
+      {
+        "para_index": 10,
+        "text": "Publisher \u2014 The person or organization that creates and maintains an MCP service.",
+        "style": "List Number"
+      }
+    ],
+    "direct_run_formatting": [
+      {
+        "para_index": 1,
+        "run_text": "Secured MCP Registry",
+        "style": "Normal"
+      },
+      {
+        "para_index": 2,
+        "run_text": "Publisher and AI Agent User Journeys",
+        "style": "Normal"
+      },
+      {
+        "para_index": 3,
+        "run_text": "A forward-looking view of how trusted MCP services can be published, discovered ",
+        "style": "Normal"
+      },
+      {
+        "para_index": 4,
+        "run_text": "At a glance",
+        "style": "Heading 1"
+      },
+      {
+        "para_index": 5,
+        "run_text": "The Secured MCP Registry is envisioned as the trust fabric for the next generati",
+        "style": "Normal"
+      }
+    ]
+  },
+  "notes": [
+    "Direct formatting is not always wrong, but it often causes inconsistent output when templates change.",
+    "Heading-like paragraphs not using Heading styles can break TOC and accessibility."
+  ]
+}

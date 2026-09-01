@@ -18,7 +18,7 @@ This module defines:
   the store persists only its SHA-256 hash. A short prefix is kept
   in the clear so the UI can render "pcc_abc123…" identifiers
   without exposing the full token.
-- :class:`RegistryClientStore` — SQLite-backed (in-memory fallback)
+- :class:`RegistryClientStore` — PostgreSQL-backed (in-memory fallback)
   persistence for both, with helpers for CRUD + token issue /
   revoke / authenticate flows.
 
@@ -30,14 +30,15 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
+import json
 import re
 import secrets
-import sqlite3
 import time
 import uuid
-from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
+
+from purecipher.pgdb import connection, dict_row, is_postgres_dsn
 
 # Allowed slug alphabet — lowercase ASCII alnum + hyphen, with no
 # leading/trailing hyphen and no consecutive hyphens. We slugify
@@ -225,12 +226,12 @@ class RegistryClientStore:
     """Persistent store for MCP client identities + their tokens.
 
     Mirrors the pattern used by other PureCipher persistence
-    helpers: SQLite when ``db_path`` is set (excluding the
-    ``:memory:`` sentinel which the registry uses to mean "no real
-    persistence"), in-memory dict otherwise.
+    helpers: PostgreSQL when ``db_path`` is a Postgres DSN
+    (excluding the ``:memory:`` sentinel which the registry uses to
+    mean "no real persistence"), in-memory dict otherwise.
 
     Args:
-        db_path: SQLite file path or ``None`` for in-memory mode.
+        db_path: PostgreSQL DSN or ``None`` for in-memory mode.
         ensure_schema: When ``True`` (default), create the tables on
             construction. Pass ``False`` when migrations manage the
             schema (the registry detects this via
@@ -243,12 +244,11 @@ class RegistryClientStore:
         self._db_path = db_path
         self._memory_clients: dict[str, RegistryClient] = {}
         self._memory_tokens: dict[str, RegistryClientToken] = {}
-        if self._db_path and ensure_schema:
-            self._ensure_sqlite()
+        if is_postgres_dsn(self._db_path) and ensure_schema:
+            self._ensure_schema()
 
-    def _ensure_sqlite(self) -> None:
-        conn = sqlite3.connect(self._db_path)
-        try:
+    def _ensure_schema(self) -> None:
+        with connection(self._db_path) as conn:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS purecipher_registry_clients (
@@ -261,8 +261,8 @@ class RegistryClientStore:
                     owner_publisher_id TEXT NOT NULL,
                     status TEXT NOT NULL,
                     suspended_reason TEXT NOT NULL,
-                    created_at REAL NOT NULL,
-                    updated_at REAL NOT NULL,
+                    created_at DOUBLE PRECISION NOT NULL,
+                    updated_at DOUBLE PRECISION NOT NULL,
                     metadata_json TEXT NOT NULL
                 );
                 """
@@ -276,15 +276,12 @@ class RegistryClientStore:
                     secret_hash TEXT NOT NULL UNIQUE,
                     secret_prefix TEXT NOT NULL,
                     created_by TEXT NOT NULL,
-                    created_at REAL NOT NULL,
-                    revoked_at REAL,
-                    last_used_at REAL
+                    created_at DOUBLE PRECISION NOT NULL,
+                    revoked_at DOUBLE PRECISION,
+                    last_used_at DOUBLE PRECISION
                 );
                 """
             )
-            conn.commit()
-        finally:
-            conn.close()
 
     # ── Client CRUD ────────────────────────────────────────────────
 
@@ -350,37 +347,29 @@ class RegistryClientStore:
         return record
 
     def get_client(self, client_id: str) -> RegistryClient | None:
-        if not self._db_path:
+        if not is_postgres_dsn(self._db_path):
             return self._memory_clients.get(client_id)
-        conn = sqlite3.connect(self._db_path)
-        try:
+        with connection(self._db_path, row_factory=dict_row) as conn:
             cur = conn.execute(
-                "SELECT * FROM purecipher_registry_clients WHERE client_id = ?",
+                "SELECT * FROM purecipher_registry_clients WHERE client_id = %s",
                 (client_id,),
             )
             row = cur.fetchone()
-            cols = [d[0] for d in cur.description] if cur.description else []
-        finally:
-            conn.close()
-        return _row_to_client(row, cols) if row else None
+        return _row_to_client(row) if row else None
 
     def get_client_by_slug(self, slug: str) -> RegistryClient | None:
-        if not self._db_path:
+        if not is_postgres_dsn(self._db_path):
             for record in self._memory_clients.values():
                 if record.slug == slug:
                     return record
             return None
-        conn = sqlite3.connect(self._db_path)
-        try:
+        with connection(self._db_path, row_factory=dict_row) as conn:
             cur = conn.execute(
-                "SELECT * FROM purecipher_registry_clients WHERE slug = ?",
+                "SELECT * FROM purecipher_registry_clients WHERE slug = %s",
                 (slug,),
             )
             row = cur.fetchone()
-            cols = [d[0] for d in cur.description] if cur.description else []
-        finally:
-            conn.close()
-        return _row_to_client(row, cols) if row else None
+        return _row_to_client(row) if row else None
 
     def list_clients(
         self,
@@ -392,7 +381,7 @@ class RegistryClientStore:
 
         Sorted most-recently-updated first.
         """
-        if not self._db_path:
+        if not is_postgres_dsn(self._db_path):
             records = list(self._memory_clients.values())
             if owner_publisher_id is not None:
                 records = [
@@ -401,15 +390,14 @@ class RegistryClientStore:
             records.sort(key=lambda r: r.updated_at, reverse=True)
             return records[:limit]
 
-        conn = sqlite3.connect(self._db_path)
-        try:
+        with connection(self._db_path, row_factory=dict_row) as conn:
             if owner_publisher_id is not None:
                 cur = conn.execute(
                     """
                     SELECT * FROM purecipher_registry_clients
-                    WHERE owner_publisher_id = ?
+                    WHERE owner_publisher_id = %s
                     ORDER BY updated_at DESC
-                    LIMIT ?
+                    LIMIT %s
                     """,
                     (owner_publisher_id, int(limit)),
                 )
@@ -418,15 +406,12 @@ class RegistryClientStore:
                     """
                     SELECT * FROM purecipher_registry_clients
                     ORDER BY updated_at DESC
-                    LIMIT ?
+                    LIMIT %s
                     """,
                     (int(limit),),
                 )
-            cols = [d[0] for d in cur.description] if cur.description else []
             rows = cur.fetchall()
-        finally:
-            conn.close()
-        return [_row_to_client(r, cols) for r in rows]
+        return [_row_to_client(r) for r in rows]
 
     def update_client(
         self,
@@ -507,13 +492,10 @@ class RegistryClientStore:
         return updated
 
     def _save_client(self, record: RegistryClient) -> None:
-        if not self._db_path:
+        if not is_postgres_dsn(self._db_path):
             self._memory_clients[record.client_id] = record
             return
-        import json
-
-        conn = sqlite3.connect(self._db_path)
-        try:
+        with connection(self._db_path) as conn:
             conn.execute(
                 """
                 INSERT INTO purecipher_registry_clients (
@@ -521,18 +503,18 @@ class RegistryClientStore:
                     intended_use, kind, owner_publisher_id, status,
                     suspended_reason, created_at, updated_at,
                     metadata_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(client_id) DO UPDATE SET
-                    slug = excluded.slug,
-                    display_name = excluded.display_name,
-                    description = excluded.description,
-                    intended_use = excluded.intended_use,
-                    kind = excluded.kind,
-                    owner_publisher_id = excluded.owner_publisher_id,
-                    status = excluded.status,
-                    suspended_reason = excluded.suspended_reason,
-                    updated_at = excluded.updated_at,
-                    metadata_json = excluded.metadata_json
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (client_id) DO UPDATE SET
+                    slug = EXCLUDED.slug,
+                    display_name = EXCLUDED.display_name,
+                    description = EXCLUDED.description,
+                    intended_use = EXCLUDED.intended_use,
+                    kind = EXCLUDED.kind,
+                    owner_publisher_id = EXCLUDED.owner_publisher_id,
+                    status = EXCLUDED.status,
+                    suspended_reason = EXCLUDED.suspended_reason,
+                    updated_at = EXCLUDED.updated_at,
+                    metadata_json = EXCLUDED.metadata_json
                 """,
                 (
                     record.client_id,
@@ -549,9 +531,6 @@ class RegistryClientStore:
                     json.dumps(record.metadata, sort_keys=True),
                 ),
             )
-            conn.commit()
-        finally:
-            conn.close()
 
     # ── Tokens ──────────────────────────────────────────────────────
 
@@ -603,7 +582,7 @@ class RegistryClientStore:
         *,
         include_revoked: bool = True,
     ) -> list[RegistryClientToken]:
-        if not self._db_path:
+        if not is_postgres_dsn(self._db_path):
             tokens = [
                 t for t in self._memory_tokens.values() if t.client_id == client_id
             ]
@@ -612,21 +591,17 @@ class RegistryClientStore:
             tokens.sort(key=lambda t: t.created_at, reverse=True)
             return tokens
 
-        conn = sqlite3.connect(self._db_path)
-        try:
+        with connection(self._db_path, row_factory=dict_row) as conn:
             cur = conn.execute(
                 """
                 SELECT * FROM purecipher_registry_client_tokens
-                WHERE client_id = ?
+                WHERE client_id = %s
                 ORDER BY created_at DESC
                 """,
                 (client_id,),
             )
-            cols = [d[0] for d in cur.description] if cur.description else []
             rows = cur.fetchall()
-        finally:
-            conn.close()
-        tokens = [_row_to_token(r, cols) for r in rows]
+        tokens = [_row_to_token(r) for r in rows]
         if not include_revoked:
             tokens = [t for t in tokens if t.revoked_at is None]
         return tokens
@@ -679,40 +654,32 @@ class RegistryClientStore:
         return client, token
 
     def _get_token(self, token_id: str) -> RegistryClientToken | None:
-        if not self._db_path:
+        if not is_postgres_dsn(self._db_path):
             return self._memory_tokens.get(token_id)
-        conn = sqlite3.connect(self._db_path)
-        try:
+        with connection(self._db_path, row_factory=dict_row) as conn:
             cur = conn.execute(
-                "SELECT * FROM purecipher_registry_client_tokens WHERE token_id = ?",
+                "SELECT * FROM purecipher_registry_client_tokens WHERE token_id = %s",
                 (token_id,),
             )
-            cols = [d[0] for d in cur.description] if cur.description else []
             row = cur.fetchone()
-        finally:
-            conn.close()
-        return _row_to_token(row, cols) if row else None
+        return _row_to_token(row) if row else None
 
     def _get_token_by_hash(self, secret_hash: str) -> RegistryClientToken | None:
-        if not self._db_path:
+        if not is_postgres_dsn(self._db_path):
             for token in self._memory_tokens.values():
                 if token.secret_hash == secret_hash:
                     return token
             return None
-        conn = sqlite3.connect(self._db_path)
-        try:
+        with connection(self._db_path, row_factory=dict_row) as conn:
             cur = conn.execute(
-                "SELECT * FROM purecipher_registry_client_tokens WHERE secret_hash = ?",
+                "SELECT * FROM purecipher_registry_client_tokens WHERE secret_hash = %s",
                 (secret_hash,),
             )
-            cols = [d[0] for d in cur.description] if cur.description else []
             row = cur.fetchone()
-        finally:
-            conn.close()
-        return _row_to_token(row, cols) if row else None
+        return _row_to_token(row) if row else None
 
     def _mark_token_used(self, token_id: str) -> None:
-        if not self._db_path:
+        if not is_postgres_dsn(self._db_path):
             existing = self._memory_tokens.get(token_id)
             if existing is None:
                 return
@@ -728,32 +695,27 @@ class RegistryClientStore:
                 last_used_at=time.time(),
             )
             return
-        conn = sqlite3.connect(self._db_path)
-        try:
+        with connection(self._db_path) as conn:
             conn.execute(
-                "UPDATE purecipher_registry_client_tokens SET last_used_at = ? WHERE token_id = ?",
+                "UPDATE purecipher_registry_client_tokens SET last_used_at = %s WHERE token_id = %s",
                 (time.time(), token_id),
             )
-            conn.commit()
-        finally:
-            conn.close()
 
     def _save_token(self, token: RegistryClientToken) -> None:
-        if not self._db_path:
+        if not is_postgres_dsn(self._db_path):
             self._memory_tokens[token.token_id] = token
             return
-        conn = sqlite3.connect(self._db_path)
-        try:
+        with connection(self._db_path) as conn:
             conn.execute(
                 """
                 INSERT INTO purecipher_registry_client_tokens (
                     token_id, client_id, name, secret_hash, secret_prefix,
                     created_by, created_at, revoked_at, last_used_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(token_id) DO UPDATE SET
-                    name = excluded.name,
-                    revoked_at = excluded.revoked_at,
-                    last_used_at = excluded.last_used_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (token_id) DO UPDATE SET
+                    name = EXCLUDED.name,
+                    revoked_at = EXCLUDED.revoked_at,
+                    last_used_at = EXCLUDED.last_used_at
                 """,
                 (
                     token.token_id,
@@ -767,15 +729,10 @@ class RegistryClientStore:
                     token.last_used_at,
                 ),
             )
-            conn.commit()
-        finally:
-            conn.close()
 
 
-def _row_to_client(row: Any, cols: Iterable[str]) -> RegistryClient:
-    import json
-
-    record = dict(zip(cols, row, strict=False))
+def _row_to_client(row: dict[str, Any]) -> RegistryClient:
+    record = dict(row)
     metadata_raw = record.get("metadata_json") or "{}"
     try:
         metadata = json.loads(metadata_raw)
@@ -797,8 +754,8 @@ def _row_to_client(row: Any, cols: Iterable[str]) -> RegistryClient:
     )
 
 
-def _row_to_token(row: Any, cols: Iterable[str]) -> RegistryClientToken:
-    record = dict(zip(cols, row, strict=False))
+def _row_to_token(row: dict[str, Any]) -> RegistryClientToken:
+    record = dict(row)
     return RegistryClientToken(
         token_id=str(record["token_id"]),
         client_id=str(record["client_id"]),

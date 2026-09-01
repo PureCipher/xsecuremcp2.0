@@ -41,8 +41,8 @@ def upgrade() -> None:
             sa.Column("owner_publisher_id", sa.Text(), nullable=False),
             sa.Column("status", sa.Text(), nullable=False),
             sa.Column("suspended_reason", sa.Text(), nullable=False),
-            sa.Column("created_at", sa.REAL(), nullable=False),
-            sa.Column("updated_at", sa.REAL(), nullable=False),
+            sa.Column("created_at", sa.Float(), nullable=False),
+            sa.Column("updated_at", sa.Float(), nullable=False),
             sa.Column("metadata_json", sa.Text(), nullable=False),
         )
 
@@ -55,9 +55,9 @@ def upgrade() -> None:
             sa.Column("secret_hash", sa.Text(), nullable=False, unique=True),
             sa.Column("secret_prefix", sa.Text(), nullable=False),
             sa.Column("created_by", sa.Text(), nullable=False),
-            sa.Column("created_at", sa.REAL(), nullable=False),
-            sa.Column("revoked_at", sa.REAL(), nullable=True),
-            sa.Column("last_used_at", sa.REAL(), nullable=True),
+            sa.Column("created_at", sa.Float(), nullable=False),
+            sa.Column("revoked_at", sa.Float(), nullable=True),
+            sa.Column("last_used_at", sa.Float(), nullable=True),
         )
 
 

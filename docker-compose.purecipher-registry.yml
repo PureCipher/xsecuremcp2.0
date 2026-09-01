@@ -1,20 +1,49 @@
-# PureCipher registry API only (Next.js console lives in the xregistry repo).
-# Quick start: `docker compose -f docker-compose.purecipher-registry.yml up --build`
-# API: http://localhost:${PURECIPHER_REGISTRY_PORT:-8000}/registry/health
+# PureCipher Secured MCP Registry — API + PostgreSQL (Next.js console lives in
+# the xregistry repo).
+#
+# Quick start:
+#   docker compose -f docker-compose.purecipher-registry.yml up --build
+#   API:      http://localhost:${PURECIPHER_REGISTRY_PORT:-8000}/registry/health
+#   Postgres: localhost:${POSTGRES_PORT:-5432}  (db/user/pass below)
+#
+# PostgreSQL is the persistence engine. The registry connects via DATABASE_URL
+# and creates its schema automatically (Alembic migrations) on first start, so
+# published listings, client identities/tokens, the provenance ledger, consent
+# and contracts all persist until withdrawn/unregistered. Data lives in the
+# named ``pgdata`` volume and survives ``docker compose down`` (use
+# ``down -v`` to wipe it).
 #
 # For the full stack (registry + Next.js console + public site), use the
 # sibling product repo: https://github.com/PureCipher/xregistry
-#   docker compose --env-file .env.compose.example up --build
-#
-# To pin the backend build context when this compose file is copied elsewhere, set:
-#   export SECUREMCP_REPO=/path/to/xsecuremcp2.0
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-purecipher}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-purecipher}
+      POSTGRES_DB: ${POSTGRES_DB:-purecipher}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U ${POSTGRES_USER:-purecipher} -d ${POSTGRES_DB:-purecipher}
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
   purecipher-registry:
     image: purecipher-secured-mcp-registry:local
     build:
       context: .
       dockerfile: Dockerfile.purecipher-registry
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
       - "${PURECIPHER_REGISTRY_PORT:-8000}:8000"
     command:
@@ -30,8 +59,9 @@ services:
         "8000",
       ]
     environment:
+      # PostgreSQL DSN — the registry's durable persistence engine.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-purecipher}:${POSTGRES_PASSWORD:-purecipher}@postgres:5432/${POSTGRES_DB:-purecipher}
       PURECIPHER_SIGNING_SECRET: ${PURECIPHER_SIGNING_SECRET:-purecipher-registry-dev-signing-secret}
-      PURECIPHER_REGISTRY_DB: /data/purecipher-registry.db
       PURECIPHER_HOST_TOOLSETS: "true"
       PURECIPHER_REQUIRE_MODERATION: ${PURECIPHER_REQUIRE_MODERATION:-true}
       PURECIPHER_ENABLE_AUTH: ${PURECIPHER_ENABLE_AUTH:-true}
@@ -40,7 +70,6 @@ services:
       PURECIPHER_AUTH_COOKIE_NAME: ${PURECIPHER_AUTH_COOKIE_NAME:-purecipher_registry_token}
       PURECIPHER_ALLOW_HTTP_HOSTS: ${PURECIPHER_ALLOW_HTTP_HOSTS:-demo-mcp-server}
     volumes:
-      - ./.data/purecipher-registry:/data
       - ./demo:/app/demo:ro
       # Iter 14.7: mount the host's Docker socket so the curator's
       # introspector can ``docker pull`` and ``docker run`` upstream
@@ -64,7 +93,7 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
-      start_period: 5s
+      start_period: 10s
 
   # Alternate service: registry only (no hosted toolset gateways).
   purecipher-registry-control-plane:
@@ -73,18 +102,20 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.purecipher-registry
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
       - "${PURECIPHER_REGISTRY_PORT_CONTROL_PLANE:-8002}:8000"
     environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-purecipher}:${POSTGRES_PASSWORD:-purecipher}@postgres:5432/${POSTGRES_DB:-purecipher}
       PURECIPHER_SIGNING_SECRET: ${PURECIPHER_SIGNING_SECRET:-purecipher-registry-dev-signing-secret}
-      PURECIPHER_REGISTRY_DB: /data/purecipher-registry.db
       PURECIPHER_REQUIRE_MODERATION: ${PURECIPHER_REQUIRE_MODERATION:-true}
       PURECIPHER_ENABLE_AUTH: ${PURECIPHER_ENABLE_AUTH:-true}
       PURECIPHER_JWT_SECRET: ${PURECIPHER_JWT_SECRET:-purecipher-registry-dev-jwt-secret-change-me}
       PURECIPHER_USERS_JSON: ${PURECIPHER_USERS_JSON:-}
       PURECIPHER_AUTH_COOKIE_NAME: ${PURECIPHER_AUTH_COOKIE_NAME:-purecipher_registry_token}
     volumes:
-      - ./.data/purecipher-registry:/data
       # Iter 14.7: parity with the main purecipher-registry service
       # so Docker-channel onboards work in the control-plane-only
       # profile too. Same security caveat applies — see the comment
@@ -115,3 +146,6 @@ services:
       timeout: 3s
       retries: 10
       start_period: 5s
+
+volumes:
+  pgdata:

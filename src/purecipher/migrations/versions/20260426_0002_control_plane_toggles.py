@@ -34,7 +34,7 @@ def upgrade() -> None:
             "purecipher_registry_control_planes",
             sa.Column("plane", sa.Text(), primary_key=True),
             sa.Column("enabled", sa.Integer(), nullable=False),
-            sa.Column("updated_at", sa.REAL(), nullable=False),
+            sa.Column("updated_at", sa.Float(), nullable=False),
             sa.Column("updated_by", sa.Text(), nullable=False),
         )
 

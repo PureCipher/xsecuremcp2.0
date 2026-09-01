@@ -86,7 +86,7 @@ def _auth_settings() -> RegistryAuthSettings:
 
 
 class TestPureCipherRegistryAuth:
-    def test_bootstrap_setup_creates_first_admin(self, tmp_path):
+    def test_bootstrap_setup_creates_first_admin(self, registry_dsn):
         registry = PureCipherRegistry(
             signing_secret=TEST_SIGNING_SECRET,
             auth_settings=RegistryAuthSettings.from_values(
@@ -94,7 +94,7 @@ class TestPureCipherRegistryAuth:
                 issuer="purecipher-registry",
                 jwt_secret=TEST_JWT_SECRET,
             ),
-            persistence_path=str(tmp_path / "registry.sqlite"),
+            persistence_path=registry_dsn,
         )
         app = registry.http_app()
 
@@ -206,12 +206,11 @@ class TestPureCipherRegistryAuth:
             )
             assert update.status_code == 401
 
-    def test_preferences_persist_per_user(self, tmp_path):
-        db_path = str(tmp_path / "registry.sqlite")
+    def test_preferences_persist_per_user(self, registry_dsn):
         registry = PureCipherRegistry(
             signing_secret=TEST_SIGNING_SECRET,
             auth_settings=_auth_settings(),
-            persistence_path=db_path,
+            persistence_path=registry_dsn,
         )
         app = registry.http_app()
 
@@ -247,7 +246,7 @@ class TestPureCipherRegistryAuth:
         restarted = PureCipherRegistry(
             signing_secret=TEST_SIGNING_SECRET,
             auth_settings=_auth_settings(),
-            persistence_path=db_path,
+            persistence_path=registry_dsn,
         )
         restarted_app = restarted.http_app()
 
@@ -262,12 +261,11 @@ class TestPureCipherRegistryAuth:
             assert prefs.status_code == 200
             assert prefs.json()["preferences"]["workspace"]["density"] == "compact"
 
-    def test_account_activity_records_login_and_logout(self, tmp_path):
-        db_path = str(tmp_path / "registry.sqlite")
+    def test_account_activity_records_login_and_logout(self, registry_dsn):
         registry = PureCipherRegistry(
             signing_secret=TEST_SIGNING_SECRET,
             auth_settings=_auth_settings(),
-            persistence_path=db_path,
+            persistence_path=registry_dsn,
         )
         app = registry.http_app()
 
@@ -307,12 +305,11 @@ class TestPureCipherRegistryAuth:
             latest_events = [item["event_kind"] for item in latest.json()["items"]]
             assert "logout" in latest_events
 
-    def test_password_change_updates_writable_account_store(self, tmp_path):
-        db_path = str(tmp_path / "registry.sqlite")
+    def test_password_change_updates_writable_account_store(self, registry_dsn):
         registry = PureCipherRegistry(
             signing_secret=TEST_SIGNING_SECRET,
             auth_settings=_auth_settings(),
-            persistence_path=db_path,
+            persistence_path=registry_dsn,
         )
         app = registry.http_app()
 
@@ -344,12 +341,11 @@ class TestPureCipherRegistryAuth:
             )
             assert new_login.status_code == 200
 
-    def test_sessions_can_be_revoked(self, tmp_path):
-        db_path = str(tmp_path / "registry.sqlite")
+    def test_sessions_can_be_revoked(self, registry_dsn):
         registry = PureCipherRegistry(
             signing_secret=TEST_SIGNING_SECRET,
             auth_settings=_auth_settings(),
-            persistence_path=db_path,
+            persistence_path=registry_dsn,
         )
         app = registry.http_app()
 
@@ -373,12 +369,11 @@ class TestPureCipherRegistryAuth:
             assert session.status_code == 200
             assert session.json()["session"] is None
 
-    def test_api_tokens_work_as_bearer_tokens_and_can_be_revoked(self, tmp_path):
-        db_path = str(tmp_path / "registry.sqlite")
+    def test_api_tokens_work_as_bearer_tokens_and_can_be_revoked(self, registry_dsn):
         registry = PureCipherRegistry(
             signing_secret=TEST_SIGNING_SECRET,
             auth_settings=_auth_settings(),
-            persistence_path=db_path,
+            persistence_path=registry_dsn,
         )
         app = registry.http_app()
 
@@ -424,12 +419,11 @@ class TestPureCipherRegistryAuth:
             )
             assert denied.status_code == 401
 
-    def test_admin_can_manage_users_and_roles(self, tmp_path):
-        db_path = str(tmp_path / "registry.sqlite")
+    def test_admin_can_manage_users_and_roles(self, registry_dsn):
         registry = PureCipherRegistry(
             signing_secret=TEST_SIGNING_SECRET,
             auth_settings=_auth_settings(),
-            persistence_path=db_path,
+            persistence_path=registry_dsn,
         )
         app = registry.http_app()
 

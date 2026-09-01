@@ -1,0 +1,28 @@
+sequenceDiagram
+    participant H as Agent Host
+    participant C as MCP Client
+    participant S as Secured MCP Server
+    participant L as Language Model
+
+    H->>C: 1. Start the MCP Client
+    C->>S: 2. Start or connect to the MCP Server
+    C->>S: 3. initialize
+    S-->>C: 4. Return protocol version and capabilities
+    C->>S: 5. notifications/initialized
+    C->>S: 6. tools/list
+    S-->>C: 7. Return available tool descriptions
+    C-->>H: 8. Provide tool descriptions
+    H-->>L: 9. Make approved tools available
+    L-->>H: 10. Select a tool and produce a tool call
+    H->>C: 11. Send the approved tool call
+    C->>S: 12. tools/call with tool name and arguments
+    S-->>C: 13. Return tool result or error
+    C-->>H: 14. Return the tool response
+    H-->>L: 15. Make the response available
+    L-->>H: 16. Produce the user-facing answer
+
+    opt Host session ends or connection is no longer needed
+        H->>C: 17. Close the MCP Client
+        C->>S: 18. Close the transport connection
+        S->>S: 19. Stop server process if client-managed
+    end

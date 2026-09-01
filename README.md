@@ -96,7 +96,7 @@ PURECIPHER_SIGNING_SECRET=development-secret uv run purecipher-registry
 
 By default, the backend now serves the registry API only at:
 
-- `http://127.0.0.1:8000/registry`
+- `http://127.0.0.1:8001/registry`
 
 The legacy server-rendered UI is disabled by default. Use the Next.js console in the **[xregistry](https://github.com/PureCipher/xregistry)** product repo (clone beside this repo and set `REGISTRY_BACKEND_URL` to this server), or opt back into the old backend UI with:
 

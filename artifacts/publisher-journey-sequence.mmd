@@ -1,0 +1,27 @@
+sequenceDiagram
+    actor P as Publisher
+    participant R as Secured MCP Registry
+    participant S as Safety Review
+    participant C as Approved Catalogue
+    participant N as Notifications
+
+    P->>R: 1. Sign in and create a service entry
+    P->>R: 2. Provide ownership, purpose and permission details
+    P->>R: 3. Submit the MCP service and version
+    R->>S: 4. Request identity, safety and quality checks
+    S-->>R: 5. Return approval or required changes
+
+    alt Changes are required
+        R-->>P: 6A. Explain what must be corrected
+        P->>R: 7A. Update and resubmit the service
+        R->>S: 8A. Repeat the review
+    else Service is approved
+        R->>C: 6B. Publish the approved service
+        C-->>P: 7B. Confirm that the service is discoverable
+        N-->>P: 8B. Send publication confirmation
+    end
+
+    P->>R: 9. Submit updates and new versions
+    R->>S: 10. Recheck trust and safety
+    R->>C: 11. Update, suspend or retire the listing
+    N-->>P: 12. Notify the publisher of status changes

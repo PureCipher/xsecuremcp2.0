@@ -2,7 +2,7 @@
 
 The store layer accepts JSON or YAML OpenAPI payloads (3.0 / 3.1),
 extracts the operation surface, and persists raw + selected
-operations to the registry SQLite file when one is available.
+operations to the registry PostgreSQL database when one is configured.
 
 There are two extractor surfaces:
 
@@ -26,10 +26,11 @@ import base64
 import hashlib
 import hmac
 import json
-import sqlite3
 import time
 from dataclasses import dataclass
 from typing import Any, Literal, TypedDict
+
+from purecipher.pgdb import connection, is_postgres_dsn, transaction
 
 HttpMethod = Literal["get", "post", "put", "patch", "delete", "head", "options"]
 ParamLocation = Literal["path", "query", "header", "cookie"]
@@ -1058,77 +1059,62 @@ class OpenAPIStore:
         self._memory_sources: dict[str, OpenAPISourceRecord] = {}
         self._memory_toolsets: dict[str, OpenAPIToolsetRecord] = {}
         self._memory_credentials: dict[str, OpenAPICredentialRecord] = {}
-        self._shared_conn: sqlite3.Connection | None = None
         self._fernet_key: bytes | None = _derive_credential_key(self.credential_key)
-        if self.db_path:
-            if self.db_path == ":memory:":
-                # Keep a single connection so tables persist.
-                self._shared_conn = sqlite3.connect(
-                    self.db_path, check_same_thread=False
-                )
-            if self.ensure_schema:
-                self._ensure_tables()
+        if is_postgres_dsn(self.db_path) and self.ensure_schema:
+            self._ensure_schema()
 
-    def _connect(self) -> sqlite3.Connection:
-        if not self.db_path:
-            raise RuntimeError("OpenAPIStore is not configured with a sqlite path.")
-        if self._shared_conn is not None:
-            return self._shared_conn
-        return sqlite3.connect(self.db_path)
-
-    def _ensure_tables(self) -> None:
-        conn = self._connect()
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS purecipher_openapi_sources (
-              source_id TEXT PRIMARY KEY,
-              created_at REAL NOT NULL,
-              publisher_id TEXT NOT NULL,
-              title TEXT NOT NULL,
-              source_url TEXT NOT NULL,
-              spec_json TEXT NOT NULL,
-              spec_sha256 TEXT NOT NULL,
-              operation_count INTEGER NOT NULL
-            );
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS purecipher_openapi_toolsets (
-              toolset_id TEXT PRIMARY KEY,
-              created_at REAL NOT NULL,
-              publisher_id TEXT NOT NULL,
-              source_id TEXT NOT NULL,
-              title TEXT NOT NULL,
-              selected_operations_json TEXT NOT NULL,
-              tool_name_prefix TEXT NOT NULL,
-              metadata_json TEXT NOT NULL
-            );
-            """
-        )
-        # Credentials (Iter 13.2). The (publisher_id, source_id,
-        # scheme_name) triple is unique — one credential per scheme per
-        # publisher per source — so a re-store is an upsert.
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS purecipher_openapi_credentials (
-              credential_id TEXT PRIMARY KEY,
-              created_at REAL NOT NULL,
-              updated_at REAL NOT NULL,
-              publisher_id TEXT NOT NULL,
-              source_id TEXT NOT NULL,
-              scheme_name TEXT NOT NULL,
-              scheme_kind TEXT NOT NULL,
-              label TEXT NOT NULL,
-              secret_hint TEXT NOT NULL,
-              secret_ciphertext TEXT NOT NULL,
-              UNIQUE (publisher_id, source_id, scheme_name)
-            );
-            """
-        )
-        conn.commit()
-        if self._shared_conn is None:
-            conn.close()
+    def _ensure_schema(self) -> None:
+        # Safety net for a store bootstrapping its own tables; the Alembic
+        # chain normally owns the schema. Only runs for a Postgres DSN.
+        with connection(self.db_path) as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS purecipher_openapi_sources (
+                  source_id TEXT PRIMARY KEY,
+                  created_at DOUBLE PRECISION NOT NULL,
+                  publisher_id TEXT NOT NULL,
+                  title TEXT NOT NULL,
+                  source_url TEXT NOT NULL,
+                  spec_json TEXT NOT NULL,
+                  spec_sha256 TEXT NOT NULL,
+                  operation_count BIGINT NOT NULL
+                );
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS purecipher_openapi_toolsets (
+                  toolset_id TEXT PRIMARY KEY,
+                  created_at DOUBLE PRECISION NOT NULL,
+                  publisher_id TEXT NOT NULL,
+                  source_id TEXT NOT NULL,
+                  title TEXT NOT NULL,
+                  selected_operations_json TEXT NOT NULL,
+                  tool_name_prefix TEXT NOT NULL,
+                  metadata_json TEXT NOT NULL
+                );
+                """
+            )
+            # Credentials (Iter 13.2). The (publisher_id, source_id,
+            # scheme_name) triple is unique — one credential per scheme per
+            # publisher per source — so a re-store is an upsert.
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS purecipher_openapi_credentials (
+                  credential_id TEXT PRIMARY KEY,
+                  created_at DOUBLE PRECISION NOT NULL,
+                  updated_at DOUBLE PRECISION NOT NULL,
+                  publisher_id TEXT NOT NULL,
+                  source_id TEXT NOT NULL,
+                  scheme_name TEXT NOT NULL,
+                  scheme_kind TEXT NOT NULL,
+                  label TEXT NOT NULL,
+                  secret_hint TEXT NOT NULL,
+                  secret_ciphertext TEXT NOT NULL,
+                  UNIQUE (publisher_id, source_id, scheme_name)
+                );
+                """
+            )
 
     def ingest_source(
         self,
@@ -1161,31 +1147,36 @@ class OpenAPIStore:
             "security_schemes": schemes,
         }
 
-        if not self.db_path:
+        if not is_postgres_dsn(self.db_path):
             self._memory_sources[source_id] = record
             return record, ops
 
-        conn = self._connect()
-        conn.execute(
-            """
-            INSERT OR REPLACE INTO purecipher_openapi_sources
-              (source_id, created_at, publisher_id, title, source_url, spec_json, spec_sha256, operation_count)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                source_id,
-                record["created_at"],
-                record["publisher_id"],
-                record["title"],
-                record["source_url"],
-                json.dumps(spec),
-                record["spec_sha256"],
-                record["operation_count"],
-            ),
-        )
-        conn.commit()
-        if self._shared_conn is None:
-            conn.close()
+        with connection(self.db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO purecipher_openapi_sources
+                  (source_id, created_at, publisher_id, title, source_url, spec_json, spec_sha256, operation_count)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (source_id) DO UPDATE SET
+                  created_at = EXCLUDED.created_at,
+                  publisher_id = EXCLUDED.publisher_id,
+                  title = EXCLUDED.title,
+                  source_url = EXCLUDED.source_url,
+                  spec_json = EXCLUDED.spec_json,
+                  spec_sha256 = EXCLUDED.spec_sha256,
+                  operation_count = EXCLUDED.operation_count
+                """,
+                (
+                    source_id,
+                    record["created_at"],
+                    record["publisher_id"],
+                    record["title"],
+                    record["source_url"],
+                    json.dumps(spec),
+                    record["spec_sha256"],
+                    record["operation_count"],
+                ),
+            )
         return record, ops
 
     def create_toolset(
@@ -1210,47 +1201,50 @@ class OpenAPIStore:
             "metadata": dict(metadata or {}),
         }
 
-        if not self.db_path:
+        if not is_postgres_dsn(self.db_path):
             self._memory_toolsets[toolset_id] = record
             return record
 
-        conn = self._connect()
-        conn.execute(
-            """
-            INSERT OR REPLACE INTO purecipher_openapi_toolsets
-              (toolset_id, created_at, publisher_id, source_id, title,
-               selected_operations_json, tool_name_prefix, metadata_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                toolset_id,
-                record["created_at"],
-                record["publisher_id"],
-                record["source_id"],
-                record["title"],
-                json.dumps(record["selected_operations"]),
-                record["tool_name_prefix"],
-                json.dumps(record["metadata"]),
-            ),
-        )
-        conn.commit()
-        if self._shared_conn is None:
-            conn.close()
+        with connection(self.db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO purecipher_openapi_toolsets
+                  (toolset_id, created_at, publisher_id, source_id, title,
+                   selected_operations_json, tool_name_prefix, metadata_json)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (toolset_id) DO UPDATE SET
+                  created_at = EXCLUDED.created_at,
+                  publisher_id = EXCLUDED.publisher_id,
+                  source_id = EXCLUDED.source_id,
+                  title = EXCLUDED.title,
+                  selected_operations_json = EXCLUDED.selected_operations_json,
+                  tool_name_prefix = EXCLUDED.tool_name_prefix,
+                  metadata_json = EXCLUDED.metadata_json
+                """,
+                (
+                    toolset_id,
+                    record["created_at"],
+                    record["publisher_id"],
+                    record["source_id"],
+                    record["title"],
+                    json.dumps(record["selected_operations"]),
+                    record["tool_name_prefix"],
+                    json.dumps(record["metadata"]),
+                ),
+            )
         return record
 
     def get_source_spec(self, source_id: str) -> dict[str, Any] | None:
-        if not self.db_path:
+        if not is_postgres_dsn(self.db_path):
             rec = self._memory_sources.get(source_id)
             return dict(rec.get("spec_json") or {}) if rec else None
 
-        conn = self._connect()
-        cur = conn.execute(
-            "SELECT spec_json FROM purecipher_openapi_sources WHERE source_id = ?",
-            (source_id,),
-        )
-        row = cur.fetchone()
-        if self._shared_conn is None:
-            conn.close()
+        with connection(self.db_path) as conn:
+            cur = conn.execute(
+                "SELECT spec_json FROM purecipher_openapi_sources WHERE source_id = %s",
+                (source_id,),
+            )
+            row = cur.fetchone()
         if not row:
             return None
         try:
@@ -1260,23 +1254,21 @@ class OpenAPIStore:
         return payload if isinstance(payload, dict) else None
 
     def get_toolset(self, toolset_id: str) -> OpenAPIToolsetRecord | None:
-        if not self.db_path:
+        if not is_postgres_dsn(self.db_path):
             rec = self._memory_toolsets.get(toolset_id)
             return dict(rec) if rec else None
 
-        conn = self._connect()
-        cur = conn.execute(
-            """
-            SELECT toolset_id, created_at, publisher_id, source_id, title,
-                   selected_operations_json, tool_name_prefix, metadata_json
-            FROM purecipher_openapi_toolsets
-            WHERE toolset_id = ?
-            """,
-            (toolset_id,),
-        )
-        row = cur.fetchone()
-        if self._shared_conn is None:
-            conn.close()
+        with connection(self.db_path) as conn:
+            cur = conn.execute(
+                """
+                SELECT toolset_id, created_at, publisher_id, source_id, title,
+                       selected_operations_json, tool_name_prefix, metadata_json
+                FROM purecipher_openapi_toolsets
+                WHERE toolset_id = %s
+                """,
+                (toolset_id,),
+            )
+            row = cur.fetchone()
         if not row:
             return None
         (
@@ -1313,25 +1305,23 @@ class OpenAPIStore:
     def list_toolsets(self, *, limit: int = 200) -> list[OpenAPIToolsetRecord]:
         if limit <= 0:
             return []
-        if not self.db_path:
+        if not is_postgres_dsn(self.db_path):
             items = list(self._memory_toolsets.values())
             items.sort(key=lambda x: float(x.get("created_at", 0.0)), reverse=True)
             return [dict(item) for item in items[:limit]]
 
-        conn = self._connect()
-        cur = conn.execute(
-            """
-            SELECT toolset_id, created_at, publisher_id, source_id, title,
-                   selected_operations_json, tool_name_prefix, metadata_json
-            FROM purecipher_openapi_toolsets
-            ORDER BY created_at DESC
-            LIMIT ?
-            """,
-            (int(limit),),
-        )
-        rows = cur.fetchall()
-        if self._shared_conn is None:
-            conn.close()
+        with connection(self.db_path) as conn:
+            cur = conn.execute(
+                """
+                SELECT toolset_id, created_at, publisher_id, source_id, title,
+                       selected_operations_json, tool_name_prefix, metadata_json
+                FROM purecipher_openapi_toolsets
+                ORDER BY created_at DESC
+                LIMIT %s
+                """,
+                (int(limit),),
+            )
+            rows = cur.fetchall()
 
         out: list[OpenAPIToolsetRecord] = []
         for row in rows:
@@ -1447,7 +1437,7 @@ class OpenAPIStore:
             "secret": dict(secret),
         }
 
-        if not self.db_path:
+        if not is_postgres_dsn(self.db_path):
             existing = self._memory_credentials.get(credential_id)
             if existing:
                 record["created_at"] = float(existing.get("created_at") or now)
@@ -1455,37 +1445,46 @@ class OpenAPIStore:
             return record
 
         ciphertext = self._encrypt_secret(secret)
-        conn = self._connect()
-        existing_row = conn.execute(
-            "SELECT created_at FROM purecipher_openapi_credentials"
-            " WHERE credential_id = ?",
-            (credential_id,),
-        ).fetchone()
-        created_at = float(existing_row[0]) if existing_row is not None else float(now)
-        record["created_at"] = created_at
-        conn.execute(
-            """
-            INSERT OR REPLACE INTO purecipher_openapi_credentials
-              (credential_id, created_at, updated_at, publisher_id, source_id,
-               scheme_name, scheme_kind, label, secret_hint, secret_ciphertext)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                credential_id,
-                created_at,
-                float(now),
-                publisher_id,
-                source_id,
-                scheme_name,
-                scheme_kind,
-                record["label"],
-                hint,
-                ciphertext,
-            ),
-        )
-        conn.commit()
-        if self._shared_conn is None:
-            conn.close()
+        with transaction(self.db_path) as conn:
+            existing_row = conn.execute(
+                "SELECT created_at FROM purecipher_openapi_credentials"
+                " WHERE credential_id = %s",
+                (credential_id,),
+            ).fetchone()
+            created_at = (
+                float(existing_row[0]) if existing_row is not None else float(now)
+            )
+            record["created_at"] = created_at
+            conn.execute(
+                """
+                INSERT INTO purecipher_openapi_credentials
+                  (credential_id, created_at, updated_at, publisher_id, source_id,
+                   scheme_name, scheme_kind, label, secret_hint, secret_ciphertext)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (credential_id) DO UPDATE SET
+                  created_at = EXCLUDED.created_at,
+                  updated_at = EXCLUDED.updated_at,
+                  publisher_id = EXCLUDED.publisher_id,
+                  source_id = EXCLUDED.source_id,
+                  scheme_name = EXCLUDED.scheme_name,
+                  scheme_kind = EXCLUDED.scheme_kind,
+                  label = EXCLUDED.label,
+                  secret_hint = EXCLUDED.secret_hint,
+                  secret_ciphertext = EXCLUDED.secret_ciphertext
+                """,
+                (
+                    credential_id,
+                    created_at,
+                    float(now),
+                    publisher_id,
+                    source_id,
+                    scheme_name,
+                    scheme_kind,
+                    record["label"],
+                    hint,
+                    ciphertext,
+                ),
+            )
         return record
 
     def get_credential(
@@ -1498,7 +1497,7 @@ class OpenAPIStore:
         Callers exposing this method via HTTP MUST pass the session's
         publisher id.
         """
-        if not self.db_path:
+        if not is_postgres_dsn(self.db_path):
             rec = self._memory_credentials.get(credential_id)
             if rec is None:
                 return None
@@ -1506,20 +1505,18 @@ class OpenAPIStore:
                 return None
             return dict(rec)  # type: ignore[return-value]
 
-        conn = self._connect()
-        cur = conn.execute(
-            """
-            SELECT credential_id, created_at, updated_at, publisher_id,
-                   source_id, scheme_name, scheme_kind, label,
-                   secret_hint, secret_ciphertext
-            FROM purecipher_openapi_credentials
-            WHERE credential_id = ?
-            """,
-            (credential_id,),
-        )
-        row = cur.fetchone()
-        if self._shared_conn is None:
-            conn.close()
+        with connection(self.db_path) as conn:
+            cur = conn.execute(
+                """
+                SELECT credential_id, created_at, updated_at, publisher_id,
+                       source_id, scheme_name, scheme_kind, label,
+                       secret_hint, secret_ciphertext
+                FROM purecipher_openapi_credentials
+                WHERE credential_id = %s
+                """,
+                (credential_id,),
+            )
+            row = cur.fetchone()
         if not row:
             return None
         (
@@ -1560,7 +1557,7 @@ class OpenAPIStore:
         Pass ``source_id`` to narrow further to credentials for one
         ingested OpenAPI source.
         """
-        if not self.db_path:
+        if not is_postgres_dsn(self.db_path):
             items = [
                 rec
                 for rec in self._memory_credentials.values()
@@ -1591,18 +1588,16 @@ class OpenAPIStore:
             "SELECT credential_id, created_at, updated_at, publisher_id,"
             " source_id, scheme_name, scheme_kind, label, secret_hint"
             " FROM purecipher_openapi_credentials"
-            " WHERE publisher_id = ?"
+            " WHERE publisher_id = %s"
         )
         if source_id is not None:
-            sql += " AND source_id = ?"
+            sql += " AND source_id = %s"
             params.append(source_id)
         sql += " ORDER BY updated_at DESC"
 
-        conn = self._connect()
-        cur = conn.execute(sql, tuple(params))
-        rows = cur.fetchall()
-        if self._shared_conn is None:
-            conn.close()
+        with connection(self.db_path) as conn:
+            cur = conn.execute(sql, tuple(params))
+            rows = cur.fetchall()
         out: list[OpenAPICredentialPublic] = []
         for row in rows:
             (
@@ -1636,21 +1631,18 @@ class OpenAPIStore:
         from one tenant can never touch another tenant's row."""
         if not credential_id or not publisher_id:
             return False
-        if not self.db_path:
+        if not is_postgres_dsn(self.db_path):
             existing = self._memory_credentials.get(credential_id)
             if existing is None or existing.get("publisher_id") != publisher_id:
                 return False
             del self._memory_credentials[credential_id]
             return True
 
-        conn = self._connect()
-        cur = conn.execute(
-            "DELETE FROM purecipher_openapi_credentials"
-            " WHERE credential_id = ? AND publisher_id = ?",
-            (credential_id, publisher_id),
-        )
-        conn.commit()
-        deleted = cur.rowcount > 0
-        if self._shared_conn is None:
-            conn.close()
+        with connection(self.db_path) as conn:
+            cur = conn.execute(
+                "DELETE FROM purecipher_openapi_credentials"
+                " WHERE credential_id = %s AND publisher_id = %s",
+                (credential_id, publisher_id),
+            )
+            deleted = cur.rowcount > 0
         return deleted

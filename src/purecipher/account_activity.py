@@ -3,50 +3,48 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 import time
 from collections import deque
 from datetime import datetime, timezone
 from typing import Any
 
+from purecipher.pgdb import connection, is_postgres_dsn
+
 _MAX_ITEMS = 200
 
 
 class RegistryAccountActivityStore:
-    """Store recent account activity in SQLite or memory."""
+    """Store recent account activity in PostgreSQL or memory."""
 
     def __init__(self, db_path: str | None, *, ensure_schema: bool = True) -> None:
         # ``:memory:`` is treated as in-memory (deque) rather than as
-        # a literal SQLite path. ``sqlite3.connect(":memory:")`` opens
-        # a fresh isolated database on every call, so the schema
-        # created in ``_ensure_sqlite`` would vanish by the time
-        # ``append`` reopened the connection. The other registry
-        # stores (clients, control planes) use the same convention.
+        # a literal database path. It is not a PostgreSQL DSN, so it
+        # takes the in-memory fallback like any other non-Postgres
+        # value. The other registry stores (clients, control planes)
+        # use the same convention.
         if db_path == ":memory:":
             db_path = None
         self._db_path = db_path
         self._memory: deque[dict[str, Any]] = deque(maxlen=_MAX_ITEMS)
         self._mem_seq = 0
-        if self._db_path and ensure_schema:
-            self._ensure_sqlite()
+        if is_postgres_dsn(self._db_path) and ensure_schema:
+            self._ensure_schema()
 
-    def _ensure_sqlite(self) -> None:
-        conn = sqlite3.connect(self._db_path)
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS purecipher_registry_account_activity (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                created_at REAL NOT NULL,
-                username TEXT NOT NULL,
-                event_kind TEXT NOT NULL,
-                title TEXT NOT NULL,
-                detail TEXT NOT NULL,
-                metadata_json TEXT NOT NULL
-            );
-            """
-        )
-        conn.commit()
-        conn.close()
+    def _ensure_schema(self) -> None:
+        with connection(self._db_path) as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS purecipher_registry_account_activity (
+                    id BIGSERIAL PRIMARY KEY,
+                    created_at DOUBLE PRECISION NOT NULL,
+                    username TEXT NOT NULL,
+                    event_kind TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    detail TEXT NOT NULL,
+                    metadata_json TEXT NOT NULL
+                );
+                """
+            )
 
     def append(
         self,
@@ -60,16 +58,14 @@ class RegistryAccountActivityStore:
         username_value = username.strip() or "unknown"
         metadata_json = json.dumps(dict(metadata or {}), sort_keys=True)
         now = time.time()
-        if self._db_path:
-            conn = sqlite3.connect(self._db_path)
-            conn.execute(
-                "INSERT INTO purecipher_registry_account_activity "
-                "(created_at, username, event_kind, title, detail, metadata_json) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (now, username_value, event_kind, title, detail, metadata_json),
-            )
-            conn.commit()
-            conn.close()
+        if is_postgres_dsn(self._db_path):
+            with connection(self._db_path) as conn:
+                conn.execute(
+                    "INSERT INTO purecipher_registry_account_activity "
+                    "(created_at, username, event_kind, title, detail, metadata_json) "
+                    "VALUES (%s, %s, %s, %s, %s, %s)",
+                    (now, username_value, event_kind, title, detail, metadata_json),
+                )
             return
 
         self._mem_seq += 1
@@ -92,17 +88,16 @@ class RegistryAccountActivityStore:
         cap = min(max(limit, 1), _MAX_ITEMS)
 
         rows: list[tuple[Any, ...]]
-        if self._db_path:
-            conn = sqlite3.connect(self._db_path)
-            cur = conn.execute(
-                "SELECT id, created_at, username, event_kind, title, detail, metadata_json "
-                "FROM purecipher_registry_account_activity "
-                "WHERE username = ? "
-                "ORDER BY id DESC LIMIT ?",
-                (username_value, cap),
-            )
-            rows = cur.fetchall()
-            conn.close()
+        if is_postgres_dsn(self._db_path):
+            with connection(self._db_path) as conn:
+                cur = conn.execute(
+                    "SELECT id, created_at, username, event_kind, title, detail, metadata_json "
+                    "FROM purecipher_registry_account_activity "
+                    "WHERE username = %s "
+                    "ORDER BY id DESC LIMIT %s",
+                    (username_value, cap),
+                )
+                rows = cur.fetchall()
         else:
             rows = [
                 (
