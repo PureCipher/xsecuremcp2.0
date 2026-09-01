@@ -121,6 +121,11 @@ class CertificationPipeline:
         # Internal registries
         self._attestations: dict[str, ToolAttestation] = {}
         self._reports: dict[str, ValidationReport] = {}
+        # Revocation is authoritative state, not an unsigned field on the
+        # attestation supplied by a caller. Keep a separate index so mutating
+        # ``attestation.status`` cannot undo a revocation during this
+        # pipeline's lifetime.
+        self._revoked_attestation_ids: set[str] = set()
 
     def certify(
         self,
@@ -238,8 +243,14 @@ class CertificationPipeline:
         """
         issues: list[str] = []
 
+        if attestation.attestation_id in self._revoked_attestation_ids:
+            issues.append("Attestation has been revoked")
+
         # Check status
-        if attestation.status == AttestationStatus.REVOKED:
+        if (
+            attestation.status == AttestationStatus.REVOKED
+            and "Attestation has been revoked" not in issues
+        ):
             issues.append("Attestation has been revoked")
         elif attestation.status == AttestationStatus.SUPERSEDED:
             issues.append("Attestation has been superseded by a newer version")
@@ -308,6 +319,7 @@ class CertificationPipeline:
 
         attestation.status = AttestationStatus.REVOKED
         attestation.metadata["revocation_reason"] = reason
+        self._revoked_attestation_ids.add(attestation_id)
 
         if self._event_bus is not None:
             from fastmcp.server.security.alerts.models import (

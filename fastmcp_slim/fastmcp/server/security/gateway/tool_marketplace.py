@@ -11,15 +11,14 @@ verification on install.
 
 from __future__ import annotations
 
-import hashlib
-import json
 import logging
 import uuid
+from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 from fastmcp.server.security.certification.attestation import (
     AttestationStatus,
@@ -33,6 +32,7 @@ from fastmcp.server.security.certification.manifest import (
     ResourceAccessDeclaration,
     SecurityManifest,
 )
+from fastmcp.server.security.contracts.crypto import compute_digest
 
 if TYPE_CHECKING:
     from fastmcp.server.security.alerts.bus import SecurityEventBus
@@ -40,6 +40,20 @@ if TYPE_CHECKING:
     from fastmcp.server.security.storage.backend import StorageBackend
 
 logger = logging.getLogger(__name__)
+
+
+class AttestationVerificationResult(Protocol):
+    """Result surface required from a cryptographic attestation verifier."""
+
+    valid: bool
+    signature_valid: bool
+    manifest_match: bool
+    issues: list[str]
+
+
+AttestationVerifier = Callable[
+    [ToolAttestation, SecurityManifest | None], AttestationVerificationResult
+]
 
 
 class ToolCategory(Enum):
@@ -595,40 +609,47 @@ class SortBy(Enum):
 
 def compute_manifest_digest(manifest: SecurityManifest) -> str:
     """Compute a SHA-256 digest of a manifest for integrity verification."""
-    payload = json.dumps(manifest.to_dict(), sort_keys=True, default=str)
-    return hashlib.sha256(payload.encode()).hexdigest()
+    return compute_digest(manifest.to_dict())
 
 
 def verify_attestation_signature(
     attestation: ToolAttestation,
     manifest: SecurityManifest | None = None,
+    *,
+    verifier: AttestationVerifier | None = None,
 ) -> tuple[bool, str]:
-    """Verify an attestation's integrity.
+    """Verify an attestation with a configured cryptographic verifier.
 
-    Checks:
-    1. Attestation is currently valid (not expired/revoked).
-    2. If a manifest is provided, its digest matches the attestation.
-    3. The attestation has a non-empty signature.
+    The marketplace does not own issuer keys, so a caller must provide a
+    verifier backed by a trusted certification pipeline. Merely checking that
+    the signature field is populated is not verification and therefore fails
+    closed.
 
     Returns:
         (passed, reason) tuple.
     """
-    if not attestation.is_valid():
-        return False, f"Attestation status is {attestation.status.value}, not valid"
+    if verifier is None:
+        return False, "No cryptographic attestation verifier is configured"
 
-    if not attestation.signature:
-        return False, "Attestation has no signature"
+    try:
+        result = verifier(attestation, manifest)
+    except Exception:
+        logger.warning("Cryptographic attestation verifier failed", exc_info=True)
+        return False, "Cryptographic attestation verifier failed"
 
-    if manifest is not None and attestation.manifest_digest:
-        expected_digest = compute_manifest_digest(manifest)
-        if attestation.manifest_digest != expected_digest:
-            return False, (
-                f"Manifest digest mismatch: attestation expects "
-                f"{attestation.manifest_digest[:16]}..., "
-                f"got {expected_digest[:16]}..."
-            )
+    if not result.signature_valid:
+        reason = "; ".join(result.issues) or "Signature verification failed"
+        return False, reason
+    if manifest is not None and not result.manifest_match:
+        reason = "; ".join(result.issues) or "Manifest digest mismatch"
+        return False, reason
+    if not result.valid:
+        reason = "; ".join(result.issues) or (
+            f"Attestation status is {attestation.status.value}, not valid"
+        )
+        return False, reason
 
-    return True, "Signature verification passed"
+    return True, "Cryptographic signature verification passed"
 
 
 # ── Main marketplace class ────────────────────────────────────
@@ -645,7 +666,12 @@ class ToolMarketplace:
 
     Example::
 
-        marketplace = ToolMarketplace(trust_registry=registry)
+        # ``pipeline`` is a CertificationPipeline configured with the
+        # certification authority's verification key.
+        marketplace = ToolMarketplace(
+            trust_registry=registry,
+            attestation_verifier=pipeline.verify_attestation,
+        )
 
         # Publish a tool
         listing = marketplace.publish(
@@ -678,6 +704,9 @@ class ToolMarketplace:
         backend: Optional storage backend for persistence.
         marketplace_id: Identifier for this marketplace instance.
         require_moderation: If True, new listings start as PENDING_REVIEW.
+        attestation_verifier: Trusted cryptographic verifier used when an
+            install requests signature verification. Verified installs fail
+            closed when this is not configured.
     """
 
     def __init__(
@@ -688,12 +717,14 @@ class ToolMarketplace:
         backend: StorageBackend | None = None,
         marketplace_id: str = "default",
         require_moderation: bool = False,
+        attestation_verifier: AttestationVerifier | None = None,
     ) -> None:
         self._trust_registry = trust_registry
         self._event_bus = event_bus
         self._backend = backend
         self._marketplace_id = marketplace_id
         self._require_moderation = require_moderation
+        self._attestation_verifier = attestation_verifier
         self._listings: dict[str, ToolListing] = {}  # keyed by listing_id
         self._name_index: dict[str, str] = {}  # tool_name → listing_id
         self._installs: dict[str, list[InstallRecord]] = {}  # listing_id → installs
@@ -708,6 +739,10 @@ class ToolMarketplace:
         attribute from outside the class.
         """
         self._event_bus = event_bus
+
+    def attach_attestation_verifier(self, verifier: AttestationVerifier | None) -> None:
+        """Attach the trusted verifier used by verified installs."""
+        self._attestation_verifier = verifier
 
     def _load_from_backend(self) -> None:
         """Load marketplace state from persistence."""
@@ -1431,7 +1466,9 @@ class ToolMarketplace:
                 return None
 
             passed, reason = verify_attestation_signature(
-                listing.attestation, listing.manifest
+                listing.attestation,
+                listing.manifest,
+                verifier=self._attestation_verifier,
             )
             if not passed:
                 logger.warning("Install rejected for %s: %s", listing.tool_name, reason)

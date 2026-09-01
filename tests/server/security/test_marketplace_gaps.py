@@ -12,6 +12,11 @@ from fastmcp.server.security.certification.attestation import (
     ToolAttestation,
 )
 from fastmcp.server.security.certification.manifest import SecurityManifest
+from fastmcp.server.security.certification.pipeline import CertificationPipeline
+from fastmcp.server.security.contracts.crypto import (
+    ContractCryptoHandler,
+    SigningAlgorithm,
+)
 from fastmcp.server.security.gateway.tool_marketplace import (
     ModerationAction,
     ModerationDecision,
@@ -65,6 +70,33 @@ def _make_attestation(
 def _make_marketplace(**kwargs: Any) -> ToolMarketplace:
     """Create a test marketplace."""
     return ToolMarketplace(**kwargs)
+
+
+def _certification_crypto() -> ContractCryptoHandler:
+    return ContractCryptoHandler(
+        algorithm=SigningAlgorithm.HMAC_SHA256,
+        secret_key=b"marketplace-verification-test-key",
+    )
+
+
+def _certification_pipeline() -> CertificationPipeline:
+    return CertificationPipeline(
+        issuer_id="test-ca", crypto_handler=_certification_crypto()
+    )
+
+
+def _signed_attestation(**overrides: Any) -> ToolAttestation:
+    attestation = _make_attestation(
+        signature="",
+        issuer_id="test-ca",
+        **overrides,
+    )
+    attestation.signature = (
+        _certification_crypto()
+        .sign(attestation.signable_payload(), signer_id=attestation.issuer_id)
+        .signature
+    )
+    return attestation
 
 
 # ══════════════════════════════════════════════════════════════
@@ -387,43 +419,72 @@ class TestSignatureVerification:
         assert len(digest) == 64  # SHA-256 hex
 
     def test_verify_valid_attestation(self) -> None:
-        att = _make_attestation()
-        passed, reason = verify_attestation_signature(att)
+        pipeline = _certification_pipeline()
+        att = _signed_attestation()
+        passed, reason = verify_attestation_signature(
+            att, verifier=pipeline.verify_attestation
+        )
         assert passed is True
 
-    def test_verify_expired_attestation(self) -> None:
-        att = _make_attestation(valid=False)
+    def test_verify_without_cryptographic_verifier_fails_closed(self) -> None:
+        att = _signed_attestation()
         passed, reason = verify_attestation_signature(att)
+        assert passed is False
+        assert "no cryptographic" in reason.lower()
+
+    def test_verify_expired_attestation(self) -> None:
+        pipeline = _certification_pipeline()
+        att = _signed_attestation(valid=False)
+        passed, reason = verify_attestation_signature(
+            att, verifier=pipeline.verify_attestation
+        )
         assert passed is False
         assert "expired" in reason.lower() or "not valid" in reason.lower()
 
     def test_verify_no_signature(self) -> None:
+        pipeline = _certification_pipeline()
         att = _make_attestation(signature="")
-        passed, reason = verify_attestation_signature(att)
+        passed, reason = verify_attestation_signature(
+            att, verifier=pipeline.verify_attestation
+        )
         assert passed is False
-        assert "no signature" in reason.lower()
+        assert "unsigned" in reason.lower()
 
     def test_verify_manifest_digest_match(self) -> None:
+        pipeline = _certification_pipeline()
         manifest = _make_manifest()
         digest = compute_manifest_digest(manifest)
-        att = _make_attestation(manifest_digest=digest)
-        passed, reason = verify_attestation_signature(att, manifest)
+        att = _signed_attestation(manifest_digest=digest)
+        passed, reason = verify_attestation_signature(
+            att, manifest, verifier=pipeline.verify_attestation
+        )
         assert passed is True
 
     def test_verify_manifest_digest_mismatch(self) -> None:
+        pipeline = _certification_pipeline()
         manifest = _make_manifest()
-        att = _make_attestation(manifest_digest="wrong-digest")
-        passed, reason = verify_attestation_signature(att, manifest)
+        att = _signed_attestation(manifest_digest="wrong-digest")
+        passed, reason = verify_attestation_signature(
+            att, manifest, verifier=pipeline.verify_attestation
+        )
         assert passed is False
         assert "mismatch" in reason.lower()
 
     def test_install_with_verification_success(self) -> None:
-        mp = _make_marketplace()
-        att = _make_attestation()
+        pipeline = _certification_pipeline()
+        mp = _make_marketplace(attestation_verifier=pipeline.verify_attestation)
+        att = _signed_attestation()
         listing = mp.publish("t1", version="1.0.0", attestation=att)
         record = mp.install(listing.listing_id, verify_signature=True)
         assert record is not None
         assert record.signature_verified is True
+
+    def test_install_rejects_forged_nonempty_signature(self) -> None:
+        pipeline = _certification_pipeline()
+        mp = _make_marketplace(attestation_verifier=pipeline.verify_attestation)
+        att = _make_attestation(signature="not-a-real-signature")
+        listing = mp.publish("t1", version="1.0.0", attestation=att)
+        assert mp.install(listing.listing_id, verify_signature=True) is None
 
     def test_install_with_verification_no_attestation(self) -> None:
         mp = _make_marketplace()
@@ -432,8 +493,9 @@ class TestSignatureVerification:
         assert record is None
 
     def test_install_with_verification_expired_attestation(self) -> None:
-        mp = _make_marketplace()
-        att = _make_attestation(valid=False)
+        pipeline = _certification_pipeline()
+        mp = _make_marketplace(attestation_verifier=pipeline.verify_attestation)
+        att = _signed_attestation(valid=False)
         listing = mp.publish("t1", version="1.0.0", attestation=att)
         record = mp.install(listing.listing_id, verify_signature=True)
         assert record is None
@@ -446,10 +508,11 @@ class TestSignatureVerification:
         assert record.signature_verified is False
 
     def test_install_with_manifest_digest_verification(self) -> None:
-        mp = _make_marketplace()
+        pipeline = _certification_pipeline()
+        mp = _make_marketplace(attestation_verifier=pipeline.verify_attestation)
         manifest = _make_manifest()
         digest = compute_manifest_digest(manifest)
-        att = _make_attestation(manifest_digest=digest)
+        att = _signed_attestation(manifest_digest=digest)
         listing = mp.publish("t1", version="1.0.0", manifest=manifest, attestation=att)
         record = mp.install(listing.listing_id, verify_signature=True)
         assert record is not None
@@ -669,8 +732,9 @@ class TestMarketplaceAPI:
         assert result.get("status") == 400
 
     def test_install_with_verification(self) -> None:
-        api, mp = self._make_api()
-        att = _make_attestation()
+        pipeline = _certification_pipeline()
+        api, mp = self._make_api(attestation_verifier=pipeline.verify_attestation)
+        att = _signed_attestation()
         listing = mp.publish("t1", version="1.0.0", attestation=att)
         result = api.marketplace_install(listing.listing_id, verify_signature=True)
         assert result["signature_verified"] is True

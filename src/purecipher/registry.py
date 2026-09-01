@@ -596,8 +596,13 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         # Reflexive) sees a stable per-client identifier when an
         # MCP client presents a registry-issued bearer token.
         ctx = self._required_context()
-        ctx.middleware = upgrade_middleware_for_client_actor(ctx.middleware)
-        ctx.middleware.insert(0, ClientActorResolverMiddleware(self))
+        ctx.middleware[:] = upgrade_middleware_for_client_actor(ctx.middleware)
+        self._add_live_security_middleware(
+            ctx,
+            ClientActorResolverMiddleware(self),
+            index=0,
+            upgrade_for_client_actor=False,
+        )
 
         if mount_registry_api:
             self.mount_registry_api(prefix=registry_prefix)
@@ -746,6 +751,50 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         if ctx is None:
             raise RuntimeError("SecureMCP is not attached to this PureCipher registry.")
         return ctx
+
+    def _add_live_security_middleware(
+        self,
+        ctx: SecurityContext,
+        middleware: Any,
+        *,
+        index: int | None = None,
+        upgrade_for_client_actor: bool = True,
+    ) -> Any:
+        """Add one middleware to both security and live server chains.
+
+        ``attach_security_context`` copies the orchestrated chain into FastMCP
+        during construction. Runtime additions must therefore update both
+        lists; changing only ``ctx.middleware`` updates governance state but
+        has no effect on request dispatch.
+        """
+        resolved = middleware
+        if upgrade_for_client_actor:
+            resolved = upgrade_middleware_for_client_actor([middleware])[0]
+
+        if index is None:
+            ctx.middleware.append(resolved)
+            self.add_middleware(resolved)
+        else:
+            ctx.middleware.insert(index, resolved)
+            self.middleware.insert(index, resolved)
+        return resolved
+
+    def _remove_live_security_middleware(
+        self,
+        ctx: SecurityContext,
+        middleware_type: type[Any],
+    ) -> None:
+        """Remove a middleware type from both security and live chains."""
+        ctx.middleware[:] = [
+            middleware
+            for middleware in ctx.middleware
+            if not isinstance(middleware, middleware_type)
+        ]
+        self.middleware[:] = [
+            middleware
+            for middleware in self.middleware
+            if not isinstance(middleware, middleware_type)
+        ]
 
     # ── Iter 10: MCP client identities ────────────────────────────
 
@@ -2223,7 +2272,9 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 backend=backend,
             )
             ctx.broker = broker
-            ctx.middleware.append(ContractValidationMiddleware(broker=broker))
+            self._add_live_security_middleware(
+                ctx, ContractValidationMiddleware(broker=broker)
+            )
             return
 
         if plane == "consent":
@@ -2234,7 +2285,9 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
             graph = ConsentGraph(graph_id=server_id, backend=backend)
             ctx.consent_graph = graph
-            ctx.middleware.append(ConsentEnforcementMiddleware(graph=graph))
+            self._add_live_security_middleware(
+                ctx, ConsentEnforcementMiddleware(graph=graph)
+            )
             return
 
         if plane == "provenance":
@@ -2247,7 +2300,9 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
             ledger = ProvenanceLedger(ledger_id=server_id, backend=backend)
             ctx.provenance_ledger = ledger
-            ctx.middleware.append(ProvenanceRecordingMiddleware(ledger=ledger))
+            self._add_live_security_middleware(
+                ctx, ProvenanceRecordingMiddleware(ledger=ledger)
+            )
             return
 
         if plane == "reflexive":
@@ -2263,11 +2318,12 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             escalation_engine = EscalationEngine(backend=backend)
             ctx.behavioral_analyzer = analyzer
             ctx.escalation_engine = escalation_engine
-            ctx.middleware.append(
+            self._add_live_security_middleware(
+                ctx,
                 ReflexiveMiddleware(
                     analyzer=analyzer,
                     escalation_engine=escalation_engine,
-                )
+                ),
             )
             return
 
@@ -2287,11 +2343,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             )
 
             ctx.broker = None
-            ctx.middleware = [
-                m
-                for m in ctx.middleware
-                if not isinstance(m, ContractValidationMiddleware)
-            ]
+            self._remove_live_security_middleware(ctx, ContractValidationMiddleware)
             return
 
         if plane == "consent":
@@ -2300,11 +2352,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             )
 
             ctx.consent_graph = None
-            ctx.middleware = [
-                m
-                for m in ctx.middleware
-                if not isinstance(m, ConsentEnforcementMiddleware)
-            ]
+            self._remove_live_security_middleware(ctx, ConsentEnforcementMiddleware)
             return
 
         if plane == "provenance":
@@ -2313,11 +2361,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             )
 
             ctx.provenance_ledger = None
-            ctx.middleware = [
-                m
-                for m in ctx.middleware
-                if not isinstance(m, ProvenanceRecordingMiddleware)
-            ]
+            self._remove_live_security_middleware(ctx, ProvenanceRecordingMiddleware)
             return
 
         if plane == "reflexive":
@@ -2327,9 +2371,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
             ctx.behavioral_analyzer = None
             ctx.escalation_engine = None
-            ctx.middleware = [
-                m for m in ctx.middleware if not isinstance(m, ReflexiveMiddleware)
-            ]
+            self._remove_live_security_middleware(ctx, ReflexiveMiddleware)
             return
 
     @staticmethod
