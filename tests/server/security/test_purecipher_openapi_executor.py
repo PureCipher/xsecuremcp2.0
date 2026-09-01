@@ -203,6 +203,28 @@ class TestRequestBuilder:
         # Scalars stringify.
         assert ("limit", "10") in b.query
 
+    async def test_execute_preserves_repeated_query_keys(self):
+        spec = _spec_pets()
+        operation = _operation(spec, "listPets")
+        executor = OpenAPIToolExecutor(
+            spec=spec,
+            operation=operation,
+            server_url="https://api.pets.example/v1",
+        )
+
+        def handle(request: httpx.Request) -> httpx.Response:
+            assert request.url.params.get_list("tags") == ["a", "b", "c"]
+            return httpx.Response(200, json={"ok": True})
+
+        transport = httpx.MockTransport(handle)
+        async with httpx.AsyncClient(transport=transport) as client:
+            result = await executor.execute(
+                {"query": {"tags": ["a", "b", "c"]}},
+                client=client,
+            )
+
+        assert result.status_code == 200
+
     def test_query_explode_false_joins_with_comma(self):
         # Synthesize a parameter with explode=false to verify the
         # builder honours it.

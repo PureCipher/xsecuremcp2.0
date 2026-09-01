@@ -514,7 +514,7 @@ class OpenAPIToolExecutor:
         request = httpx.Request(
             method=blueprint.method,
             url=blueprint.url,
-            params=dict(blueprint.query) if blueprint.query else None,
+            params=tuple(blueprint.query) if blueprint.query else None,
             headers=blueprint.headers or None,
             cookies=blueprint.cookies or None,
             **body_kwargs,
