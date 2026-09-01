@@ -191,7 +191,7 @@ class PolicyConfig:
             providers.insert(0, declarative_provider)
 
         return PolicyEngine(
-            providers=providers or None,
+            providers=providers if providers or self.fail_closed else None,
             fail_closed=self.fail_closed,
             allow_hot_swap=self.allow_hot_swap,
             audit_log=audit_log,

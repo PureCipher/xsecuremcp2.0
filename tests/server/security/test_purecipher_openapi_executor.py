@@ -225,6 +225,34 @@ class TestRequestBuilder:
 
         assert result.status_code == 200
 
+    async def test_execute_does_not_expose_sensitive_response_headers(self):
+        spec = _spec_pets()
+        operation = _operation(spec, "listPets")
+        executor = OpenAPIToolExecutor(
+            spec=spec,
+            operation=operation,
+            server_url="https://api.pets.example/v1",
+        )
+
+        def handle(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={"ok": True},
+                headers={
+                    "Set-Cookie": "session=upstream-secret",
+                    "WWW-Authenticate": "Bearer internal",
+                    "ETag": '"safe-etag"',
+                },
+            )
+
+        transport = httpx.MockTransport(handle)
+        async with httpx.AsyncClient(transport=transport) as client:
+            result = await executor.execute({}, client=client)
+
+        assert "set-cookie" not in result.headers
+        assert "www-authenticate" not in result.headers
+        assert result.headers["etag"] == '"safe-etag"'
+
     def test_query_explode_false_joins_with_comma(self):
         # Synthesize a parameter with explode=false to verify the
         # builder honours it.

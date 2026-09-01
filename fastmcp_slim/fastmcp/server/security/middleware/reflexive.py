@@ -25,6 +25,7 @@ from fastmcp.server.middleware.middleware import (
     Middleware,
     MiddlewareContext,
 )
+from fastmcp.server.security.principal import principal_id_from_access_token
 from fastmcp.server.security.reflexive.analyzer import (
     BehavioralAnalyzer,
     EscalationAction,
@@ -102,9 +103,7 @@ class ReflexiveMiddleware(Middleware):
         from fastmcp.server.dependencies import get_access_token
 
         token = get_access_token()
-        if token is not None:
-            return token.token[:8] + "..."
-        return "anonymous"
+        return principal_id_from_access_token(token) or "anonymous"
 
     def _check_suspended(self, actor_id: str) -> None:
         """Raise if the actor has been suspended."""

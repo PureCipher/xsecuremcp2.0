@@ -255,6 +255,17 @@ class TestPolicyConfigVersioning:
         assert returned is existing_engine
         assert returned.version_manager is vm
 
+    def test_corrupt_active_policy_refuses_fallback_startup(self):
+        backend = InMemoryBackend()
+        vm = PolicyVersionManager(policy_set_id="test", backend=backend)
+        vm.create_version(
+            policy_data={"providers": [{"type": "unknown-policy-type"}]},
+            author="test",
+        )
+
+        with pytest.raises(RuntimeError, match="refusing to start"):
+            PolicyEngine(providers=[AllowAllPolicy()], version_manager=vm)
+
 
 # ── Orchestrator ─────────────────────────────────────────────────
 

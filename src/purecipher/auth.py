@@ -78,6 +78,7 @@ class RegistryAuthSettings:
     issuer: str = "purecipher-registry"
     audience: str = "purecipher-registry"
     cookie_name: str = "purecipher_registry_token"
+    cookie_secure: bool = False
     token_ttl_seconds: int = 12 * 60 * 60
     users: tuple[RegistryUser, ...] = ()
     bootstrap_admin_username: str = "admin"
@@ -114,6 +115,7 @@ class RegistryAuthSettings:
                 "PURECIPHER_AUTH_COOKIE_NAME",
                 "purecipher_registry_token",
             ),
+            cookie_secure=_env_flag_default_true("PURECIPHER_AUTH_COOKIE_SECURE"),
             token_ttl_seconds=_env_int(
                 "PURECIPHER_JWT_TTL_SECONDS",
                 12 * 60 * 60,
@@ -143,6 +145,7 @@ class RegistryAuthSettings:
         jwt_secret: str = "",
         audience: str = "purecipher-registry",
         cookie_name: str = "purecipher_registry_token",
+        cookie_secure: bool = True,
         token_ttl_seconds: int = 12 * 60 * 60,
         users_json: str = "",
         bootstrap_admin_username: str = "admin",
@@ -161,6 +164,7 @@ class RegistryAuthSettings:
             issuer=issuer,
             audience=audience,
             cookie_name=cookie_name,
+            cookie_secure=cookie_secure,
             token_ttl_seconds=token_ttl_seconds,
             users=users,
             bootstrap_admin_username=bootstrap_admin_username,
@@ -248,6 +252,13 @@ class RegistryAuthSettings:
 
 def _env_flag(name: str) -> bool:
     value = os.getenv(name, "")
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_flag_default_true(name: str) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return True
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 

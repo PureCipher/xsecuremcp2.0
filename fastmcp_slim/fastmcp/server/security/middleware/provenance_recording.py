@@ -20,11 +20,45 @@ from fastmcp.server.middleware.middleware import (
     Middleware,
     MiddlewareContext,
 )
+from fastmcp.server.security.principal import principal_id_from_access_token
 from fastmcp.server.security.provenance.ledger import ProvenanceLedger
 from fastmcp.server.security.provenance.records import ProvenanceAction
 from fastmcp.tools.base import Tool, ToolResult
 
 logger = logging.getLogger(__name__)
+
+_SENSITIVE_FIELD_MARKERS = frozenset(
+    {
+        "authorization",
+        "cookie",
+        "credential",
+        "password",
+        "secret",
+        "token",
+        "api_key",
+        "apikey",
+        "private_key",
+    }
+)
+_REDACTED = "[REDACTED]"
+
+
+def _redact_provenance_data(value: object) -> object:
+    """Recursively redact common credential fields before persistence."""
+    if isinstance(value, dict):
+        redacted: dict[object, object] = {}
+        for key, item in value.items():
+            normalized = str(key).lower().replace("-", "_")
+            if any(marker in normalized for marker in _SENSITIVE_FIELD_MARKERS):
+                redacted[key] = _REDACTED
+            else:
+                redacted[key] = _redact_provenance_data(item)
+        return redacted
+    if isinstance(value, list):
+        return [_redact_provenance_data(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_redact_provenance_data(item) for item in value)
+    return value
 
 
 def _estimate_call_tokens(
@@ -93,9 +127,7 @@ class ProvenanceRecordingMiddleware(Middleware):
         from fastmcp.server.dependencies import get_access_token
 
         token = get_access_token()
-        if token is not None:
-            return token.token[:8] + "..."
-        return "anonymous"
+        return principal_id_from_access_token(token) or "anonymous"
 
     # ── Tool operations ──────────────────────────────────────────────
 
@@ -111,9 +143,10 @@ class ProvenanceRecordingMiddleware(Middleware):
         tool_name = context.message.name
         actor_id = self._get_actor_id(context)
         arguments = context.message.arguments or {}
+        redacted_arguments = _redact_provenance_data(arguments)
         input_data = {
             "tool": tool_name,
-            "arguments": arguments,
+            "arguments": redacted_arguments,
         }
 
         try:
@@ -255,7 +288,9 @@ class ProvenanceRecordingMiddleware(Middleware):
                 resource_id=prompt_name,
                 input_data={
                     "prompt": prompt_name,
-                    "arguments": context.message.arguments or {},
+                    "arguments": _redact_provenance_data(
+                        context.message.arguments or {}
+                    ),
                 },
                 output_data={"status": "success"},
             )

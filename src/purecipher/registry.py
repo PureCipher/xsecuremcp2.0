@@ -647,6 +647,8 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         enable_reflexive: bool = True,
         server_id: str = "purecipher-registry",
     ) -> SecurityConfig:
+        from fastmcp.server.security.policy.provider import AllowAllPolicy
+
         secret_bytes = (
             signing_secret.encode()
             if isinstance(signing_secret, str)
@@ -713,6 +715,10 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         return SecurityConfig(
             alerts=AlertConfig(),
             policy=PolicyConfig(
+                # The registry's editable policy chain starts permissive by
+                # design; unlike an empty fail-closed configuration, this is
+                # explicit, serializable, and visible to governance APIs.
+                providers=[AllowAllPolicy()],
                 enable_versioning=True,
                 enable_governance=True,
                 governance_require_simulation=False,
@@ -2470,7 +2476,27 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             )
             tags = set(payload.get("tags") or set())
             if extra_tags:
+                reserved = sorted(
+                    tag
+                    for tag in extra_tags
+                    if tag.lower().startswith(
+                        ("action:", "env:", "principal:", "resource:", "risk:")
+                    )
+                )
+                if reserved:
+                    raise ValueError(
+                        "Publisher tags cannot set reserved security attributes: "
+                        + ", ".join(reserved)
+                    )
                 tags.update(extra_tags)
+            method = str(op.get("method") or "").lower()
+            classified_action = {
+                "delete": "delete",
+                "patch": "patch",
+                "put": "update",
+            }.get(method)
+            if classified_action:
+                tags.add(f"action:{classified_action}")
             listing = self._marketplace().publish(
                 payload["tool_name"],
                 display_name=payload["display_name"],
@@ -2623,7 +2649,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             description=listing_description,
             parameters=input_schema,
             output_schema=output_schema,
-            tags={"openapi", "registry-proxy"},
+            tags={"openapi", "registry-proxy", *listing.tags},
             meta={
                 "purecipher.attestation_kind": "openapi",
                 "purecipher.openapi.operation_key": operation_key,
@@ -2923,6 +2949,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             token,
             max_age=self._auth_settings.token_ttl_seconds,
             httponly=True,
+            secure=self._auth_settings.cookie_secure,
             samesite="lax",
         )
 
@@ -2930,6 +2957,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         response.delete_cookie(
             self._auth_settings.cookie_name,
             httponly=True,
+            secure=self._auth_settings.cookie_secure,
             samesite="lax",
         )
 

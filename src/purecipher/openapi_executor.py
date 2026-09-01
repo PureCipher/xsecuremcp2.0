@@ -40,6 +40,19 @@ from purecipher.openapi_store import (
 
 logger = logging.getLogger(__name__)
 
+_SAFE_RESPONSE_HEADERS = frozenset(
+    {"cache-control", "content-language", "content-length", "content-type", "etag"}
+)
+
+
+def _safe_response_headers(headers: Any) -> dict[str, str]:
+    """Return response metadata without forwarding cookies or auth material."""
+    return {
+        str(name).lower(): str(value)
+        for name, value in headers.items()
+        if str(name).lower() in _SAFE_RESPONSE_HEADERS
+    }
+
 
 _DEFAULT_QUERY_STYLE = "form"
 _DEFAULT_PATH_STYLE = "simple"
@@ -483,10 +496,13 @@ class OpenAPIToolExecutor:
         """
         import httpx
 
+        from purecipher.outbound_security import validate_outbound_url
+
         if validate_input:
             self.validate_arguments(args)
 
         blueprint = self.build_request(args)
+        validate_outbound_url(blueprint.url)
         if store is not None:
             self.apply_credentials_from_store(blueprint, store)
 
@@ -525,7 +541,7 @@ class OpenAPIToolExecutor:
             client if client is not None else httpx.AsyncClient(timeout=timeout_seconds)
         )
         try:
-            response = await active_client.send(request)
+            response = await active_client.send(request, follow_redirects=False)
         finally:
             if owns_client:
                 await active_client.aclose()
@@ -559,7 +575,7 @@ class OpenAPIToolExecutor:
 
         result = ExecutorResult(
             status_code=response.status_code,
-            headers=dict(response.headers),
+            headers=_safe_response_headers(response.headers),
             content_type=response_ct or None,
             body=parsed_body,
             raw_bytes=raw_bytes,

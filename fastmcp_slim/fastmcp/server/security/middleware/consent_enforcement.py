@@ -22,6 +22,7 @@ from fastmcp.server.middleware.middleware import (
 )
 from fastmcp.server.security.consent.graph import ConsentGraph
 from fastmcp.server.security.consent.models import ConsentQuery, ConsentScope
+from fastmcp.server.security.principal import principal_id_from_access_token
 from fastmcp.tools.base import Tool, ToolResult
 
 logger = logging.getLogger(__name__)
@@ -83,9 +84,7 @@ class ConsentEnforcementMiddleware(Middleware):
         from fastmcp.server.dependencies import get_access_token
 
         token = get_access_token()
-        if token is not None:
-            return token.token[:8] + "..."
-        return "anonymous"
+        return principal_id_from_access_token(token) or "anonymous"
 
     def _check_consent(
         self,

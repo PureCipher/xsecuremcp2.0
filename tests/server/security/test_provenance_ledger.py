@@ -4,8 +4,29 @@ from __future__ import annotations
 
 import pytest
 
+from fastmcp.server.security.middleware.provenance_recording import (
+    _redact_provenance_data,
+)
 from fastmcp.server.security.provenance.ledger import ProvenanceLedger
 from fastmcp.server.security.provenance.records import ProvenanceAction
+
+
+def test_provenance_redaction_removes_nested_credentials():
+    payload = {
+        "username": "alice",
+        "password": "correct horse battery staple",
+        "headers": {"Authorization": "Bearer secret", "X-Trace": "safe"},
+        "nested": [{"api-key": "key-value", "value": 42}],
+    }
+
+    redacted = _redact_provenance_data(payload)
+
+    assert redacted == {
+        "username": "alice",
+        "password": "[REDACTED]",
+        "headers": {"Authorization": "[REDACTED]", "X-Trace": "safe"},
+        "nested": [{"api-key": "[REDACTED]", "value": 42}],
+    }
 
 
 class TestProvenanceLedgerBasics:

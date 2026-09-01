@@ -173,11 +173,11 @@ class PolicyEngine:
                     current_version.version_number,
                 )
                 return
-            except Exception:
-                logger.warning(
-                    "Failed to restore policy engine from version history",
-                    exc_info=True,
-                )
+            except Exception as exc:
+                raise RuntimeError(
+                    "Failed to restore the active policy version; refusing to "
+                    "start with fallback providers"
+                ) from exc
 
         self._record_version_snapshot(
             author="policy-engine",
@@ -338,51 +338,42 @@ class PolicyEngine:
             self._record_audit(context, defer_allow, start_time)
             return defer_allow
 
-        # REQUIRE_APPROVAL wins over ALLOW when no provider denied.
-        # A provider can retract the demand by also returning ALLOW
-        # in the same chain — that's what "approval consumed" looks
-        # like: the CapabilityPolicy emits REQUIRE_APPROVAL when it
-        # sees a high-risk action, then re-emits ALLOW on the same
-        # context when approval_granted=True. We surface the approval
-        # only when no ALLOW explicitly acknowledged the high-risk
-        # path.
+        # REQUIRE_APPROVAL wins over ALLOW when no provider denied. Providers
+        # consume approval by evaluating a structured approval ticket and
+        # returning ALLOW instead of REQUIRE_APPROVAL. Human-readable reasons
+        # never participate in authorization decisions.
         if pending_approval is not None:
-            approval_consumed = any(
-                r.decision == PolicyDecision.ALLOW and "approval" in r.reason.lower()
-                for r in results
-            )
-            if not approval_consumed:
-                if self._event_bus is not None:
-                    from fastmcp.server.security.alerts.models import (
-                        AlertSeverity,
-                        SecurityEvent,
-                        SecurityEventType,
-                    )
-
-                    await self._event_bus.aemit(
-                        SecurityEvent(
-                            event_type=SecurityEventType.POLICY_DENIED,
-                            severity=AlertSeverity.INFO,
-                            layer="policy",
-                            message=f"Approval required: {pending_approval.reason}",
-                            actor_id=context.actor_id,
-                            resource_id=context.resource_id,
-                            data={
-                                "policy_id": pending_approval.policy_id,
-                                "action": context.action,
-                                "outcome": "require_approval",
-                            },
-                        )
-                    )
-                logger.info(
-                    "Policy REQUIRE_APPROVAL from %s: %s (action=%s, resource=%s)",
-                    pending_approval.policy_id,
-                    pending_approval.reason,
-                    context.action,
-                    context.resource_id,
+            if self._event_bus is not None:
+                from fastmcp.server.security.alerts.models import (
+                    AlertSeverity,
+                    SecurityEvent,
+                    SecurityEventType,
                 )
-                self._record_audit(context, pending_approval, start_time)
-                return pending_approval
+
+                await self._event_bus.aemit(
+                    SecurityEvent(
+                        event_type=SecurityEventType.POLICY_DENIED,
+                        severity=AlertSeverity.INFO,
+                        layer="policy",
+                        message=f"Approval required: {pending_approval.reason}",
+                        actor_id=context.actor_id,
+                        resource_id=context.resource_id,
+                        data={
+                            "policy_id": pending_approval.policy_id,
+                            "action": context.action,
+                            "outcome": "require_approval",
+                        },
+                    )
+                )
+            logger.info(
+                "Policy REQUIRE_APPROVAL from %s: %s (action=%s, resource=%s)",
+                pending_approval.policy_id,
+                pending_approval.reason,
+                context.action,
+                context.resource_id,
+            )
+            self._record_audit(context, pending_approval, start_time)
+            return pending_approval
 
         # At least one ALLOW, no DENY → aggregate ALLOW
         allow_result = next(r for r in results if r.decision == PolicyDecision.ALLOW)
