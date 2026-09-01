@@ -674,7 +674,7 @@ Three ways to see what the governance layer is doing.
 
 **MCP tools (the gateway).** `create_audit_tools` and `create_marketplace_tools` expose governance as *tools*, so an agent can query the ledger, drift events, the consent audit log, policy status, and overall security health through the same protocol it uses for everything else. Governance is introspectable by the agents being governed.
 
-**HTTP API.** `mount_security_routes(server)` mounts a JSON API — dashboard, provenance (including chain status, Merkle proofs, export, and bundle verification), trust registry and scores, federation status, revocations, compliance reports, and an extensive policy surface: status, audit, simulate, schema, bundles, packs, environment profiles, promotions, versions, rollback, diff, snapshot import/export, analytics, and migration preview. Default `security_api_require_auth=True`, default prefix `/security`.
+**HTTP API.** `mount_security_routes(server, bearer_token=...)` mounts a JSON API — dashboard, provenance (including chain status, Merkle proofs, export, and bundle verification), trust registry and scores, federation status, revocations, compliance reports, and an extensive policy surface: status, audit, simulate, schema, bundles, packs, environment profiles, promotions, versions, rollback, diff, snapshot import/export, analytics, and migration preview. Authentication and capability authorization are required by default; the default prefix is `/security`.
 
 **Dashboard.** Always constructed; a read-only aggregate projection over whatever layers are active.
 

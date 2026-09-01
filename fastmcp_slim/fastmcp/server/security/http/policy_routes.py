@@ -8,9 +8,19 @@ from typing import Any
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+from fastmcp.server.security.http.authorization import (
+    SecurityCapability,
+    request_principal_actor,
+)
+
 
 def _status_code_from_payload(payload: dict[str, Any]) -> int:
     return payload["status"] if isinstance(payload.get("status"), int) else 200
+
+
+def _request_actor(request: Request) -> str:
+    """Use verified attribution when mounted through the secured route wrapper."""
+    return request_principal_actor(request) or "api"
 
 
 def mount_policy_routes(
@@ -38,7 +48,13 @@ def mount_policy_routes(
         # ``server.custom_route``. ``mount_security_routes`` always
         # passes the secured wrapper so the security HTTP API is
         # auth-gated end-to-end.
-        def _default(path: str, *, methods: list[str]):
+        def _default(
+            path: str,
+            *,
+            methods: list[str],
+            capability: SecurityCapability = SecurityCapability.READ,
+        ):
+            del capability
             return server.custom_route(path, methods=methods)
 
         _route = _default
@@ -68,7 +84,11 @@ def mount_policy_routes(
     async def policy_audit_stats_endpoint(request: Request) -> JSONResponse:
         return JSONResponse(api.get_policy_audit_statistics())
 
-    @_route(f"{prefix}/policy/simulate", methods=["POST"])
+    @_route(
+        f"{prefix}/policy/simulate",
+        methods=["POST"],
+        capability=SecurityCapability.OPERATE,
+    )
     async def policy_simulate_endpoint(request: Request) -> JSONResponse:
         body = await request.json()
         scenarios = body.get("scenarios", [])
@@ -91,7 +111,11 @@ def mount_policy_routes(
     async def policy_packs_endpoint(request: Request) -> JSONResponse:
         return JSONResponse(api.get_policy_packs())
 
-    @_route(f"{prefix}/policy/packs", methods=["POST"])
+    @_route(
+        f"{prefix}/policy/packs",
+        methods=["POST"],
+        capability=SecurityCapability.ADMIN,
+    )
     async def policy_packs_save_endpoint(request: Request) -> JSONResponse:
         body = await request.json()
         payload = await api.save_policy_pack(
@@ -104,7 +128,7 @@ def mount_policy_routes(
                 if body.get("source_version_number") is not None
                 else None
             ),
-            author=str(body.get("author", "api")),
+            author=_request_actor(request),
             pack_id=str(body.get("pack_id")) if body.get("pack_id") else None,
             tags=list(body.get("tags", []))
             if isinstance(body.get("tags"), list)
@@ -118,30 +142,42 @@ def mount_policy_routes(
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
-    @_route(f"{prefix}/policy/packs/{{pack_id}}", methods=["DELETE"])
+    @_route(
+        f"{prefix}/policy/packs/{{pack_id}}",
+        methods=["DELETE"],
+        capability=SecurityCapability.ADMIN,
+    )
     async def policy_packs_delete_endpoint(request: Request) -> JSONResponse:
         pack_id = request.path_params.get("pack_id", "")
         payload = api.delete_policy_pack(str(pack_id))
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
-    @_route(f"{prefix}/policy/bundles/{{bundle_id}}/stage", methods=["POST"])
+    @_route(
+        f"{prefix}/policy/bundles/{{bundle_id}}/stage",
+        methods=["POST"],
+        capability=SecurityCapability.ADMIN,
+    )
     async def policy_bundle_stage_endpoint(request: Request) -> JSONResponse:
         bundle_id = request.path_params.get("bundle_id", "")
         body = await request.json()
         payload = await api.stage_policy_bundle(
             bundle_id,
-            author=str(body.get("author", "api")),
+            author=_request_actor(request),
             description=str(body.get("description", "")),
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
-    @_route(f"{prefix}/policy/packs/{{pack_id}}/stage", methods=["POST"])
+    @_route(
+        f"{prefix}/policy/packs/{{pack_id}}/stage",
+        methods=["POST"],
+        capability=SecurityCapability.ADMIN,
+    )
     async def policy_pack_stage_endpoint(request: Request) -> JSONResponse:
         pack_id = request.path_params.get("pack_id", "")
         body = await request.json()
         payload = await api.stage_policy_pack(
             str(pack_id),
-            author=str(body.get("author", "api")),
+            author=_request_actor(request),
             description=str(body.get("description", "")),
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
@@ -151,14 +187,16 @@ def mount_policy_routes(
         return JSONResponse(api.get_policy_environment_profiles())
 
     @_route(
-        f"{prefix}/policy/environments/{{environment_id}}/capture", methods=["POST"]
+        f"{prefix}/policy/environments/{{environment_id}}/capture",
+        methods=["POST"],
+        capability=SecurityCapability.ADMIN,
     )
     async def policy_environment_capture_endpoint(request: Request) -> JSONResponse:
         environment_id = request.path_params.get("environment_id", "")
         body = await request.json()
         payload = api.capture_policy_environment(
             str(environment_id),
-            actor=str(body.get("actor", "api")),
+            actor=_request_actor(request),
             note=str(body.get("note", "")),
             source_snapshot=(
                 body.get("source_snapshot")
@@ -177,13 +215,17 @@ def mount_policy_routes(
     async def policy_promotions_endpoint(request: Request) -> JSONResponse:
         return JSONResponse(api.get_policy_promotions())
 
-    @_route(f"{prefix}/policy/promotions", methods=["POST"])
+    @_route(
+        f"{prefix}/policy/promotions",
+        methods=["POST"],
+        capability=SecurityCapability.ADMIN,
+    )
     async def policy_promotions_stage_endpoint(request: Request) -> JSONResponse:
         body = await request.json()
         payload = await api.stage_policy_promotion(
             source_environment=str(body.get("source_environment", "")),
             target_environment=str(body.get("target_environment", "")),
-            author=str(body.get("author", "api")),
+            author=_request_actor(request),
             description=str(body.get("description", "")),
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
@@ -205,7 +247,11 @@ def mount_policy_routes(
         payload = api.export_policy_snapshot(version_number=version_number)
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
-    @_route(f"{prefix}/policy/migrations/preview", methods=["POST"])
+    @_route(
+        f"{prefix}/policy/migrations/preview",
+        methods=["POST"],
+        capability=SecurityCapability.OPERATE,
+    )
     async def policy_migration_preview_endpoint(request: Request) -> JSONResponse:
         body = await request.json()
         payload = api.preview_policy_migration(
@@ -226,14 +272,17 @@ def mount_policy_routes(
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
-    @_route(f"{prefix}/policy/import", methods=["POST"])
+    @_route(
+        f"{prefix}/policy/import",
+        methods=["POST"],
+        capability=SecurityCapability.ADMIN,
+    )
     async def policy_import_endpoint(request: Request) -> JSONResponse:
         try:
             body = await request.json()
         except Exception:
             body = {}
         snapshot = body.get("snapshot", body) if isinstance(body, dict) else body
-        author = str(body.get("author", "api")) if isinstance(body, dict) else "api"
         description_prefix = (
             str(body.get("description_prefix", "Imported policy snapshot"))
             if isinstance(body, dict)
@@ -241,7 +290,7 @@ def mount_policy_routes(
         )
         payload = await api.import_policy_snapshot(
             snapshot,
-            author=author,
+            author=_request_actor(request),
             description_prefix=description_prefix,
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
@@ -250,7 +299,11 @@ def mount_policy_routes(
     async def policy_versions_endpoint(request: Request) -> JSONResponse:
         return JSONResponse(api.get_policy_versions())
 
-    @_route(f"{prefix}/policy/versions/rollback", methods=["POST"])
+    @_route(
+        f"{prefix}/policy/versions/rollback",
+        methods=["POST"],
+        capability=SecurityCapability.ADMIN,
+    )
     async def policy_rollback_endpoint(request: Request) -> JSONResponse:
         body = await request.json()
         version_number = body.get("version_number", 0)
@@ -263,7 +316,11 @@ def mount_policy_routes(
         v2 = int(request.query_params.get("v2", "0"))
         return JSONResponse(api.diff_policy_versions(v1, v2))
 
-    @_route(f"{prefix}/policy/validate", methods=["POST"])
+    @_route(
+        f"{prefix}/policy/validate",
+        methods=["POST"],
+        capability=SecurityCapability.OPERATE,
+    )
     async def policy_validate_endpoint(request: Request) -> JSONResponse:
         body = await request.json()
         config = body.get("config", {})
@@ -291,7 +348,11 @@ def mount_policy_routes(
         proposal_id = request.path_params.get("proposal_id", "")
         return JSONResponse(api.get_governance_proposal(proposal_id))
 
-    @_route(f"{prefix}/policy/governance/proposals", methods=["POST"])
+    @_route(
+        f"{prefix}/policy/governance/proposals",
+        methods=["POST"],
+        capability=SecurityCapability.OPERATE,
+    )
     async def policy_governance_create_endpoint(request: Request) -> JSONResponse:
         body = await request.json()
         payload = await api.create_governance_proposal(
@@ -303,7 +364,7 @@ def mount_policy_routes(
                 else None
             ),
             description=str(body.get("description", "")),
-            author=str(body.get("author", "api")),
+            author=_request_actor(request),
             metadata=body.get("metadata")
             if isinstance(body.get("metadata"), dict)
             else None,
@@ -313,13 +374,14 @@ def mount_policy_routes(
     @_route(
         f"{prefix}/policy/governance/{{proposal_id}}/approve",
         methods=["POST"],
+        capability=SecurityCapability.ADMIN,
     )
     async def policy_governance_approve_endpoint(request: Request) -> JSONResponse:
         body = await request.json()
         proposal_id = request.path_params.get("proposal_id", "")
         payload = api.approve_governance_proposal(
             proposal_id,
-            approver=str(body.get("approver", "api")),
+            approver=_request_actor(request),
             note=str(body.get("note", body.get("reason", ""))),
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
@@ -327,6 +389,7 @@ def mount_policy_routes(
     @_route(
         f"{prefix}/policy/governance/{{proposal_id}}/assign",
         methods=["POST"],
+        capability=SecurityCapability.ADMIN,
     )
     async def policy_governance_assign_endpoint(request: Request) -> JSONResponse:
         body = await request.json()
@@ -334,7 +397,7 @@ def mount_policy_routes(
         payload = api.assign_governance_proposal(
             proposal_id,
             reviewer=str(body.get("reviewer", "")),
-            actor=str(body.get("actor", "api")),
+            actor=_request_actor(request),
             note=str(body.get("note", "")),
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
@@ -342,6 +405,7 @@ def mount_policy_routes(
     @_route(
         f"{prefix}/policy/governance/{{proposal_id}}/simulate",
         methods=["POST"],
+        capability=SecurityCapability.OPERATE,
     )
     async def policy_governance_simulate_endpoint(request: Request) -> JSONResponse:
         body = await request.json()
@@ -356,13 +420,14 @@ def mount_policy_routes(
     @_route(
         f"{prefix}/policy/governance/{{proposal_id}}/deploy",
         methods=["POST"],
+        capability=SecurityCapability.ADMIN,
     )
     async def policy_governance_deploy_endpoint(request: Request) -> JSONResponse:
         body = await request.json()
         proposal_id = request.path_params.get("proposal_id", "")
         payload = await api.deploy_governance_proposal(
             proposal_id,
-            actor=str(body.get("actor", "api")),
+            actor=_request_actor(request),
             note=str(body.get("note", body.get("reason", ""))),
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
@@ -370,6 +435,7 @@ def mount_policy_routes(
     @_route(
         f"{prefix}/policy/governance/{{proposal_id}}/reject",
         methods=["POST"],
+        capability=SecurityCapability.ADMIN,
     )
     async def policy_governance_reject_endpoint(request: Request) -> JSONResponse:
         body = await request.json()
@@ -377,20 +443,21 @@ def mount_policy_routes(
         payload = api.reject_governance_proposal(
             proposal_id,
             reason=str(body.get("reason", "")),
-            actor=str(body.get("actor", "api")),
+            actor=_request_actor(request),
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))
 
     @_route(
         f"{prefix}/policy/governance/{{proposal_id}}/withdraw",
         methods=["POST"],
+        capability=SecurityCapability.ADMIN,
     )
     async def policy_governance_withdraw_endpoint(request: Request) -> JSONResponse:
         body = await request.json()
         proposal_id = request.path_params.get("proposal_id", "")
         payload = api.withdraw_governance_proposal(
             proposal_id,
-            actor=str(body.get("actor", "api")),
+            actor=_request_actor(request),
             note=str(body.get("note", body.get("reason", ""))),
         )
         return JSONResponse(payload, status_code=_status_code_from_payload(payload))

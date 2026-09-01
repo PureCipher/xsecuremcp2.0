@@ -76,7 +76,12 @@ from fastmcp.server.security.alerts import (
     SecurityEventType,
     SeverityFilter,
 )
-from fastmcp.server.security.http import SecurityAPI, mount_security_routes
+from fastmcp.server.security.http import (
+    SecurityAPI,
+    SecurityAuthorizer,
+    SecurityCapability,
+    mount_security_routes,
+)
 from fastmcp.server.security.config import (
     AlertConfig,
     CRLConfig,
@@ -350,6 +355,8 @@ __all__ = [
     "SecureMCPCLI",
     "SecureMCPClient",
     "SecurityAPI",
+    "SecurityAuthorizer",
+    "SecurityCapability",
     "SecurityCheckResult",
     "SecurityConfig",
     "SecurityContext",

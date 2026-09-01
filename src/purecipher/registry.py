@@ -106,7 +106,7 @@ from securemcp.config import (
     SecurityConfig,
     ToolMarketplaceConfig,
 )
-from securemcp.http import SecurityAPI
+from securemcp.http import SecurityAPI, SecurityAuthorizer, SecurityCapability
 
 logger = logging.getLogger(__name__)
 
@@ -420,6 +420,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         security_api_require_auth: bool | None = None,
         security_api_bearer_token: str | None = None,
         security_api_auth_verifier: Any = None,
+        security_api_authorizer: SecurityAuthorizer | None = None,
         # Control-plane opt-outs. As of Iter8 the registry's default
         # SecurityConfig wires all five SecureMCP control planes
         # (policy + contracts + consent + provenance + reflexive)
@@ -581,6 +582,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             security_api_require_auth=security_api_require_auth,
             security_api_bearer_token=security_api_bearer_token,
             security_api_auth_verifier=security_api_auth_verifier,
+            security_api_authorizer=security_api_authorizer,
             **kwargs,
         )
 
@@ -624,6 +626,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             "actor": session.username,
             "role": session.role.value,
             "auth": "registry-session",
+            "capabilities": [SecurityCapability.ADMIN.value],
         }
 
     @property

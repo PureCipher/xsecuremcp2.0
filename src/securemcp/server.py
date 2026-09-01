@@ -9,7 +9,7 @@ from mcp.server.lowlevel.server import LifespanResultT
 from fastmcp import FastMCP
 from fastmcp.server.security.orchestrator import SecurityContext
 from securemcp.config import SecurityConfig
-from securemcp.http import SecurityAPI, mount_security_routes
+from securemcp.http import SecurityAPI, SecurityAuthorizer, mount_security_routes
 from securemcp.integration import (
     attach_security,
     attach_security_context,
@@ -27,6 +27,8 @@ class SecureMCP(FastMCP[LifespanResultT], Generic[LifespanResultT]):
 
     Example:
         ```python
+        import os
+
         from securemcp import SecureMCP
         from securemcp.config import RegistryConfig, SecurityConfig
 
@@ -34,6 +36,7 @@ class SecureMCP(FastMCP[LifespanResultT], Generic[LifespanResultT]):
             "my-secure-server",
             security=SecurityConfig(registry=RegistryConfig()),
             mount_security_api=True,
+            security_api_bearer_token=os.environ["SECUREMCP_API_TOKEN"],
         )
         ```
     """
@@ -49,6 +52,7 @@ class SecureMCP(FastMCP[LifespanResultT], Generic[LifespanResultT]):
         security_api_require_auth: bool = True,
         security_api_bearer_token: str | None = None,
         security_api_auth_verifier: Any = None,
+        security_api_authorizer: SecurityAuthorizer | None = None,
         bypass_stdio: bool | None = None,
         security_settings: SecuritySettings | None = None,
         register_gateway_tools: bool = False,
@@ -77,6 +81,7 @@ class SecureMCP(FastMCP[LifespanResultT], Generic[LifespanResultT]):
                 require_auth=security_api_require_auth,
                 bearer_token=security_api_bearer_token,
                 auth_verifier=security_api_auth_verifier,
+                authorizer=security_api_authorizer,
             )
 
     @property
@@ -136,6 +141,7 @@ class SecureMCP(FastMCP[LifespanResultT], Generic[LifespanResultT]):
         require_auth: bool = True,
         bearer_token: str | None = None,
         auth_verifier: Any = None,
+        authorizer: SecurityAuthorizer | None = None,
     ) -> SecurityAPI:
         """Mount SecureMCP HTTP routes on this server.
 
@@ -151,6 +157,7 @@ class SecureMCP(FastMCP[LifespanResultT], Generic[LifespanResultT]):
             require_auth=require_auth,
             bearer_token=bearer_token,
             auth_verifier=auth_verifier,
+            authorizer=authorizer,
         )
         self._securemcp_api = mounted_api
         return mounted_api
