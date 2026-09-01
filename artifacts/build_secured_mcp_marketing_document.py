@@ -7,7 +7,6 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 
-
 ROOT = Path("/Users/purecipher/code/xsecuremcp2.0/artifacts")
 OUTPUT = ROOT / "Secured MCP Registry - Marketing Overview.docx"
 FLOW = ROOT / "secured-mcp-high-level-flow.png"
@@ -49,7 +48,12 @@ def cell_margins(cell, top=120, start=150, bottom=120, end=150):
     if tc_mar is None:
         tc_mar = OxmlElement("w:tcMar")
         tc_pr.append(tc_mar)
-    for name, value in (("top", top), ("start", start), ("bottom", bottom), ("end", end)):
+    for name, value in (
+        ("top", top),
+        ("start", start),
+        ("bottom", bottom),
+        ("end", end),
+    ):
         node = tc_mar.find(qn(f"w:{name}"))
         if node is None:
             node = OxmlElement(f"w:{name}")
@@ -68,8 +72,17 @@ def set_cell_width(cell, twips):
     tc_w.set(qn("w:type"), "dxa")
 
 
-def paragraph(doc, text="", size=11, bold=False, color=BLACK, after=7, before=0,
-              align=WD_ALIGN_PARAGRAPH.LEFT, italic=False):
+def paragraph(
+    doc,
+    text="",
+    size=11,
+    bold=False,
+    color=BLACK,
+    after=7,
+    before=0,
+    align=WD_ALIGN_PARAGRAPH.LEFT,
+    italic=False,
+):
     p = doc.add_paragraph()
     p.alignment = align
     p.paragraph_format.space_before = Pt(before)
@@ -154,12 +167,36 @@ def use_case(doc, number, title, situation, value):
 def comparison_table(doc):
     rows = [
         ("Capability", "Typical registry or catalogue", "Secured MCP Registry"),
-        ("Discovery", "Find and install available MCP servers", "Discover approved services for the right audience"),
-        ("Trust", "Publisher and package metadata", "Identity, certification, attestation and version status"),
-        ("Access", "Configured by the user or client", "Policy, consent, contracts and client identity"),
-        ("Runtime", "Connection and operational visibility", "Continuous behavioural risk assessment and adaptive controls"),
-        ("Lifecycle", "Publish, update or remove listings", "Approve, suspend, revoke, deprecate and notify"),
-        ("Evidence", "Logs vary by platform", "Provenance, audit and compliance-ready records"),
+        (
+            "Discovery",
+            "Find and install available MCP servers",
+            "Discover approved services for the right audience",
+        ),
+        (
+            "Trust",
+            "Publisher and package metadata",
+            "Identity, certification, attestation and version status",
+        ),
+        (
+            "Access",
+            "Configured by the user or client",
+            "Policy, consent, contracts and client identity",
+        ),
+        (
+            "Runtime",
+            "Connection and operational visibility",
+            "Continuous behavioural risk assessment and adaptive controls",
+        ),
+        (
+            "Lifecycle",
+            "Publish, update or remove listings",
+            "Approve, suspend, revoke, deprecate and notify",
+        ),
+        (
+            "Evidence",
+            "Logs vary by platform",
+            "Provenance, audit and compliance-ready records",
+        ),
     ]
     widths = [1700, 3400, 4020]
     table = doc.add_table(rows=0, cols=3)
@@ -246,7 +283,11 @@ paragraph(doc, "PureCipher", 10, False, GRAY, after=0)
 # Page 2 — market problem and promise.
 page_break(doc)
 kicker(doc, "The opportunity")
-heading(doc, "AI agents are becoming more capable. Their connections must become more governable.", 1)
+heading(
+    doc,
+    "AI agents are becoming more capable. Their connections must become more governable.",
+    1,
+)
 paragraph(
     doc,
     "Model Context Protocol makes it easier for AI applications to reach tools, APIs and enterprise systems. That speed creates value—but it also introduces a new governance question: which capabilities should an AI agent be allowed to discover and use, under what conditions, and with what evidence?",
@@ -254,10 +295,30 @@ paragraph(
     after=11,
 )
 heading(doc, "The risk of unmanaged MCP adoption", 2)
-feature(doc, 1, "Unknown trust", "A useful server can still have an unclear publisher, unreviewed version or excessive permissions.")
-feature(doc, 2, "Fragmented control", "Teams can configure MCP services independently, creating inconsistent approval and security practices.")
-feature(doc, 3, "Static decisions", "A service that was safe at installation may become risky as context, behaviour or credentials change.")
-feature(doc, 4, "Limited accountability", "Without common provenance and audit records, important actions are harder to explain and investigate.")
+feature(
+    doc,
+    1,
+    "Unknown trust",
+    "A useful server can still have an unclear publisher, unreviewed version or excessive permissions.",
+)
+feature(
+    doc,
+    2,
+    "Fragmented control",
+    "Teams can configure MCP services independently, creating inconsistent approval and security practices.",
+)
+feature(
+    doc,
+    3,
+    "Static decisions",
+    "A service that was safe at installation may become risky as context, behaviour or credentials change.",
+)
+feature(
+    doc,
+    4,
+    "Limited accountability",
+    "Without common provenance and audit records, important actions are harder to explain and investigate.",
+)
 callout(
     doc,
     "SecureMCP turns trust into an operating model.",
@@ -280,22 +341,77 @@ pic.alignment = WD_ALIGN_PARAGRAPH.CENTER
 pic.paragraph_format.space_before = Pt(6)
 pic.paragraph_format.space_after = Pt(8)
 pic.add_run().add_picture(str(FLOW), width=Inches(6.55))
-feature(doc, 1, "Publish", "A publisher submits an MCP service with ownership, purpose, permissions and version information.")
-feature(doc, 2, "Verify and approve", "Identity, safety evidence, certification and organizational requirements are checked.")
-feature(doc, 3, "Discover", "Eligible AI agents and applications find approved capabilities through a trusted catalogue.")
-feature(doc, 4, "Use safely", "The MCP Client connects to the approved server while policy and consent govern the requested action.")
-feature(doc, 5, "Monitor and adapt", "SecureMCP records activity and can allow, restrict, require approval or stop access as risk changes.")
+feature(
+    doc,
+    1,
+    "Publish",
+    "A publisher submits an MCP service with ownership, purpose, permissions and version information.",
+)
+feature(
+    doc,
+    2,
+    "Verify and approve",
+    "Identity, safety evidence, certification and organizational requirements are checked.",
+)
+feature(
+    doc,
+    3,
+    "Discover",
+    "Eligible AI agents and applications find approved capabilities through a trusted catalogue.",
+)
+feature(
+    doc,
+    4,
+    "Use safely",
+    "The MCP Client connects to the approved server while policy and consent govern the requested action.",
+)
+feature(
+    doc,
+    5,
+    "Monitor and adapt",
+    "SecureMCP records activity and can allow, restrict, require approval or stop access as risk changes.",
+)
 
 # Page 4 — differentiators.
 page_break(doc)
 kicker(doc, "Why SecureMCP")
 heading(doc, "More than a directory: a governed control plane for MCP", 1)
-feature(doc, 1, "Trust before discovery", "Only approved publishers, services and versions become visible to the intended users and agents.")
-feature(doc, 2, "Policy during execution", "A discoverable service can still be limited by user, agent, purpose, environment, data sensitivity or action risk.")
-feature(doc, 3, "Consent and contracts", "Access reflects explicit authority and an agreed purpose—not installation alone.")
-feature(doc, 4, "Reflexive protection", "The Reflexive Core compares current activity with expected behaviour and adapts the response when risk changes.")
-feature(doc, 5, "Traceable accountability", "Provenance, audit, alerts and compliance evidence preserve who requested what, why a decision was made and what happened.")
-feature(doc, 6, "Lifecycle enforcement", "Organizations can approve, suspend, revoke, deprecate or retire services and versions across their lifecycle.")
+feature(
+    doc,
+    1,
+    "Trust before discovery",
+    "Only approved publishers, services and versions become visible to the intended users and agents.",
+)
+feature(
+    doc,
+    2,
+    "Policy during execution",
+    "A discoverable service can still be limited by user, agent, purpose, environment, data sensitivity or action risk.",
+)
+feature(
+    doc,
+    3,
+    "Consent and contracts",
+    "Access reflects explicit authority and an agreed purpose—not installation alone.",
+)
+feature(
+    doc,
+    4,
+    "Reflexive protection",
+    "The Reflexive Core compares current activity with expected behaviour and adapts the response when risk changes.",
+)
+feature(
+    doc,
+    5,
+    "Traceable accountability",
+    "Provenance, audit, alerts and compliance evidence preserve who requested what, why a decision was made and what happened.",
+)
+feature(
+    doc,
+    6,
+    "Lifecycle enforcement",
+    "Organizations can approve, suspend, revoke, deprecate or retire services and versions across their lifecycle.",
+)
 heading(doc, "The business result", 2)
 callout(
     doc,
@@ -307,22 +423,78 @@ callout(
 page_break(doc)
 kicker(doc, "Business value")
 heading(doc, "What organizations gain", 1)
-feature(doc, 1, "Accelerated innovation", "Publishers and internal teams can bring trusted MCP capabilities to users faster.")
-feature(doc, 2, "Reduced integration risk", "Approved versions, permissions and identities replace ad hoc connections and unknown dependencies.")
-feature(doc, 3, "Consistent governance", "One operating model can serve Claude Code, Codex and other standards-compliant MCP clients.")
-feature(doc, 4, "Audit-ready evidence", "Important identities, decisions and outcomes remain available for review, investigation and assurance.")
+feature(
+    doc,
+    1,
+    "Accelerated innovation",
+    "Publishers and internal teams can bring trusted MCP capabilities to users faster.",
+)
+feature(
+    doc,
+    2,
+    "Reduced integration risk",
+    "Approved versions, permissions and identities replace ad hoc connections and unknown dependencies.",
+)
+feature(
+    doc,
+    3,
+    "Consistent governance",
+    "One operating model can serve Claude Code, Codex and other standards-compliant MCP clients.",
+)
+feature(
+    doc,
+    4,
+    "Audit-ready evidence",
+    "Important identities, decisions and outcomes remain available for review, investigation and assurance.",
+)
 heading(doc, "Representative use cases", 1)
-use_case(doc, 1, "Enterprise-approved AI tools", "Employees want AI clients to use Jira, GitHub, databases and internal APIs.", "Provide a curated catalogue of reviewed services and discourage or block unapproved alternatives.")
-use_case(doc, 2, "Regulated financial-services agent", "An AI agent analyzes customers or transactions using sensitive systems.", "Apply purpose limits, consent, policy and audit evidence so access matches the approved task.")
-use_case(doc, 3, "Healthcare workflow assistant", "A clinical or administrative assistant needs controlled access to patient-related services.", "Approve specific service versions and limit access by role, purpose and environment.")
+use_case(
+    doc,
+    1,
+    "Enterprise-approved AI tools",
+    "Employees want AI clients to use Jira, GitHub, databases and internal APIs.",
+    "Provide a curated catalogue of reviewed services and discourage or block unapproved alternatives.",
+)
+use_case(
+    doc,
+    2,
+    "Regulated financial-services agent",
+    "An AI agent analyzes customers or transactions using sensitive systems.",
+    "Apply purpose limits, consent, policy and audit evidence so access matches the approved task.",
+)
+use_case(
+    doc,
+    3,
+    "Healthcare workflow assistant",
+    "A clinical or administrative assistant needs controlled access to patient-related services.",
+    "Approve specific service versions and limit access by role, purpose and environment.",
+)
 
 # Page 6 — additional use cases and position.
 page_break(doc)
 kicker(doc, "Secure adoption at scale")
 heading(doc, "Use cases across the MCP lifecycle", 1)
-use_case(doc, 4, "Third-party vendor onboarding", "A SaaS provider wants its MCP service to reach enterprise AI agents.", "Review publisher identity, capability, permissions and version evidence before publication.")
-use_case(doc, 5, "High-risk production action", "An agent requests a deployment, payment, account change or destructive infrastructure action.", "Check policy and consent, use restricted execution where appropriate and stop abnormal behaviour.")
-use_case(doc, 6, "Rapid incident response", "A trusted version or publisher credential becomes compromised.", "Revoke trust, suspend the listing, notify affected clients and prevent new connections.")
+use_case(
+    doc,
+    4,
+    "Third-party vendor onboarding",
+    "A SaaS provider wants its MCP service to reach enterprise AI agents.",
+    "Review publisher identity, capability, permissions and version evidence before publication.",
+)
+use_case(
+    doc,
+    5,
+    "High-risk production action",
+    "An agent requests a deployment, payment, account change or destructive infrastructure action.",
+    "Check policy and consent, use restricted execution where appropriate and stop abnormal behaviour.",
+)
+use_case(
+    doc,
+    6,
+    "Rapid incident response",
+    "A trusted version or publisher credential becomes compromised.",
+    "Revoke trust, suspend the listing, notify affected clients and prevent new connections.",
+)
 heading(doc, "From registry to control plane", 1)
 comparison_table(doc)
 
@@ -330,9 +502,24 @@ comparison_table(doc)
 page_break(doc)
 kicker(doc, "Designed for the way organizations operate")
 heading(doc, "One trust model. Multiple deployment choices.", 1)
-feature(doc, 1, "Internal registry", "Create a private catalogue of approved MCP services for employees, developers and enterprise AI agents.")
-feature(doc, 2, "Curated public service", "Publish approved services to a controlled audience while maintaining certification and lifecycle status.")
-feature(doc, 3, "Federated trust environment", "Share approved trust information across business units or partners while preserving local policy decisions.")
+feature(
+    doc,
+    1,
+    "Internal registry",
+    "Create a private catalogue of approved MCP services for employees, developers and enterprise AI agents.",
+)
+feature(
+    doc,
+    2,
+    "Curated public service",
+    "Publish approved services to a controlled audience while maintaining certification and lifecycle status.",
+)
+feature(
+    doc,
+    3,
+    "Federated trust environment",
+    "Share approved trust information across business units or partners while preserving local policy decisions.",
+)
 heading(doc, "Works across the MCP ecosystem", 2)
 paragraph(
     doc,
@@ -346,15 +533,44 @@ callout(
     "Public directories optimize for broad discovery. SecureMCP optimizes for governed organizational adoption—before publication, during discovery and throughout execution.",
 )
 heading(doc, "Start with a focused adoption path", 1)
-feature(doc, 1, "Choose a priority workflow", "Select one valuable MCP-enabled use case with clear users, systems and business outcomes.")
-feature(doc, 2, "Define the trust requirements", "Identify the publishers, versions, permissions, policies, consent and evidence required.")
-feature(doc, 3, "Publish an approved catalogue", "Make trusted capabilities easy for eligible AI clients to discover and use.")
-feature(doc, 4, "Expand with evidence", "Use runtime insight, audit records and operating experience to scale adoption responsibly.")
+feature(
+    doc,
+    1,
+    "Choose a priority workflow",
+    "Select one valuable MCP-enabled use case with clear users, systems and business outcomes.",
+)
+feature(
+    doc,
+    2,
+    "Define the trust requirements",
+    "Identify the publishers, versions, permissions, policies, consent and evidence required.",
+)
+feature(
+    doc,
+    3,
+    "Publish an approved catalogue",
+    "Make trusted capabilities easy for eligible AI clients to discover and use.",
+)
+feature(
+    doc,
+    4,
+    "Expand with evidence",
+    "Use runtime insight, audit records and operating experience to scale adoption responsibly.",
+)
 paragraph(doc, "SecureMCP", 18, True, PURPLE_DARK, after=2)
-paragraph(doc, "Trust the capability. Govern the action. Preserve the evidence.", 12, True, NAVY, after=0)
+paragraph(
+    doc,
+    "Trust the capability. Govern the action. Preserve the evidence.",
+    12,
+    True,
+    NAVY,
+    after=0,
+)
 
 doc.core_properties.title = "Secured MCP Registry - Marketing Overview"
-doc.core_properties.subject = "Marketing overview for the PureCipher Secured MCP Registry"
+doc.core_properties.subject = (
+    "Marketing overview for the PureCipher Secured MCP Registry"
+)
 doc.core_properties.author = "PureCipher"
 doc.save(OUTPUT)
 print(OUTPUT)

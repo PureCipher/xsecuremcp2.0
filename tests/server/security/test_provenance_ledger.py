@@ -308,7 +308,7 @@ class TestProvenanceLedgerGenesisNonce:
         # should reject because it no longer matches the ledger's nonce
         # AND it's not the legacy form (the ledger already has a real nonce).
         legit._records[0] = type(legit._records[0])(
-            **{
+            **{  # ty: ignore[invalid-argument-type]
                 **{
                     f.name: getattr(legit._records[0], f.name)
                     for f in legit._records[0].__dataclass_fields__.values()
@@ -332,7 +332,7 @@ class TestProvenanceLedgerGenesisNonce:
             action=ProvenanceAction.TOOL_CALLED, actor_id="real", resource_id="r"
         )
         legit2._records[0] = type(legit2._records[0])(
-            **{
+            **{  # ty: ignore[invalid-argument-type]
                 **{
                     f.name: getattr(legit2._records[0], f.name)
                     for f in legit2._records[0].__dataclass_fields__.values()

@@ -120,16 +120,15 @@ class DashboardDataBridge:
                 }
             ]
 
-        entries = []
-        for snap in history[-7:]:  # last 7 for chart
-            entries.append(
-                {
-                    "time": snap.generated_at.strftime("%H:%M"),
-                    "score": round(snap.compliance_score, 2),
-                    "violations": snap.critical_count + snap.degraded_count,
-                    "checks": snap.component_count,
-                }
-            )
+        entries = [
+            {
+                "time": snap.generated_at.strftime("%H:%M"),
+                "score": round(snap.compliance_score, 2),
+                "violations": snap.critical_count + snap.degraded_count,
+                "checks": snap.component_count,
+            }
+            for snap in history[-7:]
+        ]
         # Mark last entry as "Now"
         if entries:
             entries[-1]["time"] = "Now"

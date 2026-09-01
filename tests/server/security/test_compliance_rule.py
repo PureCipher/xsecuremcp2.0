@@ -319,6 +319,7 @@ class TestComplianceRuleDeclarative:
                 ],
             }
         )
+        assert isinstance(policy, ComplianceRulePolicy)
 
         denied = await policy.evaluate(_ctx(tags=frozenset({"secure"})))
         assert denied.decision == PolicyDecision.DENY
@@ -398,6 +399,7 @@ class TestBundleComplianceRuleIntegration:
         assert core_config["type"] == "compliance_rule"
 
         provider = load_policy(core_config)
+        assert isinstance(provider, ComplianceRulePolicy)
 
         untagged = await provider.evaluate(_ctx(tags=frozenset({"safe"})))
         assert untagged.decision == PolicyDecision.DEFER
@@ -424,6 +426,7 @@ class TestBundleComplianceRuleIntegration:
         assert core_config["type"] == "compliance_rule"
 
         provider = load_policy(core_config)
+        assert isinstance(provider, ComplianceRulePolicy)
 
         untagged = await provider.evaluate(_ctx(tags=frozenset({"safe"})))
         assert untagged.decision == PolicyDecision.DEFER
@@ -461,6 +464,7 @@ class TestBundleComplianceRuleIntegration:
         assert core_config["type"] == "compliance_rule"
 
         provider = load_policy(core_config)
+        assert isinstance(provider, ComplianceRulePolicy)
 
         untagged = await provider.evaluate(_ctx(tags=frozenset({"safe"})))
         assert untagged.decision == PolicyDecision.DEFER
@@ -498,6 +502,7 @@ class TestBundleComplianceRuleIntegration:
         assert core_config["type"] == "compliance_rule"
 
         provider = load_policy(core_config)
+        assert isinstance(provider, ComplianceRulePolicy)
 
         untagged = await provider.evaluate(_ctx(tags=frozenset({"safe"})))
         assert untagged.decision == PolicyDecision.DEFER
@@ -541,6 +546,7 @@ class TestBundleComplianceRuleIntegration:
         assert core_config["type"] == "compliance_rule"
 
         provider = load_policy(core_config)
+        assert isinstance(provider, ComplianceRulePolicy)
 
         untagged = await provider.evaluate(_ctx(tags=frozenset({"safe"})))
         assert untagged.decision == PolicyDecision.DEFER

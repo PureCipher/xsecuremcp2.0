@@ -36,7 +36,7 @@ import secrets
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 from purecipher.pgdb import connection, dict_row, is_postgres_dsn
 
@@ -248,6 +248,7 @@ class RegistryClientStore:
             self._ensure_schema()
 
     def _ensure_schema(self) -> None:
+        assert self._db_path is not None
         with connection(self._db_path) as conn:
             conn.execute(
                 """
@@ -355,7 +356,7 @@ class RegistryClientStore:
                 (client_id,),
             )
             row = cur.fetchone()
-        return _row_to_client(row) if row else None
+        return _row_to_client(cast(dict[str, Any], row)) if row else None
 
     def get_client_by_slug(self, slug: str) -> RegistryClient | None:
         if not is_postgres_dsn(self._db_path):
@@ -369,7 +370,7 @@ class RegistryClientStore:
                 (slug,),
             )
             row = cur.fetchone()
-        return _row_to_client(row) if row else None
+        return _row_to_client(cast(dict[str, Any], row)) if row else None
 
     def list_clients(
         self,
@@ -411,7 +412,7 @@ class RegistryClientStore:
                     (int(limit),),
                 )
             rows = cur.fetchall()
-        return [_row_to_client(r) for r in rows]
+        return [_row_to_client(cast(dict[str, Any], r)) for r in rows]
 
     def update_client(
         self,
@@ -601,7 +602,7 @@ class RegistryClientStore:
                 (client_id,),
             )
             rows = cur.fetchall()
-        tokens = [_row_to_token(r) for r in rows]
+        tokens = [_row_to_token(cast(dict[str, Any], r)) for r in rows]
         if not include_revoked:
             tokens = [t for t in tokens if t.revoked_at is None]
         return tokens
@@ -662,7 +663,7 @@ class RegistryClientStore:
                 (token_id,),
             )
             row = cur.fetchone()
-        return _row_to_token(row) if row else None
+        return _row_to_token(cast(dict[str, Any], row)) if row else None
 
     def _get_token_by_hash(self, secret_hash: str) -> RegistryClientToken | None:
         if not is_postgres_dsn(self._db_path):
@@ -676,7 +677,7 @@ class RegistryClientStore:
                 (secret_hash,),
             )
             row = cur.fetchone()
-        return _row_to_token(row) if row else None
+        return _row_to_token(cast(dict[str, Any], row)) if row else None
 
     def _mark_token_used(self, token_id: str) -> None:
         if not is_postgres_dsn(self._db_path):

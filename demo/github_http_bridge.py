@@ -48,11 +48,15 @@ TOOLSETS = os.getenv("GITHUB_TOOLSETS", "")
 
 def main() -> int:
     if shutil.which("docker") is None:
-        sys.exit("docker not found on PATH. Install Docker Desktop (or set "
-                 "GITHUB_MCP_IMAGE to a locally available image).")
+        sys.exit(
+            "docker not found on PATH. Install Docker Desktop (or set "
+            "GITHUB_MCP_IMAGE to a locally available image)."
+        )
     if not TOKEN:
-        sys.exit("GITHUB_PERSONAL_ACCESS_TOKEN is not set. Export a fresh, "
-                 "scoped GitHub PAT and re-run.")
+        sys.exit(
+            "GITHUB_PERSONAL_ACCESS_TOKEN is not set. Export a fresh, "
+            "scoped GitHub PAT and re-run."
+        )
 
     from fastmcp import FastMCP
     from fastmcp.client.transports.stdio import StdioTransport
@@ -65,7 +69,7 @@ def main() -> int:
     if TOOLSETS:
         docker_args += ["-e", "GITHUB_TOOLSETS"]
         passthrough_env["GITHUB_TOOLSETS"] = TOOLSETS
-    docker_args += [IMAGE, "stdio"]   # <-- the subcommand the registry omits
+    docker_args += [IMAGE, "stdio"]  # <-- the subcommand the registry omits
 
     transport = StdioTransport(command="docker", args=docker_args, env=passthrough_env)
     bridge = FastMCP.as_proxy(transport, name="GitHub MCP Bridge")

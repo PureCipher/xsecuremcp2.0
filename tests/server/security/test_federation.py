@@ -598,12 +598,14 @@ class TestBroadcastRevocation:
         fed.add_peer("a", endpoint="https://a")
         # No transport yet — broadcast is local-only.
         fed.broadcast_revocation("tool-1")
+        assert fed.last_broadcast_result is not None
         assert fed.last_broadcast_result.transport_configured is False
 
         # Wire a transport after construction.
         transport = _RecordingTransport()
         fed.set_broadcast_transport(transport)
         fed.broadcast_revocation("tool-2")
+        assert fed.last_broadcast_result is not None
         assert fed.last_broadcast_result.transport_configured is True
         assert len(transport.calls) == 1
 

@@ -176,14 +176,13 @@ def export_chain_dump(
         A JSON-safe dict containing the full chain with
         integrity metadata.
     """
-    chain_records = []
-    for rec in records:
-        chain_records.append(
-            {
-                **rec.to_dict(),
-                "computed_hash": rec.compute_hash(),
-            }
-        )
+    chain_records = [
+        {
+            **rec.to_dict(),
+            "computed_hash": rec.compute_hash(),
+        }
+        for rec in records
+    ]
 
     # Compute overall chain digest
     chain_digest = ""

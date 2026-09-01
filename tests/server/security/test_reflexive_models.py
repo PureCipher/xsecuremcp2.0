@@ -43,7 +43,7 @@ class TestDriftEvent:
     def test_drift_event_frozen(self):
         event = DriftEvent()
         try:
-            event.severity = DriftSeverity.CRITICAL  # type: ignore[misc]
+            event.severity = DriftSeverity.CRITICAL  # ty: ignore[invalid-assignment]
             assert False, "Should be frozen"
         except AttributeError:
             pass

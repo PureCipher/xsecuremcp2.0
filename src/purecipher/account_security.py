@@ -91,6 +91,7 @@ class RegistryAccountSecurityStore:
         self.seed_users(seed_users)
 
     def _ensure_schema(self) -> None:
+        assert self._db_path is not None
         with connection(self._db_path) as conn:
             conn.execute(
                 """

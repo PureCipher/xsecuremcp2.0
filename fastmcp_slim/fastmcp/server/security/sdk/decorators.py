@@ -223,13 +223,14 @@ class SecurityDecorator:
         # Bare form: @security applied directly to a function.
         if callable(tool_name) and config is None and not config_kwargs:
             fn = tool_name
-            return self._wrap(fn, fn.__name__, None, {})
+            return self._wrap(fn, getattr(fn, "__name__", "secured_tool"), None, {})
 
         # Parameterized form: @security(name, **kwargs) → returns a decorator.
         explicit_name = tool_name if isinstance(tool_name, str) else None
 
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
-            return self._wrap(fn, explicit_name or fn.__name__, config, config_kwargs)
+            name = explicit_name or getattr(fn, "__name__", "secured_tool")
+            return self._wrap(fn, name, config, config_kwargs)
 
         return decorator
 
@@ -273,7 +274,7 @@ class SecurityDecorator:
                 self._record_success(tool_name, cfg, args, kwargs, result, check)
                 return result
 
-            async_wrapper.__wrapped_security_config__ = cfg  # type: ignore[attr-defined]
+            async_wrapper.__dict__["__wrapped_security_config__"] = cfg
             return async_wrapper
 
         @functools.wraps(fn)
@@ -287,7 +288,7 @@ class SecurityDecorator:
             self._record_success(tool_name, cfg, args, kwargs, result, check)
             return result
 
-        sync_wrapper.__wrapped_security_config__ = cfg  # type: ignore[attr-defined]
+        sync_wrapper.__dict__["__wrapped_security_config__"] = cfg
         return sync_wrapper
 
     def _require_client(self) -> None:

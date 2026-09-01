@@ -2,11 +2,9 @@ from pathlib import Path
 
 from docx import Document
 from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
-from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
-
 
 ROOT = Path(__file__).resolve().parent
 OUTPUT = ROOT / "mcp-registry-comparison-and-use-cases.docx"
@@ -77,7 +75,12 @@ def set_cell_margins(cell, top=100, start=120, bottom=100, end=120):
     if tc_mar is None:
         tc_mar = OxmlElement("w:tcMar")
         tc_pr.append(tc_mar)
-    for margin, value in (("top", top), ("start", start), ("bottom", bottom), ("end", end)):
+    for margin, value in (
+        ("top", top),
+        ("start", start),
+        ("bottom", bottom),
+        ("end", end),
+    ):
         node = tc_mar.find(qn(f"w:{margin}"))
         if node is None:
             node = OxmlElement(f"w:{margin}")
@@ -335,12 +338,42 @@ for heading, role, strength, boundary, position in comparisons:
 add_heading(doc, "Comparison at a glance", 1)
 headers = ["Option", "Best suited to", "Discovery model", "Governance emphasis"]
 rows = [
-    ["Official MCP Registry", "Open ecosystem metadata", "Public API and registry", "Publisher metadata and ecosystem reporting"],
-    ["GitHub MCP Registry", "Developer self-service", "GitHub-integrated search", "Enterprise allowlists in supported GitHub environments"],
-    ["Docker MCP Catalog", "Packaged deployment", "Curated Docker catalogue", "Container execution and operational consistency"],
-    ["Smithery", "Managed connections", "Open registry and connection API", "OAuth, credentials and session lifecycle"],
-    ["Glama", "Hosted MCP operations", "Directory plus deployment", "Gateway, logs, health and per-tool controls"],
-    ["Secured MCP Registry", "Governed organizational adoption", "Approved internal/public catalogue", "Policy, consent, contracts, provenance and adaptive risk"],
+    [
+        "Official MCP Registry",
+        "Open ecosystem metadata",
+        "Public API and registry",
+        "Publisher metadata and ecosystem reporting",
+    ],
+    [
+        "GitHub MCP Registry",
+        "Developer self-service",
+        "GitHub-integrated search",
+        "Enterprise allowlists in supported GitHub environments",
+    ],
+    [
+        "Docker MCP Catalog",
+        "Packaged deployment",
+        "Curated Docker catalogue",
+        "Container execution and operational consistency",
+    ],
+    [
+        "Smithery",
+        "Managed connections",
+        "Open registry and connection API",
+        "OAuth, credentials and session lifecycle",
+    ],
+    [
+        "Glama",
+        "Hosted MCP operations",
+        "Directory plus deployment",
+        "Gateway, logs, health and per-tool controls",
+    ],
+    [
+        "Secured MCP Registry",
+        "Governed organizational adoption",
+        "Approved internal/public catalogue",
+        "Policy, consent, contracts, provenance and adaptive risk",
+    ],
 ]
 
 table = doc.add_table(rows=1, cols=4)
@@ -503,12 +536,24 @@ add_number(
 
 add_heading(doc, "Sources", 1)
 sources = [
-    ("Anthropic: Connect Claude Code to tools via MCP", "https://docs.anthropic.com/en/docs/claude-code/mcp"),
-    ("OpenAI Codex Manual: Model Context Protocol", "https://learn.chatgpt.com/docs/extend/mcp"),
+    (
+        "Anthropic: Connect Claude Code to tools via MCP",
+        "https://docs.anthropic.com/en/docs/claude-code/mcp",
+    ),
+    (
+        "OpenAI Codex Manual: Model Context Protocol",
+        "https://learn.chatgpt.com/docs/extend/mcp",
+    ),
     ("Official MCP Registry API", "https://registry.modelcontextprotocol.io/docs"),
     ("Official MCP Registry FAQ", "https://modelcontextprotocol.io/registry/faq"),
-    ("GitHub: Meet the GitHub MCP Registry", "https://github.blog/ai-and-ml/github-copilot/meet-the-github-mcp-registry-the-fastest-way-to-discover-mcp-servers/"),
-    ("GitHub: Internal MCP registry and allowlist controls", "https://github.blog/changelog/2025-09-12-internal-mcp-registry-and-allowlist-controls-for-vs-code-insiders/"),
+    (
+        "GitHub: Meet the GitHub MCP Registry",
+        "https://github.blog/ai-and-ml/github-copilot/meet-the-github-mcp-registry-the-fastest-way-to-discover-mcp-servers/",
+    ),
+    (
+        "GitHub: Internal MCP registry and allowlist controls",
+        "https://github.blog/changelog/2025-09-12-internal-mcp-registry-and-allowlist-controls-for-vs-code-insiders/",
+    ),
     ("Docker MCP Registry", "https://github.com/docker/mcp-registry"),
     ("Smithery documentation", "https://smithery.ai/docs"),
     ("Smithery Connect", "https://smithery.ai/docs/use/connect"),

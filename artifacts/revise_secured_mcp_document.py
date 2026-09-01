@@ -5,10 +5,13 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 
-
 SOURCE = Path("/Users/purecipher/Downloads/Secured MCP Registry.docx")
-OUTPUT = Path("/Users/purecipher/code/xsecuremcp2.0/artifacts/Secured MCP Registry - Executive Overview.docx")
-FLOW = Path("/Users/purecipher/code/xsecuremcp2.0/artifacts/secured-mcp-high-level-flow.png")
+OUTPUT = Path(
+    "/Users/purecipher/code/xsecuremcp2.0/artifacts/Secured MCP Registry - Executive Overview.docx"
+)
+FLOW = Path(
+    "/Users/purecipher/code/xsecuremcp2.0/artifacts/secured-mcp-high-level-flow.png"
+)
 
 
 def set_arial(run, size=None, bold=None, color=None):
@@ -248,6 +251,8 @@ for paragraph in list(doc.paragraphs):
     elif paragraph.style.name.startswith("Heading"):
         counter = None
 
-doc.core_properties.title = "Secured MCP Registry - Executive Overview and User Journeys"
+doc.core_properties.title = (
+    "Secured MCP Registry - Executive Overview and User Journeys"
+)
 doc.save(OUTPUT)
 print(OUTPUT)

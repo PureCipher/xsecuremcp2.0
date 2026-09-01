@@ -78,7 +78,7 @@ class CedarParseError(ValueError):
     """Raised when a Cedar policy can't be parsed.
 
     The engine drops the offending policy rather than loading a
-    half-parsed rule set — an unparseable policy is indistinguishable
+    half-parsed rule set — an unparsable policy is indistinguishable
     from a typo'd deny, and we'd rather fail loud at load time.
     """
 

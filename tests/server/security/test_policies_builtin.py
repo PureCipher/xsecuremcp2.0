@@ -131,8 +131,11 @@ class TestAttributeBasedPolicy:
         assert result.decision == PolicyDecision.DEFER
 
     def test_rule_exception_counts_as_failure(self):
+        def bad_rule(_ctx: PolicyEvaluationContext) -> bool:
+            raise RuntimeError("rule failed")
+
         policy = AttributeBasedPolicy(
-            rules={"bad_rule": lambda ctx: 1 / 0},
+            rules={"bad_rule": bad_rule},
             require_all=True,
         )
         result = asyncio.get_event_loop().run_until_complete(policy.evaluate(_ctx()))

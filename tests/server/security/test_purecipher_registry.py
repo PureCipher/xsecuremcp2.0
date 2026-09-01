@@ -740,6 +740,7 @@ class TestPureCipherRegistry:
             categories={ToolCategory.NETWORK},
             requested_level=CertificationLevel.BASIC,
         )
+        assert result.listing is not None
         app = registry.http_app()
 
         with TestClient(app) as client:
@@ -782,6 +783,7 @@ class TestPureCipherRegistry:
             categories={ToolCategory.NETWORK},
             requested_level=CertificationLevel.BASIC,
         )
+        assert result.listing is not None
         app = registry.http_app()
 
         with TestClient(app) as client:

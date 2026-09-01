@@ -250,9 +250,7 @@ class ManifestEnforcer:
 
         # Build resource patterns from manifest declarations
         if manifest.resource_access:
-            allowed: list[str] = []
-            for ra in manifest.resource_access:
-                allowed.append(ra.resource_pattern)
+            allowed = [ra.resource_pattern for ra in manifest.resource_access]
             policy.resource_policy = ResourcePolicy(allowed_patterns=allowed)
 
         # Set timeout from manifest

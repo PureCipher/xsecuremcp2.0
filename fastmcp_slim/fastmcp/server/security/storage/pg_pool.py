@@ -17,21 +17,21 @@ from __future__ import annotations
 import os
 import threading
 from collections.abc import Iterator
-from contextlib import contextmanager
-from typing import Any
+from contextlib import contextmanager, suppress
+from typing import Any, TypeGuard
 
 import psycopg
 from psycopg.rows import dict_row, tuple_row
 from psycopg_pool import ConnectionPool
 
 __all__ = [
+    "close_all_pools",
+    "connection",
+    "dict_row",
+    "get_pool",
     "is_postgres_dsn",
     "normalize_dsn",
-    "get_pool",
-    "connection",
     "transaction",
-    "close_all_pools",
-    "dict_row",
     "tuple_row",
 ]
 
@@ -41,7 +41,7 @@ _POOLS: dict[str, ConnectionPool] = {}
 _POOLS_LOCK = threading.Lock()
 
 
-def is_postgres_dsn(value: str | None) -> bool:
+def is_postgres_dsn(value: str | None) -> TypeGuard[str]:
     """Return True if ``value`` looks like a PostgreSQL connection string."""
     if not value:
         return False
@@ -122,7 +122,5 @@ def close_all_pools() -> None:
         pools = list(_POOLS.values())
         _POOLS.clear()
     for pool in pools:
-        try:
+        with suppress(Exception):
             pool.close()
-        except Exception:  # noqa: BLE001 - teardown must not raise
-            pass

@@ -474,12 +474,13 @@ class PostgresBackend:
             ).fetchall():
                 groups[row[0]] = row[1]
 
-            audit_log: list[dict[str, Any]] = []
-            for row in conn.execute(
-                "SELECT data FROM consent_audit_log WHERE namespace = %s ORDER BY seq",
-                (graph_id,),
-            ).fetchall():
-                audit_log.append(row[0])
+            audit_log = [
+                row[0]
+                for row in conn.execute(
+                    "SELECT data FROM consent_audit_log WHERE namespace = %s ORDER BY seq",
+                    (graph_id,),
+                ).fetchall()
+            ]
 
         return {
             "nodes": nodes,
@@ -526,12 +527,13 @@ class PostgresBackend:
             ).fetchall():
                 servers[row[0]] = row[1]
 
-            audit_log: list[dict[str, Any]] = []
-            for row in conn.execute(
-                "SELECT data FROM marketplace_audit_log WHERE namespace = %s ORDER BY seq",
-                (mp_id,),
-            ).fetchall():
-                audit_log.append(row[0])
+            audit_log = [
+                row[0]
+                for row in conn.execute(
+                    "SELECT data FROM marketplace_audit_log WHERE namespace = %s ORDER BY seq",
+                    (mp_id,),
+                ).fetchall()
+            ]
 
         return {
             "servers": servers,

@@ -119,5 +119,5 @@ def hash_data(data: Any) -> str:
     if isinstance(data, dict):
         canonical = json.dumps(data, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-    # Fallback: repr
+    # Hash a stable representation when JSON serialization is unavailable.
     return hashlib.sha256(repr(data).encode("utf-8")).hexdigest()

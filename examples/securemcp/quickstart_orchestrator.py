@@ -65,6 +65,9 @@ server = SecureMCP(
 )
 ctx = server.security_context
 assert ctx is not None
+assert ctx.registry is not None
+assert ctx.tool_marketplace is not None
+assert ctx.provenance_ledger is not None
 
 # The constructor created and wired:
 #   - event_bus (shared across all components)

@@ -15,6 +15,7 @@ multiple concurrent readers alongside a writer.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import sqlite3
 import threading
@@ -284,13 +285,8 @@ class SQLiteBackend:
             self._connections = []
             self._generation += 1
         for conn in connections:
-            try:
+            with contextlib.suppress(sqlite3.Error):
                 conn.close()
-            except sqlite3.Error:
-                # An already-closed connection or a connection the OS
-                # has lost (e.g. file removed) shouldn't prevent us from
-                # closing the others.
-                pass
         # Drop the calling thread's cached connection so the next call
         # on this thread doesn't briefly observe a stale handle before
         # the generation check kicks in.
@@ -558,12 +554,13 @@ class SQLiteBackend:
         ).fetchall():
             groups[row[0]] = json.loads(row[1])
 
-        audit_log: list[dict[str, Any]] = []
-        for row in conn.execute(
-            "SELECT data FROM consent_audit_log WHERE namespace = ? ORDER BY seq",
-            (graph_id,),
-        ).fetchall():
-            audit_log.append(json.loads(row[0]))
+        audit_log = [
+            json.loads(row[0])
+            for row in conn.execute(
+                "SELECT data FROM consent_audit_log WHERE namespace = ? ORDER BY seq",
+                (graph_id,),
+            ).fetchall()
+        ]
 
         return {
             "nodes": nodes,
@@ -612,12 +609,13 @@ class SQLiteBackend:
         ).fetchall():
             servers[row[0]] = json.loads(row[1])
 
-        audit_log: list[dict[str, Any]] = []
-        for row in conn.execute(
-            "SELECT data FROM marketplace_audit_log WHERE namespace = ? ORDER BY seq",
-            (mp_id,),
-        ).fetchall():
-            audit_log.append(json.loads(row[0]))
+        audit_log = [
+            json.loads(row[0])
+            for row in conn.execute(
+                "SELECT data FROM marketplace_audit_log WHERE namespace = ? ORDER BY seq",
+                (mp_id,),
+            ).fetchall()
+        ]
 
         return {
             "servers": servers,

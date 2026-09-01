@@ -28,7 +28,9 @@ import hmac
 import json
 import time
 from dataclasses import dataclass
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, TypedDict, cast
+
+import yaml
 
 from purecipher.pgdb import connection, is_postgres_dsn, transaction
 
@@ -54,6 +56,8 @@ class OpenAPIParameter(TypedDict, total=False):
     required: bool
     description: str
     schema: dict[str, Any]
+    style: str
+    explode: bool
 
 
 class OpenAPIRequestBody(TypedDict, total=False):
@@ -225,10 +229,8 @@ def _coerce_openapi_doc(raw_text: str) -> dict[str, Any]:
         payload: Any = json.loads(raw_text)
     except json.JSONDecodeError:
         try:
-            import yaml  # local import; only needed for YAML inputs
-
             payload = yaml.safe_load(raw_text)
-        except yaml.YAMLError as exc:  # type: ignore[name-defined]
+        except yaml.YAMLError as exc:
             raise ValueError(
                 f"OpenAPI document is neither valid JSON nor YAML: {exc}"
             ) from exc
@@ -687,7 +689,7 @@ def extract_openapi_operations_detailed(
                 params.append(
                     {
                         "name": p_name,
-                        "location": p_in,  # type: ignore[typeddict-item]
+                        "location": cast(ParamLocation, p_in),
                         "required": p_required,
                         "description": p_description,
                         "schema": (
@@ -813,7 +815,7 @@ def extract_openapi_operations_detailed(
 
             entry: OpenAPIOperationDetailed = {
                 "operation_key": operation_key,
-                "method": m,  # type: ignore[typeddict-item]
+                "method": cast(HttpMethod, m),
                 "path": str(path),
                 "operation_id": operation_id,
                 "summary": summary,
@@ -890,7 +892,7 @@ def _parse_security_scheme(scheme_name: str, raw: Any) -> SecurityScheme | None:
         return None
     out: SecurityScheme = {
         "scheme_name": scheme_name,
-        "kind": kind,  # type: ignore[typeddict-item]
+        "kind": cast(SecuritySchemeKind, kind),
         "description": str(raw.get("description") or "").strip(),
     }
     if kind == "apiKey":
@@ -901,7 +903,7 @@ def _parse_security_scheme(scheme_name: str, raw: Any) -> SecurityScheme | None:
             # accidentally produce an invalid HTTP request.
             return None
         out["api_key_name"] = api_name
-        out["api_key_in"] = api_in  # type: ignore[typeddict-item]
+        out["api_key_in"] = cast(ApiKeyLocation, api_in)
     elif kind == "http":
         http_scheme = str(raw.get("scheme") or "").strip().lower()
         if not http_scheme:
@@ -1066,6 +1068,7 @@ class OpenAPIStore:
     def _ensure_schema(self) -> None:
         # Safety net for a store bootstrapping its own tables; the Alembic
         # chain normally owns the schema. Only runs for a Postgres DSN.
+        assert self.db_path is not None
         with connection(self.db_path) as conn:
             conn.execute(
                 """
@@ -1256,7 +1259,7 @@ class OpenAPIStore:
     def get_toolset(self, toolset_id: str) -> OpenAPIToolsetRecord | None:
         if not is_postgres_dsn(self.db_path):
             rec = self._memory_toolsets.get(toolset_id)
-            return dict(rec) if rec else None
+            return cast(OpenAPIToolsetRecord, dict(rec)) if rec else None
 
         with connection(self.db_path) as conn:
             cur = conn.execute(
@@ -1289,7 +1292,7 @@ class OpenAPIStore:
             metadata = json.loads(metadata_json)
         except json.JSONDecodeError:
             metadata = {}
-        return {
+        record: OpenAPIToolsetRecord = {
             "toolset_id": str(tid),
             "created_at": float(created_at),
             "publisher_id": str(publisher_id),
@@ -1301,6 +1304,7 @@ class OpenAPIStore:
             "tool_name_prefix": str(tool_name_prefix),
             "metadata": dict(metadata) if isinstance(metadata, dict) else {},
         }
+        return record
 
     def list_toolsets(self, *, limit: int = 200) -> list[OpenAPIToolsetRecord]:
         if limit <= 0:
@@ -1308,7 +1312,7 @@ class OpenAPIStore:
         if not is_postgres_dsn(self.db_path):
             items = list(self._memory_toolsets.values())
             items.sort(key=lambda x: float(x.get("created_at", 0.0)), reverse=True)
-            return [dict(item) for item in items[:limit]]
+            return [cast(OpenAPIToolsetRecord, dict(item)) for item in items[:limit]]
 
         with connection(self.db_path) as conn:
             cur = conn.execute(
@@ -1503,7 +1507,7 @@ class OpenAPIStore:
                 return None
             if publisher_id is not None and rec.get("publisher_id") != publisher_id:
                 return None
-            return dict(rec)  # type: ignore[return-value]
+            return cast(OpenAPICredentialRecord, dict(rec))
 
         with connection(self.db_path) as conn:
             cur = conn.execute(
@@ -1533,17 +1537,18 @@ class OpenAPIStore:
         ) = row
         if publisher_id is not None and str(row_publisher) != publisher_id:
             return None
-        return {
+        record: OpenAPICredentialRecord = {
             "credential_id": str(cid),
             "created_at": float(created_at),
             "updated_at": float(updated_at),
             "publisher_id": str(row_publisher),
             "source_id": str(source_id),
             "scheme_name": str(scheme_name),
-            "scheme_kind": str(scheme_kind),  # type: ignore[typeddict-item]
+            "scheme_kind": cast(SecuritySchemeKind, str(scheme_kind)),
             "label": str(label),
             "secret": self._decrypt_secret(str(ciphertext)),
         }
+        return record
 
     def list_credentials(
         self,
@@ -1566,20 +1571,20 @@ class OpenAPIStore:
             ]
             items.sort(key=lambda x: float(x.get("updated_at", 0.0)), reverse=True)
             return [
-                {
-                    "credential_id": str(r.get("credential_id", "")),
-                    "created_at": float(r.get("created_at", 0.0)),
-                    "updated_at": float(r.get("updated_at", 0.0)),
-                    "publisher_id": str(r.get("publisher_id", "")),
-                    "source_id": str(r.get("source_id", "")),
-                    "scheme_name": str(r.get("scheme_name", "")),
-                    "scheme_kind": str(r.get("scheme_kind", "")),  # type: ignore[typeddict-item]
-                    "label": str(r.get("label", "")),
-                    "secret_hint": _credential_secret_hint(
+                OpenAPICredentialPublic(
+                    credential_id=str(r.get("credential_id", "")),
+                    created_at=float(r.get("created_at", 0.0)),
+                    updated_at=float(r.get("updated_at", 0.0)),
+                    publisher_id=str(r.get("publisher_id", "")),
+                    source_id=str(r.get("source_id", "")),
+                    scheme_name=str(r.get("scheme_name", "")),
+                    scheme_kind=cast(SecuritySchemeKind, str(r.get("scheme_kind", ""))),
+                    label=str(r.get("label", "")),
+                    secret_hint=_credential_secret_hint(
                         str(r.get("scheme_kind", "")),
                         r.get("secret", {}) or {},
                     ),
-                }
+                )
                 for r in items
             ]
 
@@ -1612,17 +1617,17 @@ class OpenAPIStore:
                 hint,
             ) = row
             out.append(
-                {
-                    "credential_id": str(cid),
-                    "created_at": float(created_at),
-                    "updated_at": float(updated_at),
-                    "publisher_id": str(row_publisher),
-                    "source_id": str(row_source),
-                    "scheme_name": str(scheme_name),
-                    "scheme_kind": str(scheme_kind),  # type: ignore[typeddict-item]
-                    "label": str(label),
-                    "secret_hint": str(hint),
-                }
+                OpenAPICredentialPublic(
+                    credential_id=str(cid),
+                    created_at=float(created_at),
+                    updated_at=float(updated_at),
+                    publisher_id=str(row_publisher),
+                    source_id=str(row_source),
+                    scheme_name=str(scheme_name),
+                    scheme_kind=cast(SecuritySchemeKind, str(scheme_kind)),
+                    label=str(label),
+                    secret_hint=str(hint),
+                )
             )
         return out
 

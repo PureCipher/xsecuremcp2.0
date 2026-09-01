@@ -60,7 +60,9 @@ def _registry_call(
     if token:
         headers["Authorization"] = f"Bearer {token}"
     data = json.dumps(body).encode() if body is not None else None
-    req = urllib.request.Request(f"{base}{path}", data=data, headers=headers, method=method)
+    req = urllib.request.Request(
+        f"{base}{path}", data=data, headers=headers, method=method
+    )
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             raw = resp.read().decode()
@@ -77,8 +79,13 @@ def _registry_call(
 
 def _resolve_registry() -> str:
     """Return a reachable registry base, auto-detecting the CLI's 8001 default."""
-    candidates = [DEFAULT_REGISTRY, "http://localhost:8001", "http://localhost:8000",
-                  "http://127.0.0.1:8001", "http://127.0.0.1:8000"]
+    candidates = [
+        DEFAULT_REGISTRY,
+        "http://localhost:8001",
+        "http://localhost:8000",
+        "http://127.0.0.1:8001",
+        "http://127.0.0.1:8000",
+    ]
     seen: set[str] = set()
     for base in candidates:
         if base in seen:
@@ -131,7 +138,9 @@ async def api_register(request: Request) -> JSONResponse:
     display = body.get("display_name") or "Agent Client Demo"
     slug = body.get("slug") or "agent-client-demo"
     status, payload = _registry_call(
-        "POST", base, "/registry/clients",
+        "POST",
+        base,
+        "/registry/clients",
         {
             "display_name": display,
             "slug": slug,
@@ -145,7 +154,10 @@ async def api_register(request: Request) -> JSONResponse:
     )
     if status not in (200, 201):
         return JSONResponse(
-            {"error": payload.get("error") or f"client registration failed (HTTP {status})"},
+            {
+                "error": payload.get("error")
+                or f"client registration failed (HTTP {status})"
+            },
             status_code=400,
         )
     return JSONResponse(
@@ -163,7 +175,9 @@ async def api_servers(request: Request) -> JSONResponse:
     token, _ = _admin_token(base, ADMIN_USER, ADMIN_PASS)
     status, payload = _registry_call("GET", base, "/registry/tools", token=token)
     if status != 200:
-        return JSONResponse({"error": payload.get("error") or "could not list servers"}, status_code=502)
+        return JSONResponse(
+            {"error": payload.get("error") or "could not list servers"}, status_code=502
+        )
     servers = []
     for t in payload.get("tools", []) or []:
         servers.append(
@@ -180,7 +194,11 @@ async def api_servers(request: Request) -> JSONResponse:
             }
         )
     return JSONResponse(
-        {"registry_url": base, "count": payload.get("count", len(servers)), "servers": servers}
+        {
+            "registry_url": base,
+            "count": payload.get("count", len(servers)),
+            "servers": servers,
+        }
     )
 
 
@@ -197,14 +215,18 @@ def _tool_to_dict(tool: Any) -> dict:
     return {
         "name": getattr(tool, "name", None),
         "description": getattr(tool, "description", "") or "",
-        "input_schema": getattr(tool, "inputSchema", None) or getattr(tool, "input_schema", None) or {},
+        "input_schema": getattr(tool, "inputSchema", None)
+        or getattr(tool, "input_schema", None)
+        or {},
     }
 
 
 def _result_to_text(result: Any) -> dict:
     """Best-effort flatten of a CallToolResult across fastmcp versions."""
     # Structured data, if present.
-    structured = getattr(result, "structured_content", None) or getattr(result, "data", None)
+    structured = getattr(result, "structured_content", None) or getattr(
+        result, "data", None
+    )
     text_parts: list[str] = []
     content = getattr(result, "content", None)
     if content is None and isinstance(result, list):
@@ -253,14 +275,20 @@ async def api_call(request: Request) -> JSONResponse:
     if not proxy_url or not tool:
         return JSONResponse({"error": "proxy_url and tool required"}, status_code=400)
     if not isinstance(arguments, dict):
-        return JSONResponse({"error": "arguments must be a JSON object"}, status_code=400)
+        return JSONResponse(
+            {"error": "arguments must be a JSON object"}, status_code=400
+        )
     try:
         client = await _mcp_session(proxy_url, secret)
         async with client:
             result = await client.call_tool(tool, arguments)
-        return JSONResponse({"ok": True, "tool": tool, "result": _result_to_text(result)})
+        return JSONResponse(
+            {"ok": True, "tool": tool, "result": _result_to_text(result)}
+        )
     except Exception as exc:  # noqa: BLE001
-        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=502)
+        return JSONResponse(
+            {"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=502
+        )
 
 
 async def api_governance(request: Request) -> JSONResponse:
@@ -269,9 +297,13 @@ async def api_governance(request: Request) -> JSONResponse:
         return JSONResponse({"error": "slug required"}, status_code=400)
     base = _resolve_registry()
     token, _ = _admin_token(base, ADMIN_USER, ADMIN_PASS)
-    status, payload = _registry_call("GET", base, f"/registry/clients/{slug}/governance", token=token)
+    status, payload = _registry_call(
+        "GET", base, f"/registry/clients/{slug}/governance", token=token
+    )
     if status != 200:
-        return JSONResponse({"error": "governance unavailable", "status": status}, status_code=200)
+        return JSONResponse(
+            {"error": "governance unavailable", "status": status}, status_code=200
+        )
     gov = payload or {}
     ledger = (gov.get("ledger") or {}).get("ledger") or {}
     policy = (gov.get("policy") or {}).get("registry_policy") or {}

@@ -8,7 +8,6 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 
-
 ROOT = Path("/Users/purecipher/code/xsecuremcp2.0/artifacts")
 SOURCE = ROOT / "Secured MCP Registry - Executive Overview.docx"
 OUTPUT = ROOT / "Secured MCP Registry - Progressive Technical Guide.docx"
