@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastmcp.server.security.config import (
     ConsentConfig,
+    FederatedConsentConfig,
     SecurityConfig,
 )
 from fastmcp.server.security.consent.graph import ConsentGraph
@@ -48,3 +49,23 @@ class TestSecurityConfigConsent:
             enabled=False,
         )
         assert not config.is_consent_enabled()
+
+    def test_federated_consent_not_enabled_by_default(self):
+        config = SecurityConfig()
+        assert not config.is_federated_consent_enabled()
+
+    def test_federated_consent_enabled_explicitly(self):
+        config = SecurityConfig(
+            consent=ConsentConfig(),
+            federated_consent=FederatedConsentConfig(
+                enable_peer_coordination=False,
+            ),
+        )
+        assert config.is_federated_consent_enabled()
+
+    def test_federated_consent_disabled_by_master_switch(self):
+        config = SecurityConfig(
+            federated_consent=FederatedConsentConfig(),
+            enabled=False,
+        )
+        assert not config.is_federated_consent_enabled()

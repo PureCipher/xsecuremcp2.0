@@ -210,7 +210,35 @@ For local command-line workflows, this repo exposes both `fastmcp` and `securemc
 ctx = SecurityOrchestrator.bootstrap(config, server_name="my-server")
 ```
 
-The bootstrap process follows a fixed dependency order: event bus → policy → contracts → provenance → reflexive → consent → registry → CRL → federation → tool marketplace → compliance → sandbox → certification → gateway → dashboard. Components that depend on others (e.g., federation needs registry + CRL) receive their dependencies automatically.
+The bootstrap process follows a fixed dependency order: event bus → policy → contracts → provenance → reflexive → local consent → registry → CRL → federation → federated consent → tool marketplace → compliance → sandbox → certification → gateway → dashboard. Components that depend on others receive their dependencies automatically. In particular, federated consent is constructed only after both its local consent graph and optional federation are available.
+
+Federated consent is an explicit bridge rather than a side effect of enabling local consent. Peer coordination requires all three configurations:
+
+```python
+from fastmcp.server.security.config import (
+    ConsentConfig,
+    FederatedConsentConfig,
+    FederationConfig,
+    SecurityConfig,
+)
+from fastmcp.server.security.orchestrator import SecurityOrchestrator
+
+config = SecurityConfig(
+    consent=ConsentConfig(),
+    federation=FederationConfig(federation_id="hospital-a"),
+    federated_consent=FederatedConsentConfig(
+        institution_id="hospital-a",
+        enable_peer_coordination=True,
+    ),
+)
+ctx = SecurityOrchestrator.bootstrap(config)
+
+assert ctx.federated_consent_graph is not None
+assert ctx.federated_consent_graph.local_graph is ctx.consent_graph
+assert ctx.federated_consent_graph.federation is ctx.federation
+```
+
+Set `enable_peer_coordination=False` to use jurisdiction-aware federated consent locally without a `FederationConfig`. Configuring federated consent without `ConsentConfig`, or enabling peer coordination without `FederationConfig`, raises `ValueError` during bootstrap instead of silently producing a disconnected graph. A supplied pre-built `FederatedConsentGraph` must reference the configured local graph and, when peer coordination is active, the configured federation instance.
 
 ### SecurityContext
 
@@ -224,6 +252,7 @@ ctx.provenance_ledger      # ProvenanceLedger
 ctx.behavioral_analyzer    # BehavioralAnalyzer
 ctx.escalation_engine      # EscalationEngine
 ctx.consent_graph          # ConsentGraph
+ctx.federated_consent_graph  # FederatedConsentGraph
 ctx.registry               # TrustRegistry
 ctx.tool_marketplace       # ToolMarketplace
 ctx.federation             # TrustFederation
@@ -250,6 +279,7 @@ Every field is `None` unless its corresponding config section was provided. The 
 | `ProvenanceConfig` | `ProvenanceLedger` | `record_list_operations` |
 | `ReflexiveConfig` | `BehavioralAnalyzer` + `EscalationEngine` | `window_size`, rules |
 | `ConsentConfig` | `ConsentGraph` | `resource_owner`, `require_for_list` |
+| `FederatedConsentConfig` | `FederatedConsentGraph` | `institution_id`, jurisdiction policies, optional peer coordination |
 | `RegistryConfig` | `TrustRegistry` | Pass a pre-built `registry` instance, or let it create one |
 | `ToolMarketplaceConfig` | `ToolMarketplace` | Auto-wired to registry + event bus |
 | `FederationConfig` | `TrustFederation` | `federation_id`; auto-wired to registry + CRL |

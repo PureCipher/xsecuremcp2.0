@@ -53,7 +53,8 @@ from fastmcp.server.security.sandbox.enforcer import SandboxedRunner
 from fastmcp.server.security.storage.backend import StorageBackend
 
 if TYPE_CHECKING:
-    pass
+    from fastmcp.server.security.consent.federation import FederatedConsentGraph
+    from fastmcp.server.security.consent.models import JurisdictionPolicy
 
 
 @dataclass
@@ -404,17 +405,17 @@ class FederatedConsentConfig:
         enable_peer_coordination: Whether to query federation peers.
     """
 
-    federated_graph: Any = None  # FederatedConsentGraph | None
-    jurisdiction_policies: dict[str, Any] | None = None  # JurisdictionPolicy
+    federated_graph: FederatedConsentGraph | None = None
+    jurisdiction_policies: dict[str, JurisdictionPolicy] | None = None
     institution_id: str = "default"
     enable_peer_coordination: bool = True
 
     def get_federated_graph(
         self,
         local_graph: ConsentGraph,
-        federation: Any = None,
+        federation: TrustFederation | None = None,
         event_bus: SecurityEventBus | None = None,
-    ) -> Any:
+    ) -> FederatedConsentGraph:
         """Get or create the FederatedConsentGraph.
 
         Args:
@@ -437,6 +438,7 @@ class FederatedConsentConfig:
             jurisdiction_policies=self.jurisdiction_policies,
             institution_id=self.institution_id,
             event_bus=event_bus,
+            enable_peer_coordination=self.enable_peer_coordination,
         )
 
 
@@ -679,6 +681,7 @@ class SecurityConfig:
         provenance: Provenance Ledger configuration (Phase 3).
         reflexive: Reflexive Core configuration (Phase 4).
         consent: Consent Graph configuration (Phase 5).
+        federated_consent: Optional jurisdiction and federation bridge.
         gateway: API Gateway configuration (Phase 6).
         enabled: Master switch to enable/disable all security layers.
     """
@@ -736,6 +739,10 @@ class SecurityConfig:
         """Check if the consent layer is configured and active."""
         return self.enabled and self.consent is not None
 
+    def is_federated_consent_enabled(self) -> bool:
+        """Check if the federated-consent layer is configured and active."""
+        return self.enabled and self.federated_consent is not None
+
     def is_gateway_enabled(self) -> bool:
         """Check if the gateway layer is configured and active."""
         return self.enabled and self.gateway is not None
@@ -771,3 +778,22 @@ class SecurityConfig:
     def is_sandbox_enabled(self) -> bool:
         """Check if the sandbox runner is configured and active."""
         return self.enabled and self.sandbox is not None
+
+    def validate_dependencies(self) -> None:
+        """Reject active layer combinations whose dependencies are missing."""
+        if not self.is_federated_consent_enabled():
+            return
+        assert self.federated_consent is not None
+        if not self.is_consent_enabled():
+            raise ValueError(
+                "Federated consent requires ConsentConfig for its local graph"
+            )
+        peer_coordination_enabled = (
+            self.federated_consent.federated_graph.peer_coordination_enabled
+            if self.federated_consent.federated_graph is not None
+            else self.federated_consent.enable_peer_coordination
+        )
+        if peer_coordination_enabled and not self.is_federation_enabled():
+            raise ValueError(
+                "Federated consent peer coordination requires FederationConfig"
+            )

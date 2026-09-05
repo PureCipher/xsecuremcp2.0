@@ -3,8 +3,16 @@ from __future__ import annotations
 import pytest
 
 import securemcp
+from fastmcp.server.security.config import (
+    FederatedConsentConfig as FastMCPFederatedConsentConfig,
+)
 from securemcp import SecureMCP
-from securemcp.config import GatewayConfig, RegistryConfig, SecurityConfig
+from securemcp.config import (
+    FederatedConsentConfig,
+    GatewayConfig,
+    RegistryConfig,
+    SecurityConfig,
+)
 from securemcp.http import SecurityAPI
 from securemcp.settings import SecuritySettings
 
@@ -15,6 +23,9 @@ class TestSecureMCPFacade:
         assert securemcp.SecurityConfig is SecurityConfig
         assert securemcp.SecurityAPI is SecurityAPI
         assert securemcp.SecuritySettings is SecuritySettings
+
+    def test_config_facade_exports_federated_consent(self):
+        assert FederatedConsentConfig is FastMCPFederatedConsentConfig
 
     def test_constructor_attaches_security(self):
         server = SecureMCP(

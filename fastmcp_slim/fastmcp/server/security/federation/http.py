@@ -146,9 +146,7 @@ def _validate_signing_secrets(signing_secrets: FederationSigningSecrets) -> None
         values = (("shared", signing_secrets),)
     for federation_id, secret_value in values:
         secret = (
-            secret_value.encode("utf-8")
-            if type(secret_value) is str
-            else secret_value
+            secret_value.encode("utf-8") if type(secret_value) is str else secret_value
         )
         if type(federation_id) is not str or not federation_id:
             raise ValueError("signing_secrets peer IDs must not be empty")

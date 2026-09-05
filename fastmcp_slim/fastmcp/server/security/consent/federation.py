@@ -82,6 +82,7 @@ class FederatedConsentGraph:
         jurisdiction_policies: Initial jurisdiction policies to register.
         institution_id: This institution's identifier.
         event_bus: Optional event bus for audit events.
+        enable_peer_coordination: Whether peer queries and propagation are enabled.
     """
 
     def __init__(
@@ -92,11 +93,13 @@ class FederatedConsentGraph:
         jurisdiction_policies: dict[str, JurisdictionPolicy] | None = None,
         institution_id: str = "default",
         event_bus: SecurityEventBus | None = None,
+        enable_peer_coordination: bool = True,
     ) -> None:
         self._local_graph = local_graph
         self._federation = federation
         self._institution_id = institution_id
         self._event_bus = event_bus
+        self._enable_peer_coordination = enable_peer_coordination
         self._lock = threading.Lock()
         self._jurisdiction_policies: dict[str, JurisdictionPolicy] = dict(
             jurisdiction_policies or {}
@@ -124,6 +127,11 @@ class FederatedConsentGraph:
     def institution_id(self) -> str:
         """This institution's identifier."""
         return self._institution_id
+
+    @property
+    def peer_coordination_enabled(self) -> bool:
+        """Whether this graph may query or propagate data to federation peers."""
+        return self._enable_peer_coordination
 
     @property
     def jurisdiction_count(self) -> int:
@@ -265,7 +273,11 @@ class FederatedConsentGraph:
 
         # 5. Query peers (if configured and requested)
         peer_decisions: dict[str, ConsentDecision] = {}
-        if query.include_peers and self._federation is not None:
+        if (
+            self._enable_peer_coordination
+            and query.include_peers
+            and self._federation is not None
+        ):
             peer_decisions = self._query_peers_for_consent(query)
 
         # 6. Merge into final decision
@@ -400,7 +412,7 @@ class FederatedConsentGraph:
         if edge is None:
             return {}
 
-        if self._federation is None:
+        if not self._enable_peer_coordination or self._federation is None:
             return {}
 
         edge_data = self._edge_to_propagation_dict(edge)

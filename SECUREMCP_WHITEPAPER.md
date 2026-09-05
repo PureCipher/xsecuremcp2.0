@@ -104,7 +104,7 @@ Every subsequent `attach_event_bus` call is guarded by `if bus_for_components is
 
 The dashboard is always constructed. It is a read-only projection over whatever else exists, so there is no configuration in which asking "what is the security posture of this server?" fails for lack of a dashboard.
 
-### 3.2 The fourteen layers
+### 3.2 The fifteen layers
 
 | Layer | Predicate | Core object | On the request path? |
 |---|---|---|---|
@@ -113,6 +113,7 @@ The dashboard is always constructed. It is a read-only projection over whatever 
 | Provenance | `is_provenance_enabled` | `ProvenanceLedger` | Yes — middleware 3 |
 | Reflexive | `is_reflexive_enabled` | `BehavioralAnalyzer` + `EscalationEngine` | Yes — middleware 4 |
 | Consent | `is_consent_enabled` | `ConsentGraph` | Yes — middleware 5 |
+| Federated consent | `is_federated_consent_enabled` | `FederatedConsentGraph` | No — query/API-time |
 | Alerts | `is_alerts_enabled` | `SecurityEventBus` | Indirect |
 | Certification | `is_certification_enabled` | `CertificationPipeline` | No — publish-time |
 | Trust registry | `is_registry_enabled` | `TrustRegistry` | No — query-time |
@@ -447,6 +448,12 @@ Invariant 3 is the structurally important one. A delegated grant can only ever b
 
 It returns `ConsentDecision(granted, path, reason)`. The `path` matters: a grant obtained three delegation hops away is explainable rather than magical, and the same structure explains denials.
 
+### 9.4 Federated consent wiring
+
+Federated consent is an explicit bridge over a configured local `ConsentGraph`; enabling local consent alone does not create it. `SecurityOrchestrator.bootstrap` validates and constructs the dependency chain in order: local consent, registry and CRL, trust federation, then `FederatedConsentGraph`. Peer-coordinated mode therefore receives the exact live `TrustFederation` instance exposed on `SecurityContext`, rather than a placeholder created before federation bootstrap.
+
+`FederatedConsentConfig(enable_peer_coordination=False)` supports jurisdiction-aware local evaluation without federation. With peer coordination enabled, both `ConsentConfig` and `FederationConfig` are required. A pre-built graph must use the configured local graph and, when coordination is active, the configured federation. Violations fail during bootstrap instead of silently degrading to disconnected consent decisions.
+
 ---
 
 ## 10. The Reflexive Core
@@ -704,15 +711,13 @@ The limits, stated plainly:
 8. **The trust registry is in-memory.** Trust scores do not survive a restart unless the backing marketplace state is persisted.
 9. **Token counts are heuristic.** `chars // 4`, useful for volumetrics, not for billing.
 
-One wiring defect is outstanding, and is recorded here rather than left to discovery. In `SecurityOrchestrator.bootstrap`, the consent block constructs `FederatedConsentGraph(..., federation=ctx.federation, ...)` before the federation block has run, so `ctx.federation` is still `None` at that point. Federated consent therefore does not receive a federation reference under the default bootstrap ordering. Remediation is to move federation construction ahead of the consent block, or to inject the reference once both exist.
-
 ---
 
 ## 21. Summary
 
 SecureMCP's architecture reduces to a small number of decisions, applied consistently across the platform.
 
-**One bootstrap.** A stateless factory turns config into an all-optional context. Fourteen layers, each independently enableable, one authoritative source of truth for what is on.
+**One bootstrap.** A stateless factory turns config into an all-optional context. Fifteen layers, each independently enableable, one authoritative source of truth for what is on.
 
 **One request path.** Five middleware in a fixed order — policy, contracts, provenance, reflexive, consent — each with a clear responsibility and each fail-closed on the enforcement path.
 

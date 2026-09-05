@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastmcp.server.security.alerts.bus import SecurityEventBus
 from fastmcp.server.security.certification.pipeline import CertificationPipeline
@@ -47,6 +47,9 @@ from fastmcp.server.security.sandbox.enforcer import SandboxedRunner
 
 logger = logging.getLogger(__name__)
 
+if TYPE_CHECKING:
+    from fastmcp.server.security.consent.federation import FederatedConsentGraph
+
 
 @dataclass
 class SecurityContext:
@@ -71,6 +74,7 @@ class SecurityContext:
         behavioral_analyzer: Behavioral drift detector.
         escalation_engine: Escalation rule engine.
         consent_graph: Consent graph for access-rights.
+        federated_consent_graph: Optional jurisdiction and federation bridge.
         audit_api: Unified audit query API.
         marketplace: Server marketplace registry (gateway).
         registry: Trust registry for tool trust scores.
@@ -99,7 +103,7 @@ class SecurityContext:
     escalation_engine: EscalationEngine | None = None
     introspection_engine: IntrospectionEngine | None = None
     consent_graph: ConsentGraph | None = None
-    federated_consent_graph: Any = None
+    federated_consent_graph: FederatedConsentGraph | None = None
     audit_api: AuditAPI | None = None
     marketplace: Marketplace | None = None
     registry: TrustRegistry | None = None
@@ -126,6 +130,7 @@ class SecurityOrchestrator:
     * Event bus injection into every component that supports it.
     * Middleware construction in the correct order (policy → contracts →
       provenance → reflexive → consent).
+    * Dependency-checked federation and federated-consent wiring.
     * Gateway wiring (AuditAPI + Marketplace + MCP tools).
 
     Example::
@@ -161,6 +166,7 @@ class SecurityOrchestrator:
         Returns:
             A fully-wired SecurityContext.
         """
+        config.validate_dependencies()
         ctx = SecurityContext(config=config)
 
         # --- Event Bus ---
@@ -339,16 +345,6 @@ class SecurityOrchestrator:
                 )
             )
 
-            from fastmcp.server.security.consent.federation import (
-                FederatedConsentGraph,
-            )
-
-            ctx.federated_consent_graph = FederatedConsentGraph(
-                local_graph=graph,
-                federation=ctx.federation,
-                institution_id=server_name,
-                event_bus=bus_for_components,
-            )
             logger.debug("Consent graph enabled")
 
         # --- Trust Registry ---
@@ -375,6 +371,34 @@ class SecurityOrchestrator:
             )
             ctx.federation = federation
             logger.debug("Trust federation enabled")
+
+        # --- Federated Consent Graph ---
+        if config.is_federated_consent_enabled():
+            assert config.federated_consent is not None
+            assert ctx.consent_graph is not None
+            federated_graph = config.federated_consent.get_federated_graph(
+                local_graph=ctx.consent_graph,
+                federation=ctx.federation,
+                event_bus=bus_for_components,
+            )
+            if federated_graph.local_graph is not ctx.consent_graph:
+                raise ValueError(
+                    "Pre-built federated consent graph must use the configured "
+                    "ConsentConfig graph"
+                )
+            if (
+                federated_graph.peer_coordination_enabled
+                and federated_graph.federation is not ctx.federation
+            ):
+                raise ValueError(
+                    "Peer-coordinated federated consent must use the configured "
+                    "FederationConfig instance"
+                )
+            ctx.federated_consent_graph = federated_graph
+            logger.debug(
+                "Federated consent enabled (peer_coordination=%s)",
+                federated_graph.peer_coordination_enabled,
+            )
 
         # --- Tool Marketplace ---
         if config.is_tool_marketplace_enabled():
