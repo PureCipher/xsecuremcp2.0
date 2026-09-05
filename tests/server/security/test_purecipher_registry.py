@@ -992,6 +992,63 @@ class TestPureCipherRegistry:
             assert payload["tool_name"] == "pending-tool"
             assert payload["status"] == "pending_review"
 
+    @pytest.mark.parametrize("pending", [False, True])
+    def test_tool_detail_includes_specs_and_activity_after_login(self, pending):
+        from fastmcp.server.security.provenance.records import ProvenanceAction
+
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            auth_settings=_auth_settings(),
+            require_moderation=pending,
+        )
+        spec = {
+            "name": "echo",
+            "description": "Echo a message",
+            "input_schema": {
+                "type": "object",
+                "properties": {"message": {"type": "string"}},
+            },
+        }
+        result = registry.submit_tool(
+            _manifest(),
+            metadata={"introspection": {"tool_names": ["echo"], "tools": [spec]}},
+            requested_level=CertificationLevel.BASIC,
+        )
+        assert result.accepted
+        ledger = registry._ledger_or_none()
+        assert ledger is not None
+        ledger.record(
+            action=ProvenanceAction.TOOL_CALLED,
+            actor_id="test-client",
+            resource_id="echo",
+        )
+        with TestClient(registry.http_app()) as client:
+            anonymous = client.get("/registry/tools/weather-lookup")
+            assert anonymous.status_code == (404 if pending else 200)
+            login = client.post(
+                "/registry/login", json={"username": "admin", "password": "admin123"}
+            )
+            assert login.status_code == 200
+            response = client.get("/registry/tools/weather-lookup")
+            assert response.status_code == 200
+            detail = response.json()
+            assert detail["tools_observed"] == ["echo"]
+            assert detail["tools_detail"] == [spec]
+            assert detail["tool_count"] == 1
+            assert detail["connected_clients"] == 1
+            assert detail["usage_total"] == 1
+            assert sum(detail["usage_7d"]) == 1
+            assert detail["last_call_at"]
+            if not pending:
+                for key in (
+                    "tools_observed",
+                    "tools_detail",
+                    "usage_total",
+                    "usage_7d",
+                    "connected_clients",
+                ):
+                    assert detail[key] == anonymous.json()[key]
+
     def test_submit_tool_requeues_existing_listing_when_moderation_is_enabled(self):
         registry = PureCipherRegistry(
             signing_secret=TEST_SIGNING_SECRET,

@@ -87,6 +87,12 @@ If you pass your own `SecurityConfig`, it must still include registry, tool mark
 
 ## Registry API
 
+Listing detail responses include `tools_observed`, `tools_detail` (including
+input JSON Schemas), `tool_count`, `connected_clients`, `usage_7d`, `usage_total`,
+and `last_call_at`. Published listings expose these fields to anonymous and
+signed-in visitors alike. Signed-in detail lookups also include the fields for
+pending listings; pending listings remain unavailable to anonymous visitors.
+
 The MVP exposes a narrow HTTP surface:
 
 | Endpoint | Purpose |

@@ -3597,8 +3597,12 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         if listing is None:
             return {"error": f"Tool '{tool_name}' not found", "status": 404}
 
+        return self._serialize_listing_with_activity(listing)
+
+    def _serialize_listing_with_activity(self, listing: ToolListing) -> dict[str, Any]:
+        """Return tool specifications and activity for a resolved visible listing."""
         detail = self._serialize_listing_detail(listing)
-        # Enrich with live signals for the public detail page.
+        # Enrich both anonymous and authenticated detail responses.
         observed = sorted(self._observed_tool_allowlist(listing))
         detail["tools_observed"] = observed
         detail["tool_count"] = len(observed)
@@ -9132,7 +9136,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 return JSONResponse(
                     payload, status_code=_status_code_from_payload(payload)
                 )
-            return JSONResponse(self._serialize_listing_detail(listing))
+            return JSONResponse(self._serialize_listing_with_activity(listing))
 
         @self.custom_route(
             f"{prefix}/tools/{{tool_name}}/governance",
