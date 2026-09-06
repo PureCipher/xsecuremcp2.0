@@ -238,6 +238,7 @@ class SecurityOrchestrator:
                 PolicyEnforcementMiddleware(
                     policy_engine=engine,
                     bypass_stdio=bypass_stdio,
+                    **vars(config.policy.evidence_resolvers),
                 )
             )
             logger.debug(

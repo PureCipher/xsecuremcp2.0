@@ -7,6 +7,7 @@ all security layers. Use it with ``attach_security(server, config)`` or
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
@@ -55,6 +56,61 @@ from fastmcp.server.security.storage.backend import StorageBackend
 if TYPE_CHECKING:
     from fastmcp.server.security.consent.federation import FederatedConsentGraph
     from fastmcp.server.security.consent.models import JurisdictionPolicy
+    from fastmcp.server.security.policy.policies.ccpa_request import CcpaEvidence
+    from fastmcp.server.security.policy.policies.ferpa_request import FerpaEvidence
+    from fastmcp.server.security.policy.policies.gdpr_request import GdprEvidence
+    from fastmcp.server.security.policy.policies.hipaa_request import HipaaEvidence
+    from fastmcp.server.security.policy.policies.pci_request import PciEvidence
+    from fastmcp.server.security.policy.policies.published_tools import (
+        PublishedToolEvidence,
+    )
+    from fastmcp.server.security.policy.policies.soc2_request import Soc2Evidence
+    from fastmcp.server.security.policy.policies.strict_change import ChangeEvidence
+    from fastmcp.server.security.policy.policies.zero_trust import ZeroTrustEvidence
+    from fastmcp.server.security.policy.provider import PolicyEvaluationContext
+
+
+@dataclass(frozen=True)
+class PolicyEvidenceResolvers:
+    """Server-owned callbacks; never populated from client metadata or policy JSON.
+
+    Adapters verify authoritative facts. Missing adapters remain fail-closed
+    for providers that require evidence. Callbacks must be asynchronous.
+    """
+
+    ferpa_evidence_resolver: (
+        Callable[[PolicyEvaluationContext], Awaitable[FerpaEvidence | None]] | None
+    ) = None
+    zero_trust_evidence_resolver: (
+        Callable[[PolicyEvaluationContext], Awaitable[ZeroTrustEvidence | None]] | None
+    ) = None
+    pci_evidence_resolver: (
+        Callable[[PolicyEvaluationContext], Awaitable[PciEvidence | None]] | None
+    ) = None
+    ccpa_evidence_resolver: (
+        Callable[[PolicyEvaluationContext], Awaitable[CcpaEvidence | None]] | None
+    ) = None
+    soc2_evidence_resolver: (
+        Callable[[PolicyEvaluationContext], Awaitable[Soc2Evidence | None]] | None
+    ) = None
+    gdpr_evidence_resolver: (
+        Callable[[PolicyEvaluationContext], Awaitable[GdprEvidence | None]] | None
+    ) = None
+    hipaa_evidence_resolver: (
+        Callable[[PolicyEvaluationContext], Awaitable[HipaaEvidence | None]] | None
+    ) = None
+    published_tool_evidence_resolver: (
+        Callable[[PolicyEvaluationContext], Awaitable[PublishedToolEvidence | None]]
+        | None
+    ) = None
+    change_evidence_resolver: (
+        Callable[[PolicyEvaluationContext], Awaitable[ChangeEvidence | None]] | None
+    ) = None
+
+    def __post_init__(self) -> None:
+        for name, callback in vars(self).items():
+            if callback is not None and not callable(callback):
+                raise TypeError(f"{name} must be a callable or None")
 
 
 @dataclass
@@ -93,6 +149,9 @@ class PolicyConfig:
     validator: PolicyValidator | None = None
     monitor: PolicyMonitor | None = None
     backend: StorageBackend | None = None
+    evidence_resolvers: PolicyEvidenceResolvers = field(
+        default_factory=PolicyEvidenceResolvers
+    )
 
     def get_audit_log(self) -> PolicyAuditLog:
         """Get or create the policy audit log."""
