@@ -1,0 +1,73 @@
+{
+  "manifest": {
+    "tool_name": "purecipher-huggingface",
+    "version": "0.1.0-alpha.1",
+    "author": "purecipher",
+    "description": "Read Hugging Face model and dataset metadata. No inference, execution, uploads or downloads. SecureMCP 2.0 preparation: provider authorization, durable security storage and live validation pending. No running production endpoint.",
+    "permissions": [
+      "read_resource",
+      "network_access",
+      "sensitive_data",
+      "environment_read"
+    ],
+    "requires_consent": true,
+    "idempotent": true,
+    "data_flows": [
+      {
+        "source": "Hugging Face",
+        "destination": "authenticated MCP client",
+        "classification": "restricted",
+        "description": "Authorized read results may contain sensitive business or personal data."
+      }
+    ],
+    "resource_access": [
+      {
+        "resource_pattern": "huggingface:*",
+        "access_type": "read",
+        "classification": "restricted"
+      }
+    ]
+  },
+  "display_name": "PureCipher Hugging Face",
+  "description": "Read Hugging Face model and dataset metadata. No inference, execution, uploads or downloads. SecureMCP 2.0 preparation: provider authorization, durable security storage and live validation pending. No running production endpoint.",
+  "homepage_url": "https://purecipher.com",
+  "source_url": "https://github.com/PureCipher/xsecuremcp2.0",
+  "tags": [
+    "securemcp-2.0",
+    "read-only",
+    "authorization-pending",
+    "huggingface"
+  ],
+  "metadata": {
+    "publisher_profile": {
+      "publisher_id": "purecipher",
+      "display_name": "PureCipher",
+      "homepage_url": "https://purecipher.com",
+      "description": "PureCipher integrations built using SecureMCP 2.0.",
+      "affiliation": "Independent integrations; not endorsed by the upstream providers."
+    },
+    "transport": "http",
+    "readiness": "authorization_pending",
+    "live_tested": false,
+    "security_framework": "SecureMCP 2.0",
+    "tools": [
+      "hf_search_models",
+      "hf_get_model",
+      "hf_search_datasets",
+      "hf_get_dataset"
+    ],
+    "oauth_scopes": [
+      "openid",
+      "profile",
+      "read-repos"
+    ],
+    "source_file": "huggingface_server.py",
+    "source_sha256": "ed1a57bc889d7d42a0bf89f69ddf1aba3c071ac19a685a3c2eb95f1201b63136",
+    "bundle_sha256": {
+      "huggingface_server.py": "ed1a57bc889d7d42a0bf89f69ddf1aba3c071ac19a685a3c2eb95f1201b63136",
+      "common.py": "6f14140b1ad64f9e2bccbb80088b8159a92d84243e05e0f7c0685b31ee8954dc"
+    },
+    "deployment_ready": false,
+    "icon_key": "huggingface"
+  }
+}

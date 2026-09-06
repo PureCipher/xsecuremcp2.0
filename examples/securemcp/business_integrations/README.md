@@ -99,3 +99,10 @@ marked `deployment_ready=false` and `live_tested=false`.
 - https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-search/
 - https://learn.microsoft.com/en-us/graph/api/user-list-messages?view=graph-rest-1.0
 - https://learn.microsoft.com/en-us/graph/api/driveitem-list-children?view=graph-rest-1.0
+
+## Additional preparation packages
+
+Apollo is documented in APOLLO.md. Stripe and Hugging Face use the read-only
+implementations in STRIPE-HUGGINGFACE.md. The 15 upstream catalog adapters in
+CATALOG.md are separate review-pending packages; their dispatcher may invoke
+mutating tools and is not a read-only integration. None is activated by import.

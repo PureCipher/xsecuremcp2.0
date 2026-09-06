@@ -1,0 +1,87 @@
+{
+  "manifest": {
+    "tool_name": "purecipher-clickhouse",
+    "version": "0.1.0-alpha.1",
+    "author": "purecipher",
+    "description": "SecureMCP 2.0 adapter preparation for Official ClickHouse. Upstream deployment, tool/schema review, authentication, durable security storage, tenant isolation and live validation are pending. No running production endpoint. Read-only database account, restricted databases and query limits; block external table functions via database settings.",
+    "permissions": [
+      "read_resource",
+      "network_access",
+      "sensitive_data",
+      "environment_read",
+      "call_tool",
+      "write_resource"
+    ],
+    "requires_consent": true,
+    "idempotent": false,
+    "data_flows": [
+      {
+        "source": "Official ClickHouse",
+        "destination": "authenticated MCP client",
+        "classification": "restricted",
+        "description": "Authorized read results may contain sensitive business or personal data."
+      }
+    ],
+    "resource_access": [
+      {
+        "resource_pattern": "clickhouse:*",
+        "access_type": "read",
+        "classification": "restricted"
+      },
+      {
+        "resource_pattern": "clickhouse:*",
+        "access_type": "write",
+        "classification": "restricted"
+      }
+    ]
+  },
+  "display_name": "PureCipher Official ClickHouse",
+  "description": "SecureMCP 2.0 adapter preparation for Official ClickHouse. Upstream deployment, tool/schema review, authentication, durable security storage, tenant isolation and live validation are pending. No running production endpoint. Read-only database account, restricted databases and query limits; block external table functions via database settings.",
+  "homepage_url": "https://purecipher.com",
+  "source_url": "https://github.com/PureCipher/xsecuremcp2.0",
+  "tags": [
+    "securemcp-2.0",
+    "adapter-preparation",
+    "review-pending",
+    "clickhouse"
+  ],
+  "metadata": {
+    "publisher_profile": {
+      "publisher_id": "purecipher",
+      "display_name": "PureCipher",
+      "homepage_url": "https://purecipher.com",
+      "description": "PureCipher integrations built using SecureMCP 2.0.",
+      "affiliation": "Independent adapters; upstream trademarks belong to their respective owners."
+    },
+    "transport": "http",
+    "readiness": "integration_review_pending",
+    "live_tested": false,
+    "security_framework": "SecureMCP 2.0",
+    "tools": [
+      "catalog_list_tools",
+      "catalog_call"
+    ],
+    "oauth_scopes": [],
+    "source_file": "catalog_adapter.py",
+    "source_sha256": "1a8a8ad5061119f9a44e589ea020498be3c7b9f3782b3df891b14205dc977549",
+    "bundle_sha256": {
+      "catalog_adapter.py": "1a8a8ad5061119f9a44e589ea020498be3c7b9f3782b3df891b14205dc977549",
+      "catalog-sources.json": "cdef90b1106c4b5e0e3c9dcaecb53f25b6ee71714478df9f63ba63f9d899d23a",
+      "common.py": "6f14140b1ad64f9e2bccbb80088b8159a92d84243e05e0f7c0685b31ee8954dc"
+    },
+    "deployment_ready": false,
+    "upstream": {
+      "title": "Official ClickHouse",
+      "icon_url": "https://avatars.githubusercontent.com/u/54801242?v=4",
+      "source": {
+        "project": "https://github.com/ClickHouse/mcp-clickhouse",
+        "commit": "21e6cb2b0758150e8fd0627b699fbfd78e31837b"
+      },
+      "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/clickhouse/server.yaml",
+      "image_reference": "mcp/clickhouse",
+      "archived": false,
+      "requirements": "Read-only database account, restricted databases and query limits; block external table functions via database settings."
+    },
+    "icon_key": "clickhouse"
+  }
+}

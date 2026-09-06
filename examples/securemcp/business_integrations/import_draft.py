@@ -15,7 +15,31 @@ from purecipher.registry import _make_security_backend, _parse_manifest
 def main():
     root = Path(sys.argv[1]).resolve()
     service = sys.argv[2]
-    if service not in {"github", "slack", "jira", "outlook", "onedrive", "apollo"}:
+    if service not in {
+        "jira",
+        "youtube-transcripts",
+        "grafana",
+        "fetch",
+        "stripe",
+        "onedrive",
+        "duckduckgo",
+        "slack-archived",
+        "github",
+        "clickhouse",
+        "playwright",
+        "time",
+        "slack",
+        "puppeteer",
+        "sonarqube",
+        "apollo",
+        "outlook",
+        "sequential-thinking",
+        "dynatrace",
+        "huggingface",
+        "brave-search",
+        "filesystem",
+        "memory",
+    }:
         raise ValueError("Unknown integration")
     payload = json.loads((root / (service + "-submission.json")).read_text())
     manifest = _parse_manifest(payload.pop("manifest"))

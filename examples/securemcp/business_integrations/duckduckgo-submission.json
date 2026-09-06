@@ -1,0 +1,87 @@
+{
+  "manifest": {
+    "tool_name": "purecipher-duckduckgo",
+    "version": "0.1.0-alpha.1",
+    "author": "purecipher",
+    "description": "SecureMCP 2.0 adapter preparation for Private Web Search. Upstream deployment, tool/schema review, authentication, durable security storage, tenant isolation and live validation are pending. No running production endpoint. Restricted search egress; review provider terms and rate limits.",
+    "permissions": [
+      "read_resource",
+      "network_access",
+      "sensitive_data",
+      "environment_read",
+      "call_tool",
+      "write_resource"
+    ],
+    "requires_consent": true,
+    "idempotent": false,
+    "data_flows": [
+      {
+        "source": "Private Web Search",
+        "destination": "authenticated MCP client",
+        "classification": "restricted",
+        "description": "Authorized read results may contain sensitive business or personal data."
+      }
+    ],
+    "resource_access": [
+      {
+        "resource_pattern": "duckduckgo:*",
+        "access_type": "read",
+        "classification": "restricted"
+      },
+      {
+        "resource_pattern": "duckduckgo:*",
+        "access_type": "write",
+        "classification": "restricted"
+      }
+    ]
+  },
+  "display_name": "PureCipher Private Web Search",
+  "description": "SecureMCP 2.0 adapter preparation for Private Web Search. Upstream deployment, tool/schema review, authentication, durable security storage, tenant isolation and live validation are pending. No running production endpoint. Restricted search egress; review provider terms and rate limits.",
+  "homepage_url": "https://purecipher.com",
+  "source_url": "https://github.com/PureCipher/xsecuremcp2.0",
+  "tags": [
+    "securemcp-2.0",
+    "adapter-preparation",
+    "review-pending",
+    "duckduckgo"
+  ],
+  "metadata": {
+    "publisher_profile": {
+      "publisher_id": "purecipher",
+      "display_name": "PureCipher",
+      "homepage_url": "https://purecipher.com",
+      "description": "PureCipher integrations built using SecureMCP 2.0.",
+      "affiliation": "Independent adapters; upstream trademarks belong to their respective owners."
+    },
+    "transport": "http",
+    "readiness": "integration_review_pending",
+    "live_tested": false,
+    "security_framework": "SecureMCP 2.0",
+    "tools": [
+      "catalog_list_tools",
+      "catalog_call"
+    ],
+    "oauth_scopes": [],
+    "source_file": "catalog_adapter.py",
+    "source_sha256": "1a8a8ad5061119f9a44e589ea020498be3c7b9f3782b3df891b14205dc977549",
+    "bundle_sha256": {
+      "catalog_adapter.py": "1a8a8ad5061119f9a44e589ea020498be3c7b9f3782b3df891b14205dc977549",
+      "catalog-sources.json": "cdef90b1106c4b5e0e3c9dcaecb53f25b6ee71714478df9f63ba63f9d899d23a",
+      "common.py": "6f14140b1ad64f9e2bccbb80088b8159a92d84243e05e0f7c0685b31ee8954dc"
+    },
+    "deployment_ready": false,
+    "upstream": {
+      "title": "Private Web Search",
+      "icon_url": "https://avatars.githubusercontent.com/u/182288589?s=200&v=4",
+      "source": {
+        "project": "https://github.com/nickclyde/duckduckgo-mcp-server",
+        "commit": "8992977d65a086995c82826ceead42e890aa17c1"
+      },
+      "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/duckduckgo/server.yaml",
+      "image_reference": "mcp/duckduckgo",
+      "archived": false,
+      "requirements": "Restricted search egress; review provider terms and rate limits."
+    },
+    "icon_key": "duckduckgo"
+  }
+}

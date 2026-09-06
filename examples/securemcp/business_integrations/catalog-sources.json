@@ -1,0 +1,199 @@
+{
+  "playwright": {
+    "title": "Playwright",
+    "icon_url": "https://avatars.githubusercontent.com/u/6154722?v=4",
+    "source": {
+      "project": "https://github.com/microsoft/playwright-mcp",
+      "commit": "2d446f9e1b79886103c79406b81cc5408364487a"
+    },
+    "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/playwright/server.yaml",
+    "image_reference": "mcp/playwright",
+    "archived": false,
+    "requirements": "Isolated browser, destination allowlist, no host mounts, reviewed actions and per-user sessions."
+  },
+  "fetch": {
+    "title": "Fetch (Reference)",
+    "icon_url": "https://avatars.githubusercontent.com/u/182288589?s=200&v=4",
+    "source": {
+      "project": "https://github.com/modelcontextprotocol/servers",
+      "branch": "main",
+      "commit": "d31124c982401739917fd817c2a59db344529c16",
+      "directory": "src/fetch"
+    },
+    "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/fetch/server.yaml",
+    "image_reference": "mcp/fetch",
+    "archived": false,
+    "requirements": "Egress allowlist including redirect and DNS-rebinding defenses; block private and metadata addresses."
+  },
+  "sonarqube": {
+    "title": "SonarQube",
+    "icon_url": "https://avatars.githubusercontent.com/u/545988?s=200&v=4",
+    "source": {
+      "project": "https://github.com/SonarSource/sonarqube-mcp-server",
+      "branch": "master",
+      "commit": "9721d0408bfe72709e28fa0b303b7b5b4ca8446f"
+    },
+    "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/sonarqube/server.yaml",
+    "image_reference": "mcp/sonarqube",
+    "archived": false,
+    "requirements": "SonarQube site and least-privilege user token; read-only tool allowlist."
+  },
+  "time": {
+    "title": "Time (Reference)",
+    "icon_url": "https://avatars.githubusercontent.com/u/182288589?s=200&v=4",
+    "source": {
+      "project": "https://github.com/modelcontextprotocol/servers",
+      "branch": "2025.4.24",
+      "commit": "b4ee623039a6c60053ce67269701ad9e95073306",
+      "directory": "src/time"
+    },
+    "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/time/server.yaml",
+    "image_reference": "mcp/time",
+    "archived": false,
+    "requirements": "Reviewed timezone tools; no provider credentials required."
+  },
+  "grafana": {
+    "title": "Grafana",
+    "icon_url": "https://avatars.githubusercontent.com/u/7195757?s=200&v=4",
+    "source": {
+      "project": "https://github.com/grafana/mcp-grafana",
+      "branch": "main",
+      "commit": "76ed7dba5a18c9058d58a9ec037cc0e6a6febe49"
+    },
+    "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/grafana/server.yaml",
+    "image_reference": "mcp/grafana",
+    "archived": false,
+    "requirements": "Grafana URL and least-privilege service account; read-only tool allowlist."
+  },
+  "duckduckgo": {
+    "title": "Private Web Search",
+    "icon_url": "https://avatars.githubusercontent.com/u/182288589?s=200&v=4",
+    "source": {
+      "project": "https://github.com/nickclyde/duckduckgo-mcp-server",
+      "commit": "8992977d65a086995c82826ceead42e890aa17c1"
+    },
+    "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/duckduckgo/server.yaml",
+    "image_reference": "mcp/duckduckgo",
+    "archived": false,
+    "requirements": "Restricted search egress; review provider terms and rate limits."
+  },
+  "memory": {
+    "title": "Memory (Reference)",
+    "icon_url": "https://cdn.jsdelivr.net/npm/simple-icons@v7/icons/knowledgebase.svg",
+    "source": {
+      "project": "https://github.com/modelcontextprotocol/servers",
+      "branch": "2025.4.24",
+      "commit": "b4ee623039a6c60053ce67269701ad9e95073306",
+      "directory": "src/memory"
+    },
+    "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/memory/server.yaml",
+    "image_reference": "mcp/memory",
+    "archived": false,
+    "requirements": "Dedicated persistent volume and tenant isolation; explicit consent for memory mutations."
+  },
+  "sequential-thinking": {
+    "title": "Sequential Thinking (Reference)",
+    "icon_url": "https://avatars.githubusercontent.com/u/182288589?s=200&v=4",
+    "source": {
+      "project": "https://github.com/modelcontextprotocol/servers",
+      "branch": "2025.4.6",
+      "commit": "82064568802e542c3924560aef2cb421b4ce436c",
+      "directory": "src/sequentialthinking"
+    },
+    "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/sequentialthinking/server.yaml",
+    "image_reference": "mcp/sequentialthinking",
+    "archived": false,
+    "requirements": "Per-session state isolation and bounded input/history sizes."
+  },
+  "slack-archived": {
+    "title": "Slack (Archived)",
+    "icon_url": "https://avatars.githubusercontent.com/u/6911160?s=200&v=4",
+    "source": {
+      "project": "https://github.com/modelcontextprotocol/servers",
+      "branch": "2025.4.24",
+      "commit": "b4ee623039a6c60053ce67269701ad9e95073306",
+      "dockerfile": "src/slack/Dockerfile"
+    },
+    "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/slack/server.yaml",
+    "image_reference": "mcp/slack",
+    "archived": true,
+    "requirements": "Archived upstream: maintenance review required. Prefer the existing PureCipher Slack OAuth integration."
+  },
+  "youtube-transcripts": {
+    "title": "YouTube Transcripts",
+    "icon_url": "https://avatars.githubusercontent.com/u/4052902?s=200&v=4",
+    "source": {
+      "project": "https://github.com/jkawamoto/mcp-youtube-transcript",
+      "commit": "0a42884fc8e5eb03dd331b6519411849bcd26a95"
+    },
+    "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/youtube_transcript/server.yaml",
+    "image_reference": "mcp/youtube-transcript",
+    "archived": false,
+    "requirements": "Restricted YouTube egress, transcript availability and usage review."
+  },
+  "dynatrace": {
+    "title": "Dynatrace",
+    "icon_url": "https://avatars.githubusercontent.com/u/58178984?s=200&v=4",
+    "source": {
+      "project": "https://github.com/dynatrace-oss/dynatrace-mcp",
+      "branch": "main",
+      "commit": "35db4695ce24f19d5326edee5a86e9ba39e13f69"
+    },
+    "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/dynatrace-mcp-server/server.yaml",
+    "image_reference": "mcp/dynatrace-mcp-server",
+    "archived": false,
+    "requirements": "Dynatrace environment and scoped OAuth credentials; read-only tool allowlist."
+  },
+  "clickhouse": {
+    "title": "Official ClickHouse",
+    "icon_url": "https://avatars.githubusercontent.com/u/54801242?v=4",
+    "source": {
+      "project": "https://github.com/ClickHouse/mcp-clickhouse",
+      "commit": "21e6cb2b0758150e8fd0627b699fbfd78e31837b"
+    },
+    "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/clickhouse/server.yaml",
+    "image_reference": "mcp/clickhouse",
+    "archived": false,
+    "requirements": "Read-only database account, restricted databases and query limits; block external table functions via database settings."
+  },
+  "brave-search": {
+    "title": "Brave Search",
+    "icon_url": "https://avatars.githubusercontent.com/u/12301619?s=200&v=4",
+    "source": {
+      "project": "https://github.com/brave/brave-search-mcp-server",
+      "commit": "fd28e3e7b3e1911b4a2ba87a199feb86ec173c60"
+    },
+    "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/brave/server.yaml",
+    "image_reference": "mcp/brave-search",
+    "archived": false,
+    "requirements": "Brave Search API key and request budget/rate limits."
+  },
+  "filesystem": {
+    "title": "Filesystem (Reference)",
+    "icon_url": "https://avatars.githubusercontent.com/u/182288589?s=200&v=4",
+    "source": {
+      "project": "https://github.com/modelcontextprotocol/servers",
+      "branch": "2025.4.24",
+      "commit": "b4ee623039a6c60053ce67269701ad9e95073306",
+      "dockerfile": "src/filesystem/Dockerfile"
+    },
+    "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/filesystem/server.yaml",
+    "image_reference": "mcp/filesystem",
+    "archived": false,
+    "requirements": "Dedicated read-only directory mounts; no host home, secrets or Docker socket; no network."
+  },
+  "puppeteer": {
+    "title": "Puppeteer (Archived)",
+    "icon_url": "https://avatars.githubusercontent.com/u/6906516?s=200&v=4",
+    "source": {
+      "project": "https://github.com/modelcontextprotocol/servers",
+      "branch": "2025.4.24",
+      "commit": "b4ee623039a6c60053ce67269701ad9e95073306",
+      "dockerfile": "src/puppeteer/Dockerfile"
+    },
+    "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/puppeteer/server.yaml",
+    "image_reference": "mcp/puppeteer",
+    "archived": true,
+    "requirements": "Archived upstream: maintenance review required. Isolated browser, destination allowlist and per-user sessions."
+  }
+}

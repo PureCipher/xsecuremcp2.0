@@ -1,0 +1,70 @@
+{
+  "manifest": {
+    "tool_name": "purecipher-stripe",
+    "version": "0.1.0-alpha.1",
+    "author": "purecipher",
+    "description": "Stripe Apps OAuth: read balances, payment and invoice summaries. No charges, refunds, transfers or payment client secrets. SecureMCP 2.0 preparation: provider authorization, durable security storage and live validation pending. No running production endpoint.",
+    "permissions": [
+      "read_resource",
+      "network_access",
+      "sensitive_data",
+      "environment_read"
+    ],
+    "requires_consent": true,
+    "idempotent": true,
+    "data_flows": [
+      {
+        "source": "Stripe",
+        "destination": "authenticated MCP client",
+        "classification": "restricted",
+        "description": "Authorized read results may contain sensitive business or personal data."
+      }
+    ],
+    "resource_access": [
+      {
+        "resource_pattern": "stripe:*",
+        "access_type": "read",
+        "classification": "restricted"
+      }
+    ]
+  },
+  "display_name": "PureCipher Stripe",
+  "description": "Stripe Apps OAuth: read balances, payment and invoice summaries. No charges, refunds, transfers or payment client secrets. SecureMCP 2.0 preparation: provider authorization, durable security storage and live validation pending. No running production endpoint.",
+  "homepage_url": "https://purecipher.com",
+  "source_url": "https://github.com/PureCipher/xsecuremcp2.0",
+  "tags": [
+    "securemcp-2.0",
+    "read-only",
+    "authorization-pending",
+    "stripe"
+  ],
+  "metadata": {
+    "publisher_profile": {
+      "publisher_id": "purecipher",
+      "display_name": "PureCipher",
+      "homepage_url": "https://purecipher.com",
+      "description": "PureCipher integrations built using SecureMCP 2.0.",
+      "affiliation": "Independent integrations; not endorsed by the upstream providers."
+    },
+    "transport": "http",
+    "readiness": "authorization_pending",
+    "live_tested": false,
+    "security_framework": "SecureMCP 2.0",
+    "tools": [
+      "stripe_get_balance",
+      "stripe_list_payment_intents",
+      "stripe_list_invoices"
+    ],
+    "oauth_scopes": [
+      "stripe_apps"
+    ],
+    "source_file": "stripe_server.py",
+    "source_sha256": "4aaad09bc4b94e3900422541b9877462d73fa7178099a5d7fd5907b2b71d96e6",
+    "bundle_sha256": {
+      "stripe_server.py": "4aaad09bc4b94e3900422541b9877462d73fa7178099a5d7fd5907b2b71d96e6",
+      "common.py": "6f14140b1ad64f9e2bccbb80088b8159a92d84243e05e0f7c0685b31ee8954dc"
+    },
+    "deployment_ready": false,
+    "icon_key": "stripe"
+  }
+}
