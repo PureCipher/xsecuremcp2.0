@@ -123,6 +123,11 @@ def profile_blockers(registry, profile):
                 "A selected client is unavailable or belongs to another account"
             )
     for selected in profile["servers"]:
+        from purecipher.product_connections import connection_blocker
+
+        reason = connection_blocker(registry, profile["owner"], selected)
+        if reason:
+            blockers.append(reason)
         listing = registry._marketplace().get(selected["listing_id"])
         if not listing or registry._get_public_listing(listing.tool_name) is None:
             blockers.append("A selected server is not published and verified")
@@ -341,9 +346,19 @@ def mount_workspace(registry, prefix):
                     or not set(tools).issubset(inspected_tools(listing))
                 ):
                     raise ValueError("Select inspected tools from this server")
-                selected_servers.append(
-                    {"listing_id": listing.listing_id, "tools": sorted(set(tools))}
-                )
+                entry = {"listing_id": listing.listing_id, "tools": sorted(set(tools))}
+                connection_id = selected.get("connection_id")
+                if connection_id:
+                    connection = owned(request, connection_id)
+                    if (
+                        not connection
+                        or connection.get("kind") != "product_connection"
+                        or listing.author != "purecipher"
+                        or listing.tool_name != "purecipher-" + connection["product"]
+                    ):
+                        raise ValueError("Select your own connection for this product")
+                    entry["connection_id"] = connection_id
+                selected_servers.append(entry)
             status = body.get("status", "inactive")
             if status not in {"active", "inactive"}:
                 raise ValueError("Invalid profile status")

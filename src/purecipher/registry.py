@@ -76,6 +76,7 @@ from purecipher.openapi_store import (
     extract_openapi_operations,
 )
 from purecipher.policy_routes import mount_registry_policy_routes
+from purecipher.product_connections import mount_product_connections
 from purecipher.publishers import (
     get_public_publisher_profile,
     list_public_publishers,
@@ -616,6 +617,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         if mount_registry_api:
             self.mount_registry_api(prefix=registry_prefix)
             mount_workspace(self, registry_prefix)
+            mount_product_connections(self, registry_prefix)
 
         # Iter 13.5: re-attach OpenAPI proxy tools for any listings
         # that were published in a previous run. Restarts of a
