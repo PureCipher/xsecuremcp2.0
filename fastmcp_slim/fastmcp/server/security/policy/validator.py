@@ -133,6 +133,7 @@ _VALID_POLICY_TYPES = {
     "ccpa_request",
     "soc2_request",
     "gdpr_request",
+    "hipaa_request",
 }
 
 _VALID_COMPOSITIONS = {

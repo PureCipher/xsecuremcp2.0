@@ -408,42 +408,29 @@ class TestBundleComplianceRuleIntegration:
             ).decision == PolicyDecision.DENY
 
     @pytest.mark.anyio
-    async def test_hipaa_bundle_core_provider_evaluates(self) -> None:
+    async def test_hipaa_bundle_requires_trusted_evidence(self) -> None:
         from fastmcp.server.security.policy.declarative import load_policy
+        from fastmcp.server.security.policy.policies.hipaa_request import (
+            HipaaRequestPolicy,
+        )
         from fastmcp.server.security.policy.workbench import get_policy_bundle
 
         bundle = get_policy_bundle("hipaa-health-data")
         assert bundle is not None
-        core_config = bundle["providers"][0]
-        assert core_config["type"] == "compliance_rule"
-
-        provider = load_policy(core_config)
-        assert isinstance(provider, ComplianceRulePolicy)
-
-        untagged = await provider.evaluate(_ctx(tags=frozenset({"safe"})))
-        assert untagged.decision == PolicyDecision.DEFER
-
-        missing_all = await provider.evaluate(_ctx(tags=frozenset({"phi"})))
-        assert missing_all.decision == PolicyDecision.DENY
-
-        role_only = await provider.evaluate(
-            _ctx(
-                tags=frozenset({"phi"}),
-                metadata={"actor_role": "healthcare_provider"},
-            )
-        )
-        assert role_only.decision == PolicyDecision.DENY
-
-        valid_access = await provider.evaluate(
-            _ctx(
-                tags=frozenset({"phi"}),
-                metadata={
-                    "actor_role": "healthcare_provider",
-                    "purpose": "treatment",
-                },
-            )
-        )
-        assert valid_access.decision == PolicyDecision.ALLOW
+        provider = load_policy(bundle["providers"][0])
+        assert isinstance(provider, HipaaRequestPolicy)
+        for tags in (frozenset(), frozenset({"phi"})):
+            assert (
+                await provider.evaluate(
+                    _ctx(
+                        tags=tags,
+                        metadata={
+                            "actor_role": "healthcare_provider",
+                            "purpose": "treatment",
+                        },
+                    )
+                )
+            ).decision == PolicyDecision.DENY
 
     @pytest.mark.anyio
     async def test_pci_requires_trusted_evidence(self) -> None:

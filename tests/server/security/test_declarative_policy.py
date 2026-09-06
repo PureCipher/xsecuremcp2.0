@@ -656,6 +656,7 @@ class TestSchema:
             "ccpa_request",
             "soc2_request",
             "gdpr_request",
+            "hipaa_request",
         }
         assert set(types.keys()) == expected
 

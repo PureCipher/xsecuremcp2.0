@@ -31,6 +31,7 @@ from fastmcp.server.security.policy.engine import (
 from fastmcp.server.security.policy.policies.ccpa_request import CcpaEvidence
 from fastmcp.server.security.policy.policies.ferpa_request import FerpaEvidence
 from fastmcp.server.security.policy.policies.gdpr_request import GdprEvidence
+from fastmcp.server.security.policy.policies.hipaa_request import HipaaEvidence
 from fastmcp.server.security.policy.policies.pci_request import PciEvidence
 from fastmcp.server.security.policy.policies.soc2_request import Soc2Evidence
 from fastmcp.server.security.policy.policies.zero_trust import ZeroTrustEvidence
@@ -69,6 +70,10 @@ class PolicyEnforcementMiddleware(Middleware):
         policy_engine: PolicyEngine,
         *,
         bypass_stdio: bool = False,
+        hipaa_evidence_resolver: Callable[
+            [PolicyEvaluationContext], Awaitable[HipaaEvidence | None]
+        ]
+        | None = None,
         gdpr_evidence_resolver: Callable[
             [PolicyEvaluationContext], Awaitable[GdprEvidence | None]
         ]
@@ -102,6 +107,7 @@ class PolicyEnforcementMiddleware(Middleware):
         self.ccpa_evidence_resolver = ccpa_evidence_resolver
         self.soc2_evidence_resolver = soc2_evidence_resolver
         self.gdpr_evidence_resolver = gdpr_evidence_resolver
+        self.hipaa_evidence_resolver = hipaa_evidence_resolver
 
     async def _evaluate(self, context: PolicyEvaluationContext) -> PolicyResult:
         if self.ferpa_evidence_resolver is not None and not context.action.startswith(
@@ -166,6 +172,17 @@ class PolicyEnforcementMiddleware(Middleware):
             context = replace(
                 context,
                 gdpr_evidence=gdpr_evidence,
+                timestamp=datetime.now(timezone.utc),
+            )
+        if self.hipaa_evidence_resolver is not None:
+            try:
+                hipaa_evidence = await self.hipaa_evidence_resolver(context)
+            except Exception:
+                logger.warning("HIPAA evidence resolution failed; denying request")
+                return _deny_result("HIPAA evidence is unavailable")
+            context = replace(
+                context,
+                hipaa_evidence=hipaa_evidence,
                 timestamp=datetime.now(timezone.utc),
             )
         return await self.policy_engine.evaluate(context)

@@ -111,6 +111,7 @@ class PolicyEvaluationContext:
     ccpa_evidence: Any = None
     soc2_evidence: Any = None
     gdpr_evidence: Any = None
+    hipaa_evidence: Any = None
 
 
 @dataclass(frozen=True)

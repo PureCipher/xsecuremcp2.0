@@ -190,101 +190,30 @@ _BUNDLES: tuple[PolicyBundle, ...] = (
     ),
     PolicyBundle(
         bundle_id="hipaa-health-data",
-        title="HIPAA Health Data Protection",
-        summary="US HIPAA compliance for protected health information in MCP workflows.",
-        description=(
-            "Enforces HIPAA principles for any MCP tool or resource handling "
-            "protected health information (PHI). Requires authorized roles "
-            "(healthcare provider, business associate, etc.) and a stated purpose "
-            "before granting access. Includes strict RBAC, PHI-tagged resource "
-            "denylists, business-hours restrictions for administrative actions, "
-            "and conservative rate limits."
-        ),
+        title="HIPAA Request Validation",
+        summary="Validate PHI requests with trusted patient-specific evidence.",
+        description="Checks permitted grounds, minimum necessary or a verified exception, patient restrictions, authorizations, recipient authority and business-associate scope. Requires exact grants and a trusted server-side resolver. No global business-hours gate.",
         risk_posture="strict",
         recommended_environments=("staging", "production"),
         tags=("compliance", "hipaa", "healthcare", "phi", "us"),
+        pack_version="2.0.0",
+        regulation_reference="45 CFR Parts 160 and 164; HHS guidance reviewed September 6, 2026",
+        source_reviewed_at="2026-09-06",
+        source_urls=(
+            "https://www.hhs.gov/hipaa/for-professionals/privacy/laws-regulations/index.html",
+            "https://www.ecfr.gov/current/title-45/subtitle-A/subchapter-C/part-164",
+            "https://www.hhs.gov/hipaa/for-professionals/special-topics/reproductive-health/final-rule-fact-sheet/index.html",
+        ),
+        coverage_note="Request safeguards only, not full HIPAA certification. External systems verify legal conditions and enforce output controls. Part 2 records and authorization/restriction exceptions are unsupported. HHS reports most 2024 reproductive-health provisions vacated; no blanket attestation requirement is imposed. Empty grants/issuer/scope deny execution; active policies are not automatically migrated.",
         providers=(
             {
-                "type": "compliance_rule",
-                "policy_id": "hipaa-bundle-core",
-                "version": "1.0.0",
-                "framework": "HIPAA",
-                "rules": [
-                    {
-                        "name": "authorized_role_required",
-                        "description": (
-                            "PHI access requires an authorized covered-entity "
-                            "or business-associate role"
-                        ),
-                        "tags": [
-                            "health_data",
-                            "hipaa_regulated",
-                            "medical_record",
-                            "phi",
-                        ],
-                        "checks": [
-                            {
-                                "metadata_key": "actor_role",
-                                "allowed_values": [
-                                    "business_associate",
-                                    "health_plan",
-                                    "healthcare_clearinghouse",
-                                    "healthcare_provider",
-                                ],
-                            },
-                            {
-                                "metadata_key": "purpose",
-                            },
-                        ],
-                        "deny_message": (
-                            "HIPAA: PHI access requires an authorized role "
-                            "and a stated purpose (minimum necessary principle)"
-                        ),
-                        "allow_message": (
-                            "HIPAA: PHI access permitted for authorized role "
-                            "with stated purpose"
-                        ),
-                    },
-                ],
-            },
-            {
-                "type": "rbac",
-                "policy_id": "hipaa-bundle-rbac",
-                "version": "1.0.0",
-                "role_mappings": {
-                    "healthcare_provider": [
-                        "call_tool",
-                        "read_resource",
-                    ],
-                    "business_associate": ["call_tool", "read_resource"],
-                    "compliance_officer": [
-                        "call_tool",
-                        "read_resource",
-                        "manage_policy",
-                        "review_listing",
-                    ],
-                    "admin": ["*"],
-                },
-                "default_decision": "deny",
-            },
-            {
-                "type": "denylist",
-                "policy_id": "hipaa-bundle-denylist",
-                "version": "1.0.0",
-                "denied": [
-                    "admin-panel",
-                    "data:phi-export-*",
-                    "data:bulk-patient-*",
-                ],
-            },
-            {
-                "type": "time_based",
-                "policy_id": "hipaa-bundle-business-hours",
-                "version": "1.0.0",
-                "allowed_days": [0, 1, 2, 3, 4],
-                "start_hour": 6,
-                "end_hour": 22,
-                "utc_offset_hours": -5,
+                "type": "hipaa_request",
+                "policy_id": "hipaa-request-validation",
+                "version": "2.0.0",
+                "grants": [],
+                "trusted_issuers": [],
+                "scope_id": "",
+                "max_evidence_age_seconds": 60,
             },
             {
                 "type": "rate_limit",
