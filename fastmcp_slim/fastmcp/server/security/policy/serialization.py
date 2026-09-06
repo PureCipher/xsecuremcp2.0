@@ -32,6 +32,7 @@ from fastmcp.server.security.policy.policies.compliance_rule import (
     ComplianceRulePolicy,
 )
 from fastmcp.server.security.policy.policies.ferpa_request import FerpaRequestPolicy
+from fastmcp.server.security.policy.policies.pci_request import PciRequestPolicy
 from fastmcp.server.security.policy.policies.rate_limit import RateLimitPolicy
 from fastmcp.server.security.policy.policies.rbac import RoleBasedPolicy
 from fastmcp.server.security.policy.policies.resource_scoped import (
@@ -270,7 +271,9 @@ def policy_provider_to_config(provider: PolicyProvider) -> dict[str, Any]:
 
     if isinstance(provider, ZeroTrustPolicy):
         return {
-            "type": "zero_trust",
+            "type": "pci_request"
+            if isinstance(provider, PciRequestPolicy)
+            else "zero_trust",
             "policy_id": provider.policy_id,
             "version": provider.version,
             "scope_id": provider.scope_id,

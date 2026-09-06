@@ -129,6 +129,7 @@ _VALID_POLICY_TYPES = {
     "compliance_rule",
     "ferpa_request",
     "zero_trust",
+    "pci_request",
 }
 
 _VALID_COMPOSITIONS = {

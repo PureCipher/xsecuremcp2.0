@@ -471,114 +471,30 @@ _BUNDLES: tuple[PolicyBundle, ...] = (
     ),
     PolicyBundle(
         bundle_id="pci-dss-cardholder-data",
-        title="PCI DSS Cardholder Data Protection",
-        summary="Payment Card Industry Data Security Standard controls for cardholder data.",
-        description=(
-            "Enforces PCI DSS requirements for any MCP tool or resource handling "
-            "cardholder data (CHD) or sensitive authentication data (SAD). Requires "
-            "a valid data handling justification and authorized processor role before "
-            "granting access. Combines PCI DSS compliance rules with strict RBAC, "
-            "denylists for raw card data exports, business-hours restrictions for "
-            "data operations, and conservative rate limits."
-        ),
+        title="PCI DSS Request Validation",
+        summary="Validate account-data operations, PAN protection and sensitive authentication data restrictions.",
+        description="Requires trusted request-bound evidence and exact actor/resource/action grants. Evaluates display, processing, transmission, storage and deletion safeguards. Preserves rate limiting; institutional workflows and PCI certification are outside scope.",
         risk_posture="strict",
         recommended_environments=("staging", "production"),
         tags=("compliance", "pci-dss", "payment", "cardholder", "financial"),
+        pack_version="2.0.0",
+        regulation_reference="PCI DSS v4.0.1 (June 2024)",
+        source_reviewed_at="2026-09-06",
+        source_urls=(
+            "https://www.pcisecuritystandards.org/document_library/",
+            "https://www.pcisecuritystandards.org/faqs/1154/",
+            "https://www.pcisecuritystandards.org/faqs/1492/",
+        ),
+        coverage_note="Request safeguards only, not PCI certification or payload inspection. The trusted verifier must validate actual scope and server protections. This conservative pack does not support issuer-specific SAD retention exceptions or SAD disclosure to MCP clients. Empty issuer/scope/grants deny access until configured; existing policies are not automatically replaced.",
         providers=(
             {
-                "type": "compliance_rule",
-                "policy_id": "pci-dss-bundle-core",
-                "version": "1.0.0",
-                "framework": "PCI DSS",
-                "rules": [
-                    {
-                        "name": "cardholder_data_protection",
-                        "description": (
-                            "Cardholder data access requires authorized processor "
-                            "role and valid business justification (PCI DSS Req 7)"
-                        ),
-                        "tags": [
-                            "cardholder_data",
-                            "pci_regulated",
-                            "payment_data",
-                            "sad",
-                        ],
-                        "checks": [
-                            {
-                                "metadata_key": "processor_role",
-                                "allowed_values": [
-                                    "payment_processor",
-                                    "acquiring_bank",
-                                    "issuing_bank",
-                                    "service_provider",
-                                    "merchant_admin",
-                                ],
-                            },
-                            {
-                                "metadata_key": "business_justification",
-                                "allowed_values": [
-                                    "transaction_processing",
-                                    "fraud_investigation",
-                                    "dispute_resolution",
-                                    "compliance_audit",
-                                    "system_maintenance",
-                                ],
-                            },
-                        ],
-                        "deny_message": (
-                            "PCI DSS: Cardholder data access requires an "
-                            "authorized processor role and valid business "
-                            "justification (Requirement 7: Restrict access)"
-                        ),
-                        "allow_message": (
-                            "PCI DSS: Cardholder data access permitted for "
-                            "authorized role with valid justification"
-                        ),
-                    },
-                ],
-            },
-            {
-                "type": "rbac",
-                "policy_id": "pci-dss-bundle-rbac",
-                "version": "1.0.0",
-                "role_mappings": {
-                    "payment_processor": ["call_tool", "read_resource"],
-                    "merchant_admin": ["call_tool", "read_resource"],
-                    "security_assessor": [
-                        "call_tool",
-                        "read_resource",
-                        "review_listing",
-                    ],
-                    "compliance_officer": [
-                        "call_tool",
-                        "read_resource",
-                        "manage_policy",
-                        "review_listing",
-                    ],
-                    "admin": ["*"],
-                },
-                "default_decision": "deny",
-            },
-            {
-                "type": "denylist",
-                "policy_id": "pci-dss-bundle-denylist",
-                "version": "1.0.0",
-                "denied": [
-                    "admin-panel",
-                    "data:card-export-*",
-                    "data:pan-bulk-*",
-                    "data:cvv-*",
-                    "debug:*",
-                ],
-            },
-            {
-                "type": "time_based",
-                "policy_id": "pci-dss-bundle-business-hours",
-                "version": "1.0.0",
-                "allowed_days": [0, 1, 2, 3, 4],
-                "start_hour": 6,
-                "end_hour": 22,
-                "utc_offset_hours": 0,
+                "type": "pci_request",
+                "policy_id": "pci-dss-request-validation",
+                "version": "2.0.0",
+                "grants": [],
+                "trusted_issuers": [],
+                "scope_id": "",
+                "max_evidence_age_seconds": 60,
             },
             {
                 "type": "rate_limit",

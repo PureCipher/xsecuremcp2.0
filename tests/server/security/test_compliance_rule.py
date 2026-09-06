@@ -454,42 +454,11 @@ class TestBundleComplianceRuleIntegration:
         assert valid_access.decision == PolicyDecision.ALLOW
 
     @pytest.mark.anyio
-    async def test_pci_dss_bundle_core_provider_evaluates(self) -> None:
-        from fastmcp.server.security.policy.declarative import load_policy
-        from fastmcp.server.security.policy.workbench import get_policy_bundle
+    async def test_pci_requires_trusted_evidence(self) -> None:
+        from fastmcp.server.security.policy.policies.pci_request import PciRequestPolicy
 
-        bundle = get_policy_bundle("pci-dss-cardholder-data")
-        assert bundle is not None
-        core_config = bundle["providers"][0]
-        assert core_config["type"] == "compliance_rule"
-
-        provider = load_policy(core_config)
-        assert isinstance(provider, ComplianceRulePolicy)
-
-        untagged = await provider.evaluate(_ctx(tags=frozenset({"safe"})))
-        assert untagged.decision == PolicyDecision.DEFER
-
-        missing_all = await provider.evaluate(_ctx(tags=frozenset({"cardholder_data"})))
-        assert missing_all.decision == PolicyDecision.DENY
-
-        role_only = await provider.evaluate(
-            _ctx(
-                tags=frozenset({"cardholder_data"}),
-                metadata={"processor_role": "payment_processor"},
-            )
-        )
-        assert role_only.decision == PolicyDecision.DENY
-
-        valid_access = await provider.evaluate(
-            _ctx(
-                tags=frozenset({"payment_data"}),
-                metadata={
-                    "processor_role": "payment_processor",
-                    "business_justification": "transaction_processing",
-                },
-            )
-        )
-        assert valid_access.decision == PolicyDecision.ALLOW
+        result = await PciRequestPolicy().evaluate(_ctx(tags=frozenset({"sad"})))
+        assert result.decision == PolicyDecision.DENY
 
     @pytest.mark.anyio
     async def test_ccpa_bundle_core_provider_evaluates(self) -> None:

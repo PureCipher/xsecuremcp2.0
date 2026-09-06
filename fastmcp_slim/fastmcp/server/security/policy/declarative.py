@@ -73,6 +73,7 @@ from fastmcp.server.security.policy.policies.compliance_rule import (
     MetadataCheck,
 )
 from fastmcp.server.security.policy.policies.ferpa_request import FerpaRequestPolicy
+from fastmcp.server.security.policy.policies.pci_request import PciRequestPolicy
 from fastmcp.server.security.policy.policies.rate_limit import RateLimitPolicy
 from fastmcp.server.security.policy.policies.rbac import RoleBasedPolicy
 from fastmcp.server.security.policy.policies.resource_scoped import (
@@ -342,9 +343,46 @@ def _build_zero_trust(config: dict[str, Any]) -> ZeroTrustPolicy:
     )
 
 
+def _build_pci_request(config: dict[str, Any]) -> PciRequestPolicy:
+    base = _build_zero_trust(
+        {**config, "policy_id": config.get("policy_id", "pci-dss-request-validation")}
+    )
+    return PciRequestPolicy(**vars(base))
+
+
 def _register_builtins() -> None:
     """Register all built-in policy types with the global registry."""
     builtins = [
+        PolicyTypeDescriptor(
+            type_key="pci_request",
+            factory=_build_pci_request,
+            display_name="PCI DSS Request Validation",
+            category="compliance",
+            description="Operation-aware account-data safeguards with trusted evidence.",
+            field_specs={
+                "grants": {
+                    "label": "Exact grants",
+                    "type": "json_list",
+                    "required": True,
+                },
+                "trusted_issuers": {
+                    "label": "Trusted issuers",
+                    "type": "string_list",
+                    "required": True,
+                },
+                "scope_id": {
+                    "label": "Server and tenant scope",
+                    "type": "string",
+                    "required": True,
+                },
+            },
+            starter_config={
+                "type": "pci_request",
+                "grants": [],
+                "trusted_issuers": [],
+                "scope_id": "",
+            },
+        ),
         PolicyTypeDescriptor(
             type_key="zero_trust",
             factory=_build_zero_trust,

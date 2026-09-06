@@ -652,6 +652,7 @@ class TestSchema:
             "compliance_rule",
             "ferpa_request",
             "zero_trust",
+            "pci_request",
         }
         assert set(types.keys()) == expected
 

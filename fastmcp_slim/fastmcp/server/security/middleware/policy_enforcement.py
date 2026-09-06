@@ -29,6 +29,7 @@ from fastmcp.server.security.policy.engine import (
     PolicyViolationError,
 )
 from fastmcp.server.security.policy.policies.ferpa_request import FerpaEvidence
+from fastmcp.server.security.policy.policies.pci_request import PciEvidence
 from fastmcp.server.security.policy.policies.zero_trust import ZeroTrustEvidence
 from fastmcp.server.security.policy.provider import (
     PolicyEvaluationContext,
@@ -65,6 +66,10 @@ class PolicyEnforcementMiddleware(Middleware):
         policy_engine: PolicyEngine,
         *,
         bypass_stdio: bool = False,
+        pci_evidence_resolver: Callable[
+            [PolicyEvaluationContext], Awaitable[PciEvidence | None]
+        ]
+        | None = None,
         zero_trust_evidence_resolver: Callable[
             [PolicyEvaluationContext], Awaitable[ZeroTrustEvidence | None]
         ]
@@ -78,6 +83,7 @@ class PolicyEnforcementMiddleware(Middleware):
         self.bypass_stdio = bypass_stdio
         self.ferpa_evidence_resolver = ferpa_evidence_resolver
         self.zero_trust_evidence_resolver = zero_trust_evidence_resolver
+        self.pci_evidence_resolver = pci_evidence_resolver
 
     async def _evaluate(self, context: PolicyEvaluationContext) -> PolicyResult:
         if self.ferpa_evidence_resolver is not None and not context.action.startswith(
@@ -101,6 +107,15 @@ class PolicyEnforcementMiddleware(Middleware):
                 context,
                 zero_trust_evidence=zero_evidence,
                 timestamp=datetime.now(timezone.utc),
+            )
+        if self.pci_evidence_resolver is not None:
+            try:
+                pci_evidence = await self.pci_evidence_resolver(context)
+            except Exception:
+                logger.warning("PCI evidence resolution failed; denying request")
+                return _deny_result("PCI evidence is unavailable")
+            context = replace(
+                context, pci_evidence=pci_evidence, timestamp=datetime.now(timezone.utc)
             )
         return await self.policy_engine.evaluate(context)
 

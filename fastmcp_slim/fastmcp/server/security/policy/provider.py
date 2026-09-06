@@ -107,6 +107,7 @@ class PolicyEvaluationContext:
     # Server-supplied evidence; never populated from request metadata.
     ferpa_evidence: Any = None
     zero_trust_evidence: Any = None
+    pci_evidence: Any = None
 
 
 @dataclass(frozen=True)
