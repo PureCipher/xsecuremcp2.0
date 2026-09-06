@@ -1,0 +1,75 @@
+{
+  "manifest": {
+    "tool_name": "purecipher-apollo",
+    "version": "0.1.0-alpha.1",
+    "author": "purecipher",
+    "description": "Apollo.io prospect previews, company search and authenticated profile using SecureMCP 2.0. Company search is disabled by default because it costs one Apollo credit per page. No enrichment, outreach or contact writes. Preparation draft: approved partner OAuth registration, durable security storage, consent enrollment and live validation are pending. No running production endpoint.",
+    "permissions": [
+      "read_resource",
+      "network_access",
+      "sensitive_data",
+      "environment_read"
+    ],
+    "requires_consent": true,
+    "idempotent": true,
+    "data_flows": [
+      {
+        "source": "Apollo.io",
+        "destination": "authenticated MCP client",
+        "classification": "restricted",
+        "description": "Authorized read results may contain sensitive business or personal data."
+      }
+    ],
+    "resource_access": [
+      {
+        "resource_pattern": "apollo:*",
+        "access_type": "read",
+        "classification": "restricted"
+      }
+    ]
+  },
+  "display_name": "PureCipher Apollo.io",
+  "description": "Apollo.io prospect previews, company search and authenticated profile using SecureMCP 2.0. Company search is disabled by default because it costs one Apollo credit per page. No enrichment, outreach or contact writes. Preparation draft: approved partner OAuth registration, durable security storage, consent enrollment and live validation are pending. No running production endpoint.",
+  "homepage_url": "https://purecipher.com",
+  "source_url": "https://github.com/PureCipher/xsecuremcp2.0",
+  "tags": [
+    "apollo",
+    "sales-research",
+    "securemcp-2.0",
+    "read-only",
+    "authorization-pending"
+  ],
+  "metadata": {
+    "publisher_profile": {
+      "publisher_id": "purecipher",
+      "display_name": "PureCipher",
+      "homepage_url": "https://purecipher.com",
+      "description": "PureCipher integrations with Google Workspace, built using SecureMCP 2.0.",
+      "affiliation": "Independent integrations; not published or endorsed by Google."
+    },
+    "transport": "http",
+    "readiness": "authorization_pending",
+    "live_tested": false,
+    "security_framework": "SecureMCP 2.0",
+    "tools": [
+      "apollo_search_people",
+      "apollo_search_companies",
+      "apollo_profile"
+    ],
+    "oauth_scopes": [
+      "read_user_profile",
+      "mixed_people_api_search"
+    ],
+    "source_file": "apollo_server.py",
+    "source_sha256": "886098cf3001fd4c18cb84deca5c6df9d87a82b21f270cc7a4c82387b6baca61",
+    "bundle_sha256": {
+      "apollo_server.py": "886098cf3001fd4c18cb84deca5c6df9d87a82b21f270cc7a4c82387b6baca61",
+      "common.py": "6f14140b1ad64f9e2bccbb80088b8159a92d84243e05e0f7c0685b31ee8954dc"
+    },
+    "deployment_ready": false,
+    "optional_oauth_scopes": [
+      "mixed_companies_search"
+    ],
+    "company_search_enabled": false
+  }
+}
