@@ -144,7 +144,9 @@ def test_profile_approval_persists_in_postgres(registry_dsn):
 
     app, profile = fixture()
     app._workspace = WorkspaceStore(registry_dsn)
-    app._workspace.save({key: value for key, value in profile.items() if key != "revision"})
+    app._workspace.save(
+        {key: value for key, value in profile.items() if key != "revision"}
+    )
     with TestClient(app.http_app()) as client:
         login(client)
         assert post(client, profile, "request").status_code == 200
