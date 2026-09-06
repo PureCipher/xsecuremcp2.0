@@ -1,6 +1,6 @@
 # PureCipher Google Workspace — SecureMCP 2.0 preparation
 
-Four read-only source packages and draft listings have been uploaded to production.
+Five read-only source packages and draft listings have been uploaded to production.
 They are not certified, publicly published, running Google endpoints, or live-Google-tested.
 
 ## Publisher and production drafts
@@ -10,7 +10,7 @@ Listing ownership uses the exact account username `purecipher`. The supplied
 `publisher-profile.json` contains the PureCipher name, website and description;
 it is also included in each draft's metadata. No account credentials are packaged.
 
-The production registry persists accounts and listings in PostgreSQL. All four
+The production registry persists accounts and listings in PostgreSQL. The initial four
 drafts were read back after a registry restart, verified in `/api/me/listings`
 under the publisher account, and their authenticated detail pages returned 200:
 
@@ -18,6 +18,7 @@ under the publisher account, and their authenticated detail pages returned 200:
 - `purecipher-google-docs`
 - `purecipher-google-tasks`
 - `purecipher-google-calendar`
+- `purecipher-google-drive` (additional integration iteration 1)
 
 Production source bundle location:
 `/home/vamsi/services/purecipher/uploads/google-workspace-alpha1`.
@@ -28,7 +29,7 @@ The running registry must reload after this offline import to see new records.
 
 Public publisher pages include active registered publisher accounts, even before
 their first published listing. PureCipher appears with zero published tools;
-the four drafts remain visible only in authenticated listing views.
+the drafts remain visible only in authenticated listing views.
 
 ## Implemented read tools
 
@@ -38,8 +39,9 @@ the four drafts remain visible only in authenticated listing views.
 | Docs | Get document by ID, including all tabs | `documents.readonly` | 9102 |
 | Tasks | List task lists, list tasks | `tasks.readonly` | 9103 |
 | Calendar | List calendars, list events | `calendar.readonly` | 9104 |
+| Drive | Search files/folders and get file metadata | `drive.metadata.readonly` | 9105 |
 
-All four construct `securemcp.SecureMCP` with GoogleProvider OAuth, per-request
+All five construct `securemcp.SecureMCP` with GoogleProvider OAuth, per-request
 upstream tokens, fail-closed tool policies, a Consent Graph, provenance recording,
 Reflexive controls and pre-execution gating. Public security administration is
 disabled. There are no send, edit, create or delete tools.
@@ -65,7 +67,7 @@ Google authorization is deferred at the user's request. Before enabling endpoint
 
 For development only, set `PURECIPHER_GOOGLE_CLIENT_ID` and
 `PURECIPHER_GOOGLE_CLIENT_SECRET`, plus `PURECIPHER_<SERVICE>_BASE_URL` if needed
-(where SERVICE is GMAIL, DOCS, TASKS or CALENDAR), then run the respective
+(where SERVICE is GMAIL, DOCS, TASKS, CALENDAR or DRIVE), then run the respective
 `<service>_server.py`. Missing credentials stop startup. The default bind address
 is loopback; default callbacks use `http://127.0.0.1:<port>/auth/callback`.
 
@@ -80,3 +82,23 @@ These are PureCipher integrations with Google, not Google-published or endorsed 
 - https://developers.google.com/workspace/docs/api/reference/rest/v1/documents/get
 - https://developers.google.com/workspace/tasks/reference/rest/v1/tasks/list
 - https://developers.google.com/workspace/calendar/api/v3/reference/events/list
+
+## Additional integrations: iteration order
+
+1. Google Drive: metadata-only source and draft; OAuth remains deferred.
+2. GitHub: authorized repository issues and pull requests.
+3. Slack: authorized channel messages.
+4. Jira: issue search and details.
+5. Outlook: mail and calendar reads.
+6. OneDrive: file listing and retrieval.
+
+Each iteration requires scoped authentication, SecureMCP policy/consent tests,
+committed source, a production draft import and persistence verification before
+moving to authorization and public publication. Entries 2–6 are implemented as preparation packages in the sibling
+`business_integrations` directory; they share the same deferred live acceptance gates.
+
+To import only Drive using the production runtime:
+`python import_production_drafts.py /path/to/upload drive`.
+The existing four draft submissions are not overwritten by that command.
+
+Drive API reference: https://developers.google.com/workspace/drive/api/reference/rest/v3/files/list

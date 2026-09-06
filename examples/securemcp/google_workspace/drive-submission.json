@@ -1,0 +1,66 @@
+{
+  "manifest": {
+    "tool_name": "purecipher-google-drive",
+    "version": "0.1.0-alpha.1",
+    "author": "purecipher",
+    "description": "Read-only Google Drive file and folder search and metadata using SecureMCP 2.0. Preparation draft: OAuth authorization, durable security storage, consent enrollment and live validation are pending. No file downloads or content access.",
+    "permissions": [
+      "read_resource",
+      "network_access",
+      "sensitive_data",
+      "environment_read"
+    ],
+    "requires_consent": true,
+    "idempotent": true,
+    "data_flows": [
+      {
+        "source": "Google Drive",
+        "destination": "authenticated MCP client",
+        "classification": "restricted",
+        "description": "Authorized file and folder metadata, which can contain personal or sensitive information."
+      }
+    ],
+    "resource_access": [
+      {
+        "resource_pattern": "google:drive:*",
+        "access_type": "read",
+        "classification": "restricted"
+      }
+    ]
+  },
+  "display_name": "PureCipher Google Drive",
+  "description": "Read-only Google Drive file and folder search and metadata using SecureMCP 2.0. Preparation draft: OAuth authorization, durable security storage, consent enrollment and live validation are pending. No file downloads or content access.",
+  "homepage_url": "https://purecipher.com",
+  "source_url": "https://github.com/PureCipher/xsecuremcp2.0",
+  "tags": [
+    "google",
+    "securemcp-2.0",
+    "read-only",
+    "authorization-pending"
+  ],
+  "metadata": {
+    "publisher_profile": {
+      "publisher_id": "purecipher",
+      "display_name": "PureCipher",
+      "homepage_url": "https://purecipher.com",
+      "description": "PureCipher integrations with Google Workspace, built using SecureMCP 2.0.",
+      "affiliation": "Independent integrations; not published or endorsed by Google."
+    },
+    "transport": "http",
+    "readiness": "authorization_pending",
+    "live_tested": false,
+    "security_framework": "SecureMCP 2.0",
+    "tools": [
+      "drive_search_files",
+      "drive_get_file"
+    ],
+    "google_scopes": [
+      "openid",
+      "https://www.googleapis.com/auth/userinfo.email",
+      "https://www.googleapis.com/auth/drive.metadata.readonly"
+    ],
+    "source_file": "drive_server.py",
+    "source_sha256": "12c64f7b06e06ddf90a4a2ec34ca282b750df5fa1defd473f834b7c02bd5d924",
+    "deployment_ready": false
+  }
+}

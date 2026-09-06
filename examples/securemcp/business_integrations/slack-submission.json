@@ -1,0 +1,69 @@
+{
+  "manifest": {
+    "tool_name": "purecipher-slack",
+    "version": "0.1.0-alpha.1",
+    "author": "purecipher",
+    "description": "Read authorized public-channel history using user OAuth and an explicit channel allowlist. No private channels, DMs or message sending. SecureMCP 2.0 preparation draft: OAuth configuration, durable security storage, controlled consent, live validation and certification are pending. No running production endpoint.",
+    "permissions": [
+      "read_resource",
+      "network_access",
+      "sensitive_data",
+      "environment_read"
+    ],
+    "requires_consent": true,
+    "idempotent": true,
+    "data_flows": [
+      {
+        "source": "Slack",
+        "destination": "authenticated MCP client",
+        "classification": "restricted",
+        "description": "Authorized read results may contain sensitive business or personal data."
+      }
+    ],
+    "resource_access": [
+      {
+        "resource_pattern": "slack:*",
+        "access_type": "read",
+        "classification": "restricted"
+      }
+    ]
+  },
+  "display_name": "PureCipher Slack",
+  "description": "Read authorized public-channel history using user OAuth and an explicit channel allowlist. No private channels, DMs or message sending. SecureMCP 2.0 preparation draft: OAuth configuration, durable security storage, controlled consent, live validation and certification are pending. No running production endpoint.",
+  "homepage_url": "https://purecipher.com",
+  "source_url": "https://github.com/PureCipher/xsecuremcp2.0",
+  "tags": [
+    "securemcp-2.0",
+    "read-only",
+    "authorization-pending",
+    "slack"
+  ],
+  "metadata": {
+    "publisher_profile": {
+      "publisher_id": "purecipher",
+      "display_name": "PureCipher",
+      "homepage_url": "https://purecipher.com",
+      "description": "PureCipher integrations with Google Workspace, built using SecureMCP 2.0.",
+      "affiliation": "Independent integrations; not published or endorsed by Google."
+    },
+    "transport": "http",
+    "readiness": "authorization_pending",
+    "live_tested": false,
+    "security_framework": "SecureMCP 2.0",
+    "tools": [
+      "slack_channel_history"
+    ],
+    "oauth_scopes": [
+      "channels:read",
+      "channels:history"
+    ],
+    "source_file": "slack_server.py",
+    "source_sha256": "dd673fd6754ac844ad8b0d7e5b8202606f7a8b063628ddb8e264d28a46221cd4",
+    "bundle_sha256": {
+      "slack_server.py": "dd673fd6754ac844ad8b0d7e5b8202606f7a8b063628ddb8e264d28a46221cd4",
+      "common.py": "6f14140b1ad64f9e2bccbb80088b8159a92d84243e05e0f7c0685b31ee8954dc",
+      "oauth.py": "39a475482c55d3a0f5c746690ee3b63fe7ef9d588bb3c9f76ad5de5884cb2c6c"
+    },
+    "deployment_ready": false
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "manifest": {
+    "tool_name": "purecipher-onedrive",
+    "version": "0.1.0-alpha.1",
+    "author": "purecipher",
+    "description": "List folder contents and read file metadata and browser links. Content downloads are not implemented in this first iteration. SecureMCP 2.0 preparation draft: OAuth configuration, durable security storage, controlled consent, live validation and certification are pending. No running production endpoint.",
+    "permissions": [
+      "read_resource",
+      "network_access",
+      "sensitive_data",
+      "environment_read"
+    ],
+    "requires_consent": true,
+    "idempotent": true,
+    "data_flows": [
+      {
+        "source": "Microsoft OneDrive",
+        "destination": "authenticated MCP client",
+        "classification": "restricted",
+        "description": "Authorized read results may contain sensitive business or personal data."
+      }
+    ],
+    "resource_access": [
+      {
+        "resource_pattern": "onedrive:*",
+        "access_type": "read",
+        "classification": "restricted"
+      }
+    ]
+  },
+  "display_name": "PureCipher Microsoft OneDrive",
+  "description": "List folder contents and read file metadata and browser links. Content downloads are not implemented in this first iteration. SecureMCP 2.0 preparation draft: OAuth configuration, durable security storage, controlled consent, live validation and certification are pending. No running production endpoint.",
+  "homepage_url": "https://purecipher.com",
+  "source_url": "https://github.com/PureCipher/xsecuremcp2.0",
+  "tags": [
+    "securemcp-2.0",
+    "read-only",
+    "authorization-pending",
+    "onedrive"
+  ],
+  "metadata": {
+    "publisher_profile": {
+      "publisher_id": "purecipher",
+      "display_name": "PureCipher",
+      "homepage_url": "https://purecipher.com",
+      "description": "PureCipher integrations with Google Workspace, built using SecureMCP 2.0.",
+      "affiliation": "Independent integrations; not published or endorsed by Google."
+    },
+    "transport": "http",
+    "readiness": "authorization_pending",
+    "live_tested": false,
+    "security_framework": "SecureMCP 2.0",
+    "tools": [
+      "onedrive_list_files",
+      "onedrive_get_file"
+    ],
+    "oauth_scopes": [
+      "User.Read",
+      "Files.Read",
+      "offline_access"
+    ],
+    "source_file": "onedrive_server.py",
+    "source_sha256": "676dbc9d541341650356591d93fa930ce7b81d0e7313ee8ec597ccd5755e17ca",
+    "bundle_sha256": {
+      "onedrive_server.py": "676dbc9d541341650356591d93fa930ce7b81d0e7313ee8ec597ccd5755e17ca",
+      "common.py": "6f14140b1ad64f9e2bccbb80088b8159a92d84243e05e0f7c0685b31ee8954dc",
+      "oauth.py": "39a475482c55d3a0f5c746690ee3b63fe7ef9d588bb3c9f76ad5de5884cb2c6c"
+    },
+    "deployment_ready": false
+  }
+}

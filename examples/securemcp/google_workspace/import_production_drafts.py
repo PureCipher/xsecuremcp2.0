@@ -18,12 +18,15 @@ from purecipher.registry import _make_security_backend, _parse_manifest
 
 def main() -> None:
     root = Path(sys.argv[1]).resolve()
+    services = tuple(sys.argv[2:]) or ("gmail", "docs", "tasks", "calendar")
+    if not set(services).issubset({"gmail", "docs", "tasks", "calendar", "drive"}):
+        raise ValueError("Unknown Google service")
     database = Path("/run/secrets/database_url").read_text().strip()
     backend = _make_security_backend(database)
     if backend is None:
         raise RuntimeError("A persistent production backend is required")
     marketplace = ToolMarketplace(backend=backend)
-    for service in ("gmail", "docs", "tasks", "calendar"):
+    for service in services:
         payload = json.loads((root / f"{service}-submission.json").read_text())
         manifest = _parse_manifest(payload.pop("manifest"))
         metadata = payload["metadata"]
@@ -60,10 +63,12 @@ def main() -> None:
         print(listing.tool_name, listing.status.value, listing.listing_id)
     # Read back via a new store instance to verify persistence, not just memory.
     reloaded = ToolMarketplace(backend=backend)
-    for service in ("gmail", "docs", "tasks", "calendar"):
+    for service in services:
         listing = reloaded.get_by_name(f"purecipher-google-{service}")
         assert listing is not None and listing.status == PublishStatus.DRAFT
-    print("Verified four persistent drafts; no certification or public publication.")
+    print(
+        f"Verified {len(services)} persistent drafts; no certification or public publication."
+    )
 
 
 if __name__ == "__main__":
