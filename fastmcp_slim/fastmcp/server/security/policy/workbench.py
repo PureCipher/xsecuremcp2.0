@@ -391,49 +391,25 @@ _BUNDLES: tuple[PolicyBundle, ...] = (
     PolicyBundle(
         bundle_id="registry-balanced",
         title="Balanced Registry Guardrails",
-        summary="A balanced baseline for public tool browsing and moderated operations.",
-        description=(
-            "Allows published tools and registry workflows, gates actions by role, "
-            "blocks obvious admin-only surfaces, and adds rate limiting."
-        ),
+        summary="Explicit access grants and current request posture for registry deployments.",
+        description="Uses the shared Zero Trust evaluator for exact actor/resource/action grants and trusted session, device and risk evidence, plus a request-rate limit. Role labels and tool wildcards do not grant access. Configure grants for the intended operations before activation.",
         risk_posture="balanced",
         recommended_environments=("development", "staging"),
         tags=("registry", "starter", "balanced"),
+        pack_version="2.0.0",
+        regulation_reference="PureCipher registry access baseline v2.0.0 (product policy)",
+        source_reviewed_at="2026-09-06",
+        source_urls=("https://github.com/PureCipher/xsecuremcp2.0",),
+        coverage_note="Access-admission baseline only. Does not establish publication, read-only behavior or legal data authority; compose the relevant policies. Uses the existing trusted Zero Trust resolver. Empty grants/issuer/scope deny access. No workflows are implemented and active policy chains are not migrated automatically.",
         providers=(
             {
-                "type": "allowlist",
-                "policy_id": "registry-balanced-allowlist",
-                "version": "1.0.0",
-                "allowed": [
-                    "tool:*",
-                    "registry:submit",
-                    "registry:review",
-                    "registry:policy",
-                ],
-            },
-            {
-                "type": "rbac",
-                "policy_id": "registry-balanced-rbac",
-                "version": "1.0.0",
-                "role_mappings": {
-                    "viewer": ["call_tool", "read_resource"],
-                    "publisher": ["call_tool", "read_resource", "submit_listing"],
-                    "reviewer": [
-                        "call_tool",
-                        "read_resource",
-                        "submit_listing",
-                        "review_listing",
-                        "manage_policy",
-                    ],
-                    "admin": ["*"],
-                },
-                "default_decision": "deny",
-            },
-            {
-                "type": "denylist",
-                "policy_id": "registry-balanced-denylist",
-                "version": "1.0.0",
-                "denied": ["admin-panel"],
+                "type": "zero_trust",
+                "policy_id": "registry-balanced-access",
+                "version": "2.0.0",
+                "grants": [],
+                "trusted_issuers": [],
+                "scope_id": "",
+                "max_evidence_age_seconds": 60,
             },
             {
                 "type": "rate_limit",
