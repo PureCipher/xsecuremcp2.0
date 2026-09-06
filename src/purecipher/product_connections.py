@@ -49,6 +49,11 @@ def view(registry, item):
         for f in schema["fields"]
         if f["required"] and not values.get(f["key"])
     ]
+    from purecipher.consumer_oauth import configured
+    from purecipher.consumer_runtime import GOOGLE, runtime_ready
+
+    ready = runtime_ready(registry, item)
+    supported = item["product"] in getattr(registry, "_consumer_products", set())
     return {
         "id": item["id"],
         "product": item["product"],
@@ -58,12 +63,17 @@ def view(registry, item):
         "values": {k: v for k, v in values.items() if k not in secrets},
         "secret_fields": [k for k in secrets if values.get(k)],
         "missing": missing,
-        "status": "authorization_pending"
+        "status": "connected"
+        if ready
+        else "authorization_pending"
         if schema["kind"] == "oauth"
         else "settings_incomplete"
         if missing
         else "settings_saved",
-        "runtime_ready": False,
+        "runtime_ready": ready,
+        "runtime_supported": supported,
+        "can_authorize": supported and item["product"] in GOOGLE and configured(),
+        "can_verify": supported and item["product"] == "brave-search",
     }
 
 
@@ -257,6 +267,8 @@ def connection_blocker(registry, owner, selected):
         or listing.tool_name != "purecipher-" + item["product"]
     ):
         return "The selected product connection is unavailable or does not match this server"
-    # Never claim saved credentials are installed in an upstream runtime. No
-    # credential forwarding exists for these preparation adapters yet.
-    return "Product connection saved; runtime authorization is not yet available"
+    from purecipher.consumer_runtime import runtime_ready
+
+    if runtime_ready(registry, item):
+        return None
+    return "Authorize or verify your product connection before activating this profile"

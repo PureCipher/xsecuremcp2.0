@@ -88,6 +88,30 @@ class ProfileToolAccess(Middleware):
         allowed = self.allowed()
         if allowed is not None and context.message.name not in allowed:
             raise ValueError("This tool is not enabled in the profile")
+        if context.message.name in getattr(
+            self.registry, "_consumer_tool_products", {}
+        ):
+            from purecipher.consumer_runtime import _ACCESS, resolve_access
+
+            headers = get_http_headers(include={"authorization"})
+            resolved = self.registry.authenticate_client_token(
+                headers.get("authorization", "")[7:].strip()
+            )
+            if allowed is None or not resolved:
+                raise ValueError(
+                    "Consumer tools require an assigned profile and your own connection"
+                )
+            value = await resolve_access(
+                self.registry,
+                headers["x-purecipher-profile"],
+                resolved[0],
+                context.message.name,
+            )
+            reset = _ACCESS.set(value)
+            try:
+                return await call_next(context)
+            finally:
+                _ACCESS.reset(reset)
         return await call_next(context)
 
     async def on_list_tools(self, context, call_next):

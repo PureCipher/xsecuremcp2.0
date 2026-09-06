@@ -133,9 +133,14 @@ def profile_blockers(registry, profile):
             blockers.append("A selected server is not published and verified")
             continue
         metadata = listing.metadata or {}
-        if (
-            metadata.get("deployment_ready") is False
-            or metadata.get("live_tested") is False
+        runtime_verified = False
+        if selected.get("connection_id") and not reason:
+            from purecipher.consumer_runtime import runtime_ready
+
+            connected = registry._workspace.get(selected["connection_id"])
+            runtime_verified = bool(connected and runtime_ready(registry, connected))
+        if metadata.get("deployment_ready") is False or (
+            metadata.get("live_tested") is False and not runtime_verified
         ):
             blockers.append(
                 f"{listing.display_name}: deployment or live validation is pending"

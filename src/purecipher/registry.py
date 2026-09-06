@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Generic, TypedDict, cast
@@ -618,6 +619,16 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             self.mount_registry_api(prefix=registry_prefix)
             mount_workspace(self, registry_prefix)
             mount_product_connections(self, registry_prefix)
+            from purecipher.consumer_oauth import mount_consumer_oauth
+
+            mount_consumer_oauth(self, registry_prefix)
+            if (
+                os.environ.get("PURECIPHER_CONSUMER_RUNTIME_ENABLED", "false").lower()
+                == "true"
+            ):
+                from purecipher.consumer_runtime import register_consumer_tools
+
+                register_consumer_tools(self)
 
         # Iter 13.5: re-attach OpenAPI proxy tools for any listings
         # that were published in a previous run. Restarts of a

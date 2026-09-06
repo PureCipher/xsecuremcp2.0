@@ -9,15 +9,11 @@ PRODUCT_SCHEMAS: dict[str, dict[str, Any]] = {
         "version": 1,
         "kind": "oauth",
         "fields": [],
-        "scopes": [],
+        "scopes": ["https://www.googleapis.com/auth/calendar.readonly"],
         "instructions": [
-            "Authorize your own Google Calendar account from your MCP "
-            "client when the server is available.",
-            "The publisher configures the OAuth application. You do not "
-            "need its client ID or client secret.",
-            "The permissions below are requested by this server. Saving "
-            "a connection does not grant them; you must complete the "
-            "provider consent flow.",
+            "Save this connection, then choose Authorize Google to connect your own account.",
+            "The publisher configures the OAuth app. You do not provide its client ID or client secret.",
+            "Review the read-only permissions below. Disconnect removes this registry connection’s grant.",
         ],
         "source": "https://developers.google.com/identity/protocols/oauth2/web-server",
         "runtime_supported": False,
@@ -29,15 +25,11 @@ PRODUCT_SCHEMAS: dict[str, dict[str, Any]] = {
         "version": 1,
         "kind": "oauth",
         "fields": [],
-        "scopes": [],
+        "scopes": ["https://www.googleapis.com/auth/drive.metadata.readonly"],
         "instructions": [
-            "Authorize your own Google Drive account from your MCP client "
-            "when the server is available.",
-            "The publisher configures the OAuth application. You do not "
-            "need its client ID or client secret.",
-            "The permissions below are requested by this server. Saving a "
-            "connection does not grant them; you must complete the provider "
-            "consent flow.",
+            "Save this connection, then choose Authorize Google to connect your own account.",
+            "The publisher configures the OAuth app. You do not provide its client ID or client secret.",
+            "Review the read-only permissions below. Disconnect removes this registry connection’s grant.",
         ],
         "source": "https://developers.google.com/identity/protocols/oauth2/web-server",
         "runtime_supported": False,
@@ -49,15 +41,11 @@ PRODUCT_SCHEMAS: dict[str, dict[str, Any]] = {
         "version": 1,
         "kind": "oauth",
         "fields": [],
-        "scopes": [],
+        "scopes": ["https://www.googleapis.com/auth/gmail.readonly"],
         "instructions": [
-            "Authorize your own Gmail account from your MCP client when the "
-            "server is available.",
-            "The publisher configures the OAuth application. You do not "
-            "need its client ID or client secret.",
-            "The permissions below are requested by this server. Saving a "
-            "connection does not grant them; you must complete the provider "
-            "consent flow.",
+            "Save this connection, then choose Authorize Google to connect your own account.",
+            "The publisher configures the OAuth app. You do not provide its client ID or client secret.",
+            "Review the read-only permissions below. Disconnect removes this registry connection’s grant.",
         ],
         "source": "https://developers.google.com/identity/protocols/oauth2/web-server",
         "runtime_supported": False,
@@ -69,15 +57,11 @@ PRODUCT_SCHEMAS: dict[str, dict[str, Any]] = {
         "version": 1,
         "kind": "oauth",
         "fields": [],
-        "scopes": [],
+        "scopes": ["https://www.googleapis.com/auth/documents.readonly"],
         "instructions": [
-            "Authorize your own Google Docs account from your MCP client "
-            "when the server is available.",
-            "The publisher configures the OAuth application. You do not need "
-            "its client ID or client secret.",
-            "The permissions below are requested by this server. Saving a "
-            "connection does not grant them; you must complete the provider "
-            "consent flow.",
+            "Save this connection, then choose Authorize Google to connect your own account.",
+            "The publisher configures the OAuth app. You do not provide its client ID or client secret.",
+            "Review the read-only permissions below. Disconnect removes this registry connection’s grant.",
         ],
         "source": "https://developers.google.com/identity/protocols/oauth2/web-server",
         "runtime_supported": False,
@@ -89,15 +73,11 @@ PRODUCT_SCHEMAS: dict[str, dict[str, Any]] = {
         "version": 1,
         "kind": "oauth",
         "fields": [],
-        "scopes": [],
+        "scopes": ["https://www.googleapis.com/auth/tasks.readonly"],
         "instructions": [
-            "Authorize your own Google Tasks account from your MCP client "
-            "when the server is available.",
-            "The publisher configures the OAuth application. You do not "
-            "need its client ID or client secret.",
-            "The permissions below are requested by this server. Saving a "
-            "connection does not grant them; you must complete the provider "
-            "consent flow.",
+            "Save this connection, then choose Authorize Google to connect your own account.",
+            "The publisher configures the OAuth app. You do not provide its client ID or client secret.",
+            "Review the read-only permissions below. Disconnect removes this registry connection’s grant.",
         ],
         "source": "https://developers.google.com/identity/protocols/oauth2/web-server",
         "runtime_supported": False,

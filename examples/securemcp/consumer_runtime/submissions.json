@@ -1,0 +1,639 @@
+[
+  {
+    "display_name": "Brave Search",
+    "categories": [
+      "search"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-brave-search",
+      "version": "0.2.0",
+      "author": "purecipher",
+      "description": "Registry-hosted Brave web search using the end user\u2019s own verified API key. Each call requires an active profile and remains subject to SecureMCP controls.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data",
+        "call_tool"
+      ],
+      "requires_consent": true,
+      "idempotent": false,
+      "data_flows": [
+        {
+          "source": "Brave Search",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "brave-search:*",
+          "access_type": "read",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations built using SecureMCP 2.0.",
+        "affiliation": "Independent adapters; upstream trademarks belong to their respective owners."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "brave-search",
+      "configuration": [
+        "secrets"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v1",
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "20b628b80650697dd7bb5cc7dc181f485f77d143c646fa5e35d216ca6e3a31f1",
+      "tools": [
+        "brave_web_search"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "brave_web_search"
+        ],
+        "tools": [
+          {
+            "name": "brave_web_search",
+            "description": "Search the web with the API key selected in your profile.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "query": {
+                  "type": "string"
+                },
+                "count": {
+                  "default": 5,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "query"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "Google Calendar",
+    "categories": [
+      "productivity"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-google-calendar",
+      "version": "0.2.0",
+      "author": "purecipher",
+      "description": "Registry-hosted read-only Google Calendar tools. Each user must authorize or verify their own connection before an assigned profile can call these tools. Google OAuth app configuration is pending.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data"
+      ],
+      "requires_consent": true,
+      "idempotent": true,
+      "data_flows": [
+        {
+          "source": "Google Calendar",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "User-authorized read results; may contain personal and sensitive information."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "google:calendar:*",
+          "access_type": "read",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations with Google Workspace, built using SecureMCP 2.0.",
+        "affiliation": "Independent integrations; not published or endorsed by Google."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "google-calendar",
+      "configuration": [
+        "oauth"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v1",
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "20b628b80650697dd7bb5cc7dc181f485f77d143c646fa5e35d216ca6e3a31f1",
+      "tools": [
+        "calendar_list_calendars",
+        "calendar_list_events"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "calendar_list_calendars",
+          "calendar_list_events"
+        ],
+        "tools": [
+          {
+            "name": "calendar_list_calendars",
+            "description": "List calendars available to your authorized Google account.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "page_token": {
+                  "default": "",
+                  "type": "string"
+                },
+                "max_results": {
+                  "default": 20,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            }
+          },
+          {
+            "name": "calendar_list_events",
+            "description": "Read events in an authorized Google calendar.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "calendar_id": {
+                  "default": "primary",
+                  "type": "string"
+                },
+                "page_token": {
+                  "default": "",
+                  "type": "string"
+                },
+                "max_results": {
+                  "default": 20,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "Google Docs",
+    "categories": [
+      "content_management",
+      "productivity"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-google-docs",
+      "version": "0.2.0",
+      "author": "purecipher",
+      "description": "Registry-hosted read-only Google Docs tools. Each user must authorize or verify their own connection before an assigned profile can call these tools. Google OAuth app configuration is pending.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data"
+      ],
+      "requires_consent": true,
+      "idempotent": true,
+      "data_flows": [
+        {
+          "source": "Google Docs",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "User-authorized read results; may contain personal and sensitive information."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "google:docs:*",
+          "access_type": "read",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations with Google Workspace, built using SecureMCP 2.0.",
+        "affiliation": "Independent integrations; not published or endorsed by Google."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "google-docs",
+      "configuration": [
+        "oauth"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v1",
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "20b628b80650697dd7bb5cc7dc181f485f77d143c646fa5e35d216ca6e3a31f1",
+      "tools": [
+        "docs_get_document"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "docs_get_document"
+        ],
+        "tools": [
+          {
+            "name": "docs_get_document",
+            "description": "Read a Google document accessible to your authorized account.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "document_id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "document_id"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "Google Drive",
+    "categories": [
+      "cloud_storage"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-google-drive",
+      "version": "0.2.0",
+      "author": "purecipher",
+      "description": "Registry-hosted read-only Google Drive tools. Each user must authorize or verify their own connection before an assigned profile can call these tools. Google OAuth app configuration is pending.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data"
+      ],
+      "requires_consent": true,
+      "idempotent": true,
+      "data_flows": [
+        {
+          "source": "Google Drive",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized file and folder metadata, which can contain personal or sensitive information."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "google:drive:*",
+          "access_type": "read",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations with Google Workspace, built using SecureMCP 2.0.",
+        "affiliation": "Independent integrations; not published or endorsed by Google."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "google-drive",
+      "configuration": [
+        "oauth"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v1",
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "20b628b80650697dd7bb5cc7dc181f485f77d143c646fa5e35d216ca6e3a31f1",
+      "tools": [
+        "drive_get_file",
+        "drive_search_files"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "drive_get_file",
+          "drive_search_files"
+        ],
+        "tools": [
+          {
+            "name": "drive_search_files",
+            "description": "Search file metadata in your authorized Google Drive.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "query": {
+                  "default": "",
+                  "type": "string"
+                },
+                "page_token": {
+                  "default": "",
+                  "type": "string"
+                },
+                "max_results": {
+                  "default": 20,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            }
+          },
+          {
+            "name": "drive_get_file",
+            "description": "Read metadata for a Google Drive file; does not download file contents.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "file_id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "file_id"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "Gmail",
+    "categories": [
+      "communication",
+      "productivity"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-google-gmail",
+      "version": "0.2.0",
+      "author": "purecipher",
+      "description": "Registry-hosted read-only Gmail tools. Each user must authorize or verify their own connection before an assigned profile can call these tools. Google OAuth app configuration is pending.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data"
+      ],
+      "requires_consent": true,
+      "idempotent": true,
+      "data_flows": [
+        {
+          "source": "Gmail",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "User-authorized read results; may contain personal and sensitive information."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "google:gmail:*",
+          "access_type": "read",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations with Google Workspace, built using SecureMCP 2.0.",
+        "affiliation": "Independent integrations; not published or endorsed by Google."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "google-gmail",
+      "configuration": [
+        "oauth"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v1",
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "20b628b80650697dd7bb5cc7dc181f485f77d143c646fa5e35d216ca6e3a31f1",
+      "tools": [
+        "gmail_get_message",
+        "gmail_list_messages",
+        "gmail_profile"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "gmail_get_message",
+          "gmail_list_messages",
+          "gmail_profile"
+        ],
+        "tools": [
+          {
+            "name": "gmail_profile",
+            "description": "Read the authorized user's Gmail profile.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {},
+              "type": "object"
+            }
+          },
+          {
+            "name": "gmail_list_messages",
+            "description": "List message IDs in your authorized Gmail account.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "query": {
+                  "default": "",
+                  "type": "string"
+                },
+                "page_token": {
+                  "default": "",
+                  "type": "string"
+                },
+                "max_results": {
+                  "default": 20,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            }
+          },
+          {
+            "name": "gmail_get_message",
+            "description": "Read a message from your authorized Gmail account.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "message_id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message_id"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "Google Tasks",
+    "categories": [
+      "project_management",
+      "productivity"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-google-tasks",
+      "version": "0.2.0",
+      "author": "purecipher",
+      "description": "Registry-hosted read-only Google Tasks tools. Each user must authorize or verify their own connection before an assigned profile can call these tools. Google OAuth app configuration is pending.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data"
+      ],
+      "requires_consent": true,
+      "idempotent": true,
+      "data_flows": [
+        {
+          "source": "Google Tasks",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "User-authorized read results; may contain personal and sensitive information."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "google:tasks:*",
+          "access_type": "read",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations with Google Workspace, built using SecureMCP 2.0.",
+        "affiliation": "Independent integrations; not published or endorsed by Google."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "google-tasks",
+      "configuration": [
+        "oauth"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v1",
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "20b628b80650697dd7bb5cc7dc181f485f77d143c646fa5e35d216ca6e3a31f1",
+      "tools": [
+        "tasks_list_tasklists",
+        "tasks_list_tasks"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "tasks_list_tasklists",
+          "tasks_list_tasks"
+        ],
+        "tools": [
+          {
+            "name": "tasks_list_tasklists",
+            "description": "List your Google task lists.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "page_token": {
+                  "default": "",
+                  "type": "string"
+                },
+                "max_results": {
+                  "default": 20,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            }
+          },
+          {
+            "name": "tasks_list_tasks",
+            "description": "Read tasks in one of your Google task lists.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "tasklist_id": {
+                  "type": "string"
+                },
+                "page_token": {
+                  "default": "",
+                  "type": "string"
+                },
+                "max_results": {
+                  "default": 20,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "tasklist_id"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  }
+]
