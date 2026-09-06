@@ -655,6 +655,7 @@ class TestSchema:
             "pci_request",
             "ccpa_request",
             "soc2_request",
+            "gdpr_request",
         }
         assert set(types.keys()) == expected
 

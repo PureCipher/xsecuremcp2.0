@@ -156,92 +156,28 @@ _BUNDLES: tuple[PolicyBundle, ...] = (
     # ── Compliance Bundles ────────────────────────────────────
     PolicyBundle(
         bundle_id="gdpr-data-protection",
-        title="GDPR Data Protection",
-        summary="EU General Data Protection Regulation compliance for personal data handling.",
-        description=(
-            "Enforces GDPR principles for any MCP tool or resource that handles "
-            "personal data. Requires a valid legal basis (consent, contract, "
-            "legitimate interests, etc.) before allowing access to PII-tagged "
-            "resources. Combines GDPR policy with RBAC for data controller/processor "
-            "role separation, denylists for raw data exports, rate limiting, and "
-            "audit-friendly resource scoping."
-        ),
+        title="GDPR Request Validation",
+        summary="Validate personal-data requests using trusted subject-specific evidence.",
+        description="Checks legal basis, special-category conditions, criminal-offence authority, purpose, scope, current subject restrictions, recipient arrangements and international transfers. Requires exact grants and a server-side evidence resolver. Significant automated decisions and restriction overrides are unsupported.",
         risk_posture="strict",
         recommended_environments=("staging", "production"),
         tags=("compliance", "gdpr", "privacy", "eu", "data-protection"),
+        pack_version="2.0.0",
+        regulation_reference="Regulation (EU) 2016/679; EUR-Lex consolidated text 2016-05-04",
+        source_reviewed_at="2026-09-06",
+        source_urls=(
+            "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:02016R0679-20160504",
+        ),
+        coverage_note="Request-time safeguards only, not full GDPR certification. Trusted adapters verify legal conditions and enforce output controls. National-law assessments, rights workflows, notices, DPIAs and supervisory processes remain external. Empty grants/issuer/scope deny execution; active policies are not automatically migrated.",
         providers=(
             {
-                "type": "compliance_rule",
-                "policy_id": "gdpr-bundle-core",
-                "version": "1.0.0",
-                "framework": "GDPR",
-                "rules": [
-                    {
-                        "name": "legal_basis_required",
-                        "description": (
-                            "Personal data access requires a valid legal basis "
-                            "under GDPR Article 6"
-                        ),
-                        "tags": [
-                            "gdpr_regulated",
-                            "personal_data",
-                            "pii",
-                            "sensitive_data",
-                        ],
-                        "checks": [
-                            {
-                                "metadata_key": "legal_basis",
-                                "allowed_values": [
-                                    "consent",
-                                    "contract",
-                                    "legal_obligation",
-                                    "legitimate_interests",
-                                    "public_interest",
-                                    "vital_interests",
-                                ],
-                            },
-                        ],
-                        "deny_message": (
-                            "GDPR: Personal data access requires a valid "
-                            "legal basis (consent, contract, etc.)"
-                        ),
-                        "allow_message": (
-                            "GDPR: Access permitted under stated legal basis"
-                        ),
-                    },
-                ],
-            },
-            {
-                "type": "rbac",
-                "policy_id": "gdpr-bundle-rbac",
-                "version": "1.0.0",
-                "role_mappings": {
-                    "data_subject": ["read_resource"],
-                    "data_controller": [
-                        "call_tool",
-                        "read_resource",
-                        "manage_policy",
-                    ],
-                    "data_processor": ["call_tool", "read_resource"],
-                    "dpo": [
-                        "call_tool",
-                        "read_resource",
-                        "manage_policy",
-                        "review_listing",
-                    ],
-                    "admin": ["*"],
-                },
-                "default_decision": "deny",
-            },
-            {
-                "type": "denylist",
-                "policy_id": "gdpr-bundle-denylist",
-                "version": "1.0.0",
-                "denied": [
-                    "admin-panel",
-                    "data:export-raw-*",
-                    "data:bulk-download-*",
-                ],
+                "type": "gdpr_request",
+                "policy_id": "gdpr-request-validation",
+                "version": "2.0.0",
+                "grants": [],
+                "trusted_issuers": [],
+                "scope_id": "",
+                "max_evidence_age_seconds": 60,
             },
             {
                 "type": "rate_limit",

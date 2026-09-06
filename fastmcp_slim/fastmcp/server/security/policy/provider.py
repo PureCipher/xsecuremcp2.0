@@ -110,6 +110,7 @@ class PolicyEvaluationContext:
     pci_evidence: Any = None
     ccpa_evidence: Any = None
     soc2_evidence: Any = None
+    gdpr_evidence: Any = None
 
 
 @dataclass(frozen=True)

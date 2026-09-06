@@ -233,7 +233,8 @@ class TestEffectiveBundles:
             listed = workbench.list_policy_bundles()
         # The real GDPR bundle is still the one returned.
         gdpr = next(b for b in listed if b["bundle_id"] == "gdpr-data-protection")
-        assert gdpr["title"] == "GDPR Data Protection"
+        assert gdpr["title"] == "GDPR Request Validation"
+        assert gdpr["providers"][0]["type"] == "gdpr_request"
         # And the operator gets a warning.
         assert any(
             "collides with a built-in" in rec.getMessage() for rec in caplog.records

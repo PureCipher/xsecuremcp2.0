@@ -74,6 +74,7 @@ from fastmcp.server.security.policy.policies.compliance_rule import (
     MetadataCheck,
 )
 from fastmcp.server.security.policy.policies.ferpa_request import FerpaRequestPolicy
+from fastmcp.server.security.policy.policies.gdpr_request import GdprRequestPolicy
 from fastmcp.server.security.policy.policies.pci_request import PciRequestPolicy
 from fastmcp.server.security.policy.policies.rate_limit import RateLimitPolicy
 from fastmcp.server.security.policy.policies.rbac import RoleBasedPolicy
@@ -366,6 +367,13 @@ def _build_soc2_request(config: dict[str, Any]) -> Soc2RequestPolicy:
     return Soc2RequestPolicy(**vars(base))
 
 
+def _build_gdpr_request(config: dict[str, Any]) -> GdprRequestPolicy:
+    base = _build_zero_trust(
+        {**config, "policy_id": config.get("policy_id", "gdpr-request-validation")}
+    )
+    return GdprRequestPolicy(**vars(base))
+
+
 def _register_builtins() -> None:
     """Register all built-in policy types with the global registry."""
     builtins = [
@@ -454,6 +462,36 @@ def _register_builtins() -> None:
             },
             starter_config={
                 "type": "soc2_request",
+                "grants": [],
+                "trusted_issuers": [],
+                "scope_id": "",
+            },
+        ),
+        PolicyTypeDescriptor(
+            type_key="gdpr_request",
+            factory=_build_gdpr_request,
+            display_name="GDPR Request Validation",
+            category="compliance",
+            description="Subject-specific data processing safeguards with trusted evidence.",
+            field_specs={
+                "grants": {
+                    "label": "Exact grants",
+                    "type": "json_list",
+                    "required": True,
+                },
+                "trusted_issuers": {
+                    "label": "Trusted issuers",
+                    "type": "string_list",
+                    "required": True,
+                },
+                "scope_id": {
+                    "label": "Server and tenant scope",
+                    "type": "string",
+                    "required": True,
+                },
+            },
+            starter_config={
+                "type": "gdpr_request",
                 "grants": [],
                 "trusted_issuers": [],
                 "scope_id": "",

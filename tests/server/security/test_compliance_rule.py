@@ -389,31 +389,23 @@ class TestBundleComplianceRuleIntegration:
     """Verify GDPR and HIPAA bundles load and evaluate correctly."""
 
     @pytest.mark.anyio
-    async def test_gdpr_bundle_core_provider_evaluates(self) -> None:
+    async def test_gdpr_bundle_requires_trusted_evidence(self) -> None:
         from fastmcp.server.security.policy.declarative import load_policy
+        from fastmcp.server.security.policy.policies.gdpr_request import (
+            GdprRequestPolicy,
+        )
         from fastmcp.server.security.policy.workbench import get_policy_bundle
 
         bundle = get_policy_bundle("gdpr-data-protection")
         assert bundle is not None
-        core_config = bundle["providers"][0]
-        assert core_config["type"] == "compliance_rule"
-
-        provider = load_policy(core_config)
-        assert isinstance(provider, ComplianceRulePolicy)
-
-        untagged = await provider.evaluate(_ctx(tags=frozenset({"safe"})))
-        assert untagged.decision == PolicyDecision.DEFER
-
-        missing_basis = await provider.evaluate(_ctx(tags=frozenset({"pii"})))
-        assert missing_basis.decision == PolicyDecision.DENY
-
-        valid_basis = await provider.evaluate(
-            _ctx(
-                tags=frozenset({"pii"}),
-                metadata={"legal_basis": "consent"},
-            )
-        )
-        assert valid_basis.decision == PolicyDecision.ALLOW
+        provider = load_policy(bundle["providers"][0])
+        assert isinstance(provider, GdprRequestPolicy)
+        for tags in (frozenset(), frozenset({"pii"})):
+            assert (
+                await provider.evaluate(
+                    _ctx(tags=tags, metadata={"legal_basis": "consent"})
+                )
+            ).decision == PolicyDecision.DENY
 
     @pytest.mark.anyio
     async def test_hipaa_bundle_core_provider_evaluates(self) -> None:

@@ -33,6 +33,7 @@ from fastmcp.server.security.policy.policies.compliance_rule import (
     ComplianceRulePolicy,
 )
 from fastmcp.server.security.policy.policies.ferpa_request import FerpaRequestPolicy
+from fastmcp.server.security.policy.policies.gdpr_request import GdprRequestPolicy
 from fastmcp.server.security.policy.policies.pci_request import PciRequestPolicy
 from fastmcp.server.security.policy.policies.rate_limit import RateLimitPolicy
 from fastmcp.server.security.policy.policies.rbac import RoleBasedPolicy
@@ -279,6 +280,8 @@ def policy_provider_to_config(provider: PolicyProvider) -> dict[str, Any]:
             if isinstance(provider, CcpaRequestPolicy)
             else "soc2_request"
             if isinstance(provider, Soc2RequestPolicy)
+            else "gdpr_request"
+            if isinstance(provider, GdprRequestPolicy)
             else "zero_trust",
             "policy_id": provider.policy_id,
             "version": provider.version,

@@ -132,6 +132,7 @@ _VALID_POLICY_TYPES = {
     "pci_request",
     "ccpa_request",
     "soc2_request",
+    "gdpr_request",
 }
 
 _VALID_COMPOSITIONS = {

@@ -877,19 +877,10 @@ class TestSecurityAPIGovernance:
         assert bundle["risk_posture"] == "strict"
         assert "compliance" in bundle["tags"]
         assert "gdpr" in bundle["tags"]
-        assert bundle["provider_count"] == 4
-
-        provider_types = [p.get("type") for p in bundle["providers"]]
-        assert "compliance_rule" in provider_types
-        assert "rbac" in provider_types
-        assert "denylist" in provider_types
-        assert "rate_limit" in provider_types
-
-        core = bundle["providers"][0]
-        assert core["type"] == "compliance_rule"
-        assert core["framework"] == "GDPR"
-        assert len(core["rules"]) >= 1
-        assert core["rules"][0]["name"] == "legal_basis_required"
+        assert bundle["provider_count"] == 2
+        assert bundle["providers"][0]["type"] == "gdpr_request"
+        assert bundle["pack_version"] == "2.0.0"
+        assert bundle["source_urls"]
 
     def test_hipaa_bundle_structure(self) -> None:
         from fastmcp.server.security.policy.workbench import get_policy_bundle
