@@ -42,9 +42,7 @@ def _peer_query() -> FederatedConsentQuery:
 
 
 def test_local_consent_does_not_implicitly_enable_federated_consent():
-    ctx = SecurityOrchestrator.bootstrap(
-        SecurityConfig(consent=ConsentConfig())
-    )
+    ctx = SecurityOrchestrator.bootstrap(SecurityConfig(consent=ConsentConfig()))
 
     assert ctx.consent_graph is not None
     assert ctx.federated_consent_graph is None
@@ -52,9 +50,7 @@ def test_local_consent_does_not_implicitly_enable_federated_consent():
 
 
 def test_federation_can_be_enabled_without_consent():
-    ctx = SecurityOrchestrator.bootstrap(
-        SecurityConfig(federation=FederationConfig())
-    )
+    ctx = SecurityOrchestrator.bootstrap(SecurityConfig(federation=FederationConfig()))
 
     assert ctx.federation is not None
     assert ctx.consent_graph is None

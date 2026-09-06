@@ -5008,21 +5008,27 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         }
 
     def _summarize_consent_federation(self) -> dict[str, Any]:
-        """Federation isn't tracked on the security context today.
-
-        Returns a stable shape with ``available=false`` so the UI can
-        render a clear "coming in a follow-up" empty state instead of
-        guessing. When federation gets plumbed through, this method
-        starts returning real metadata.
-        """
+        """Report the configured bridge separately from local consent."""
+        ctx = self._required_context()
+        bridge = getattr(ctx, "federated_consent_graph", None)
+        local = getattr(ctx, "consent_graph", None)
+        if bridge is None:
+            return {
+                "available": False,
+                "reason": "Federated consent is not configured.",
+            }
+        if local is None or bridge.local_graph is not local:
+            return {
+                "available": False,
+                "reason": "Federated consent is detached from the active local consent graph.",
+            }
         return {
-            "available": False,
-            "reason": (
-                "Federated consent (cross-jurisdiction / multi-"
-                "institution) isn't surfaced on this registry yet. "
-                "FederatedConsentGraph exists at the engine layer but "
-                "isn't attached to the security context."
-            ),
+            "available": True,
+            "institution_id": bridge.institution_id,
+            "peer_coordination_enabled": bridge.peer_coordination_enabled,
+            "federation_connected": bridge.federation is not None,
+            "jurisdiction_count": bridge.jurisdiction_count,
+            "institution_count": len(bridge.list_institutions()),
         }
 
     def _active_consent_edges_snapshot(self, graph) -> list[Any]:

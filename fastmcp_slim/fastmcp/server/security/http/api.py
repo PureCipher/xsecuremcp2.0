@@ -81,6 +81,7 @@ if TYPE_CHECKING:
     from fastmcp.server.security.alerts.bus import SecurityEventBus
     from fastmcp.server.security.compliance.reports import ComplianceReporter
     from fastmcp.server.security.consent.federation import FederatedConsentGraph
+    from fastmcp.server.security.consent.graph import ConsentGraph
     from fastmcp.server.security.contracts.broker import ContextBroker
     from fastmcp.server.security.dashboard.snapshot import SecurityDashboard
     from fastmcp.server.security.federation.crl import CertificateRevocationList
@@ -134,11 +135,31 @@ class SecurityAPI:
     broker: ContextBroker | None = None
     federated_consent_graph: FederatedConsentGraph | None = None
     introspection_engine: IntrospectionEngine | None = None
+    consent_graph: ConsentGraph | None = None
+    _consent_context: Any = field(default=None, repr=False)
     _policy_workbench_store: PolicyWorkbenchStore | None = field(
         default=None,
         init=False,
         repr=False,
     )
+
+    @property
+    def _active_federated_consent_graph(self) -> FederatedConsentGraph | None:
+        if self._consent_context is None:
+            return self.federated_consent_graph
+        graph = getattr(self._consent_context, "federated_consent_graph", None)
+        local = getattr(self._consent_context, "consent_graph", None)
+        if graph is None or local is None or graph.local_graph is not local:
+            return None
+        return graph
+
+    def _local_consent_graph(self) -> ConsentGraph | None:
+        if self._consent_context is not None:
+            return getattr(self._consent_context, "consent_graph", None)
+        if self.consent_graph is not None:
+            return self.consent_graph
+        bridge = self.federated_consent_graph
+        return bridge.local_graph if bridge is not None else None
 
     @classmethod
     def from_context(cls, ctx: Any) -> SecurityAPI:
@@ -164,6 +185,8 @@ class SecurityAPI:
             A SecurityAPI wired to all components in the context.
         """
         return cls(
+            _consent_context=ctx,
+            consent_graph=getattr(ctx, "consent_graph", None),
             dashboard=getattr(ctx, "dashboard", None),
             marketplace=getattr(ctx, "tool_marketplace", None),
             registry=getattr(ctx, "registry", None),
@@ -2485,7 +2508,7 @@ class SecurityAPI:
         require_all_jurisdictions: bool = True,
     ) -> dict[str, Any]:
         """Evaluate consent with federation and jurisdiction awareness."""
-        if self.federated_consent_graph is None:
+        if self._active_federated_consent_graph is None:
             return {"error": "Federated consent not configured", "status": 503}
 
         from fastmcp.server.security.consent.models import (
@@ -2511,7 +2534,9 @@ class SecurityAPI:
             jurisdictions=jurisdictions,
             require_all_jurisdictions=require_all_jurisdictions,
         )
-        decision = self.federated_consent_graph.evaluate_federated_consent(query)
+        decision = self._active_federated_consent_graph.evaluate_federated_consent(
+            query
+        )
         return {
             "granted": decision.granted,
             "reason": decision.reason,
@@ -2562,7 +2587,7 @@ class SecurityAPI:
         geographic_context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Compute dynamic access rights for an agent on a resource."""
-        if self.federated_consent_graph is None:
+        if self._active_federated_consent_graph is None:
             return {"error": "Federated consent not configured", "status": 503}
 
         from fastmcp.server.security.consent.models import GeographicContext
@@ -2577,7 +2602,7 @@ class SecurityAPI:
             if geographic_context
             else None
         )
-        rights = self.federated_consent_graph.compute_access_rights(
+        rights = self._active_federated_consent_graph.compute_access_rights(
             agent_id, resource_id, geographic_context=geo
         )
         return {
@@ -2592,10 +2617,10 @@ class SecurityAPI:
 
     def list_jurisdictions(self) -> dict[str, Any]:
         """List all registered jurisdiction policies."""
-        if self.federated_consent_graph is None:
+        if self._active_federated_consent_graph is None:
             return {"error": "Federated consent not configured", "status": 503}
 
-        policies = self.federated_consent_graph.list_jurisdiction_policies()
+        policies = self._active_federated_consent_graph.list_jurisdiction_policies()
         return {
             "jurisdictions": {
                 jcode: {
@@ -2613,10 +2638,10 @@ class SecurityAPI:
 
     def list_institutions(self) -> dict[str, Any]:
         """List all registered institutions."""
-        if self.federated_consent_graph is None:
+        if self._active_federated_consent_graph is None:
             return {"error": "Federated consent not configured", "status": 503}
 
-        institutions = self.federated_consent_graph.list_institutions()
+        institutions = self._active_federated_consent_graph.list_institutions()
         return {
             "institutions": {
                 iid: {"jurisdiction_code": jcode} for iid, jcode in institutions.items()
@@ -2630,10 +2655,12 @@ class SecurityAPI:
         target_peers: list[str] | None = None,
     ) -> dict[str, Any]:
         """Propagate a consent grant to federation peers."""
-        if self.federated_consent_graph is None:
+        if self._active_federated_consent_graph is None:
             return {"error": "Federated consent not configured", "status": 503}
 
-        results = self.federated_consent_graph.propagate_consent(edge_id, target_peers)
+        results = self._active_federated_consent_graph.propagate_consent(
+            edge_id, target_peers
+        )
         return {
             "edge_id": edge_id,
             "propagation_results": results,
@@ -2642,9 +2669,9 @@ class SecurityAPI:
 
     def grant_consent(self, body: dict[str, Any]) -> dict[str, Any]:
         """Grant a consent edge in the local graph."""
-        if self.federated_consent_graph is None:
+        graph = self._local_consent_graph()
+        if graph is None:
             return {"error": "Consent not configured", "status": 503}
-        graph = self.federated_consent_graph._local_graph
         from fastmcp.server.security.consent.graph import ConsentNode, NodeType
 
         source_id = str(body.get("source_id", "")).strip()
@@ -2693,9 +2720,9 @@ class SecurityAPI:
 
     def get_consent_graph_status(self) -> dict[str, Any]:
         """Return consent graph summary."""
-        if self.federated_consent_graph is None:
+        graph = self._local_consent_graph()
+        if graph is None:
             return {"error": "Consent not configured", "status": 503}
-        graph = self.federated_consent_graph._local_graph
         return {
             "graph_id": graph.graph_id,
             "node_count": graph.node_count,
@@ -3638,26 +3665,4 @@ def _build_api_from_server(server: FastMCP) -> SecurityAPI:
         logger.warning("No security context found on server; API will be empty")
         return SecurityAPI()
 
-    # The SecurityContext has real fields for all components.
-    # Use ctx.dashboard (auto-created by bootstrap) or build one.
-    dashboard = getattr(ctx, "dashboard", None)
-
-    return SecurityAPI(
-        dashboard=dashboard,
-        marketplace=getattr(ctx, "tool_marketplace", None),
-        registry=getattr(ctx, "registry", None),
-        compliance_reporter=getattr(ctx, "compliance_reporter", None),
-        provenance_ledger=getattr(ctx, "provenance_ledger", None),
-        federation=getattr(ctx, "federation", None),
-        crl=getattr(ctx, "crl", None),
-        event_bus=getattr(ctx, "event_bus", None),
-        policy_engine=getattr(ctx, "policy_engine", None),
-        policy_audit_log=getattr(ctx, "policy_audit_log", None),
-        policy_version_manager=getattr(ctx, "policy_version_manager", None),
-        policy_validator=getattr(ctx, "policy_validator", None),
-        policy_monitor=getattr(ctx, "policy_monitor", None),
-        policy_governor=getattr(ctx, "policy_governor", None),
-        broker=getattr(ctx, "broker", None),
-        federated_consent_graph=getattr(ctx, "federated_consent_graph", None),
-        introspection_engine=getattr(ctx, "introspection_engine", None),
-    )
+    return SecurityAPI.from_context(ctx)
