@@ -31,6 +31,7 @@ from fastmcp.server.security.policy.engine import (
 from fastmcp.server.security.policy.policies.ccpa_request import CcpaEvidence
 from fastmcp.server.security.policy.policies.ferpa_request import FerpaEvidence
 from fastmcp.server.security.policy.policies.pci_request import PciEvidence
+from fastmcp.server.security.policy.policies.soc2_request import Soc2Evidence
 from fastmcp.server.security.policy.policies.zero_trust import ZeroTrustEvidence
 from fastmcp.server.security.policy.provider import (
     PolicyEvaluationContext,
@@ -67,6 +68,10 @@ class PolicyEnforcementMiddleware(Middleware):
         policy_engine: PolicyEngine,
         *,
         bypass_stdio: bool = False,
+        soc2_evidence_resolver: Callable[
+            [PolicyEvaluationContext], Awaitable[Soc2Evidence | None]
+        ]
+        | None = None,
         ccpa_evidence_resolver: Callable[
             [PolicyEvaluationContext], Awaitable[CcpaEvidence | None]
         ]
@@ -90,6 +95,7 @@ class PolicyEnforcementMiddleware(Middleware):
         self.zero_trust_evidence_resolver = zero_trust_evidence_resolver
         self.pci_evidence_resolver = pci_evidence_resolver
         self.ccpa_evidence_resolver = ccpa_evidence_resolver
+        self.soc2_evidence_resolver = soc2_evidence_resolver
 
     async def _evaluate(self, context: PolicyEvaluationContext) -> PolicyResult:
         if self.ferpa_evidence_resolver is not None and not context.action.startswith(
@@ -132,6 +138,17 @@ class PolicyEnforcementMiddleware(Middleware):
             context = replace(
                 context,
                 ccpa_evidence=ccpa_evidence,
+                timestamp=datetime.now(timezone.utc),
+            )
+        if self.soc2_evidence_resolver is not None:
+            try:
+                soc2_evidence = await self.soc2_evidence_resolver(context)
+            except Exception:
+                logger.warning("SOC 2 evidence resolution failed; denying request")
+                return _deny_result("SOC 2 evidence is unavailable")
+            context = replace(
+                context,
+                soc2_evidence=soc2_evidence,
                 timestamp=datetime.now(timezone.utc),
             )
         return await self.policy_engine.evaluate(context)

@@ -920,14 +920,10 @@ class TestSecurityAPIGovernance:
         assert bundle is not None
         assert bundle["risk_posture"] == "strict"
         assert "soc2" in bundle["tags"]
-        assert bundle["provider_count"] == 5
-
-        provider_types = [p.get("type") for p in bundle["providers"]]
-        assert "allowlist" in provider_types
-        assert "rbac" in provider_types
-        assert "denylist" in provider_types
-        assert "time_based" in provider_types
-        assert "rate_limit" in provider_types
+        assert bundle["provider_count"] == 2
+        assert bundle["providers"][0]["type"] == "soc2_request"
+        assert bundle["pack_version"] == "2.0.0"
+        assert bundle["source_urls"]
 
     def test_zero_trust_bundle_structure(self) -> None:
         from fastmcp.server.security.policy.workbench import get_policy_bundle

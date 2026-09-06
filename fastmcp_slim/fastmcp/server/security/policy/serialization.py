@@ -39,6 +39,7 @@ from fastmcp.server.security.policy.policies.rbac import RoleBasedPolicy
 from fastmcp.server.security.policy.policies.resource_scoped import (
     ResourceScopedPolicy,
 )
+from fastmcp.server.security.policy.policies.soc2_request import Soc2RequestPolicy
 from fastmcp.server.security.policy.policies.temporal import TimeBasedPolicy
 from fastmcp.server.security.policy.policies.zero_trust import ZeroTrustPolicy
 from fastmcp.server.security.policy.provider import (
@@ -276,6 +277,8 @@ def policy_provider_to_config(provider: PolicyProvider) -> dict[str, Any]:
             if isinstance(provider, PciRequestPolicy)
             else "ccpa_request"
             if isinstance(provider, CcpaRequestPolicy)
+            else "soc2_request"
+            if isinstance(provider, Soc2RequestPolicy)
             else "zero_trust",
             "policy_id": provider.policy_id,
             "version": provider.version,

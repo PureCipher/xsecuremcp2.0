@@ -131,6 +131,7 @@ _VALID_POLICY_TYPES = {
     "zero_trust",
     "pci_request",
     "ccpa_request",
+    "soc2_request",
 }
 
 _VALID_COMPOSITIONS = {

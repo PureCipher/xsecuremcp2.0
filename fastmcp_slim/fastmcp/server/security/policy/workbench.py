@@ -361,72 +361,28 @@ _BUNDLES: tuple[PolicyBundle, ...] = (
     ),
     PolicyBundle(
         bundle_id="soc2-trust-services",
-        title="SOC 2 Trust Services",
-        summary="Controls aligned with SOC 2 trust service criteria for SaaS and cloud MCP services.",
-        description=(
-            "Implements access controls aligned with SOC 2 trust service criteria: "
-            "security, availability, and confidentiality. Uses strict RBAC with "
-            "separation of duties, denylists for sensitive administrative surfaces, "
-            "business-hours restrictions for change management, and conservative "
-            "rate limiting to protect availability."
-        ),
+        title="SOC 2 Request Validation",
+        summary="Validate MCP requests against trusted access and operational safeguards.",
+        description="Checks all operation effects, data classification, access, capacity, processing integrity, confidentiality, privacy and system-change authorization. Requires a trusted server-side resolver and exact grants. Ordinary reads do not require a change window.",
         risk_posture="strict",
         recommended_environments=("staging", "production"),
         tags=("compliance", "soc2", "trust-services", "saas", "cloud"),
+        pack_version="2.0.0",
+        regulation_reference="AICPA 2017 Trust Services Criteria (SOC 2 framework, not a regulation)",
+        source_reviewed_at="2026-09-06",
+        source_urls=(
+            "https://www.aicpa-cima.com/resources/download/2017-trust-services-criteria-with-revised-points-of-focus-2022",
+        ),
+        coverage_note="Selected request-time safeguards aligned to all five trust service categories; not full SOC 2 audit coverage or certification. External systems verify facts and enforce output controls. Governance, physical security, audits and approval workflows remain external. Empty grants/issuer/scope deny execution; active policies are not automatically migrated.",
         providers=(
             {
-                "type": "allowlist",
-                "policy_id": "soc2-bundle-allowlist",
-                "version": "1.0.0",
-                "allowed": [
-                    "tool:*",
-                    "registry:submit",
-                    "registry:review",
-                    "registry:policy",
-                ],
-            },
-            {
-                "type": "rbac",
-                "policy_id": "soc2-bundle-rbac",
-                "version": "1.0.0",
-                "role_mappings": {
-                    "viewer": ["read_resource"],
-                    "operator": ["call_tool", "read_resource"],
-                    "publisher": ["call_tool", "read_resource", "submit_listing"],
-                    "reviewer": [
-                        "call_tool",
-                        "read_resource",
-                        "submit_listing",
-                        "review_listing",
-                    ],
-                    "security_admin": [
-                        "call_tool",
-                        "read_resource",
-                        "manage_policy",
-                        "review_listing",
-                    ],
-                    "admin": ["*"],
-                },
-                "default_decision": "deny",
-            },
-            {
-                "type": "denylist",
-                "policy_id": "soc2-bundle-denylist",
-                "version": "1.0.0",
-                "denied": [
-                    "admin-panel",
-                    "config:*",
-                    "debug:*",
-                ],
-            },
-            {
-                "type": "time_based",
-                "policy_id": "soc2-bundle-change-window",
-                "version": "1.0.0",
-                "allowed_days": [0, 1, 2, 3, 4],
-                "start_hour": 8,
-                "end_hour": 18,
-                "utc_offset_hours": 0,
+                "type": "soc2_request",
+                "policy_id": "soc2-request-validation",
+                "version": "2.0.0",
+                "grants": [],
+                "trusted_issuers": [],
+                "scope_id": "",
+                "max_evidence_age_seconds": 60,
             },
             {
                 "type": "rate_limit",

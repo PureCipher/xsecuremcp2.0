@@ -654,6 +654,7 @@ class TestSchema:
             "zero_trust",
             "pci_request",
             "ccpa_request",
+            "soc2_request",
         }
         assert set(types.keys()) == expected
 

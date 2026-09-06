@@ -80,6 +80,7 @@ from fastmcp.server.security.policy.policies.rbac import RoleBasedPolicy
 from fastmcp.server.security.policy.policies.resource_scoped import (
     ResourceScopedPolicy,
 )
+from fastmcp.server.security.policy.policies.soc2_request import Soc2RequestPolicy
 from fastmcp.server.security.policy.policies.temporal import TimeBasedPolicy
 from fastmcp.server.security.policy.policies.zero_trust import (
     ZeroTrustGrant,
@@ -358,6 +359,13 @@ def _build_ccpa_request(config: dict[str, Any]) -> CcpaRequestPolicy:
     return CcpaRequestPolicy(**vars(base))
 
 
+def _build_soc2_request(config: dict[str, Any]) -> Soc2RequestPolicy:
+    base = _build_zero_trust(
+        {**config, "policy_id": config.get("policy_id", "soc2-request-validation")}
+    )
+    return Soc2RequestPolicy(**vars(base))
+
+
 def _register_builtins() -> None:
     """Register all built-in policy types with the global registry."""
     builtins = [
@@ -416,6 +424,36 @@ def _register_builtins() -> None:
             },
             starter_config={
                 "type": "ccpa_request",
+                "grants": [],
+                "trusted_issuers": [],
+                "scope_id": "",
+            },
+        ),
+        PolicyTypeDescriptor(
+            type_key="soc2_request",
+            factory=_build_soc2_request,
+            display_name="SOC 2 Request Validation",
+            category="compliance",
+            description="Operation-specific trust service safeguards with trusted evidence.",
+            field_specs={
+                "grants": {
+                    "label": "Exact grants",
+                    "type": "json_list",
+                    "required": True,
+                },
+                "trusted_issuers": {
+                    "label": "Trusted issuers",
+                    "type": "string_list",
+                    "required": True,
+                },
+                "scope_id": {
+                    "label": "Server and tenant scope",
+                    "type": "string",
+                    "required": True,
+                },
+            },
+            starter_config={
+                "type": "soc2_request",
                 "grants": [],
                 "trusted_issuers": [],
                 "scope_id": "",

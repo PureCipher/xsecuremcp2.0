@@ -109,6 +109,7 @@ class PolicyEvaluationContext:
     zero_trust_evidence: Any = None
     pci_evidence: Any = None
     ccpa_evidence: Any = None
+    soc2_evidence: Any = None
 
 
 @dataclass(frozen=True)
