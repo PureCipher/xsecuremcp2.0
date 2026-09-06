@@ -19,6 +19,7 @@ from typing import Any
 class ProvenanceAction(Enum):
     """Types of actions recorded in the provenance ledger."""
 
+    EXECUTION_RECEIPT = "execution_receipt"
     TOOL_CALLED = "tool_called"
     TOOL_RESULT = "tool_result"
     RESOURCE_READ = "resource_read"

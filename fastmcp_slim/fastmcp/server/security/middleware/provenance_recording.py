@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
+from datetime import datetime, timezone
 
 import mcp.types as mt
 
@@ -22,8 +23,12 @@ from fastmcp.server.middleware.middleware import (
 )
 from fastmcp.server.security.principal import principal_id_from_access_token
 from fastmcp.server.security.provenance.ledger import ProvenanceLedger
+from fastmcp.server.security.provenance.receipts import (
+    RECEIPT_META_KEY,
+    issue_execution_receipt,
+)
 from fastmcp.server.security.provenance.records import ProvenanceAction
-from fastmcp.tools.base import Tool, ToolResult
+from fastmcp.tools.base import InputRequiredToolResult, Tool, ToolResult
 
 logger = logging.getLogger(__name__)
 
@@ -149,25 +154,11 @@ class ProvenanceRecordingMiddleware(Middleware):
             "arguments": redacted_arguments,
         }
 
+        started_at = datetime.now(timezone.utc)
         try:
             result = await call_next(context)
-
-            input_tokens, output_tokens = _estimate_call_tokens(arguments, result)
-            self.ledger.record(
-                action=ProvenanceAction.TOOL_CALLED,
-                actor_id=actor_id,
-                resource_id=tool_name,
-                input_data=input_data,
-                output_data={"status": "success"},
-                metadata={
-                    "input_tokens": input_tokens,
-                    "output_tokens": output_tokens,
-                },
-            )
-
-            return result
-
         except Exception as exc:
+            completed_at = datetime.now(timezone.utc)
             input_tokens, _ = _estimate_call_tokens(arguments, None)
             self.ledger.record(
                 action=ProvenanceAction.ERROR,
@@ -180,7 +171,59 @@ class ProvenanceRecordingMiddleware(Middleware):
                     "input_tokens": input_tokens,
                 },
             )
+            issue_execution_receipt(
+                self.ledger,
+                actor_id=actor_id,
+                tool_name=tool_name,
+                status="error",
+                started_at=started_at,
+                completed_at=completed_at,
+                input_data=input_data,
+                output_data={"error_type": type(exc).__name__},
+            )
             raise
+
+        if isinstance(result, InputRequiredToolResult):
+            return result
+
+        completed_at = datetime.now(timezone.utc)
+        output_data = {
+            "content": [
+                block.model_dump(mode="json", by_alias=True) for block in result.content
+            ],
+            "structured_content": result.structured_content,
+            "is_error": result.is_error,
+        }
+        input_tokens, output_tokens = _estimate_call_tokens(arguments, result)
+        self.ledger.record(
+            action=ProvenanceAction.TOOL_CALLED,
+            actor_id=actor_id,
+            resource_id=tool_name,
+            input_data=input_data,
+            output_data=output_data,
+            metadata={"input_tokens": input_tokens, "output_tokens": output_tokens},
+        )
+        receipt = issue_execution_receipt(
+            self.ledger,
+            actor_id=actor_id,
+            tool_name=tool_name,
+            status="error" if result.is_error else "success",
+            started_at=started_at,
+            completed_at=completed_at,
+            input_data=input_data,
+            output_data=output_data,
+        )
+        # Copy so cached/shared tool results are not modified between calls.
+        result = result.model_copy()
+        result.meta = {
+            **(result.meta or {}),
+            RECEIPT_META_KEY: receipt.model_dump(mode="json"),
+        }
+        if result._raw_mcp_result is not None:
+            result._raw_mcp_result = result._raw_mcp_result.model_copy(
+                update={"meta": result.meta}
+            )
+        return result
 
     async def on_list_tools(
         self,

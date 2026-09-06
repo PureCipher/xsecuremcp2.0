@@ -3369,6 +3369,10 @@ def mount_security_routes(
         body = await request.json()
         return JSONResponse(api.verify_provenance_bundle(body))
 
+    from fastmcp.server.security.http.receipt_routes import mount_receipt_routes
+
+    mount_receipt_routes(api, prefix, _secured_route)
+
     mount_policy_routes(server, api, prefix, route_decorator=_secured_route)
 
     # Health

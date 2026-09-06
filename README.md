@@ -15,6 +15,7 @@ SecureMCP keeps the FastMCP server developer experience, but adds enforceable se
 - explicit security manifests
 - runtime policy enforcement
 - consent and contract checks
+- [Execution Receipts](docs/execution-receipts.md): portable tool outcomes with input/output digests and verification proofs
 - provenance and audit trails
 - certification and attestation
 - trust and moderation hooks

@@ -51,7 +51,6 @@ def make_server(service):
     return onedrive_server.create_server(auth)
 
 
-
 @pytest.mark.parametrize("service", MODULES)
 async def test_controls_discovery_and_unconsented_call(service, caplog):
     server = make_server(service)
