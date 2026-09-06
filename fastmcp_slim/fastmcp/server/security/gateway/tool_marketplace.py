@@ -481,6 +481,7 @@ class ToolListing:
     """
 
     listing_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    publisher_setup: dict[str, Any] = field(default_factory=dict, repr=False)
     tool_name: str = ""
     display_name: str = ""
     description: str = ""
@@ -795,6 +796,17 @@ class ToolMarketplace:
                 "Failed to persist listing %s", listing.listing_id, exc_info=True
             )
 
+    def save_publisher_setup(self, listing: ToolListing, setup: dict[str, Any]) -> None:
+        """Persist private working configuration without publishing or activating it."""
+        if self._backend is None:
+            raise RuntimeError("Persistent storage is required to save setup")
+        payload = self._serialize_listing_for_storage(listing)
+        payload["publisher_setup"] = setup
+        self._backend.save_tool_listing(
+            self._marketplace_id, listing.listing_id, payload
+        )
+        listing.publisher_setup = setup
+
     def _remove_persisted_listing(self, listing_id: str) -> None:
         """Remove a listing from the backend."""
         if self._backend is None:
@@ -974,6 +986,7 @@ class ToolMarketplace:
         payload["attestation"] = (
             listing.attestation.to_dict() if listing.attestation is not None else None
         )
+        payload["publisher_setup"] = dict(listing.publisher_setup)
         payload["metadata"] = dict(listing.metadata)
         payload["version_history"] = [
             version.to_dict() for version in listing.version_history
@@ -1014,6 +1027,7 @@ class ToolMarketplace:
 
         listing = ToolListing(
             listing_id=data.get("listing_id", str(uuid.uuid4())),
+            publisher_setup=dict(data.get("publisher_setup") or {}),
             tool_name=data.get("tool_name", ""),
             display_name=data.get("display_name", ""),
             description=data.get("description", ""),

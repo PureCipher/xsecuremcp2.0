@@ -9238,6 +9238,63 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 }
             )
 
+        @self.custom_route(
+            f"{prefix}/me/listings/{{listing_id}}/setup", methods=["GET", "PUT"]
+        )
+        async def registry_listing_setup(request: Request) -> JSONResponse:
+            session = self._session_from_request(request)
+            if session is None:
+                return JSONResponse(
+                    {"error": "Authentication required"}, status_code=401
+                )
+            listing = self._marketplace().get(request.path_params["listing_id"])
+            if listing is None or listing.author != session.username:
+                return JSONResponse(
+                    {"error": "Saved server not found"}, status_code=404
+                )
+            if request.method == "GET":
+                return JSONResponse(
+                    {
+                        "listing": self._serialize_listing_detail(listing),
+                        "setup": listing.publisher_setup,
+                    }
+                )
+            if listing.status.value != "draft":
+                return JSONResponse(
+                    {"error": "Only draft setup can be saved"}, status_code=409
+                )
+            try:
+                raw = await request.body()
+                if len(raw) > 100_000:
+                    raise ValueError("Setup is too large")
+                body = json.loads(raw)
+                keys = {"displayName", "categories", "manifestText", "runtimeText"}
+                if (
+                    not isinstance(body, dict)
+                    or set(body) != keys
+                    or not all(isinstance(v, str) for v in body.values())
+                ):
+                    raise ValueError("Invalid setup fields")
+                manifest = json.loads(body["manifestText"])
+                runtime = json.loads(body["runtimeText"])
+                if (
+                    not isinstance(manifest, dict)
+                    or manifest.get("tool_name") != listing.tool_name
+                ):
+                    raise ValueError("The saved server tool name must remain unchanged")
+                if not isinstance(runtime, dict):
+                    raise ValueError("Runtime configuration must be an object")
+                setup = {**body, "saved_at": datetime.now(timezone.utc).isoformat()}
+                self._marketplace().save_publisher_setup(listing, setup)
+            except (ValueError, TypeError) as exc:
+                return JSONResponse({"error": str(exc)}, status_code=400)
+            except Exception:
+                logger.exception("Unable to persist publisher setup")
+                return JSONResponse(
+                    {"error": "Setup could not be saved"}, status_code=503
+                )
+            return JSONResponse({"saved": True, "saved_at": setup["saved_at"]})
+
         @self.custom_route(f"{prefix}/me/listings", methods=["GET"])
         async def registry_me_listings(request: Request) -> JSONResponse:
             session = self._session_from_request(request)

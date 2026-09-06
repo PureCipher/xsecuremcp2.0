@@ -63,3 +63,14 @@ planned authenticated HTTP SecureMCP wrapper, not deployment readiness. Known
 publisher means an active registered publisher account, not certification or an
 upstream affiliation. All drafts still require review, isolated deployment and
 live validation before publication.
+
+## Publisher-owned setup
+
+GET and PUT /registry/me/listings/{listing_id}/setup require the listing owner's
+session. PUT saves displayName, categories, manifestText and runtimeText as a
+private working copy in persistent listing storage. It is available across
+sessions and restarts, excluded from public serialization, and does not publish,
+certify or activate a server. Only drafts can be saved. The original tool name
+must remain unchanged; credentials belong in secure storage, with references in
+configuration. The UI displays declared tools separately from inspected tool
+schemas and shows each provider's recorded requirements and OAuth scopes.
