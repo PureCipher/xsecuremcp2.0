@@ -8,6 +8,7 @@ from starlette.testclient import TestClient
 
 from purecipher import PureCipherRegistry, consumer_oauth, consumer_runtime
 from purecipher.product_schemas import PRODUCT_SCHEMAS
+from tests.server.security.profile_approval_helpers import approve_profile
 from tests.server.security.test_purecipher_catalog_query import registry
 from tests.server.security.test_workspace_profiles import login
 
@@ -168,8 +169,8 @@ def test_actual_profile_call_uses_only_selected_user_key(monkeypatch):
     app = PureCipherRegistry(
         signing_secret="test-secret",
         auth_settings=registry()._auth_settings,
-        enable_contracts=False,
-        enable_consent=False,
+        enable_contracts=True,
+        enable_consent=True,
         enable_provenance=False,
         enable_reflexive=False,
     )
@@ -211,7 +212,8 @@ def test_actual_profile_call_uses_only_selected_user_key(monkeypatch):
             "/registry/workspace/profiles",
             json={
                 "name": "Search",
-                "status": "active",
+                "status": "inactive",
+                "purpose": "Fixture product access",
                 "client_ids": [entry["client"]["client_id"]],
                 "servers": [
                     {
@@ -223,6 +225,7 @@ def test_actual_profile_call_uses_only_selected_user_key(monkeypatch):
             },
         ).json()
         assert "id" in profile, profile
+        profile = approve_profile(app, client, profile)
         headers = {
             "Authorization": "Bearer " + entry["token"],
             "Accept": "application/json, text/event-stream",

@@ -174,7 +174,21 @@ class ContractValidationMiddleware(Middleware):
         tool_name = context.message.name
         agent_id = self._get_agent_id(context)
 
-        contract = self._find_valid_contract(agent_id)
+        # Select a contract that permits this operation, not merely the first
+        # active agreement. Profile boundaries separately validate their bound ID.
+        contracts = (
+            self.broker.get_active_contracts_for_agent(agent_id) if agent_id else []
+        )
+        contract = next(
+            (
+                item
+                for item in contracts
+                if not self._check_term_constraint(item, "call_tool", tool_name)
+            ),
+            None,
+        )
+        if contract is None and contracts:
+            contract = contracts[0]
         if contract is None:
             raise ContractViolationError(
                 f"No active contract for agent '{agent_id}' to call tool '{tool_name}'"

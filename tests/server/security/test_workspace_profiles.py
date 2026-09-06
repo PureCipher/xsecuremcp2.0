@@ -4,6 +4,7 @@ from starlette.testclient import TestClient
 
 from fastmcp.server.security.gateway.tool_marketplace import PublishStatus
 from purecipher.workspace import WorkspaceStore
+from tests.server.security.profile_approval_helpers import approve_profile
 from tests.server.security.test_purecipher_catalog_query import registry
 
 
@@ -36,13 +37,14 @@ def setup(app, client, monkeypatch):
     record = result.json()
     profile = {
         "name": "Research",
-        "status": "active",
+        "purpose": "Fixture research",
+        "status": "inactive",
         "client_ids": [record["client"]["client_id"]],
         "servers": [{"listing_id": listing.listing_id, "tools": ["echo"]}],
     }
     response = client.post("/registry/workspace/profiles", json=profile)
     assert response.status_code == 200, response.text
-    return response.json(), record
+    return approve_profile(app, client, response.json()), record
 
 
 def test_registration_cannot_grant_privileged_roles():
@@ -78,7 +80,7 @@ def test_profile_ownership_revision_and_readiness(monkeypatch):
         assert profile["owner"] == "alice"
         url = "/registry/workspace/profiles/" + profile["id"]
         changed = client.put(url, json={**profile, "status": "inactive"}).json()
-        assert changed["revision"] == 2
+        assert changed["revision"] == profile["revision"] + 1
         assert client.put(url, json=profile).status_code == 400
         assert (
             client.post(
@@ -203,8 +205,8 @@ def test_profile_tool_call_and_token_revocation(monkeypatch):
     app = PureCipherRegistry(
         signing_secret="profile-test-only",
         auth_settings=registry()._auth_settings,
-        enable_contracts=False,
-        enable_consent=False,
+        enable_contracts=True,
+        enable_consent=True,
         enable_provenance=False,
         enable_reflexive=False,
     )

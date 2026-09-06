@@ -8,6 +8,7 @@ from fastmcp.server.security.contracts.schema import (
     ContractNegotiationRequest,
     ContractTerm,
 )
+from tests.server.security.profile_approval_helpers import approve_profile
 from tests.server.security.test_consumer_runtime import add, enabled
 from tests.server.security.test_workspace_profiles import login
 
@@ -42,6 +43,7 @@ def test_full_security_stack_requires_approval_and_runs_after_grants(monkeypatch
         ).json()
         profile = {
             "name": "Time only",
+            "purpose": "Time checks",
             "status": "active",
             "client_ids": [entry["client"]["client_id"]],
             "servers": [
@@ -54,11 +56,24 @@ def test_full_security_stack_requires_approval_and_runs_after_grants(monkeypatch
         }
         denied = c.post("/registry/workspace/profiles", json=profile)
         assert denied.status_code == 400 and "Security approval" in denied.text
-        assert (
-            "active SecureMCP contract" in denied.text
-            and "execute consent" in denied.text
-        )
+        assert "Security & access" in denied.text
         broker = app._broker_or_none()
+        asyncio.run(
+            broker.negotiate(
+                ContractNegotiationRequest(
+                    agent_id=entry["client"]["slug"],
+                    proposed_terms=[
+                        ContractTerm(
+                            description="Unrelated older agreement",
+                            constraint={
+                                "allowed_actions": ["call_tool"],
+                                "allowed_resources": ["unrelated_tool"],
+                            },
+                        )
+                    ],
+                )
+            )
+        )
         response = asyncio.run(
             broker.negotiate(
                 ContractNegotiationRequest(
@@ -82,7 +97,10 @@ def test_full_security_stack_requires_approval_and_runs_after_grants(monkeypatch
             {"execute"},
             granted_by="test-administrator",
         )
-        profile = c.post("/registry/workspace/profiles", json=profile).json()
+        profile = c.post(
+            "/registry/workspace/profiles", json={**profile, "status": "inactive"}
+        ).json()
+        profile = approve_profile(app, c, profile, grant_controls=False)
         assert profile["status"] == "active"
         path = "/mcp/profiles/" + profile["id"]
         headers = {

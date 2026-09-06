@@ -2,6 +2,7 @@ import pytest
 from starlette.testclient import TestClient
 
 from purecipher import PureCipherRegistry, consumer_cloud, consumer_runtime
+from tests.server.security.profile_approval_helpers import approve_profile
 from tests.server.security.test_consumer_runtime import add, enabled
 from tests.server.security.test_purecipher_catalog_query import registry
 from tests.server.security.test_workspace_profiles import login
@@ -42,8 +43,8 @@ def test_cloud_profile_isolates_owner_and_revokes(monkeypatch, product, tool, ar
     app = PureCipherRegistry(
         signing_secret="test-secret",
         auth_settings=registry()._auth_settings,
-        enable_contracts=False,
-        enable_consent=False,
+        enable_contracts=True,
+        enable_consent=True,
         enable_provenance=False,
         enable_reflexive=False,
     )
@@ -85,7 +86,8 @@ def test_cloud_profile_isolates_owner_and_revokes(monkeypatch, product, tool, ar
             "/registry/workspace/profiles",
             json={
                 "name": "Search",
-                "status": "active",
+                "status": "inactive",
+                "purpose": "Fixture product access",
                 "client_ids": [entry["client"]["client_id"]],
                 "servers": [
                     {
@@ -97,6 +99,7 @@ def test_cloud_profile_isolates_owner_and_revokes(monkeypatch, product, tool, ar
             },
         ).json()
         assert "id" in profile, profile
+        profile = approve_profile(app, client, profile)
         headers = {
             "Authorization": "Bearer " + entry["token"],
             "Accept": "application/json, text/event-stream",

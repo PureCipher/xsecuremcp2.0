@@ -43,6 +43,16 @@ class WorkspaceStore:
             ).fetchall()
         return [json.loads(row[0]) for row in rows]
 
+    def list_kind(self, kind):
+        if not is_postgres_dsn(self.dsn):
+            return [copy.deepcopy(v) for v in self.memory.values() if v["kind"] == kind]
+        with connection(self.dsn) as conn:
+            rows = conn.execute(
+                "SELECT payload FROM purecipher_workspace WHERE kind=%s ORDER BY id",
+                (kind,),
+            ).fetchall()
+        return [json.loads(row[0]) for row in rows]
+
     def save(self, item, expected=None):
         item = copy.deepcopy(item)
         item["revision"] = (expected or 0) + 1
@@ -148,7 +158,7 @@ def profile_blockers(registry, profile):
         observed = inspected_tools(listing)
         if not selected["tools"] or not set(selected["tools"]).issubset(observed):
             blockers.append(f"{listing.display_name}: select inspected tools")
-    from purecipher.consumer_governance import blockers as security_blockers
+    from purecipher.profile_governance import blockers as security_blockers
 
     blockers.extend(security_blockers(registry, profile))
     return list(dict.fromkeys(blockers))
@@ -176,7 +186,9 @@ def allowed_profile_tools(registry, profile_id, client):
         raise ValueError("Profile is not ready or its owner is disabled")
     allowed = set()
     for selected in profile["servers"]:
-        allowed.update(selected["tools"])
+        from purecipher.profile_governance import selected_tools
+
+        allowed.update(selected_tools(profile, selected, client.client_id))
     # A name exposed by multiple listings cannot safely identify one permission.
     for name in allowed:
         owners = [
@@ -193,6 +205,9 @@ def mount_workspace(registry, prefix):
     from purecipher.publisher_drafts import mount_publisher_drafts
 
     mount_publisher_drafts(registry, prefix)
+    from purecipher.profile_governance import mount
+
+    mount(registry, prefix)
 
     def owned(request, key):
         session = registry._session_from_request(request)
@@ -370,6 +385,21 @@ def mount_workspace(registry, prefix):
                     ):
                         raise ValueError("Select your own connection for this product")
                     entry["connection_id"] = connection_id
+                restrictions = selected.get("client_tools", {})
+                if not isinstance(restrictions, dict) or any(
+                    cid not in clients
+                    or not isinstance(names, list)
+                    or not all(isinstance(n, str) for n in names)
+                    or not set(names).issubset(tools)
+                    for cid, names in restrictions.items()
+                ):
+                    raise ValueError(
+                        "Client tool restrictions must be subsets of selected tools"
+                    )
+                if restrictions:
+                    entry["client_tools"] = {
+                        cid: sorted(set(names)) for cid, names in restrictions.items()
+                    }
                 selected_servers.append(entry)
             status = body.get("status", "inactive")
             if status not in {"active", "inactive"}:
@@ -381,12 +411,17 @@ def mount_workspace(registry, prefix):
                 "kind": "profile",
                 "owner": session.username,
                 "name": name,
+                "purpose": str(body.get("purpose") or "").strip()[:500],
                 "status": status,
                 "client_ids": sorted(set(clients)),
                 "servers": selected_servers,
                 "updated_at": time.time(),
             }
-            if status == "active":
+            from purecipher.profile_governance import fingerprint
+
+            if previous and fingerprint(previous) != fingerprint(profile):
+                profile["status"] = "inactive"
+            if profile["status"] == "active":
                 blockers = profile_blockers(registry, profile)
                 if blockers:
                     raise ValueError("; ".join(blockers))

@@ -6,6 +6,7 @@ from starlette.testclient import TestClient
 
 from fastmcp.server.security.outbound import OutboundHTTPResponse
 from purecipher import PureCipherRegistry, consumer_bridge, consumer_runtime
+from tests.server.security.profile_approval_helpers import approve_profile
 from tests.server.security.test_consumer_runtime import add, enabled
 from tests.server.security.test_purecipher_catalog_query import registry
 from tests.server.security.test_workspace_profiles import login
@@ -69,8 +70,8 @@ def test_upstream_profile_calls_enforce_approved_tools_and_owner(monkeypatch, pr
     app = PureCipherRegistry(
         signing_secret="test-secret",
         auth_settings=registry()._auth_settings,
-        enable_contracts=False,
-        enable_consent=False,
+        enable_contracts=True,
+        enable_consent=True,
         enable_provenance=False,
         enable_reflexive=False,
     )
@@ -120,7 +121,8 @@ def test_upstream_profile_calls_enforce_approved_tools_and_owner(monkeypatch, pr
             "/registry/workspace/profiles",
             json={
                 "name": "Upstream",
-                "status": "active",
+                "status": "inactive",
+                "purpose": "Fixture product access",
                 "client_ids": [entry["client"]["client_id"]],
                 "servers": [
                     {
@@ -132,6 +134,7 @@ def test_upstream_profile_calls_enforce_approved_tools_and_owner(monkeypatch, pr
             },
         ).json()
         assert "id" in profile, profile
+        profile = approve_profile(app, client, profile)
         headers = {
             "Authorization": "Bearer " + entry["token"],
             "Accept": "application/json, text/event-stream",
