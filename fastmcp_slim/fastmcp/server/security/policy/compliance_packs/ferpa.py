@@ -208,7 +208,7 @@ _SEC_99_37_DIRECTORY = ComplianceRuleSpec(
     checks=(
         MetadataCheck(
             metadata_key="directory_opt_out_state",
-            allowed_values=frozenset({"not_opted_out", "notice_waived"}),
+            allowed_values=frozenset({"not_opted_out"}),
         ),
     ),
     deny_message=(

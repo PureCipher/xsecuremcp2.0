@@ -936,14 +936,10 @@ class TestSecurityAPIGovernance:
         assert bundle is not None
         assert bundle["risk_posture"] == "locked_down"
         assert "zero-trust" in bundle["tags"]
-        assert bundle["provider_count"] == 5
-
-        provider_types = [p.get("type") for p in bundle["providers"]]
-        assert "resource_scoped" in provider_types
-        assert "rbac" in provider_types
-        assert "abac" in provider_types
-        assert "denylist" in provider_types
-        assert "rate_limit" in provider_types
+        assert bundle["provider_count"] == 2
+        assert bundle["providers"][0]["type"] == "zero_trust"
+        assert bundle["providers"][0]["grants"] == []
+        assert bundle["pack_version"] == "2.0.0"
 
     def test_pci_dss_bundle_structure(self) -> None:
         from fastmcp.server.security.policy.workbench import get_policy_bundle
@@ -994,23 +990,10 @@ class TestSecurityAPIGovernance:
 
         bundle = get_policy_bundle("ferpa-student-records")
         assert bundle is not None
-        assert bundle["risk_posture"] == "strict"
-        assert "ferpa" in bundle["tags"]
-        assert bundle["provider_count"] == 4
-
-        provider_types = [p.get("type") for p in bundle["providers"]]
-        assert "compliance_rule" in provider_types
-        assert "rbac" in provider_types
-        assert "denylist" in provider_types
-        assert "rate_limit" in provider_types
-
-        core = bundle["providers"][0]
-        assert core["type"] == "compliance_rule"
-        assert core["framework"] == "FERPA"
-        assert len(core["rules"]) == 2
-        assert core["rules"][0]["name"] == "educational_interest_required"
-        assert core["rules"][1]["name"] == "directory_information_exception"
-        assert core.get("require_all_rules") is False
+        assert bundle["pack_version"] == "2.0.0"
+        assert bundle["provider_count"] == 1
+        assert bundle["providers"][0]["type"] == "ferpa_request"
+        assert bundle["providers"][0]["trusted_issuers"] == []
 
     def test_all_bundles_have_required_fields(self) -> None:
         from fastmcp.server.security.policy.workbench import list_policy_bundles
@@ -1458,6 +1441,26 @@ class TestSecurityAPIGovernance:
         assert staged["status"] == "imported"
         assert staged["bundle"]["bundle_id"] == "registry-balanced"
         assert staged["proposal"]["action"] == "replace_chain"
+
+    @pytest.mark.anyio
+    async def test_ferpa_proposal_persists_catalog_reference(self, tmp_path) -> None:
+        from fastmcp.server.security.storage.sqlite import SQLiteBackend
+
+        api = self._make_api()
+        backend = SQLiteBackend(str(tmp_path / "ferpa.db"))
+        api.policy_governor._storage = backend
+        staged = await api.stage_policy_bundle(
+            "ferpa-student-records", author="reviewer"
+        )
+        assert staged["status"] == "imported"
+        proposal = staged["proposal"]
+        expected = proposal["metadata"]["catalog_reference"]
+        assert expected["pack_version"] == "2.0.0"
+        assert expected["source_urls"]
+        reopened = SQLiteBackend(str(tmp_path / "ferpa.db"))
+        stored = reopened.load_policy_proposals(api.policy_governor._governor_id)
+        restored = stored[proposal["proposal_id"]]
+        assert restored["metadata"]["catalog_reference"] == expected
 
     @pytest.mark.anyio
     async def test_reject_governance_proposal(self) -> None:

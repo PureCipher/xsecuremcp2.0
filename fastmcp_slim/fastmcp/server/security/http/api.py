@@ -856,6 +856,18 @@ class SecurityAPI:
                 "workbench_kind": "starter_bundle",
                 "bundle_id": bundle_id,
                 "bundle_title": bundle.get("title"),
+                "catalog_reference": {
+                    key: bundle[key]
+                    for key in (
+                        "bundle_id",
+                        "pack_version",
+                        "regulation_reference",
+                        "source_reviewed_at",
+                        "coverage_note",
+                        "source_urls",
+                    )
+                    if bundle.get(key)
+                },
             },
         )
         if payload.get("status") in {"imported", "no_changes"}:

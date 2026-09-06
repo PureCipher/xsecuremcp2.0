@@ -650,6 +650,8 @@ class TestSchema:
             "gdpr",
             "hipaa",
             "compliance_rule",
+            "ferpa_request",
+            "zero_trust",
         }
         assert set(types.keys()) == expected
 

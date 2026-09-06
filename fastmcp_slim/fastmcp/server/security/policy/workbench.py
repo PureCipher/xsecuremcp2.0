@@ -17,7 +17,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from fastmcp.server.security.policy.serialization import describe_policy_config
+from fastmcp.server.security.policy.serialization import (
+    describe_policy_config,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +65,11 @@ class PolicyBundle:
     recommended_environments: tuple[str, ...]
     tags: tuple[str, ...]
     providers: tuple[dict[str, Any], ...]
+    pack_version: str = ""
+    regulation_reference: str = ""
+    source_reviewed_at: str = ""
+    coverage_note: str = ""
+    source_urls: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -73,6 +80,11 @@ class PolicyBundle:
             "risk_posture": self.risk_posture,
             "recommended_environments": list(self.recommended_environments),
             "tags": list(self.tags),
+            "pack_version": self.pack_version,
+            "regulation_reference": self.regulation_reference,
+            "source_reviewed_at": self.source_reviewed_at,
+            "coverage_note": self.coverage_note,
+            "source_urls": list(self.source_urls),
             "provider_count": len(self.providers),
             "provider_summaries": [
                 describe_policy_config(provider) for provider in self.providers
@@ -427,65 +439,26 @@ _BUNDLES: tuple[PolicyBundle, ...] = (
     ),
     PolicyBundle(
         bundle_id="zero-trust-lockdown",
-        title="Zero Trust Lockdown",
-        summary="Deny-by-default posture requiring explicit approval for every resource and action.",
-        description=(
-            "Implements a zero-trust architecture: all access is denied by default "
-            "and must be explicitly granted per resource. Uses resource-scoped "
-            "policies for fine-grained control, strict RBAC with no wildcard "
-            "permissions, aggressive rate limits, and metadata-based verification "
-            "via ABAC conditions."
-        ),
+        title="Zero Trust Request Validation",
+        summary="Exact actor, resource and action grants with fresh trusted posture evidence.",
+        description="Requires explicit grants and current session, device and risk verification. No role, network location or metadata flag confers implicit access. Configure a server-side evidence resolver, trusted issuers and server/tenant scope before activation.",
         risk_posture="locked_down",
         recommended_environments=("production",),
-        tags=("compliance", "zero-trust", "locked-down", "high-security"),
+        tags=("zero-trust", "locked-down", "high-security"),
+        pack_version="2.0.0",
+        regulation_reference="NIST SP 800-207 (August 2020)",
+        source_reviewed_at="2026-09-06",
+        source_urls=("https://www.nist.gov/publications/zero-trust-architecture",),
+        coverage_note="Request authorization only; posture evidence must be authenticated externally. This does not implement a complete Zero Trust architecture or continuous session termination. Empty configuration denies all access, including discovery. Configure explicit administrative recovery access before activation. Policy changes are persisted through normal policy versioning; evidence is rechecked per request.",
         providers=(
             {
-                "type": "resource_scoped",
-                "policy_id": "zero-trust-resource-scoping",
-                "version": "1.0.0",
-                "resource_rules": {
-                    "tool:": {"type": "allow_all"},
-                    "registry:submit": {"type": "allow_all"},
-                },
-                "default": {"type": "deny_all"},
-                "prefix_match": True,
-            },
-            {
-                "type": "rbac",
-                "policy_id": "zero-trust-rbac",
-                "version": "1.0.0",
-                "role_mappings": {
-                    "operator": ["call_tool", "read_resource"],
-                    "publisher": ["call_tool", "read_resource", "submit_listing"],
-                    "reviewer": [
-                        "call_tool",
-                        "read_resource",
-                        "submit_listing",
-                        "review_listing",
-                    ],
-                    "security_admin": ["manage_policy"],
-                },
-                "default_decision": "deny",
-            },
-            {
-                "type": "abac",
-                "policy_id": "zero-trust-verification",
-                "version": "1.0.0",
-                "metadata_conditions": {"verified": "true"},
-                "require_all": True,
-            },
-            {
-                "type": "denylist",
-                "policy_id": "zero-trust-denylist",
-                "version": "1.0.0",
-                "denied": [
-                    "admin-panel",
-                    "config:*",
-                    "debug:*",
-                    "data:export-*",
-                    "data:bulk-*",
-                ],
+                "type": "zero_trust",
+                "policy_id": "zero-trust-request-validation",
+                "version": "2.0.0",
+                "grants": [],
+                "trusted_issuers": [],
+                "scope_id": "",
+                "max_evidence_age_seconds": 60,
             },
             {
                 "type": "rate_limit",
@@ -745,135 +718,31 @@ _BUNDLES: tuple[PolicyBundle, ...] = (
     ),
     PolicyBundle(
         bundle_id="ferpa-student-records",
-        title="FERPA Student Records Protection",
-        summary="Family Educational Rights and Privacy Act controls for student education records.",
-        description=(
-            "Enforces FERPA requirements for MCP tools and resources handling "
-            "student education records. Requires authorized educational roles and "
-            "a legitimate educational interest before granting access. Supports "
-            "directory information exceptions. Includes RBAC for school officials, "
-            "denylists for unauthorized bulk exports, and rate limits."
-        ),
+        title="FERPA Request Validation",
+        summary="Validate MCP disclosures against trusted FERPA request evidence.",
+        description="Evaluates consent, the 16 disclosure exceptions, and de-identification. Requires a server-side evidence resolver and explicit trusted issuer/server scope configuration. Missing evidence denies execution; institutional workflows remain external.",
         risk_posture="strict",
         recommended_environments=("staging", "production"),
-        tags=("compliance", "ferpa", "education", "student-records", "us"),
+        tags=("compliance", "ferpa", "education", "us"),
+        pack_version="2.0.0",
+        regulation_reference="20 U.S.C. 1232g; 34 CFR Part 99",
+        source_reviewed_at="2026-09-06",
+        source_urls=(
+            "https://studentprivacy.ed.gov/ferpa",
+            "https://www.ecfr.gov/current/title-34/subtitle-A/part-99",
+        ),
+        coverage_note="Request-validation coverage only. External systems must authenticate the evidence and verify the applicable facts. This pack does not manage institutional workflows or certify institution-wide compliance. Empty issuer/scope settings deny execution until configured. Existing active policies are not migrated automatically.",
         providers=(
             {
-                "type": "compliance_rule",
-                "policy_id": "ferpa-bundle-core",
-                "version": "1.0.0",
-                "framework": "FERPA",
-                "rules": [
-                    {
-                        "name": "educational_interest_required",
-                        "description": (
-                            "Student record access requires an authorized school "
-                            "official role and a legitimate educational interest"
-                        ),
-                        "tags": [
-                            "ferpa_regulated",
-                            "student_record",
-                            "education_record",
-                            "student_pii",
-                        ],
-                        "checks": [
-                            {
-                                "metadata_key": "official_role",
-                                "allowed_values": [
-                                    "teacher",
-                                    "school_administrator",
-                                    "counselor",
-                                    "registrar",
-                                    "financial_aid_officer",
-                                    "institutional_researcher",
-                                ],
-                            },
-                            {
-                                "metadata_key": "educational_interest",
-                            },
-                        ],
-                        "deny_message": (
-                            "FERPA: Student record access requires an authorized "
-                            "school official role and a legitimate educational interest"
-                        ),
-                        "allow_message": (
-                            "FERPA: Student record access permitted for "
-                            "authorized official with legitimate interest"
-                        ),
-                    },
-                    {
-                        "name": "directory_information_exception",
-                        "description": (
-                            "Directory information (name, enrollment status) may "
-                            "be shared without consent unless student has opted out"
-                        ),
-                        "tags": ["directory_information"],
-                        "checks": [
-                            {
-                                "metadata_key": "student_opted_out",
-                                "allowed_values": ["false"],
-                            },
-                        ],
-                        "deny_message": (
-                            "FERPA: Student has opted out of directory information "
-                            "disclosure"
-                        ),
-                        "allow_message": (
-                            "FERPA: Directory information disclosure permitted — "
-                            "student has not opted out"
-                        ),
-                    },
-                ],
-                "require_all_rules": False,
-            },
-            {
-                "type": "rbac",
-                "policy_id": "ferpa-bundle-rbac",
-                "version": "1.0.0",
-                "role_mappings": {
-                    "teacher": ["call_tool", "read_resource"],
-                    "school_administrator": [
-                        "call_tool",
-                        "read_resource",
-                        "manage_policy",
-                    ],
-                    "counselor": ["call_tool", "read_resource"],
-                    "registrar": [
-                        "call_tool",
-                        "read_resource",
-                        "submit_listing",
-                    ],
-                    "compliance_officer": [
-                        "call_tool",
-                        "read_resource",
-                        "manage_policy",
-                        "review_listing",
-                    ],
-                    "admin": ["*"],
-                },
-                "default_decision": "deny",
-            },
-            {
-                "type": "denylist",
-                "policy_id": "ferpa-bundle-denylist",
-                "version": "1.0.0",
-                "denied": [
-                    "admin-panel",
-                    "data:student-export-*",
-                    "data:bulk-transcript-*",
-                    "data:discipline-record-*",
-                ],
-            },
-            {
-                "type": "rate_limit",
-                "policy_id": "ferpa-bundle-rate-limit",
-                "version": "1.0.0",
-                "max_requests": 80,
-                "window_seconds": 3600,
+                "type": "ferpa_request",
+                "policy_id": "ferpa-request-validation",
+                "version": "2.0.0",
+                "trusted_issuers": [],
+                "scope_id": "",
+                "max_evidence_age_seconds": 60,
             },
         ),
     ),
-    # ── Registry Operations Bundles ───────────────────────────
     PolicyBundle(
         bundle_id="registry-balanced",
         title="Balanced Registry Guardrails",
@@ -1110,7 +979,18 @@ def _validate_bundle_payload(payload: Any, *, source: str) -> PolicyBundle:
             out.append(item)
         return tuple(out)
 
+    def _optional_str(key: str) -> str:
+        value = payload.get(key, "")
+        if not isinstance(value, str):
+            raise BundleLoadError(f"{source}: {key!r} must be a string.")
+        return value
+
     return PolicyBundle(
+        pack_version=_optional_str("pack_version"),
+        regulation_reference=_optional_str("regulation_reference"),
+        source_reviewed_at=_optional_str("source_reviewed_at"),
+        coverage_note=_optional_str("coverage_note"),
+        source_urls=_str_tuple("source_urls"),
         bundle_id=bundle_id,
         title=title,
         summary=summary,

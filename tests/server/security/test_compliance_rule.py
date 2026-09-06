@@ -536,51 +536,14 @@ class TestBundleComplianceRuleIntegration:
         assert opt_out_clear.decision == PolicyDecision.ALLOW
 
     @pytest.mark.anyio
-    async def test_ferpa_bundle_core_provider_evaluates(self) -> None:
-        from fastmcp.server.security.policy.declarative import load_policy
-        from fastmcp.server.security.policy.workbench import get_policy_bundle
-
-        bundle = get_policy_bundle("ferpa-student-records")
-        assert bundle is not None
-        core_config = bundle["providers"][0]
-        assert core_config["type"] == "compliance_rule"
-
-        provider = load_policy(core_config)
-        assert isinstance(provider, ComplianceRulePolicy)
-
-        untagged = await provider.evaluate(_ctx(tags=frozenset({"safe"})))
-        assert untagged.decision == PolicyDecision.DEFER
-
-        missing_all = await provider.evaluate(_ctx(tags=frozenset({"student_record"})))
-        assert missing_all.decision == PolicyDecision.DENY
-
-        valid_access = await provider.evaluate(
-            _ctx(
-                tags=frozenset({"student_record"}),
-                metadata={
-                    "official_role": "teacher",
-                    "educational_interest": "grade_reporting",
-                },
-            )
+    async def test_ferpa_requires_trusted_evidence(self) -> None:
+        from fastmcp.server.security.policy.policies.ferpa_request import (
+            FerpaRequestPolicy,
         )
-        assert valid_access.decision == PolicyDecision.ALLOW
 
-        # Directory info with opt-out check (require_all_rules=False)
-        dir_info_blocked = await provider.evaluate(
-            _ctx(
-                tags=frozenset({"directory_information"}),
-                metadata={"student_opted_out": "true"},
-            )
-        )
-        assert dir_info_blocked.decision == PolicyDecision.DENY
-
-        dir_info_allowed = await provider.evaluate(
-            _ctx(
-                tags=frozenset({"directory_information"}),
-                metadata={"student_opted_out": "false"},
-            )
-        )
-        assert dir_info_allowed.decision == PolicyDecision.ALLOW
+        provider = FerpaRequestPolicy()
+        result = await provider.evaluate(_ctx(tags=frozenset({"student_record"})))
+        assert result.decision == PolicyDecision.DENY
 
     def test_all_bundles_are_fully_declarative(self) -> None:
         """No bundle should use python_class — all must be JSON-declarative."""

@@ -72,14 +72,20 @@ from fastmcp.server.security.policy.policies.compliance_rule import (
     ComplianceRuleSpec,
     MetadataCheck,
 )
+from fastmcp.server.security.policy.policies.ferpa_request import FerpaRequestPolicy
 from fastmcp.server.security.policy.policies.rate_limit import RateLimitPolicy
 from fastmcp.server.security.policy.policies.rbac import RoleBasedPolicy
 from fastmcp.server.security.policy.policies.resource_scoped import (
     ResourceScopedPolicy,
 )
 from fastmcp.server.security.policy.policies.temporal import TimeBasedPolicy
+from fastmcp.server.security.policy.policies.zero_trust import (
+    ZeroTrustGrant,
+    ZeroTrustPolicy,
+)
 from fastmcp.server.security.policy.provider import (
     AllowAllPolicy,
+    Citation,
     DenyAllPolicy,
     PolicyDecision,
     PolicyProvider,
@@ -217,6 +223,7 @@ def _build_compliance_rule(config: dict[str, Any]) -> ComplianceRulePolicy:
                 name=str(raw.get("name", "unnamed")),
                 description=str(raw.get("description", "")),
                 tags=frozenset(raw.get("tags", [])),
+                citation=Citation(**raw["citation"]) if raw.get("citation") else None,
                 checks=tuple(checks),
                 deny_message=str(
                     raw.get("deny_message", "Access denied by compliance rule")
@@ -280,9 +287,114 @@ def _build_deny_all(config: dict[str, Any]) -> DenyAllPolicy:
 # ── Register built-in types in the plugin registry ────────────────
 
 
+def _build_ferpa_request(config: dict[str, Any]) -> FerpaRequestPolicy:
+    issuers = config.get("trusted_issuers", [])
+    if not isinstance(issuers, list) or any(
+        not isinstance(v, str) or not v.strip() for v in issuers
+    ):
+        raise ValueError("trusted_issuers must be a list of nonempty strings")
+    scope = config.get("scope_id", "")
+    if not isinstance(scope, str):
+        raise ValueError("scope_id must be a string")
+    age = config.get("max_evidence_age_seconds", 60)
+    if type(age) is not int:
+        raise ValueError("max_evidence_age_seconds must be an integer")
+    return FerpaRequestPolicy(
+        trusted_issuers=frozenset(issuers),
+        scope_id=scope,
+        max_evidence_age_seconds=age,
+        policy_id=str(config.get("policy_id", "ferpa-request-validation")),
+        version=str(config.get("version", "2.0.0")),
+    )
+
+
+def _build_zero_trust(config: dict[str, Any]) -> ZeroTrustPolicy:
+    raw = config.get("grants", [])
+    if not isinstance(raw, list) or any(not isinstance(g, dict) for g in raw):
+        raise ValueError("grants must be a list of grant objects")
+    grants = []
+    for g in raw:
+        actions = g.get("actions", [])
+        if not isinstance(actions, list) or any(
+            not isinstance(a, str) for a in actions
+        ):
+            raise ValueError("grant actions must be a list of strings")
+        grants.append(
+            ZeroTrustGrant(
+                g.get("actor_id", ""), g.get("resource_id", ""), frozenset(actions)
+            )
+        )
+    issuers = config.get("trusted_issuers", [])
+    scope = config.get("scope_id", "")
+    if (
+        not isinstance(issuers, list)
+        or any(not isinstance(v, str) or not v.strip() for v in issuers)
+        or not isinstance(scope, str)
+    ):
+        raise ValueError("Invalid trusted issuers or scope")
+    return ZeroTrustPolicy(
+        grants=tuple(grants),
+        trusted_issuers=frozenset(issuers),
+        scope_id=scope,
+        max_evidence_age_seconds=config.get("max_evidence_age_seconds", 60),
+        policy_id=str(config.get("policy_id", "zero-trust-request-validation")),
+        version=str(config.get("version", "2.0.0")),
+    )
+
+
 def _register_builtins() -> None:
     """Register all built-in policy types with the global registry."""
     builtins = [
+        PolicyTypeDescriptor(
+            type_key="zero_trust",
+            factory=_build_zero_trust,
+            display_name="Zero Trust Request Validation",
+            category="access_control",
+            description="Exact identity/resource/action grants with trusted request posture.",
+            field_specs={
+                "grants": {
+                    "label": "Exact grants",
+                    "type": "json_list",
+                    "required": True,
+                },
+                "trusted_issuers": {
+                    "label": "Trusted issuers",
+                    "type": "string_list",
+                    "required": True,
+                },
+                "scope_id": {
+                    "label": "Server and tenant scope",
+                    "type": "string",
+                    "required": True,
+                },
+            },
+            starter_config={
+                "type": "zero_trust",
+                "grants": [],
+                "trusted_issuers": [],
+                "scope_id": "",
+            },
+        ),
+        PolicyTypeDescriptor(
+            type_key="ferpa_request",
+            factory=_build_ferpa_request,
+            display_name="FERPA Request Validation",
+            category="compliance",
+            description="Validate request-bound evidence for FERPA disclosure conditions.",
+            field_specs={
+                "trusted_issuers": {
+                    "label": "Trusted evidence issuers",
+                    "type": "string_list",
+                    "required": True,
+                },
+                "scope_id": {
+                    "label": "Server and tenant scope",
+                    "type": "string",
+                    "required": True,
+                },
+            },
+            starter_config={"type": "ferpa_request", "trusted_issuers": []},
+        ),
         PolicyTypeDescriptor(
             type_key="allowlist",
             factory=_build_allowlist,

@@ -31,12 +31,14 @@ from fastmcp.server.security.policy.policies.allowlist import (
 from fastmcp.server.security.policy.policies.compliance_rule import (
     ComplianceRulePolicy,
 )
+from fastmcp.server.security.policy.policies.ferpa_request import FerpaRequestPolicy
 from fastmcp.server.security.policy.policies.rate_limit import RateLimitPolicy
 from fastmcp.server.security.policy.policies.rbac import RoleBasedPolicy
 from fastmcp.server.security.policy.policies.resource_scoped import (
     ResourceScopedPolicy,
 )
 from fastmcp.server.security.policy.policies.temporal import TimeBasedPolicy
+from fastmcp.server.security.policy.policies.zero_trust import ZeroTrustPolicy
 from fastmcp.server.security.policy.provider import (
     AllowAllPolicy,
     DenyAllPolicy,
@@ -266,6 +268,34 @@ def policy_provider_to_config(provider: PolicyProvider) -> dict[str, Any]:
             "version": provider.version,
         }
 
+    if isinstance(provider, ZeroTrustPolicy):
+        return {
+            "type": "zero_trust",
+            "policy_id": provider.policy_id,
+            "version": provider.version,
+            "scope_id": provider.scope_id,
+            "trusted_issuers": sorted(provider.trusted_issuers),
+            "max_evidence_age_seconds": provider.max_evidence_age_seconds,
+            "grants": [
+                {
+                    "actor_id": g.actor_id,
+                    "resource_id": g.resource_id,
+                    "actions": sorted(g.actions),
+                }
+                for g in provider.grants
+            ],
+        }
+
+    if isinstance(provider, FerpaRequestPolicy):
+        return {
+            "type": "ferpa_request",
+            "trusted_issuers": sorted(provider.trusted_issuers),
+            "scope_id": provider.scope_id,
+            "max_evidence_age_seconds": provider.max_evidence_age_seconds,
+            "policy_id": provider.policy_id,
+            "version": provider.version,
+        }
+
     if isinstance(provider, ComplianceRulePolicy):
         return {
             "type": "compliance_rule",
@@ -292,6 +322,7 @@ def policy_provider_to_config(provider: PolicyProvider) -> dict[str, Any]:
                         }
                         for check in rule.checks
                     ],
+                    **({"citation": rule.citation.to_dict()} if rule.citation else {}),
                     "deny_message": rule.deny_message,
                     "allow_message": rule.allow_message,
                 }

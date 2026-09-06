@@ -104,6 +104,9 @@ class PolicyEvaluationContext:
     risk: str = RISK_LOW
     approval_granted: bool = False
     approval_ticket: str | None = None
+    # Server-supplied evidence; never populated from request metadata.
+    ferpa_evidence: Any = None
+    zero_trust_evidence: Any = None
 
 
 @dataclass(frozen=True)

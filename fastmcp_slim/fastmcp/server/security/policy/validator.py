@@ -127,6 +127,8 @@ _VALID_POLICY_TYPES = {
     # click in the workbench UI with E_UNKNOWN_TYPE even though
     # the runtime can build the policy fine.
     "compliance_rule",
+    "ferpa_request",
+    "zero_trust",
 }
 
 _VALID_COMPOSITIONS = {

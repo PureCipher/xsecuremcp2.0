@@ -8,7 +8,9 @@ AuthMiddleware: fail-closed, STDIO bypass, list filtering.
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
+from dataclasses import replace
+from datetime import datetime, timezone
 from typing import Any, cast
 
 import mcp.types as mt
@@ -26,6 +28,8 @@ from fastmcp.server.security.policy.engine import (
     PolicyEngine,
     PolicyViolationError,
 )
+from fastmcp.server.security.policy.policies.ferpa_request import FerpaEvidence
+from fastmcp.server.security.policy.policies.zero_trust import ZeroTrustEvidence
 from fastmcp.server.security.policy.provider import (
     PolicyEvaluationContext,
     PolicyResult,
@@ -61,9 +65,44 @@ class PolicyEnforcementMiddleware(Middleware):
         policy_engine: PolicyEngine,
         *,
         bypass_stdio: bool = False,
+        zero_trust_evidence_resolver: Callable[
+            [PolicyEvaluationContext], Awaitable[ZeroTrustEvidence | None]
+        ]
+        | None = None,
+        ferpa_evidence_resolver: Callable[
+            [PolicyEvaluationContext], Awaitable[FerpaEvidence | None]
+        ]
+        | None = None,
     ) -> None:
         self.policy_engine = policy_engine
         self.bypass_stdio = bypass_stdio
+        self.ferpa_evidence_resolver = ferpa_evidence_resolver
+        self.zero_trust_evidence_resolver = zero_trust_evidence_resolver
+
+    async def _evaluate(self, context: PolicyEvaluationContext) -> PolicyResult:
+        if self.ferpa_evidence_resolver is not None and not context.action.startswith(
+            "list_"
+        ):
+            try:
+                evidence = await self.ferpa_evidence_resolver(context)
+            except Exception:
+                logger.warning("FERPA evidence resolution failed; denying request")
+                return _deny_result("FERPA evidence is unavailable")
+            context = replace(
+                context, ferpa_evidence=evidence, timestamp=datetime.now(timezone.utc)
+            )
+        if self.zero_trust_evidence_resolver is not None:
+            try:
+                zero_evidence = await self.zero_trust_evidence_resolver(context)
+            except Exception:
+                logger.warning("Zero Trust evidence resolution failed; denying request")
+                return _deny_result("Zero Trust evidence is unavailable")
+            context = replace(
+                context,
+                zero_trust_evidence=zero_evidence,
+                timestamp=datetime.now(timezone.utc),
+            )
+        return await self.policy_engine.evaluate(context)
 
     def _should_bypass(self) -> bool:
         """Check if policy checks should be skipped for current transport."""
@@ -115,10 +154,13 @@ class PolicyEnforcementMiddleware(Middleware):
         tags: frozenset[str],
     ) -> PolicyEvaluationContext:
         """Build a lightweight context for list-level filtering."""
+        from fastmcp.server.dependencies import get_access_token
+
+        actor_id = principal_id_from_access_token(get_access_token())
         capability = _capability_overrides(tags, {})
         policy_action = cast(str, capability.pop("action", action))
         return PolicyEvaluationContext(
-            actor_id=None,
+            actor_id=actor_id,
             action=policy_action,
             resource_id=resource_id,
             tags=tags,
@@ -176,7 +218,7 @@ class PolicyEnforcementMiddleware(Middleware):
                 **cast(Any, capability),
             )
 
-        result = await self.policy_engine.evaluate(eval_ctx)
+        result = await self._evaluate(eval_ctx)
         # REQUIRE_APPROVAL is a non-terminal deny from the caller's
         # perspective — the action cannot execute right now but may
         # be retried with approval metadata attached. We reuse the
@@ -220,7 +262,7 @@ class PolicyEnforcementMiddleware(Middleware):
                 tags=frozenset(tool.tags),
             )
             try:
-                result = await self.policy_engine.evaluate(eval_ctx)
+                result = await self._evaluate(eval_ctx)
                 # Hide components that need approval too — listing
                 # them would invite callers to attempt calls that
                 # won't succeed without a human-in-the-loop ticket.
@@ -268,7 +310,7 @@ class PolicyEnforcementMiddleware(Middleware):
             middleware_context=context,
         )
 
-        result = await self.policy_engine.evaluate(eval_ctx)
+        result = await self._evaluate(eval_ctx)
         # REQUIRE_APPROVAL is a non-terminal deny from the caller's
         # perspective — the action cannot execute right now but may
         # be retried with approval metadata attached. We reuse the
@@ -302,7 +344,7 @@ class PolicyEnforcementMiddleware(Middleware):
                 tags=frozenset(resource.tags),
             )
             try:
-                result = await self.policy_engine.evaluate(eval_ctx)
+                result = await self._evaluate(eval_ctx)
                 if result.decision not in (
                     PolicyDecision.DENY,
                     PolicyDecision.REQUIRE_APPROVAL,
@@ -337,7 +379,7 @@ class PolicyEnforcementMiddleware(Middleware):
                 tags=frozenset(template.tags),
             )
             try:
-                result = await self.policy_engine.evaluate(eval_ctx)
+                result = await self._evaluate(eval_ctx)
                 if result.decision not in (
                     PolicyDecision.DENY,
                     PolicyDecision.REQUIRE_APPROVAL,
@@ -380,9 +422,10 @@ class PolicyEnforcementMiddleware(Middleware):
             action="get_prompt",
             resource_id=prompt_name,
             middleware_context=context,
+            extra_metadata={"arguments": context.message.arguments or {}},
         )
 
-        result = await self.policy_engine.evaluate(eval_ctx)
+        result = await self._evaluate(eval_ctx)
         # REQUIRE_APPROVAL is a non-terminal deny from the caller's
         # perspective — the action cannot execute right now but may
         # be retried with approval metadata attached. We reuse the
@@ -416,7 +459,7 @@ class PolicyEnforcementMiddleware(Middleware):
                 tags=frozenset(prompt.tags),
             )
             try:
-                result = await self.policy_engine.evaluate(eval_ctx)
+                result = await self._evaluate(eval_ctx)
                 if result.decision not in (
                     PolicyDecision.DENY,
                     PolicyDecision.REQUIRE_APPROVAL,
