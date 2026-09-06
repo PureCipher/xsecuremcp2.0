@@ -657,6 +657,7 @@ class TestSchema:
             "soc2_request",
             "gdpr_request",
             "hipaa_request",
+            "published_tools",
         }
         assert set(types.keys()) == expected
 

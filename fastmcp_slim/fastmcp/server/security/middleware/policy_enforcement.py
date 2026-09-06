@@ -33,6 +33,9 @@ from fastmcp.server.security.policy.policies.ferpa_request import FerpaEvidence
 from fastmcp.server.security.policy.policies.gdpr_request import GdprEvidence
 from fastmcp.server.security.policy.policies.hipaa_request import HipaaEvidence
 from fastmcp.server.security.policy.policies.pci_request import PciEvidence
+from fastmcp.server.security.policy.policies.published_tools import (
+    PublishedToolEvidence,
+)
 from fastmcp.server.security.policy.policies.soc2_request import Soc2Evidence
 from fastmcp.server.security.policy.policies.zero_trust import ZeroTrustEvidence
 from fastmcp.server.security.policy.provider import (
@@ -70,6 +73,10 @@ class PolicyEnforcementMiddleware(Middleware):
         policy_engine: PolicyEngine,
         *,
         bypass_stdio: bool = False,
+        published_tool_evidence_resolver: Callable[
+            [PolicyEvaluationContext], Awaitable[PublishedToolEvidence | None]
+        ]
+        | None = None,
         hipaa_evidence_resolver: Callable[
             [PolicyEvaluationContext], Awaitable[HipaaEvidence | None]
         ]
@@ -108,6 +115,7 @@ class PolicyEnforcementMiddleware(Middleware):
         self.soc2_evidence_resolver = soc2_evidence_resolver
         self.gdpr_evidence_resolver = gdpr_evidence_resolver
         self.hipaa_evidence_resolver = hipaa_evidence_resolver
+        self.published_tool_evidence_resolver = published_tool_evidence_resolver
 
     async def _evaluate(self, context: PolicyEvaluationContext) -> PolicyResult:
         if self.ferpa_evidence_resolver is not None and not context.action.startswith(
@@ -183,6 +191,21 @@ class PolicyEnforcementMiddleware(Middleware):
             context = replace(
                 context,
                 hipaa_evidence=hipaa_evidence,
+                timestamp=datetime.now(timezone.utc),
+            )
+        if self.published_tool_evidence_resolver is not None:
+            try:
+                published_evidence = await self.published_tool_evidence_resolver(
+                    context
+                )
+            except Exception:
+                logger.warning(
+                    "Publication evidence resolution failed; denying request"
+                )
+                return _deny_result("Publication evidence is unavailable")
+            context = replace(
+                context,
+                published_tool_evidence=published_evidence,
                 timestamp=datetime.now(timezone.utc),
             )
         return await self.policy_engine.evaluate(context)

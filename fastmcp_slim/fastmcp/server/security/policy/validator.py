@@ -134,6 +134,7 @@ _VALID_POLICY_TYPES = {
     "soc2_request",
     "gdpr_request",
     "hipaa_request",
+    "published_tools",
 }
 
 _VALID_COMPOSITIONS = {

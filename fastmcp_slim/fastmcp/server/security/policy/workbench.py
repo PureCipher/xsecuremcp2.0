@@ -505,31 +505,25 @@ _BUNDLES: tuple[PolicyBundle, ...] = (
     PolicyBundle(
         bundle_id="published-tools-only",
         title="Published Tools Only",
-        summary="A lean pack for read-focused catalogs that should not mutate registry state.",
-        description=(
-            "Allows published tools, blocks admin surfaces, and omits publish/review "
-            "flows for browse-only deployments."
-        ),
+        summary="Permit only verified published tools with read-only effects.",
+        description="Requires current publication/revocation evidence, a verified signed manifest and exact component binding. Allows tool discovery and read/compute calls; rejects mutating tools and registry administration. Requires exact grants and a server-side publication resolver.",
         risk_posture="locked_down",
         recommended_environments=("development", "production"),
         tags=("catalog", "readonly", "viewer"),
+        pack_version="2.0.0",
+        regulation_reference="PureCipher published-tool safeguards v2.0.0 (product policy)",
+        source_reviewed_at="2026-09-06",
+        source_urls=("https://github.com/PureCipher/xsecuremcp2.0",),
+        coverage_note="Requires authoritative publication and runtime effect verification. Client tags/readOnlyHint are insufficient. Read-only does not authorize sensitive data access; compose applicable data policies. Empty grants/issuer/scope deny; active policies are not automatically migrated.",
         providers=(
             {
-                "type": "allowlist",
-                "policy_id": "catalog-only-allowlist",
-                "version": "1.0.0",
-                "allowed": ["tool:*"],
-            },
-            {
-                "type": "denylist",
-                "policy_id": "catalog-only-denylist",
-                "version": "1.0.0",
-                "denied": [
-                    "registry:submit",
-                    "registry:review",
-                    "registry:policy",
-                    "admin-panel",
-                ],
+                "type": "published_tools",
+                "policy_id": "published-tools-only",
+                "version": "2.0.0",
+                "grants": [],
+                "trusted_issuers": [],
+                "scope_id": "",
+                "max_evidence_age_seconds": 60,
             },
             {
                 "type": "rate_limit",

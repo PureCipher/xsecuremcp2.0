@@ -36,6 +36,7 @@ from fastmcp.server.security.policy.policies.ferpa_request import FerpaRequestPo
 from fastmcp.server.security.policy.policies.gdpr_request import GdprRequestPolicy
 from fastmcp.server.security.policy.policies.hipaa_request import HipaaRequestPolicy
 from fastmcp.server.security.policy.policies.pci_request import PciRequestPolicy
+from fastmcp.server.security.policy.policies.published_tools import PublishedToolsPolicy
 from fastmcp.server.security.policy.policies.rate_limit import RateLimitPolicy
 from fastmcp.server.security.policy.policies.rbac import RoleBasedPolicy
 from fastmcp.server.security.policy.policies.resource_scoped import (
@@ -285,6 +286,8 @@ def policy_provider_to_config(provider: PolicyProvider) -> dict[str, Any]:
             if isinstance(provider, GdprRequestPolicy)
             else "hipaa_request"
             if isinstance(provider, HipaaRequestPolicy)
+            else "published_tools"
+            if isinstance(provider, PublishedToolsPolicy)
             else "zero_trust",
             "policy_id": provider.policy_id,
             "version": provider.version,
