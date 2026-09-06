@@ -5,11 +5,14 @@ import hashlib
 import hmac
 import json
 import time
+from typing import Any
 from urllib.parse import quote
 
 import httpx
 
-_ACCESS = contextvars.ContextVar("purecipher_consumer_access", default=None)
+_ACCESS: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar(
+    "purecipher_consumer_access", default=None
+)
 GOOGLE = {
     "google-gmail",
     "google-docs",
@@ -233,6 +236,19 @@ def register_consumer_tools(registry):
             {"fields": "id,name,mimeType,modifiedTime,webViewLink"},
         )
 
+    from purecipher.consumer_cloud import register
+
+    register(registry)
+    from purecipher.consumer_utilities import register as register_utilities
+
+    register_utilities(registry)
+    from purecipher.consumer_aws import register as register_aws
+
+    register_aws(registry)
+    from purecipher.consumer_bridge import register as register_bridge
+
+    register_bridge(registry)
+
 
 async def resolve_access(registry, profile_id, client, tool_name):
     from purecipher.product_connections import decrypt
@@ -252,13 +268,33 @@ async def resolve_access(registry, profile_id, client, tool_name):
         or not runtime_ready(registry, item)
     ):
         raise ValueError("Your product connection must be authorized and verified")
-    if product in GOOGLE:
+    from purecipher.consumer_bridge import PRODUCTS as BRIDGES
+
+    if product in BRIDGES:
+        headers = {}
+    elif product in GOOGLE:
         from purecipher.consumer_oauth import access_token
 
         token = await access_token(registry, item)
         headers = {"Authorization": "Bearer " + token}
-    else:
+    elif product in {
+        "time",
+        "memory",
+        "sequential-thinking",
+        "wikipedia",
+        "fetch",
+        "aws-documentation",
+        "arxiv",
+        "aws-core",
+        "cloudwatch",
+    }:
+        headers = {}
+    elif product == "brave-search":
         headers = {"X-Subscription-Token": decrypt(registry, item)["BRAVE_API_KEY"]}
+    else:
+        from purecipher.consumer_cloud import headers as product_headers
+
+        headers = product_headers(product, decrypt(registry, item))
     # Revalidate after an awaited refresh; revocations and profile edits win.
     allowed_profile_tools(registry, profile_id, client)
     current = registry._workspace.get(item["id"])
@@ -269,4 +305,12 @@ async def resolve_access(registry, profile_id, client, tool_name):
         or current_profile["revision"] != profile["revision"]
     ):
         raise ValueError("Connection or profile changed; retry")
-    return {"product": product, "headers": headers}
+    return {
+        "product": product,
+        "owner": current["owner"],
+        "profile_id": profile_id,
+        "client": client,
+        "connection_id": current["id"],
+        "headers": headers,
+        "values": decrypt(registry, current),
+    }

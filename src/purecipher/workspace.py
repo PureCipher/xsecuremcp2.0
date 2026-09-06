@@ -148,6 +148,9 @@ def profile_blockers(registry, profile):
         observed = inspected_tools(listing)
         if not selected["tools"] or not set(selected["tools"]).issubset(observed):
             blockers.append(f"{listing.display_name}: select inspected tools")
+    from purecipher.consumer_governance import blockers as security_blockers
+
+    blockers.extend(security_blockers(registry, profile))
     return list(dict.fromkeys(blockers))
 
 

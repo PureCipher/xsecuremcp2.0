@@ -284,15 +284,22 @@ def mount_consumer_oauth(registry, prefix):
         f"{prefix}/workspace/connections/{{connection_id}}/verify", methods=["POST"]
     )
     async def verify(request):
+        from purecipher.consumer_bridge import PRODUCTS as BRIDGES
+        from purecipher.consumer_bridge import seal
+        from purecipher.consumer_bridge import verify as verify_bridge
         from purecipher.consumer_runtime import digest, provider_get
         from purecipher.product_connections import decrypt
 
         item = owned(request)
         if not item:
             return JSONResponse({"error": "Connection not found"}, status_code=404)
-        if item["product"] != "brave-search" or item["product"] not in getattr(
-            registry, "_consumer_products", set()
-        ):
+        if item["product"] in {
+            "google-gmail",
+            "google-docs",
+            "google-drive",
+            "google-tasks",
+            "google-calendar",
+        } or item["product"] not in getattr(registry, "_consumer_products", set()):
             return JSONResponse(
                 {
                     "error": "Credential verification is not available for this product yet"
@@ -301,13 +308,36 @@ def mount_consumer_oauth(registry, prefix):
             )
         try:
             values = decrypt(registry, item)
-            if not values.get("BRAVE_API_KEY"):
-                raise ValueError("Enter your Brave API key first")
-            await provider_get(
-                "https://api.search.brave.com/res/v1/web/search",
-                {"X-Subscription-Token": values["BRAVE_API_KEY"]},
-                {"q": "PureCipher", "count": 1},
-            )
+            if item["product"] in BRIDGES:
+                item["bridge_encrypted"] = seal(
+                    registry, item, await verify_bridge(values)
+                )
+            elif item["product"] == "brave-search":
+                if not values.get("BRAVE_API_KEY"):
+                    raise ValueError("Enter your Brave API key first")
+                await provider_get(
+                    "https://api.search.brave.com/res/v1/web/search",
+                    {"X-Subscription-Token": values["BRAVE_API_KEY"]},
+                    {"q": "PureCipher", "count": 1},
+                )
+            elif item["product"] in {
+                "time",
+                "memory",
+                "sequential-thinking",
+                "wikipedia",
+                "fetch",
+                "aws-documentation",
+                "arxiv",
+            }:
+                pass  # Local utilities need no provider credential.
+            elif item["product"] in {"aws-core", "cloudwatch"}:
+                from purecipher.consumer_aws import verify as verify_aws
+
+                await verify_aws(values)
+            else:
+                from purecipher.consumer_cloud import verify as verify_product
+
+                await verify_product(item["product"], values)
             result = registry._workspace.save(
                 {**item, "verified_values": digest(registry, values)}, item["revision"]
             )
@@ -317,7 +347,7 @@ def mount_consumer_oauth(registry, prefix):
         except (ValueError, KeyError):
             return JSONResponse(
                 {
-                    "error": "Verification failed; check your Brave key and search API access"
+                    "error": "Verification failed; check your credential, permissions and account access"
                 },
                 status_code=400,
             )

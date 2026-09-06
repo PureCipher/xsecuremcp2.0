@@ -1398,3 +1398,175 @@ PRODUCT_SCHEMAS: dict[str, dict[str, Any]] = {
         "audience": "consumer",
     },
 }
+
+
+# Direct API credentials are consumer-owned; no publisher app secret is requested.
+def _cloud_credentials():
+    from purecipher.consumer_cloud import BASE_KEYS, CUSTOM, PRODUCTS
+
+    for product, (key, label, _, _) in PRODUCTS.items():
+        schema = PRODUCT_SCHEMAS[product]
+        schema["kind"] = "credentials"
+        schema["version"] = 2
+        schema["fields"] = [
+            {
+                "key": key,
+                "label": label,
+                "type": "secret",
+                "required": True,
+                "help": "Stored encrypted for your account. Leave blank to keep the saved value.",
+            }
+        ]
+        if product in CUSTOM:
+            schema["fields"].append(
+                {
+                    "key": BASE_KEYS[product],
+                    "label": "Service base URL",
+                    "type": "url",
+                    "required": True,
+                    "help": "Publicly reachable HTTPS origin, for example https://your-site.atlassian.net. Internal endpoints require a separately configured connector.",
+                }
+            )
+        if product in {"jira", "atlassian"}:
+            schema["fields"].append(
+                {
+                    "key": "ACCOUNT_EMAIL",
+                    "label": "Atlassian account email",
+                    "type": "text",
+                    "required": True,
+                }
+            )
+        schema["instructions"] = [
+            f"Create a read-only credential in your {schema['title']} account with access only to the resources you intend to use.",
+            "Save your credential here, then choose Verify connection. Verification checks account access; individual tools can require additional read permissions.",
+            "Select this connection in your profile. Publishers and other users cannot read or reuse it.",
+        ]
+        if product in {"outlook", "onedrive"}:
+            schema["instructions"].insert(
+                0,
+                "Use a delegated Microsoft Graph access token for your own account. Automatic sign-in and refresh are not configured; replace the token when it expires.",
+            )
+        if product == "notion":
+            schema["instructions"].insert(
+                1,
+                "In Notion, explicitly share the required pages with this integration.",
+            )
+
+
+_cloud_credentials()
+
+
+for _product in (
+    "time",
+    "memory",
+    "sequential-thinking",
+    "wikipedia",
+    "fetch",
+    "aws-documentation",
+    "arxiv",
+):
+    PRODUCT_SCHEMAS[_product].update(
+        {
+            "kind": "utility",
+            "fields": [],
+            "version": 2,
+            "instructions": [
+                "Save a connection and verify it to enable this utility for your profiles.",
+                "Memory and reasoning steps are encrypted and scoped to this connection. Remove the connection to delete its stored state.",
+            ],
+        }
+    )
+
+
+for _product in ("aws-core", "cloudwatch"):
+    PRODUCT_SCHEMAS[_product].update(
+        {
+            "kind": "credentials",
+            "version": 2,
+            "fields": [
+                {
+                    "key": "AWS_ACCESS_KEY_ID",
+                    "label": "AWS access key ID",
+                    "type": "secret",
+                    "required": True,
+                },
+                {
+                    "key": "AWS_SECRET_ACCESS_KEY",
+                    "label": "AWS secret access key",
+                    "type": "secret",
+                    "required": True,
+                },
+                {
+                    "key": "AWS_SESSION_TOKEN",
+                    "label": "AWS session token (temporary credentials)",
+                    "type": "secret",
+                    "required": False,
+                },
+                {
+                    "key": "AWS_REGION",
+                    "label": "AWS region",
+                    "type": "text",
+                    "required": True,
+                    "help": "For example us-east-1",
+                },
+            ],
+            "instructions": [
+                "Use your own least-privilege AWS credentials. Temporary credentials also require a session token.",
+                "Save and verify to check caller identity. CloudWatch tools require ListMetrics or DescribeLogGroups permissions.",
+                "Replace temporary credentials when they expire. The Registry never uses its host's AWS credentials.",
+            ],
+        }
+    )
+
+
+# These products execute in an upstream service owned by the consumer.
+def _upstream_connections():
+    from purecipher.consumer_bridge import PRODUCTS
+
+    for product in PRODUCTS:
+        schema = PRODUCT_SCHEMAS[product]
+        schema["upstream_requirements"] = [f["label"] for f in schema["fields"]]
+        schema.update(
+            {
+                "kind": "connector",
+                "version": 2,
+                "fields": [
+                    {
+                        "key": "MCP_ENDPOINT",
+                        "label": f"Your {schema['title']} MCP endpoint",
+                        "type": "url",
+                        "required": True,
+                        "help": "A publicly reachable HTTPS Streamable HTTP endpoint; local stdio services need an authenticated HTTP gateway.",
+                    },
+                    {
+                        "key": "MCP_ACCESS_TOKEN",
+                        "label": "Your upstream MCP access token",
+                        "type": "secret",
+                        "required": True,
+                    },
+                    {
+                        "key": "MCP_ALLOWED_TOOLS",
+                        "label": "Approved upstream tool names",
+                        "type": "lines",
+                        "required": True,
+                        "help": "One exact tool name per line. Only these tools can be called through your profile.",
+                    },
+                ],
+                "instructions": [
+                    f"Run the {schema['title']} MCP service in your own environment. Configure its product credentials and resource access there.",
+                    "Place local stdio services behind an authenticated HTTPS MCP gateway. Do not expose an unauthenticated endpoint.",
+                    "Enter your endpoint token and explicitly approve the tools your profiles may call. Verification checks the actual tool schemas.",
+                    "Tool definitions are checked again before each call; changed definitions require reverification. Write and execution tools retain SecureMCP controls.",
+                ],
+            }
+        )
+        if schema["upstream_requirements"]:
+            schema["instructions"].insert(
+                1,
+                "Upstream setup needs: "
+                + ", ".join(schema["upstream_requirements"])
+                + ". These settings stay on your upstream service.",
+            )
+
+
+_upstream_connections()

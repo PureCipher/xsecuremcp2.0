@@ -18,23 +18,26 @@ def test_product_forms_match_consumer_auth_not_publisher_oauth_secrets():
         "google-calendar",
         "google-tasks",
         "google-drive",
-        "stripe",
-        "apollo",
-        "huggingface",
     ]:
         spec = PRODUCT_SCHEMAS[slug]
         assert spec["kind"] == "oauth" and spec["fields"] == []
         assert spec["audience"] == "consumer"
+    from purecipher.consumer_cloud import PRODUCTS
+
+    for product, (key, _, _, _) in PRODUCTS.items():
+        spec = PRODUCT_SCHEMAS[product]
+        assert spec["kind"] == "credentials"
+        assert any(f["key"] == key and f["type"] == "secret" for f in spec["fields"])
     assert any(
         f["key"] == "GRAFANA_API_KEY" for f in PRODUCT_SCHEMAS["grafana"]["fields"]
     )
-    assert any(
-        f["key"] == "MDB_MCP_CONNECTION_STRING" and f["type"] == "secret"
-        for f in PRODUCT_SCHEMAS["mongodb"]["fields"]
-    )
-    assert any(
-        f["key"] == "param:paths" for f in PRODUCT_SCHEMAS["filesystem"]["fields"]
-    )
+    for product in ["mongodb", "filesystem"]:
+        assert PRODUCT_SCHEMAS[product]["kind"] == "connector"
+        assert PRODUCT_SCHEMAS[product]["upstream_requirements"]
+        assert any(
+            f["key"] == "MCP_ACCESS_TOKEN" and f["type"] == "secret"
+            for f in PRODUCT_SCHEMAS[product]["fields"]
+        )
 
 
 def test_encryption_redaction_owner_isolation_update_and_delete():

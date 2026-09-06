@@ -1,14 +1,656 @@
 [
   {
+    "display_name": "Apollo.io",
+    "categories": [
+      "crm",
+      "marketing"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-apollo",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "Registry-hosted read-only Apollo.io tools using your selected connection. Provider credentials, permissions or account authorization may be required.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data"
+      ],
+      "requires_consent": true,
+      "idempotent": true,
+      "data_flows": [
+        {
+          "source": "Apollo.io",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "apollo:*",
+          "access_type": "read",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations with Google Workspace, built using SecureMCP 2.0.",
+        "affiliation": "Independent integrations; not published or endorsed by Google."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "apollo",
+      "configuration": [
+        "secrets"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "native",
+      "upstream_required": false,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "apollo_profile",
+        "apollo_search_people"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "apollo_profile",
+          "apollo_search_people"
+        ],
+        "tools": [
+          {
+            "name": "apollo_search_people",
+            "description": "Search prospect summaries; does not enrich or reveal email addresses or phone numbers.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "job_title": {
+                  "default": "",
+                  "type": "string"
+                },
+                "location": {
+                  "default": "",
+                  "type": "string"
+                },
+                "page_number": {
+                  "default": 1,
+                  "type": "integer"
+                },
+                "limit": {
+                  "default": 20,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            }
+          },
+          {
+            "name": "apollo_profile",
+            "description": "Read the identity associated with your Apollo API key.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {},
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "ArXiv",
+    "categories": [
+      "research"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-arxiv",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "Registry-hosted read-only ArXiv tools using your selected connection. Provider credentials, permissions or account authorization may be required.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data",
+        "call_tool"
+      ],
+      "requires_consent": true,
+      "idempotent": false,
+      "data_flows": [
+        {
+          "source": "ArXiv",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "arxiv:*",
+          "access_type": "read",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations built using SecureMCP 2.0.",
+        "affiliation": "Independent adapters; upstream trademarks belong to their respective owners."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "arxiv",
+      "configuration": [],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "native",
+      "upstream_required": false,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "arxiv_search"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "arxiv_search"
+        ],
+        "tools": [
+          {
+            "name": "arxiv_search",
+            "description": "Search arXiv paper titles, authors and abstracts.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "query": {
+                  "type": "string"
+                },
+                "limit": {
+                  "default": 5,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "query"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "ast-grep",
+    "categories": [
+      "developer_tools"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-ast-grep",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "SecureMCP connector for your own ast-grep MCP service. Requires a running authenticated HTTPS upstream and an explicit approved tool list. Upstream tools may write or execute; no upstream service is installed by this listing.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data",
+        "call_tool",
+        "write_resource"
+      ],
+      "requires_consent": true,
+      "idempotent": false,
+      "data_flows": [
+        {
+          "source": "ast-grep",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "ast-grep:*",
+          "access_type": "read",
+          "classification": "restricted"
+        },
+        {
+          "resource_pattern": "ast-grep:*",
+          "access_type": "write",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations built using SecureMCP 2.0.",
+        "affiliation": "Independent adapters; upstream trademarks belong to their respective owners."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "ast-grep",
+      "configuration": [
+        "secrets"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "upstream-connector",
+      "upstream_required": true,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "ast_grep_call_approved_tool",
+        "ast_grep_list_approved_tools"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "ast_grep_call_approved_tool",
+          "ast_grep_list_approved_tools"
+        ],
+        "tools": [
+          {
+            "name": "ast_grep_list_approved_tools",
+            "description": "List tool names and input schemas explicitly approved for your upstream connection.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {},
+              "type": "object"
+            }
+          },
+          {
+            "name": "ast_grep_call_approved_tool",
+            "description": "Call one approved tool on your own upstream MCP service. Effects depend on that tool and may include writes or execution.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "tool_name": {
+                  "type": "string"
+                },
+                "arguments": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              },
+              "required": [
+                "tool_name",
+                "arguments"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "Atlassian",
+    "categories": [
+      "project_management",
+      "collaboration"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-atlassian",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "Registry-hosted read-only Atlassian tools using your selected connection. Provider credentials, permissions or account authorization may be required.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data",
+        "call_tool"
+      ],
+      "requires_consent": true,
+      "idempotent": false,
+      "data_flows": [
+        {
+          "source": "Atlassian",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "atlassian:*",
+          "access_type": "read",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations built using SecureMCP 2.0.",
+        "affiliation": "Independent adapters; upstream trademarks belong to their respective owners."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "atlassian",
+      "configuration": [
+        "secrets"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "native",
+      "upstream_required": false,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "confluence_get_page",
+        "confluence_list_pages"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "confluence_get_page",
+          "confluence_list_pages"
+        ],
+        "tools": [
+          {
+            "name": "confluence_list_pages",
+            "description": "Read Confluence Cloud pages accessible to your account using API v2.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "limit": {
+                  "default": 20,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            }
+          },
+          {
+            "name": "confluence_get_page",
+            "description": "Read one Confluence Cloud page and its storage-format body.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "page_id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "page_id"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "AWS Core",
+    "categories": [
+      "cloud_platforms"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-aws-core",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "Registry-hosted read-only AWS Core tools using your selected connection. Provider credentials, permissions or account authorization may be required.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data",
+        "call_tool"
+      ],
+      "requires_consent": true,
+      "idempotent": false,
+      "data_flows": [
+        {
+          "source": "AWS Core",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "aws-core:*",
+          "access_type": "read",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations built using SecureMCP 2.0.",
+        "affiliation": "Independent adapters; upstream trademarks belong to their respective owners."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "aws-core",
+      "configuration": [
+        "secrets"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "native",
+      "upstream_required": false,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "aws_caller_identity"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "aws_caller_identity"
+        ],
+        "tools": [
+          {
+            "name": "aws_caller_identity",
+            "description": "Read your AWS account and caller identity using this connection's credentials.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {},
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "AWS Documentation",
+    "categories": [
+      "knowledge_management",
+      "cloud_platforms"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-aws-documentation",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "Registry-hosted read-only AWS Documentation tools using your selected connection. Provider credentials, permissions or account authorization may be required.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data",
+        "call_tool"
+      ],
+      "requires_consent": true,
+      "idempotent": false,
+      "data_flows": [
+        {
+          "source": "AWS Documentation",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "aws-documentation:*",
+          "access_type": "read",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations built using SecureMCP 2.0.",
+        "affiliation": "Independent adapters; upstream trademarks belong to their respective owners."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "aws-documentation",
+      "configuration": [],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "native",
+      "upstream_required": false,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "aws_read_documentation"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "aws_read_documentation"
+        ],
+        "tools": [
+          {
+            "name": "aws_read_documentation",
+            "description": "Read a page from the official AWS documentation site.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "url": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "url"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
     "display_name": "Brave Search",
     "categories": [
       "search"
     ],
     "manifest": {
       "tool_name": "purecipher-brave-search",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "author": "purecipher",
-      "description": "Registry-hosted Brave web search using the end user\u2019s own verified API key. Each call requires an active profile and remains subject to SecureMCP controls.",
+      "description": "Registry-hosted read-only Brave Search tools using your selected connection. Provider credentials, permissions or account authorization may be required.",
       "permissions": [
         "read_resource",
         "network_access",
@@ -53,9 +695,20 @@
       "deployment_ready": true,
       "live_tested": false,
       "readiness": "authorization_pending",
-      "runtime": "consumer-profile-v1",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "native",
+      "upstream_required": false,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
       "source_file": "src/purecipher/consumer_runtime.py",
-      "source_sha256": "20b628b80650697dd7bb5cc7dc181f485f77d143c646fa5e35d216ca6e3a31f1",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
       "tools": [
         "brave_web_search"
       ],
@@ -91,15 +744,1411 @@
     "requested_level": "basic"
   },
   {
+    "display_name": "ClickHouse",
+    "categories": [
+      "database",
+      "analytics"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-clickhouse",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "SecureMCP connector for your own ClickHouse MCP service. Requires a running authenticated HTTPS upstream and an explicit approved tool list. Upstream tools may write or execute; no upstream service is installed by this listing.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data",
+        "call_tool",
+        "write_resource"
+      ],
+      "requires_consent": true,
+      "idempotent": false,
+      "data_flows": [
+        {
+          "source": "Official ClickHouse",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "clickhouse:*",
+          "access_type": "read",
+          "classification": "restricted"
+        },
+        {
+          "resource_pattern": "clickhouse:*",
+          "access_type": "write",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations built using SecureMCP 2.0.",
+        "affiliation": "Independent adapters; upstream trademarks belong to their respective owners."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "clickhouse",
+      "configuration": [
+        "secrets"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "upstream-connector",
+      "upstream_required": true,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "clickhouse_call_approved_tool",
+        "clickhouse_list_approved_tools"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "clickhouse_call_approved_tool",
+          "clickhouse_list_approved_tools"
+        ],
+        "tools": [
+          {
+            "name": "clickhouse_list_approved_tools",
+            "description": "List tool names and input schemas explicitly approved for your upstream connection.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {},
+              "type": "object"
+            }
+          },
+          {
+            "name": "clickhouse_call_approved_tool",
+            "description": "Call one approved tool on your own upstream MCP service. Effects depend on that tool and may include writes or execution.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "tool_name": {
+                  "type": "string"
+                },
+                "arguments": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              },
+              "required": [
+                "tool_name",
+                "arguments"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "Amazon CloudWatch",
+    "categories": [
+      "monitoring",
+      "cloud_platforms"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-cloudwatch",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "Registry-hosted read-only Amazon CloudWatch tools using your selected connection. Provider credentials, permissions or account authorization may be required.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data",
+        "call_tool"
+      ],
+      "requires_consent": true,
+      "idempotent": false,
+      "data_flows": [
+        {
+          "source": "Amazon CloudWatch",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "cloudwatch:*",
+          "access_type": "read",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations built using SecureMCP 2.0.",
+        "affiliation": "Independent adapters; upstream trademarks belong to their respective owners."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "cloudwatch",
+      "configuration": [
+        "secrets"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "native",
+      "upstream_required": false,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "cloudwatch_list_log_groups",
+        "cloudwatch_list_metrics"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "cloudwatch_list_log_groups",
+          "cloudwatch_list_metrics"
+        ],
+        "tools": [
+          {
+            "name": "cloudwatch_list_metrics",
+            "description": "List metric definitions; requires cloudwatch:ListMetrics.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "namespace": {
+                  "default": "",
+                  "type": "string"
+                },
+                "next_token": {
+                  "default": "",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            }
+          },
+          {
+            "name": "cloudwatch_list_log_groups",
+            "description": "Read log-group metadata; requires logs:DescribeLogGroups.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "prefix": {
+                  "default": "",
+                  "type": "string"
+                },
+                "limit": {
+                  "default": 20,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "Desktop Commander",
+    "categories": [
+      "file_system",
+      "code_execution"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-desktop-commander",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "SecureMCP connector for your own Desktop Commander MCP service. Requires a running authenticated HTTPS upstream and an explicit approved tool list. Upstream tools may write or execute; no upstream service is installed by this listing.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data",
+        "call_tool",
+        "write_resource"
+      ],
+      "requires_consent": true,
+      "idempotent": false,
+      "data_flows": [
+        {
+          "source": "Desktop Commander",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "desktop-commander:*",
+          "access_type": "read",
+          "classification": "restricted"
+        },
+        {
+          "resource_pattern": "desktop-commander:*",
+          "access_type": "write",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations built using SecureMCP 2.0.",
+        "affiliation": "Independent adapters; upstream trademarks belong to their respective owners."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "desktop-commander",
+      "configuration": [
+        "secrets"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "upstream-connector",
+      "upstream_required": true,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "desktop_commander_call_approved_tool",
+        "desktop_commander_list_approved_tools"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "desktop_commander_call_approved_tool",
+          "desktop_commander_list_approved_tools"
+        ],
+        "tools": [
+          {
+            "name": "desktop_commander_list_approved_tools",
+            "description": "List tool names and input schemas explicitly approved for your upstream connection.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {},
+              "type": "object"
+            }
+          },
+          {
+            "name": "desktop_commander_call_approved_tool",
+            "description": "Call one approved tool on your own upstream MCP service. Effects depend on that tool and may include writes or execution.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "tool_name": {
+                  "type": "string"
+                },
+                "arguments": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              },
+              "required": [
+                "tool_name",
+                "arguments"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "Docker Hub",
+    "categories": [
+      "devops"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-docker-hub",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "SecureMCP connector for your own Docker Hub MCP service. Requires a running authenticated HTTPS upstream and an explicit approved tool list. Upstream tools may write or execute; no upstream service is installed by this listing.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data",
+        "call_tool",
+        "write_resource"
+      ],
+      "requires_consent": true,
+      "idempotent": false,
+      "data_flows": [
+        {
+          "source": "Docker Hub",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "docker-hub:*",
+          "access_type": "read",
+          "classification": "restricted"
+        },
+        {
+          "resource_pattern": "docker-hub:*",
+          "access_type": "write",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations built using SecureMCP 2.0.",
+        "affiliation": "Independent adapters; upstream trademarks belong to their respective owners."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "docker-hub",
+      "configuration": [
+        "secrets"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "upstream-connector",
+      "upstream_required": true,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "docker_hub_call_approved_tool",
+        "docker_hub_list_approved_tools"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "docker_hub_call_approved_tool",
+          "docker_hub_list_approved_tools"
+        ],
+        "tools": [
+          {
+            "name": "docker_hub_list_approved_tools",
+            "description": "List tool names and input schemas explicitly approved for your upstream connection.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {},
+              "type": "object"
+            }
+          },
+          {
+            "name": "docker_hub_call_approved_tool",
+            "description": "Call one approved tool on your own upstream MCP service. Effects depend on that tool and may include writes or execution.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "tool_name": {
+                  "type": "string"
+                },
+                "arguments": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              },
+              "required": [
+                "tool_name",
+                "arguments"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "Private Web Search",
+    "categories": [
+      "search"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-duckduckgo",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "SecureMCP connector for your own Private Web Search MCP service. Requires a running authenticated HTTPS upstream and an explicit approved tool list. Upstream tools may write or execute; no upstream service is installed by this listing.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data",
+        "call_tool",
+        "write_resource"
+      ],
+      "requires_consent": true,
+      "idempotent": false,
+      "data_flows": [
+        {
+          "source": "Private Web Search",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "duckduckgo:*",
+          "access_type": "read",
+          "classification": "restricted"
+        },
+        {
+          "resource_pattern": "duckduckgo:*",
+          "access_type": "write",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations built using SecureMCP 2.0.",
+        "affiliation": "Independent adapters; upstream trademarks belong to their respective owners."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "duckduckgo",
+      "configuration": [
+        "secrets"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "upstream-connector",
+      "upstream_required": true,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "duckduckgo_call_approved_tool",
+        "duckduckgo_list_approved_tools"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "duckduckgo_call_approved_tool",
+          "duckduckgo_list_approved_tools"
+        ],
+        "tools": [
+          {
+            "name": "duckduckgo_list_approved_tools",
+            "description": "List tool names and input schemas explicitly approved for your upstream connection.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {},
+              "type": "object"
+            }
+          },
+          {
+            "name": "duckduckgo_call_approved_tool",
+            "description": "Call one approved tool on your own upstream MCP service. Effects depend on that tool and may include writes or execution.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "tool_name": {
+                  "type": "string"
+                },
+                "arguments": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              },
+              "required": [
+                "tool_name",
+                "arguments"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "Dynatrace",
+    "categories": [
+      "monitoring"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-dynatrace",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "Registry-hosted read-only Dynatrace tools using your selected connection. Provider credentials, permissions or account authorization may be required.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data",
+        "call_tool"
+      ],
+      "requires_consent": true,
+      "idempotent": false,
+      "data_flows": [
+        {
+          "source": "Dynatrace",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "dynatrace:*",
+          "access_type": "read",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations built using SecureMCP 2.0.",
+        "affiliation": "Independent adapters; upstream trademarks belong to their respective owners."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "dynatrace",
+      "configuration": [
+        "secrets"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "native",
+      "upstream_required": false,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "dynatrace_list_entities"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "dynatrace_list_entities"
+        ],
+        "tools": [
+          {
+            "name": "dynatrace_list_entities",
+            "description": "Read monitored entities; requires an entities.read token.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "entity_type": {
+                  "default": "HOST",
+                  "type": "string"
+                },
+                "limit": {
+                  "default": 20,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "Fetch (Reference)",
+    "categories": [
+      "search",
+      "data_access"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-fetch",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "Registry-hosted read-only Fetch (Reference) tools using your selected connection. Provider credentials, permissions or account authorization may be required.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data",
+        "call_tool"
+      ],
+      "requires_consent": true,
+      "idempotent": false,
+      "data_flows": [
+        {
+          "source": "Fetch (Reference)",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "fetch:*",
+          "access_type": "read",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations built using SecureMCP 2.0.",
+        "affiliation": "Independent adapters; upstream trademarks belong to their respective owners."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "fetch",
+      "configuration": [],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "native",
+      "upstream_required": false,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "fetch_public_url"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "fetch_public_url"
+        ],
+        "tools": [
+          {
+            "name": "fetch_public_url",
+            "description": "Fetch at most 512 KiB from a public HTTPS URL. Private networks and redirects are blocked.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "url": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "url"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "Filesystem (Reference)",
+    "categories": [
+      "file_system"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-filesystem",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "SecureMCP connector for your own Filesystem (Reference) MCP service. Requires a running authenticated HTTPS upstream and an explicit approved tool list. Upstream tools may write or execute; no upstream service is installed by this listing.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data",
+        "call_tool",
+        "write_resource"
+      ],
+      "requires_consent": true,
+      "idempotent": false,
+      "data_flows": [
+        {
+          "source": "Filesystem (Reference)",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "filesystem:*",
+          "access_type": "read",
+          "classification": "restricted"
+        },
+        {
+          "resource_pattern": "filesystem:*",
+          "access_type": "write",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations built using SecureMCP 2.0.",
+        "affiliation": "Independent adapters; upstream trademarks belong to their respective owners."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "filesystem",
+      "configuration": [
+        "secrets"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "upstream-connector",
+      "upstream_required": true,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "filesystem_call_approved_tool",
+        "filesystem_list_approved_tools"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "filesystem_call_approved_tool",
+          "filesystem_list_approved_tools"
+        ],
+        "tools": [
+          {
+            "name": "filesystem_list_approved_tools",
+            "description": "List tool names and input schemas explicitly approved for your upstream connection.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {},
+              "type": "object"
+            }
+          },
+          {
+            "name": "filesystem_call_approved_tool",
+            "description": "Call one approved tool on your own upstream MCP service. Effects depend on that tool and may include writes or execution.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "tool_name": {
+                  "type": "string"
+                },
+                "arguments": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              },
+              "required": [
+                "tool_name",
+                "arguments"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "Firecrawl",
+    "categories": [
+      "search",
+      "data_access"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-firecrawl",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "Registry-hosted read-only Firecrawl tools using your selected connection. Provider credentials, permissions or account authorization may be required.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data",
+        "call_tool"
+      ],
+      "requires_consent": true,
+      "idempotent": false,
+      "data_flows": [
+        {
+          "source": "Firecrawl",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "firecrawl:*",
+          "access_type": "read",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations built using SecureMCP 2.0.",
+        "affiliation": "Independent adapters; upstream trademarks belong to their respective owners."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "firecrawl",
+      "configuration": [
+        "secrets"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "native",
+      "upstream_required": false,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "firecrawl_search"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "firecrawl_search"
+        ],
+        "tools": [
+          {
+            "name": "firecrawl_search",
+            "description": "Search the web using your Firecrawl account. This consumes provider credits.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "query": {
+                  "type": "string"
+                },
+                "limit": {
+                  "default": 5,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "query"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "Git (Reference)",
+    "categories": [
+      "version_control"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-git",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "SecureMCP connector for your own Git (Reference) MCP service. Requires a running authenticated HTTPS upstream and an explicit approved tool list. Upstream tools may write or execute; no upstream service is installed by this listing.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data",
+        "call_tool",
+        "write_resource"
+      ],
+      "requires_consent": true,
+      "idempotent": false,
+      "data_flows": [
+        {
+          "source": "Git (Reference)",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "git:*",
+          "access_type": "read",
+          "classification": "restricted"
+        },
+        {
+          "resource_pattern": "git:*",
+          "access_type": "write",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations built using SecureMCP 2.0.",
+        "affiliation": "Independent adapters; upstream trademarks belong to their respective owners."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "git",
+      "configuration": [
+        "secrets"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "upstream-connector",
+      "upstream_required": true,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "git_call_approved_tool",
+        "git_list_approved_tools"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "git_call_approved_tool",
+          "git_list_approved_tools"
+        ],
+        "tools": [
+          {
+            "name": "git_list_approved_tools",
+            "description": "List tool names and input schemas explicitly approved for your upstream connection.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {},
+              "type": "object"
+            }
+          },
+          {
+            "name": "git_call_approved_tool",
+            "description": "Call one approved tool on your own upstream MCP service. Effects depend on that tool and may include writes or execution.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "tool_name": {
+                  "type": "string"
+                },
+                "arguments": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              },
+              "required": [
+                "tool_name",
+                "arguments"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "GitHub",
+    "categories": [
+      "version_control",
+      "developer_tools"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-github",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "Registry-hosted read-only GitHub tools using your selected connection. Provider credentials, permissions or account authorization may be required.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data"
+      ],
+      "requires_consent": true,
+      "idempotent": true,
+      "data_flows": [
+        {
+          "source": "GitHub",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "github:*",
+          "access_type": "read",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations with Google Workspace, built using SecureMCP 2.0.",
+        "affiliation": "Independent integrations; not published or endorsed by Google."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "github",
+      "configuration": [
+        "secrets"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "native",
+      "upstream_required": false,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "github_list_issues",
+        "github_list_repositories"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "github_list_issues",
+          "github_list_repositories"
+        ],
+        "tools": [
+          {
+            "name": "github_list_repositories",
+            "description": "List repositories accessible to your token. Page numbering starts at one.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "limit": {
+                  "default": 20,
+                  "type": "integer"
+                },
+                "page_number": {
+                  "default": 1,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            }
+          },
+          {
+            "name": "github_list_issues",
+            "description": "Read issues and pull requests for one accessible repository.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "owner": {
+                  "type": "string"
+                },
+                "repository": {
+                  "type": "string"
+                },
+                "limit": {
+                  "default": 20,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "owner",
+                "repository"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "GitHub (Reference)",
+    "categories": [
+      "version_control",
+      "developer_tools"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-github-reference",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "Registry-hosted read-only GitHub (Reference) tools using your selected connection. Provider credentials, permissions or account authorization may be required.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data",
+        "call_tool"
+      ],
+      "requires_consent": true,
+      "idempotent": false,
+      "data_flows": [
+        {
+          "source": "GitHub (Reference)",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "github-reference:*",
+          "access_type": "read",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations built using SecureMCP 2.0.",
+        "affiliation": "Independent adapters; upstream trademarks belong to their respective owners."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "github-reference",
+      "configuration": [
+        "secrets"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "native",
+      "upstream_required": false,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "github_reference_list_issues",
+        "github_reference_list_repositories"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "github_reference_list_issues",
+          "github_reference_list_repositories"
+        ],
+        "tools": [
+          {
+            "name": "github_reference_list_repositories",
+            "description": "List repositories accessible to your token. Page numbering starts at one.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "limit": {
+                  "default": 20,
+                  "type": "integer"
+                },
+                "page_number": {
+                  "default": 1,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            }
+          },
+          {
+            "name": "github_reference_list_issues",
+            "description": "Read issues and pull requests for one accessible repository.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "owner": {
+                  "type": "string"
+                },
+                "repository": {
+                  "type": "string"
+                },
+                "limit": {
+                  "default": 20,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "owner",
+                "repository"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
     "display_name": "Google Calendar",
     "categories": [
       "productivity"
     ],
     "manifest": {
       "tool_name": "purecipher-google-calendar",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "author": "purecipher",
-      "description": "Registry-hosted read-only Google Calendar tools. Each user must authorize or verify their own connection before an assigned profile can call these tools. Google OAuth app configuration is pending.",
+      "description": "Registry-hosted read-only Google Calendar tools using your selected connection. Provider credentials, permissions or account authorization may be required. Google OAuth app configuration is pending.",
       "permissions": [
         "read_resource",
         "network_access",
@@ -143,9 +2192,20 @@
       "deployment_ready": true,
       "live_tested": false,
       "readiness": "authorization_pending",
-      "runtime": "consumer-profile-v1",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "native",
+      "upstream_required": false,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
       "source_file": "src/purecipher/consumer_runtime.py",
-      "source_sha256": "20b628b80650697dd7bb5cc7dc181f485f77d143c646fa5e35d216ca6e3a31f1",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
       "tools": [
         "calendar_list_calendars",
         "calendar_list_events"
@@ -210,9 +2270,9 @@
     ],
     "manifest": {
       "tool_name": "purecipher-google-docs",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "author": "purecipher",
-      "description": "Registry-hosted read-only Google Docs tools. Each user must authorize or verify their own connection before an assigned profile can call these tools. Google OAuth app configuration is pending.",
+      "description": "Registry-hosted read-only Google Docs tools using your selected connection. Provider credentials, permissions or account authorization may be required. Google OAuth app configuration is pending.",
       "permissions": [
         "read_resource",
         "network_access",
@@ -256,9 +2316,20 @@
       "deployment_ready": true,
       "live_tested": false,
       "readiness": "authorization_pending",
-      "runtime": "consumer-profile-v1",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "native",
+      "upstream_required": false,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
       "source_file": "src/purecipher/consumer_runtime.py",
-      "source_sha256": "20b628b80650697dd7bb5cc7dc181f485f77d143c646fa5e35d216ca6e3a31f1",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
       "tools": [
         "docs_get_document"
       ],
@@ -296,9 +2367,9 @@
     ],
     "manifest": {
       "tool_name": "purecipher-google-drive",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "author": "purecipher",
-      "description": "Registry-hosted read-only Google Drive tools. Each user must authorize or verify their own connection before an assigned profile can call these tools. Google OAuth app configuration is pending.",
+      "description": "Registry-hosted read-only Google Drive tools using your selected connection. Provider credentials, permissions or account authorization may be required. Google OAuth app configuration is pending.",
       "permissions": [
         "read_resource",
         "network_access",
@@ -342,9 +2413,20 @@
       "deployment_ready": true,
       "live_tested": false,
       "readiness": "authorization_pending",
-      "runtime": "consumer-profile-v1",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "native",
+      "upstream_required": false,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
       "source_file": "src/purecipher/consumer_runtime.py",
-      "source_sha256": "20b628b80650697dd7bb5cc7dc181f485f77d143c646fa5e35d216ca6e3a31f1",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
       "tools": [
         "drive_get_file",
         "drive_search_files"
@@ -407,9 +2489,9 @@
     ],
     "manifest": {
       "tool_name": "purecipher-google-gmail",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "author": "purecipher",
-      "description": "Registry-hosted read-only Gmail tools. Each user must authorize or verify their own connection before an assigned profile can call these tools. Google OAuth app configuration is pending.",
+      "description": "Registry-hosted read-only Gmail tools using your selected connection. Provider credentials, permissions or account authorization may be required. Google OAuth app configuration is pending.",
       "permissions": [
         "read_resource",
         "network_access",
@@ -453,9 +2535,20 @@
       "deployment_ready": true,
       "live_tested": false,
       "readiness": "authorization_pending",
-      "runtime": "consumer-profile-v1",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "native",
+      "upstream_required": false,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
       "source_file": "src/purecipher/consumer_runtime.py",
-      "source_sha256": "20b628b80650697dd7bb5cc7dc181f485f77d143c646fa5e35d216ca6e3a31f1",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
       "tools": [
         "gmail_get_message",
         "gmail_list_messages",
@@ -529,9 +2622,9 @@
     ],
     "manifest": {
       "tool_name": "purecipher-google-tasks",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "author": "purecipher",
-      "description": "Registry-hosted read-only Google Tasks tools. Each user must authorize or verify their own connection before an assigned profile can call these tools. Google OAuth app configuration is pending.",
+      "description": "Registry-hosted read-only Google Tasks tools using your selected connection. Provider credentials, permissions or account authorization may be required. Google OAuth app configuration is pending.",
       "permissions": [
         "read_resource",
         "network_access",
@@ -575,9 +2668,20 @@
       "deployment_ready": true,
       "live_tested": false,
       "readiness": "authorization_pending",
-      "runtime": "consumer-profile-v1",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "native",
+      "upstream_required": false,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
       "source_file": "src/purecipher/consumer_runtime.py",
-      "source_sha256": "20b628b80650697dd7bb5cc7dc181f485f77d143c646fa5e35d216ca6e3a31f1",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
       "tools": [
         "tasks_list_tasklists",
         "tasks_list_tasks"
@@ -627,6 +2731,2819 @@
               },
               "required": [
                 "tasklist_id"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "Grafana",
+    "categories": [
+      "monitoring",
+      "analytics"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-grafana",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "Registry-hosted read-only Grafana tools using your selected connection. Provider credentials, permissions or account authorization may be required.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data",
+        "call_tool"
+      ],
+      "requires_consent": true,
+      "idempotent": false,
+      "data_flows": [
+        {
+          "source": "Grafana",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "grafana:*",
+          "access_type": "read",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations built using SecureMCP 2.0.",
+        "affiliation": "Independent adapters; upstream trademarks belong to their respective owners."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "grafana",
+      "configuration": [
+        "secrets"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "native",
+      "upstream_required": false,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "grafana_search_dashboards"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "grafana_search_dashboards"
+        ],
+        "tools": [
+          {
+            "name": "grafana_search_dashboards",
+            "description": "Search dashboards permitted by your Grafana service account.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "query": {
+                  "default": "",
+                  "type": "string"
+                },
+                "limit": {
+                  "default": 20,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "Hugging Face",
+    "categories": [
+      "machine_learning",
+      "ai_ml"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-huggingface",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "Registry-hosted read-only Hugging Face tools using your selected connection. Provider credentials, permissions or account authorization may be required.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data"
+      ],
+      "requires_consent": true,
+      "idempotent": true,
+      "data_flows": [
+        {
+          "source": "Hugging Face",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "huggingface:*",
+          "access_type": "read",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations built using SecureMCP 2.0.",
+        "affiliation": "Independent integrations; not endorsed by the upstream providers."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "huggingface",
+      "configuration": [
+        "secrets"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "native",
+      "upstream_required": false,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "huggingface_search_datasets",
+        "huggingface_search_models"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "huggingface_search_datasets",
+          "huggingface_search_models"
+        ],
+        "tools": [
+          {
+            "name": "huggingface_search_models",
+            "description": "Search Hugging Face model metadata using your account's token.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "search": {
+                  "default": "",
+                  "type": "string"
+                },
+                "limit": {
+                  "default": 20,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            }
+          },
+          {
+            "name": "huggingface_search_datasets",
+            "description": "Search Hugging Face dataset metadata; does not download or execute code.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "search": {
+                  "default": "",
+                  "type": "string"
+                },
+                "limit": {
+                  "default": 20,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "Jira",
+    "categories": [
+      "project_management"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-jira",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "Registry-hosted read-only Jira tools using your selected connection. Provider credentials, permissions or account authorization may be required.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data"
+      ],
+      "requires_consent": true,
+      "idempotent": true,
+      "data_flows": [
+        {
+          "source": "Jira",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "jira:*",
+          "access_type": "read",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations with Google Workspace, built using SecureMCP 2.0.",
+        "affiliation": "Independent integrations; not published or endorsed by Google."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "jira",
+      "configuration": [
+        "secrets"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "native",
+      "upstream_required": false,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "jira_get_issue"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "jira_get_issue"
+        ],
+        "tools": [
+          {
+            "name": "jira_get_issue",
+            "description": "Read one Jira Cloud issue accessible to your account.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "issue_key": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "issue_key"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "Kubernetes",
+    "categories": [
+      "devops",
+      "cloud_platforms"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-kubernetes",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "SecureMCP connector for your own Kubernetes MCP service. Requires a running authenticated HTTPS upstream and an explicit approved tool list. Upstream tools may write or execute; no upstream service is installed by this listing.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data",
+        "call_tool",
+        "write_resource"
+      ],
+      "requires_consent": true,
+      "idempotent": false,
+      "data_flows": [
+        {
+          "source": "Kubernetes",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "kubernetes:*",
+          "access_type": "read",
+          "classification": "restricted"
+        },
+        {
+          "resource_pattern": "kubernetes:*",
+          "access_type": "write",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations built using SecureMCP 2.0.",
+        "affiliation": "Independent adapters; upstream trademarks belong to their respective owners."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "kubernetes",
+      "configuration": [
+        "secrets"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "upstream-connector",
+      "upstream_required": true,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "kubernetes_call_approved_tool",
+        "kubernetes_list_approved_tools"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "kubernetes_call_approved_tool",
+          "kubernetes_list_approved_tools"
+        ],
+        "tools": [
+          {
+            "name": "kubernetes_list_approved_tools",
+            "description": "List tool names and input schemas explicitly approved for your upstream connection.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {},
+              "type": "object"
+            }
+          },
+          {
+            "name": "kubernetes_call_approved_tool",
+            "description": "Call one approved tool on your own upstream MCP service. Effects depend on that tool and may include writes or execution.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "tool_name": {
+                  "type": "string"
+                },
+                "arguments": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              },
+              "required": [
+                "tool_name",
+                "arguments"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "Markitdown",
+    "categories": [
+      "content_management"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-markitdown",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "SecureMCP connector for your own Markitdown MCP service. Requires a running authenticated HTTPS upstream and an explicit approved tool list. Upstream tools may write or execute; no upstream service is installed by this listing.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data",
+        "call_tool",
+        "write_resource"
+      ],
+      "requires_consent": true,
+      "idempotent": false,
+      "data_flows": [
+        {
+          "source": "Markitdown",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "markitdown:*",
+          "access_type": "read",
+          "classification": "restricted"
+        },
+        {
+          "resource_pattern": "markitdown:*",
+          "access_type": "write",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations built using SecureMCP 2.0.",
+        "affiliation": "Independent adapters; upstream trademarks belong to their respective owners."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "markitdown",
+      "configuration": [
+        "secrets"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "upstream-connector",
+      "upstream_required": true,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "markitdown_call_approved_tool",
+        "markitdown_list_approved_tools"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "markitdown_call_approved_tool",
+          "markitdown_list_approved_tools"
+        ],
+        "tools": [
+          {
+            "name": "markitdown_list_approved_tools",
+            "description": "List tool names and input schemas explicitly approved for your upstream connection.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {},
+              "type": "object"
+            }
+          },
+          {
+            "name": "markitdown_call_approved_tool",
+            "description": "Call one approved tool on your own upstream MCP service. Effects depend on that tool and may include writes or execution.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "tool_name": {
+                  "type": "string"
+                },
+                "arguments": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              },
+              "required": [
+                "tool_name",
+                "arguments"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "Memory (Reference)",
+    "categories": [
+      "knowledge_management",
+      "ai_ml"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-memory",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "Registry-hosted Memory (Reference) with encrypted state scoped to your connection. Use an assigned active profile; state persists until the connection is removed.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data",
+        "call_tool",
+        "write_resource"
+      ],
+      "requires_consent": true,
+      "idempotent": false,
+      "data_flows": [
+        {
+          "source": "Memory (Reference)",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "memory:*",
+          "access_type": "read",
+          "classification": "restricted"
+        },
+        {
+          "resource_pattern": "memory:*",
+          "access_type": "write",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations built using SecureMCP 2.0.",
+        "affiliation": "Independent adapters; upstream trademarks belong to their respective owners."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "memory",
+      "configuration": [],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "native",
+      "upstream_required": false,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "memory_save_entity",
+        "memory_search"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "memory_save_entity",
+          "memory_search"
+        ],
+        "tools": [
+          {
+            "name": "memory_save_entity",
+            "description": "Save or replace an entity in this connection's encrypted memory; shared only by its assigned profiles.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "observations": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "name",
+                "observations"
+              ],
+              "type": "object"
+            }
+          },
+          {
+            "name": "memory_search",
+            "description": "Search this connection's stored entities and observations.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "query": {
+                  "default": "",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "MongoDB",
+    "categories": [
+      "database"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-mongodb",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "SecureMCP connector for your own MongoDB MCP service. Requires a running authenticated HTTPS upstream and an explicit approved tool list. Upstream tools may write or execute; no upstream service is installed by this listing.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data",
+        "call_tool",
+        "write_resource"
+      ],
+      "requires_consent": true,
+      "idempotent": false,
+      "data_flows": [
+        {
+          "source": "MongoDB",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "mongodb:*",
+          "access_type": "read",
+          "classification": "restricted"
+        },
+        {
+          "resource_pattern": "mongodb:*",
+          "access_type": "write",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations built using SecureMCP 2.0.",
+        "affiliation": "Independent adapters; upstream trademarks belong to their respective owners."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "mongodb",
+      "configuration": [
+        "secrets"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "upstream-connector",
+      "upstream_required": true,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "mongodb_call_approved_tool",
+        "mongodb_list_approved_tools"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "mongodb_call_approved_tool",
+          "mongodb_list_approved_tools"
+        ],
+        "tools": [
+          {
+            "name": "mongodb_list_approved_tools",
+            "description": "List tool names and input schemas explicitly approved for your upstream connection.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {},
+              "type": "object"
+            }
+          },
+          {
+            "name": "mongodb_call_approved_tool",
+            "description": "Call one approved tool on your own upstream MCP service. Effects depend on that tool and may include writes or execution.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "tool_name": {
+                  "type": "string"
+                },
+                "arguments": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              },
+              "required": [
+                "tool_name",
+                "arguments"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "n8n",
+    "categories": [
+      "automation",
+      "productivity"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-n8n",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "Registry-hosted read-only n8n tools using your selected connection. Provider credentials, permissions or account authorization may be required.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data",
+        "call_tool"
+      ],
+      "requires_consent": true,
+      "idempotent": false,
+      "data_flows": [
+        {
+          "source": "n8n",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "n8n:*",
+          "access_type": "read",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations built using SecureMCP 2.0.",
+        "affiliation": "Independent adapters; upstream trademarks belong to their respective owners."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "n8n",
+      "configuration": [
+        "secrets"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "native",
+      "upstream_required": false,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "n8n_list_workflows"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "n8n_list_workflows"
+        ],
+        "tools": [
+          {
+            "name": "n8n_list_workflows",
+            "description": "Read workflow summaries; does not execute workflows or return node credentials.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "limit": {
+                  "default": 20,
+                  "type": "integer"
+                },
+                "cursor": {
+                  "default": "",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "Node.js Sandbox",
+    "categories": [
+      "code_execution"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-nodejs-sandbox",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "SecureMCP connector for your own Node.js Sandbox MCP service. Requires a running authenticated HTTPS upstream and an explicit approved tool list. Upstream tools may write or execute; no upstream service is installed by this listing.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data",
+        "call_tool",
+        "write_resource"
+      ],
+      "requires_consent": true,
+      "idempotent": false,
+      "data_flows": [
+        {
+          "source": "Node.js Sandbox",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "nodejs-sandbox:*",
+          "access_type": "read",
+          "classification": "restricted"
+        },
+        {
+          "resource_pattern": "nodejs-sandbox:*",
+          "access_type": "write",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations built using SecureMCP 2.0.",
+        "affiliation": "Independent adapters; upstream trademarks belong to their respective owners."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "nodejs-sandbox",
+      "configuration": [
+        "secrets"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "upstream-connector",
+      "upstream_required": true,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "nodejs_sandbox_call_approved_tool",
+        "nodejs_sandbox_list_approved_tools"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "nodejs_sandbox_call_approved_tool",
+          "nodejs_sandbox_list_approved_tools"
+        ],
+        "tools": [
+          {
+            "name": "nodejs_sandbox_list_approved_tools",
+            "description": "List tool names and input schemas explicitly approved for your upstream connection.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {},
+              "type": "object"
+            }
+          },
+          {
+            "name": "nodejs_sandbox_call_approved_tool",
+            "description": "Call one approved tool on your own upstream MCP service. Effects depend on that tool and may include writes or execution.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "tool_name": {
+                  "type": "string"
+                },
+                "arguments": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              },
+              "required": [
+                "tool_name",
+                "arguments"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "Notion",
+    "categories": [
+      "knowledge_management",
+      "productivity"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-notion",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "Registry-hosted read-only Notion tools using your selected connection. Provider credentials, permissions or account authorization may be required.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data",
+        "call_tool"
+      ],
+      "requires_consent": true,
+      "idempotent": false,
+      "data_flows": [
+        {
+          "source": "Notion",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "notion:*",
+          "access_type": "read",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations built using SecureMCP 2.0.",
+        "affiliation": "Independent adapters; upstream trademarks belong to their respective owners."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "notion",
+      "configuration": [
+        "secrets"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "native",
+      "upstream_required": false,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "notion_get_block_children",
+        "notion_get_page",
+        "notion_search"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "notion_get_block_children",
+          "notion_get_page",
+          "notion_search"
+        ],
+        "tools": [
+          {
+            "name": "notion_search",
+            "description": "Search pages and databases shared with your Notion integration.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "query": {
+                  "default": "",
+                  "type": "string"
+                },
+                "page_size": {
+                  "default": 20,
+                  "type": "integer"
+                },
+                "start_cursor": {
+                  "default": "",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            }
+          },
+          {
+            "name": "notion_get_page",
+            "description": "Read properties of a page shared with your integration.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "page_id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "page_id"
+              ],
+              "type": "object"
+            }
+          },
+          {
+            "name": "notion_get_block_children",
+            "description": "Read content blocks from a shared page or block.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "block_id": {
+                  "type": "string"
+                },
+                "page_size": {
+                  "default": 20,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "block_id"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "Obsidian",
+    "categories": [
+      "knowledge_management"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-obsidian",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "SecureMCP connector for your own Obsidian MCP service. Requires a running authenticated HTTPS upstream and an explicit approved tool list. Upstream tools may write or execute; no upstream service is installed by this listing.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data",
+        "call_tool",
+        "write_resource"
+      ],
+      "requires_consent": true,
+      "idempotent": false,
+      "data_flows": [
+        {
+          "source": "Obsidian",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "obsidian:*",
+          "access_type": "read",
+          "classification": "restricted"
+        },
+        {
+          "resource_pattern": "obsidian:*",
+          "access_type": "write",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations built using SecureMCP 2.0.",
+        "affiliation": "Independent adapters; upstream trademarks belong to their respective owners."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "obsidian",
+      "configuration": [
+        "secrets"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "upstream-connector",
+      "upstream_required": true,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "obsidian_call_approved_tool",
+        "obsidian_list_approved_tools"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "obsidian_call_approved_tool",
+          "obsidian_list_approved_tools"
+        ],
+        "tools": [
+          {
+            "name": "obsidian_list_approved_tools",
+            "description": "List tool names and input schemas explicitly approved for your upstream connection.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {},
+              "type": "object"
+            }
+          },
+          {
+            "name": "obsidian_call_approved_tool",
+            "description": "Call one approved tool on your own upstream MCP service. Effects depend on that tool and may include writes or execution.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "tool_name": {
+                  "type": "string"
+                },
+                "arguments": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              },
+              "required": [
+                "tool_name",
+                "arguments"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "Microsoft OneDrive",
+    "categories": [
+      "cloud_storage"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-onedrive",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "Registry-hosted read-only Microsoft OneDrive tools using your selected connection. Provider credentials, permissions or account authorization may be required.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data"
+      ],
+      "requires_consent": true,
+      "idempotent": true,
+      "data_flows": [
+        {
+          "source": "Microsoft OneDrive",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "onedrive:*",
+          "access_type": "read",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations with Google Workspace, built using SecureMCP 2.0.",
+        "affiliation": "Independent integrations; not published or endorsed by Google."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "onedrive",
+      "configuration": [
+        "secrets"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "native",
+      "upstream_required": false,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "onedrive_get_file_metadata",
+        "onedrive_list_files"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "onedrive_get_file_metadata",
+          "onedrive_list_files"
+        ],
+        "tools": [
+          {
+            "name": "onedrive_list_files",
+            "description": "List root file metadata; requires delegated Files.Read permission.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "limit": {
+                  "default": 20,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            }
+          },
+          {
+            "name": "onedrive_get_file_metadata",
+            "description": "Read file metadata without returning temporary download URLs.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "item_id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "item_id"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "Microsoft Outlook",
+    "categories": [
+      "communication",
+      "productivity"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-outlook",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "Registry-hosted read-only Microsoft Outlook tools using your selected connection. Provider credentials, permissions or account authorization may be required.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data"
+      ],
+      "requires_consent": true,
+      "idempotent": true,
+      "data_flows": [
+        {
+          "source": "Microsoft Outlook",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "outlook:*",
+          "access_type": "read",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations with Google Workspace, built using SecureMCP 2.0.",
+        "affiliation": "Independent integrations; not published or endorsed by Google."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "outlook",
+      "configuration": [
+        "secrets"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "native",
+      "upstream_required": false,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "outlook_list_events",
+        "outlook_list_messages"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "outlook_list_events",
+          "outlook_list_messages"
+        ],
+        "tools": [
+          {
+            "name": "outlook_list_messages",
+            "description": "Read Outlook message summaries; requires delegated Mail.Read permission.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "limit": {
+                  "default": 20,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            }
+          },
+          {
+            "name": "outlook_list_events",
+            "description": "Read Outlook calendar events; requires delegated Calendars.Read permission.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "limit": {
+                  "default": 20,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "Playwright",
+    "categories": [
+      "automation",
+      "developer_tools"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-playwright",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "SecureMCP connector for your own Playwright MCP service. Requires a running authenticated HTTPS upstream and an explicit approved tool list. Upstream tools may write or execute; no upstream service is installed by this listing.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data",
+        "call_tool",
+        "write_resource"
+      ],
+      "requires_consent": true,
+      "idempotent": false,
+      "data_flows": [
+        {
+          "source": "Playwright",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "playwright:*",
+          "access_type": "read",
+          "classification": "restricted"
+        },
+        {
+          "resource_pattern": "playwright:*",
+          "access_type": "write",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations built using SecureMCP 2.0.",
+        "affiliation": "Independent adapters; upstream trademarks belong to their respective owners."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "playwright",
+      "configuration": [
+        "secrets"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "upstream-connector",
+      "upstream_required": true,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "playwright_call_approved_tool",
+        "playwright_list_approved_tools"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "playwright_call_approved_tool",
+          "playwright_list_approved_tools"
+        ],
+        "tools": [
+          {
+            "name": "playwright_list_approved_tools",
+            "description": "List tool names and input schemas explicitly approved for your upstream connection.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {},
+              "type": "object"
+            }
+          },
+          {
+            "name": "playwright_call_approved_tool",
+            "description": "Call one approved tool on your own upstream MCP service. Effects depend on that tool and may include writes or execution.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "tool_name": {
+                  "type": "string"
+                },
+                "arguments": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              },
+              "required": [
+                "tool_name",
+                "arguments"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "Puppeteer",
+    "categories": [
+      "automation",
+      "developer_tools"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-puppeteer",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "SecureMCP connector for your own Puppeteer MCP service. Requires a running authenticated HTTPS upstream and an explicit approved tool list. Upstream tools may write or execute; no upstream service is installed by this listing.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data",
+        "call_tool",
+        "write_resource"
+      ],
+      "requires_consent": true,
+      "idempotent": false,
+      "data_flows": [
+        {
+          "source": "Puppeteer",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "puppeteer:*",
+          "access_type": "read",
+          "classification": "restricted"
+        },
+        {
+          "resource_pattern": "puppeteer:*",
+          "access_type": "write",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations built using SecureMCP 2.0.",
+        "affiliation": "Independent adapters; upstream trademarks belong to their respective owners."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "puppeteer",
+      "configuration": [
+        "secrets"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "upstream-connector",
+      "upstream_required": true,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "puppeteer_call_approved_tool",
+        "puppeteer_list_approved_tools"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "puppeteer_call_approved_tool",
+          "puppeteer_list_approved_tools"
+        ],
+        "tools": [
+          {
+            "name": "puppeteer_list_approved_tools",
+            "description": "List tool names and input schemas explicitly approved for your upstream connection.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {},
+              "type": "object"
+            }
+          },
+          {
+            "name": "puppeteer_call_approved_tool",
+            "description": "Call one approved tool on your own upstream MCP service. Effects depend on that tool and may include writes or execution.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "tool_name": {
+                  "type": "string"
+                },
+                "arguments": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              },
+              "required": [
+                "tool_name",
+                "arguments"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "Redis",
+    "categories": [
+      "database"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-redis",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "SecureMCP connector for your own Redis MCP service. Requires a running authenticated HTTPS upstream and an explicit approved tool list. Upstream tools may write or execute; no upstream service is installed by this listing.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data",
+        "call_tool",
+        "write_resource"
+      ],
+      "requires_consent": true,
+      "idempotent": false,
+      "data_flows": [
+        {
+          "source": "Redis",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "redis:*",
+          "access_type": "read",
+          "classification": "restricted"
+        },
+        {
+          "resource_pattern": "redis:*",
+          "access_type": "write",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations built using SecureMCP 2.0.",
+        "affiliation": "Independent adapters; upstream trademarks belong to their respective owners."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "redis",
+      "configuration": [
+        "secrets"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "upstream-connector",
+      "upstream_required": true,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "redis_call_approved_tool",
+        "redis_list_approved_tools"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "redis_call_approved_tool",
+          "redis_list_approved_tools"
+        ],
+        "tools": [
+          {
+            "name": "redis_list_approved_tools",
+            "description": "List tool names and input schemas explicitly approved for your upstream connection.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {},
+              "type": "object"
+            }
+          },
+          {
+            "name": "redis_call_approved_tool",
+            "description": "Call one approved tool on your own upstream MCP service. Effects depend on that tool and may include writes or execution.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "tool_name": {
+                  "type": "string"
+                },
+                "arguments": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              },
+              "required": [
+                "tool_name",
+                "arguments"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "Sequential Thinking (Reference)",
+    "categories": [
+      "ai_ml"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-sequential-thinking",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "Registry-hosted Sequential Thinking (Reference) with encrypted state scoped to your connection. Use an assigned active profile; state persists until the connection is removed.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data",
+        "call_tool",
+        "write_resource"
+      ],
+      "requires_consent": true,
+      "idempotent": false,
+      "data_flows": [
+        {
+          "source": "Sequential Thinking (Reference)",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "sequential-thinking:*",
+          "access_type": "read",
+          "classification": "restricted"
+        },
+        {
+          "resource_pattern": "sequential-thinking:*",
+          "access_type": "write",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations built using SecureMCP 2.0.",
+        "affiliation": "Independent adapters; upstream trademarks belong to their respective owners."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "sequential-thinking",
+      "configuration": [],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "native",
+      "upstream_required": false,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "sequential_thinking"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "sequential_thinking"
+        ],
+        "tools": [
+          {
+            "name": "sequential_thinking",
+            "description": "Record a numbered reasoning step. This stores caller-provided thoughts; it does not invoke another model.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "thought": {
+                  "type": "string"
+                },
+                "thought_number": {
+                  "type": "integer"
+                },
+                "total_thoughts": {
+                  "type": "integer"
+                },
+                "next_thought_needed": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "thought",
+                "thought_number",
+                "total_thoughts",
+                "next_thought_needed"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "Slack",
+    "categories": [
+      "communication",
+      "collaboration"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-slack",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "Registry-hosted read-only Slack tools using your selected connection. Provider credentials, permissions or account authorization may be required.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data"
+      ],
+      "requires_consent": true,
+      "idempotent": true,
+      "data_flows": [
+        {
+          "source": "Slack",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "slack:*",
+          "access_type": "read",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations with Google Workspace, built using SecureMCP 2.0.",
+        "affiliation": "Independent integrations; not published or endorsed by Google."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "slack",
+      "configuration": [
+        "secrets"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "native",
+      "upstream_required": false,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "slack_channel_history",
+        "slack_list_channels"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "slack_channel_history",
+          "slack_list_channels"
+        ],
+        "tools": [
+          {
+            "name": "slack_list_channels",
+            "description": "List conversations available to your Slack bot; requires conversations read scopes.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "limit": {
+                  "default": 20,
+                  "type": "integer"
+                },
+                "cursor": {
+                  "default": "",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            }
+          },
+          {
+            "name": "slack_channel_history",
+            "description": "Read messages visible to your Slack bot; requires the channel's history scope.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "channel_id": {
+                  "type": "string"
+                },
+                "limit": {
+                  "default": 15,
+                  "type": "integer"
+                },
+                "cursor": {
+                  "default": "",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "channel_id"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "Slack (Reference)",
+    "categories": [
+      "communication",
+      "collaboration"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-slack-archived",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "Registry-hosted read-only Slack (Reference) tools using your selected connection. Provider credentials, permissions or account authorization may be required.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data",
+        "call_tool"
+      ],
+      "requires_consent": true,
+      "idempotent": false,
+      "data_flows": [
+        {
+          "source": "Slack (Reference)",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "slack-archived:*",
+          "access_type": "read",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations built using SecureMCP 2.0.",
+        "affiliation": "Independent adapters; upstream trademarks belong to their respective owners."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "slack-archived",
+      "configuration": [
+        "secrets"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "native",
+      "upstream_required": false,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "slack_reference_channel_history",
+        "slack_reference_list_channels"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "slack_reference_channel_history",
+          "slack_reference_list_channels"
+        ],
+        "tools": [
+          {
+            "name": "slack_reference_list_channels",
+            "description": "List conversations available to your Slack bot; requires conversations read scopes.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "limit": {
+                  "default": 20,
+                  "type": "integer"
+                },
+                "cursor": {
+                  "default": "",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            }
+          },
+          {
+            "name": "slack_reference_channel_history",
+            "description": "Read messages visible to your Slack bot; requires the channel's history scope.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "channel_id": {
+                  "type": "string"
+                },
+                "limit": {
+                  "default": 15,
+                  "type": "integer"
+                },
+                "cursor": {
+                  "default": "",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "channel_id"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "SonarQube",
+    "categories": [
+      "security",
+      "developer_tools"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-sonarqube",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "Registry-hosted read-only SonarQube tools using your selected connection. Provider credentials, permissions or account authorization may be required.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data",
+        "call_tool"
+      ],
+      "requires_consent": true,
+      "idempotent": false,
+      "data_flows": [
+        {
+          "source": "SonarQube",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "sonarqube:*",
+          "access_type": "read",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations built using SecureMCP 2.0.",
+        "affiliation": "Independent adapters; upstream trademarks belong to their respective owners."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "sonarqube",
+      "configuration": [
+        "secrets"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "native",
+      "upstream_required": false,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "sonarqube_search_issues"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "sonarqube_search_issues"
+        ],
+        "tools": [
+          {
+            "name": "sonarqube_search_issues",
+            "description": "Read issues from an accessible SonarQube project.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "project": {
+                  "type": "string"
+                },
+                "limit": {
+                  "default": 20,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "project"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "Stripe",
+    "categories": [
+      "payments",
+      "finance"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-stripe",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "Registry-hosted read-only Stripe tools using your selected connection. Provider credentials, permissions or account authorization may be required.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data"
+      ],
+      "requires_consent": true,
+      "idempotent": true,
+      "data_flows": [
+        {
+          "source": "Stripe",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "stripe:*",
+          "access_type": "read",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations built using SecureMCP 2.0.",
+        "affiliation": "Independent integrations; not endorsed by the upstream providers."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "stripe",
+      "configuration": [
+        "secrets"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "native",
+      "upstream_required": false,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "stripe_get_balance",
+        "stripe_list_invoices",
+        "stripe_list_payment_intents"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "stripe_get_balance",
+          "stripe_list_invoices",
+          "stripe_list_payment_intents"
+        ],
+        "tools": [
+          {
+            "name": "stripe_get_balance",
+            "description": "Read the balance for your Stripe account.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {},
+              "type": "object"
+            }
+          },
+          {
+            "name": "stripe_list_invoices",
+            "description": "Read invoice summaries; requires invoice read permission.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "limit": {
+                  "default": 20,
+                  "type": "integer"
+                },
+                "starting_after": {
+                  "default": "",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            }
+          },
+          {
+            "name": "stripe_list_payment_intents",
+            "description": "Read payment summaries; never returns client secrets.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "limit": {
+                  "default": 20,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "Time (Reference)",
+    "categories": [
+      "utility"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-time",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "Registry-hosted read-only Time (Reference) tools using your selected connection. Provider credentials, permissions or account authorization may be required.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data",
+        "call_tool"
+      ],
+      "requires_consent": true,
+      "idempotent": false,
+      "data_flows": [
+        {
+          "source": "Time (Reference)",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "time:*",
+          "access_type": "read",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations built using SecureMCP 2.0.",
+        "affiliation": "Independent adapters; upstream trademarks belong to their respective owners."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "time",
+      "configuration": [],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "native",
+      "upstream_required": false,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "time_convert",
+        "time_current"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "time_convert",
+          "time_current"
+        ],
+        "tools": [
+          {
+            "name": "time_current",
+            "description": "Return the current time in an IANA timezone, for example Asia/Kolkata.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "timezone": {
+                  "default": "UTC",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            }
+          },
+          {
+            "name": "time_convert",
+            "description": "Convert an ISO timestamp containing its UTC offset into an IANA timezone.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "timestamp": {
+                  "type": "string"
+                },
+                "timezone": {
+                  "default": "UTC",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "timestamp"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "Wikipedia",
+    "categories": [
+      "research",
+      "knowledge_management"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-wikipedia",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "Registry-hosted read-only Wikipedia tools using your selected connection. Provider credentials, permissions or account authorization may be required.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data",
+        "call_tool"
+      ],
+      "requires_consent": true,
+      "idempotent": false,
+      "data_flows": [
+        {
+          "source": "Wikipedia",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "wikipedia:*",
+          "access_type": "read",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations built using SecureMCP 2.0.",
+        "affiliation": "Independent adapters; upstream trademarks belong to their respective owners."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "wikipedia",
+      "configuration": [],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "native",
+      "upstream_required": false,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "wikipedia_search"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "wikipedia_search"
+        ],
+        "tools": [
+          {
+            "name": "wikipedia_search",
+            "description": "Search English Wikipedia article summaries.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "query": {
+                  "type": "string"
+                },
+                "limit": {
+                  "default": 5,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "query"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    },
+    "requested_level": "basic"
+  },
+  {
+    "display_name": "YouTube Transcripts",
+    "categories": [
+      "media",
+      "content_management"
+    ],
+    "manifest": {
+      "tool_name": "purecipher-youtube-transcripts",
+      "version": "0.3.0",
+      "author": "purecipher",
+      "description": "SecureMCP connector for your own YouTube Transcripts MCP service. Requires a running authenticated HTTPS upstream and an explicit approved tool list. Upstream tools may write or execute; no upstream service is installed by this listing.",
+      "permissions": [
+        "read_resource",
+        "network_access",
+        "sensitive_data",
+        "call_tool",
+        "write_resource"
+      ],
+      "requires_consent": true,
+      "idempotent": false,
+      "data_flows": [
+        {
+          "source": "YouTube Transcripts",
+          "destination": "authenticated MCP client",
+          "classification": "restricted",
+          "description": "Authorized read results may contain sensitive business or personal data."
+        }
+      ],
+      "resource_access": [
+        {
+          "resource_pattern": "youtube-transcripts:*",
+          "access_type": "read",
+          "classification": "restricted"
+        },
+        {
+          "resource_pattern": "youtube-transcripts:*",
+          "access_type": "write",
+          "classification": "restricted"
+        }
+      ]
+    },
+    "metadata": {
+      "publisher_profile": {
+        "publisher_id": "purecipher",
+        "display_name": "PureCipher",
+        "homepage_url": "https://purecipher.com",
+        "description": "PureCipher integrations built using SecureMCP 2.0.",
+        "affiliation": "Independent adapters; upstream trademarks belong to their respective owners."
+      },
+      "security_framework": "SecureMCP 2.0",
+      "icon_key": "youtube-transcripts",
+      "configuration": [
+        "secrets"
+      ],
+      "transport": "streamable-http",
+      "server_type": "remote",
+      "endpoint": "https://registry.purecipher.com/mcp",
+      "connection_instructions": "Create your own connection and select it in an active profile. Use that profile endpoint with an assigned client token.",
+      "deployment_ready": true,
+      "live_tested": false,
+      "readiness": "authorization_pending",
+      "runtime": "consumer-profile-v2",
+      "runtime_kind": "upstream-connector",
+      "upstream_required": true,
+      "bundle_sha256": {
+        "consumer_aws.py": "b48f0d23093b31bb8b327fd88b533777e9997c291341dc561b6f98f8370e1be1",
+        "consumer_bridge.py": "dbeda08ed692224a12e67cb0f5cfd1d7c6911be2254e2d1f5a3a891b7323dd35",
+        "consumer_cloud.py": "70a7c0fd9084a2861de13620fdd65c061c8bfbf9b8a3cac40ea1a6578be174b4",
+        "consumer_governance.py": "b1689ec86825ca12eaaf1e95590a97cbec8a46d581debdd0b7772ed3c85b9fea",
+        "consumer_oauth.py": "40112748ccd9bb4c3348d13d7096c8c0901c671790f86782122c636f30f0ab94",
+        "consumer_runtime.py": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+        "consumer_utilities.py": "bad2d146e3b16337888a75e6f8760eb24d31140a5d52222868492a92f9dcca87"
+      },
+      "source_file": "src/purecipher/consumer_runtime.py",
+      "source_sha256": "ce71ad0f2f47909b7f99916f3cb5ec4e34334ec092047fe30b127b6b10df6d8a",
+      "tools": [
+        "youtube_transcripts_call_approved_tool",
+        "youtube_transcripts_list_approved_tools"
+      ],
+      "introspection": {
+        "source": "registered-runtime-descriptors",
+        "tool_names": [
+          "youtube_transcripts_call_approved_tool",
+          "youtube_transcripts_list_approved_tools"
+        ],
+        "tools": [
+          {
+            "name": "youtube_transcripts_list_approved_tools",
+            "description": "List tool names and input schemas explicitly approved for your upstream connection.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {},
+              "type": "object"
+            }
+          },
+          {
+            "name": "youtube_transcripts_call_approved_tool",
+            "description": "Call one approved tool on your own upstream MCP service. Effects depend on that tool and may include writes or execution.",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "tool_name": {
+                  "type": "string"
+                },
+                "arguments": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              },
+              "required": [
+                "tool_name",
+                "arguments"
               ],
               "type": "object"
             }

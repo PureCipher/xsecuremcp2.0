@@ -49,6 +49,7 @@ def view(registry, item):
         for f in schema["fields"]
         if f["required"] and not values.get(f["key"])
     ]
+    from purecipher.consumer_bridge import approved_tools
     from purecipher.consumer_oauth import configured
     from purecipher.consumer_runtime import GOOGLE, runtime_ready
 
@@ -60,7 +61,11 @@ def view(registry, item):
         "name": item["name"],
         "revision": item["revision"],
         "updated_at": item["updated_at"],
-        "values": {k: v for k, v in values.items() if k not in secrets},
+        "values": {
+            k: v
+            for k, v in values.items()
+            if k not in secrets and k in {f["key"] for f in schema["fields"]}
+        },
         "secret_fields": [k for k in secrets if values.get(k)],
         "missing": missing,
         "status": "connected"
@@ -70,10 +75,11 @@ def view(registry, item):
         else "settings_incomplete"
         if missing
         else "settings_saved",
+        "upstream_tools": list(approved_tools(registry, item).values()),
         "runtime_ready": ready,
         "runtime_supported": supported,
         "can_authorize": supported and item["product"] in GOOGLE and configured(),
-        "can_verify": supported and item["product"] == "brave-search",
+        "can_verify": supported and item["product"] not in GOOGLE,
     }
 
 
@@ -122,7 +128,14 @@ def mount_product_connections(registry, prefix):
             if request.method == "GET":
                 return JSONResponse(
                     {
-                        "products": list(PRODUCT_SCHEMAS.values()),
+                        "products": [
+                            {
+                                **schema,
+                                "runtime_supported": key
+                                in getattr(registry, "_consumer_products", set()),
+                            }
+                            for key, schema in PRODUCT_SCHEMAS.items()
+                        ],
                         "connections": [
                             view(registry, x)
                             for x in registry._workspace.list(
@@ -251,7 +264,8 @@ def connection_blocker(registry, owner, selected):
         if listing and listing.author == "purecipher":
             spec = PRODUCT_SCHEMAS.get(listing.tool_name.removeprefix("purecipher-"))
             if spec and (
-                spec["kind"] == "oauth"
+                spec["id"] in getattr(registry, "_consumer_products", set())
+                or spec["kind"] == "oauth"
                 or any(f["type"] == "secret" for f in spec["fields"])
             ):
                 return "Select your own product connection; publisher credentials are not shared"
