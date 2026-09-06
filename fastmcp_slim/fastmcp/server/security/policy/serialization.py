@@ -43,6 +43,7 @@ from fastmcp.server.security.policy.policies.resource_scoped import (
     ResourceScopedPolicy,
 )
 from fastmcp.server.security.policy.policies.soc2_request import Soc2RequestPolicy
+from fastmcp.server.security.policy.policies.strict_change import StrictChangePolicy
 from fastmcp.server.security.policy.policies.temporal import TimeBasedPolicy
 from fastmcp.server.security.policy.policies.zero_trust import ZeroTrustPolicy
 from fastmcp.server.security.policy.provider import (
@@ -288,6 +289,8 @@ def policy_provider_to_config(provider: PolicyProvider) -> dict[str, Any]:
             if isinstance(provider, HipaaRequestPolicy)
             else "published_tools"
             if isinstance(provider, PublishedToolsPolicy)
+            else "strict_change"
+            if isinstance(provider, StrictChangePolicy)
             else "zero_trust",
             "policy_id": provider.policy_id,
             "version": provider.version,

@@ -17,6 +17,6 @@ In the console: Policy Kernel → Policy packs → View details → Show raw pro
 
 Catalog definitions are in `fastmcp_slim/fastmcp/server/security/policy/workbench.py`. Builder/validation wiring is in `declarative.py`, and configuration persistence is in `serialization.py` in the same directory. Trusted runtime callbacks are in `fastmcp_slim/fastmcp/server/security/middleware/policy_enforcement.py`.
 
-The local Balanced Registry Guardrails v2 update reuses `zero_trust.py`; it does not need a duplicate evaluator. Its JSON differs from the production catalog until released.
+Balanced Registry Guardrails v2 is deployed in release `5846ba89b` and reuses `zero_trust.py`. Strict Change Control v2 is prepared locally in `policies/strict_change.py`; it is not yet deployed.
 
 Evidence adapters must consult authoritative systems and enforce their attested scope. Selecting a provider and viewing its configuration does not prove that an adapter is configured or that a pack is active.

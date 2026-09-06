@@ -658,6 +658,7 @@ class TestSchema:
             "gdpr_request",
             "hipaa_request",
             "published_tools",
+            "strict_change",
         }
         assert set(types.keys()) == expected
 

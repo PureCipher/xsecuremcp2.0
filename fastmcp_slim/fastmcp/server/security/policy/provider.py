@@ -113,6 +113,7 @@ class PolicyEvaluationContext:
     gdpr_evidence: Any = None
     hipaa_evidence: Any = None
     published_tool_evidence: Any = None
+    change_evidence: Any = None
 
 
 @dataclass(frozen=True)

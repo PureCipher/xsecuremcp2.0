@@ -423,42 +423,25 @@ _BUNDLES: tuple[PolicyBundle, ...] = (
     PolicyBundle(
         bundle_id="registry-strict-change-control",
         title="Strict Change Control",
-        summary="Production-minded controls for reviewer-owned policy and listing changes.",
-        description=(
-            "Builds on the balanced bundle and adds business-hours control for "
-            "sensitive review and policy actions."
-        ),
+        summary="Require exact grants and current independent authorization for changes.",
+        description="Reads use exact access grants and trusted operation evidence. Mutating tools and registry change actions additionally require an independent authorized approver, exact request binding, current approval and an open execution window. Approval workflows remain external.",
         risk_posture="strict",
         recommended_environments=("staging", "production"),
         tags=("registry", "strict", "production"),
+        pack_version="2.0.0",
+        regulation_reference="PureCipher strict change-admission policy v2.0.0 (product policy)",
+        source_reviewed_at="2026-09-06",
+        source_urls=("https://github.com/PureCipher/xsecuremcp2.0",),
+        coverage_note="Requires a trusted change-evidence resolver and exact grants. Does not create approvals or execute changes. External systems enforce approval identity, revocation and any single-use semantics. Empty grants/issuer/scope deny; active policy chains are not automatically migrated.",
         providers=(
             {
-                "type": "allowlist",
-                "policy_id": "registry-strict-allowlist",
-                "version": "1.0.0",
-                "allowed": [
-                    "tool:*",
-                    "registry:submit",
-                    "registry:review",
-                    "registry:policy",
-                ],
-            },
-            {
-                "type": "rbac",
-                "policy_id": "registry-strict-rbac",
-                "version": "1.0.0",
-                "role_mappings": {
-                    "publisher": ["submit_listing"],
-                    "reviewer": ["review_listing", "manage_policy"],
-                    "admin": ["*"],
-                },
-                "default_decision": "deny",
-            },
-            {
-                "type": "denylist",
-                "policy_id": "registry-strict-denylist",
-                "version": "1.0.0",
-                "denied": ["admin-panel"],
+                "type": "strict_change",
+                "policy_id": "strict-change-control",
+                "version": "2.0.0",
+                "grants": [],
+                "trusted_issuers": [],
+                "scope_id": "",
+                "max_evidence_age_seconds": 60,
             },
             {
                 "type": "rate_limit",
@@ -466,15 +449,6 @@ _BUNDLES: tuple[PolicyBundle, ...] = (
                 "version": "1.0.0",
                 "max_requests": 120,
                 "window_seconds": 1800,
-            },
-            {
-                "type": "time_based",
-                "policy_id": "registry-strict-business-hours",
-                "version": "1.0.0",
-                "allowed_days": [0, 1, 2, 3, 4],
-                "start_hour": 8,
-                "end_hour": 19,
-                "utc_offset_hours": 0,
             },
         ),
     ),

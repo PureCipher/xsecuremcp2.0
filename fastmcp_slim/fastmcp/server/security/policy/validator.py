@@ -135,6 +135,7 @@ _VALID_POLICY_TYPES = {
     "gdpr_request",
     "hipaa_request",
     "published_tools",
+    "strict_change",
 }
 
 _VALID_COMPOSITIONS = {

@@ -84,6 +84,7 @@ from fastmcp.server.security.policy.policies.resource_scoped import (
     ResourceScopedPolicy,
 )
 from fastmcp.server.security.policy.policies.soc2_request import Soc2RequestPolicy
+from fastmcp.server.security.policy.policies.strict_change import StrictChangePolicy
 from fastmcp.server.security.policy.policies.temporal import TimeBasedPolicy
 from fastmcp.server.security.policy.policies.zero_trust import (
     ZeroTrustGrant,
@@ -390,6 +391,13 @@ def _build_published_tools(config: dict[str, Any]) -> PublishedToolsPolicy:
     return PublishedToolsPolicy(**vars(base))
 
 
+def _build_strict_change(config: dict[str, Any]) -> StrictChangePolicy:
+    base = _build_zero_trust(
+        {**config, "policy_id": config.get("policy_id", "strict-change-control")}
+    )
+    return StrictChangePolicy(**vars(base))
+
+
 def _register_builtins() -> None:
     """Register all built-in policy types with the global registry."""
     builtins = [
@@ -568,6 +576,36 @@ def _register_builtins() -> None:
             },
             starter_config={
                 "type": "published_tools",
+                "grants": [],
+                "trusted_issuers": [],
+                "scope_id": "",
+            },
+        ),
+        PolicyTypeDescriptor(
+            type_key="strict_change",
+            factory=_build_strict_change,
+            display_name="Strict Change Control",
+            category="access_control",
+            description="Exact access plus externally verified change authorization.",
+            field_specs={
+                "grants": {
+                    "label": "Exact grants",
+                    "type": "json_list",
+                    "required": True,
+                },
+                "trusted_issuers": {
+                    "label": "Trusted issuers",
+                    "type": "string_list",
+                    "required": True,
+                },
+                "scope_id": {
+                    "label": "Server and tenant scope",
+                    "type": "string",
+                    "required": True,
+                },
+            },
+            starter_config={
+                "type": "strict_change",
                 "grants": [],
                 "trusted_issuers": [],
                 "scope_id": "",

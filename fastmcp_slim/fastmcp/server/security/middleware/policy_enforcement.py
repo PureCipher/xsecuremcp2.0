@@ -37,6 +37,7 @@ from fastmcp.server.security.policy.policies.published_tools import (
     PublishedToolEvidence,
 )
 from fastmcp.server.security.policy.policies.soc2_request import Soc2Evidence
+from fastmcp.server.security.policy.policies.strict_change import ChangeEvidence
 from fastmcp.server.security.policy.policies.zero_trust import ZeroTrustEvidence
 from fastmcp.server.security.policy.provider import (
     PolicyEvaluationContext,
@@ -73,6 +74,10 @@ class PolicyEnforcementMiddleware(Middleware):
         policy_engine: PolicyEngine,
         *,
         bypass_stdio: bool = False,
+        change_evidence_resolver: Callable[
+            [PolicyEvaluationContext], Awaitable[ChangeEvidence | None]
+        ]
+        | None = None,
         published_tool_evidence_resolver: Callable[
             [PolicyEvaluationContext], Awaitable[PublishedToolEvidence | None]
         ]
@@ -116,6 +121,7 @@ class PolicyEnforcementMiddleware(Middleware):
         self.gdpr_evidence_resolver = gdpr_evidence_resolver
         self.hipaa_evidence_resolver = hipaa_evidence_resolver
         self.published_tool_evidence_resolver = published_tool_evidence_resolver
+        self.change_evidence_resolver = change_evidence_resolver
 
     async def _evaluate(self, context: PolicyEvaluationContext) -> PolicyResult:
         if self.ferpa_evidence_resolver is not None and not context.action.startswith(
@@ -206,6 +212,17 @@ class PolicyEnforcementMiddleware(Middleware):
             context = replace(
                 context,
                 published_tool_evidence=published_evidence,
+                timestamp=datetime.now(timezone.utc),
+            )
+        if self.change_evidence_resolver is not None:
+            try:
+                change_evidence = await self.change_evidence_resolver(context)
+            except Exception:
+                logger.warning("Change evidence resolution failed; denying request")
+                return _deny_result("Change evidence is unavailable")
+            context = replace(
+                context,
+                change_evidence=change_evidence,
                 timestamp=datetime.now(timezone.utc),
             )
         return await self.policy_engine.evaluate(context)
