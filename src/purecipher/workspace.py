@@ -190,6 +190,10 @@ def allowed_profile_tools(registry, profile_id, client):
 
 
 def mount_workspace(registry, prefix):
+    from purecipher.publisher_drafts import mount_publisher_drafts
+
+    mount_publisher_drafts(registry, prefix)
+
     def owned(request, key):
         session = registry._session_from_request(request)
         item = registry._workspace.get(key)
