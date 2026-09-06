@@ -1,71 +1,82 @@
-# PureCipher Google Workspace — SecureMCP 2.0 rollout
+# PureCipher Google Workspace — SecureMCP 2.0 preparation
 
-Status: iteration 1, Gmail preparation. Not published, certified, or live-Google-tested.
+Four read-only source packages and draft listings have been uploaded to production.
+They are not certified, publicly published, running Google endpoints, or live-Google-tested.
 
-## Publisher
+## Publisher and production drafts
 
-Local registry account: `purecipher`, display name `PureCipher`, role `publisher`.
-Generated local credentials are stored outside this package in xregistry's ignored
-`secrets/purecipher-publisher.local.json`, with owner-only permissions. The registry
-currently stores accounts and listings in memory. Restore or persist them before
-another restart. Public publisher profiles are derived from published listings:
-the profile will appear after the first approved listing with author `PureCipher`.
+Production account: `purecipher`, display name `PureCipher`, role `publisher`.
+Listing ownership uses the exact account username `purecipher`. The supplied
+`publisher-profile.json` contains the PureCipher name, website and description;
+it is also included in each draft's metadata. No account credentials are packaged.
 
-## Gmail implementation
+The production registry persists accounts and listings in PostgreSQL. All four
+drafts were read back after a registry restart, verified in `/api/me/listings`
+under the publisher account, and their authenticated detail pages returned 200:
 
-`gmail_server.py` constructs `securemcp.SecureMCP`, not a bare FastMCP server.
+- `purecipher-google-gmail`
+- `purecipher-google-docs`
+- `purecipher-google-tasks`
+- `purecipher-google-calendar`
 
-- GoogleProvider OAuth; `gmail.readonly`, OpenID and email identity scopes.
-- Per-request upstream Google token; no shared publisher mailbox credentials.
-- Fail-closed Policy Kernel: only the three declared read tools may execute.
-- Local Consent Graph requires an explicit grant before execution.
-- Provenance recording and Reflexive pre-execution gating enabled.
-- No public security-admin API, send-email, delete, or modification tools.
-- Tools: `gmail_profile`, `gmail_list_messages`, `gmail_get_message`.
+Production source bundle location:
+`/home/vamsi/services/purecipher/uploads/google-workspace-alpha1`.
+A database backup was taken before importing the drafts. The operator-only
+`import_production_drafts.py` imports through the marketplace persistence API,
+checks source hashes, refuses non-draft overwrites, and issues no attestations.
+The running registry must reload after this offline import to see new records.
 
-The first release is read-only. Future write actions need an explicit product
-scope, OAuth scopes and approval behavior, and their own negative tests.
+Public publisher pages include active registered publisher accounts, even before
+their first published listing. PureCipher appears with zero published tools;
+the four drafts remain visible only in authenticated listing views.
 
-### Start after OAuth setup
+## Implemented read tools
 
-Create a Google OAuth Web application; enable Gmail API. Configure callback
-`http://127.0.0.1:9101/auth/callback` for this local setup. Set (without committing):
+| Server | Tools | Google scope | Preparation port |
+| --- | --- | --- | --- |
+| Gmail | Profile, list messages, get message | `gmail.readonly` | 9101 |
+| Docs | Get document by ID, including all tabs | `documents.readonly` | 9102 |
+| Tasks | List task lists, list tasks | `tasks.readonly` | 9103 |
+| Calendar | List calendars, list events | `calendar.readonly` | 9104 |
 
-- `PURECIPHER_GOOGLE_CLIENT_ID`
-- `PURECIPHER_GOOGLE_CLIENT_SECRET`
-- optional `PURECIPHER_GMAIL_BASE_URL` (defaults to `http://127.0.0.1:9101`)
+All four construct `securemcp.SecureMCP` with GoogleProvider OAuth, per-request
+upstream tokens, fail-closed tool policies, a Consent Graph, provenance recording,
+Reflexive controls and pre-execution gating. Public security administration is
+disabled. There are no send, edit, create or delete tools.
 
-From the xsecuremcp2.0 repository:
+57 preparation tests passed: tool discovery, read-only annotations, unauthorized
+HTTP rejection, missing-scope denial, unconsented call rejection, allowlist policy,
+Google request mocking, resource ID validation, pagination and tool request mapping.
+These tests do not establish successful authorized end-to-end Google operation.
 
-```
-.venv/bin/python examples/securemcp/google_workspace/gmail_server.py
-```
+## Remaining deployment gates
 
-MCP endpoint: `http://127.0.0.1:9101/mcp`. Missing OAuth credentials stop startup.
-Google login alone does not bypass SecureMCP consent. Before live tests, provision
-consent for the authenticated principal via a controlled administrator flow;
-never auto-grant every Google user. Durable consent/provenance/OAuth storage and
-reviewed grant management remain prerequisites for deployment. The initial
-preparation uses the repository's in-memory security defaults.
+Google authorization is deferred at the user's request. Before enabling endpoints:
 
-## Iterations and acceptance gates
+1. Configure the Google OAuth web application and enable the relevant Google APIs.
+2. Wire durable consent, provenance and OAuth storage; the current server examples
+   use in-memory security defaults.
+3. Provide a controlled administrator enrollment flow for consent grants to the
+   actual authenticated principal. Google login alone must not grant execution.
+4. Configure production routing, base URLs and exact OAuth callback URLs.
+5. Test authorized reads, token renewal, isolation between users, persistence,
+   consent rejection and revocation through the registry connection path.
+6. Complete registry preflight, certification and publication review.
 
-1. **Preparation (current):** publisher account, Gmail implementation, mocked
-   Google API tests, unauthenticated and unconsented execution rejection.
-2. **Gmail integration:** durable storage, controlled consent enrollment, OAuth
-   authorization (when requested), real read test, registry preflight, certification,
-   moderation, and public listing/connection verification. Verify per-user OAuth
-   through the registry connection path before publishing a callable endpoint.
-3. **Google Docs:** read document by ID and Drive-based document discovery;
-   precise scopes and the same SecureMCP negative tests.
-4. **Google Tasks:** task lists and task reads; separate server and scope.
-5. **Google Calendar:** calendar and event reads; separate server and scope.
-6. **Additional Google services/write operations:** separately scoped iterations.
+For development only, set `PURECIPHER_GOOGLE_CLIENT_ID` and
+`PURECIPHER_GOOGLE_CLIENT_SECRET`, plus `PURECIPHER_<SERVICE>_BASE_URL` if needed
+(where SERVICE is GMAIL, DOCS, TASKS or CALENDAR), then run the respective
+`<service>_server.py`. Missing credentials stop startup. The default bind address
+is loopback; default callbacks use `http://127.0.0.1:<port>/auth/callback`.
 
-A listing is not evidence of a working or certified integration. Publish only
-when its authentication, consent, security tests, and real provider tests pass.
-Use author `PureCipher`; describe these as PureCipher integrations with Google,
-not Google-published or Google-endorsed servers.
+No production endpoint is advertised in the draft manifests. Source hashes pin
+the uploaded preparation files. Further source changes require regenerated hashes.
+These are PureCipher integrations with Google, not Google-published or endorsed servers.
 
-Official OAuth setup: https://developers.google.com/workspace/guides/create-credentials
-Gmail scopes: https://developers.google.com/workspace/gmail/api/auth/scopes
+## Official references
+
+- https://developers.google.com/workspace/guides/create-credentials
+- https://developers.google.com/workspace/gmail/api/auth/scopes
+- https://developers.google.com/workspace/docs/api/reference/rest/v1/documents/get
+- https://developers.google.com/workspace/tasks/reference/rest/v1/tasks/list
+- https://developers.google.com/workspace/calendar/api/v3/reference/events/list

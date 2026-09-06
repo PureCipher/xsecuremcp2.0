@@ -3662,13 +3662,23 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         detail["last_call_at"] = last_at.isoformat() if last_at is not None else None
         return detail
 
+    def _registered_publisher_names(self) -> dict[str, str]:
+        """Public identities for active publisher accounts, without account details."""
+        return {
+            account["username"]: account["display_name"]
+            for account in self._account_security.list_accounts()
+            if account.get("role") == RegistryRole.PUBLISHER.value
+            and account.get("active") is True
+        }
+
     def list_publishers(self, *, limit: int = 200) -> dict[str, Any]:
-        """Return public publisher summaries for published listings."""
+        """Return registered publishers with published-listing metrics."""
 
         profiles = list_public_publishers(
             self._marketplace(),
             trust_lookup=self._trust_overall,
             listing_serializer=self._serialize_listing_detail,
+            registered_publishers=self._registered_publisher_names(),
             limit=limit,
         )
         return {
@@ -3685,6 +3695,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             publisher_id=publisher_id,
             trust_lookup=self._trust_overall,
             listing_serializer=self._serialize_listing_detail,
+            registered_publishers=self._registered_publisher_names(),
         )
         if profile is None:
             return {

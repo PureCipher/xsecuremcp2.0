@@ -1,0 +1,65 @@
+{
+  "manifest": {
+    "tool_name": "purecipher-google-docs",
+    "version": "0.1.0-alpha.1",
+    "author": "purecipher",
+    "description": "PureCipher Google Docs read-only SecureMCP 2.0 integration. Preparation draft: Google OAuth, durable security storage, controlled consent enrollment, certification and live validation are pending. No callable production endpoint yet.",
+    "permissions": [
+      "read_resource",
+      "network_access",
+      "sensitive_data",
+      "environment_read"
+    ],
+    "requires_consent": true,
+    "idempotent": true,
+    "data_flows": [
+      {
+        "source": "Google Docs",
+        "destination": "authenticated MCP client",
+        "classification": "restricted",
+        "description": "User-authorized read results; may contain personal and sensitive information."
+      }
+    ],
+    "resource_access": [
+      {
+        "resource_pattern": "google:docs:*",
+        "access_type": "read",
+        "classification": "restricted"
+      }
+    ]
+  },
+  "display_name": "PureCipher Google Docs",
+  "description": "PureCipher Google Docs read-only SecureMCP 2.0 integration. Preparation draft: Google OAuth, durable security storage, controlled consent enrollment, certification and live validation are pending. No callable production endpoint yet.",
+  "homepage_url": "https://purecipher.com",
+  "source_url": "https://github.com/PureCipher/xsecuremcp2.0",
+  "tags": [
+    "google",
+    "securemcp-2.0",
+    "read-only",
+    "authorization-pending"
+  ],
+  "metadata": {
+    "publisher_profile": {
+      "publisher_id": "purecipher",
+      "display_name": "PureCipher",
+      "homepage_url": "https://purecipher.com",
+      "description": "PureCipher integrations with Google Workspace, built using SecureMCP 2.0.",
+      "affiliation": "Independent integrations; not published or endorsed by Google."
+    },
+    "transport": "http",
+    "readiness": "authorization_pending",
+    "live_tested": false,
+    "security_framework": "SecureMCP 2.0",
+    "tools": [
+      "docs_get_document"
+    ],
+    "google_scopes": [
+      "openid",
+      "https://www.googleapis.com/auth/userinfo.email",
+      "https://www.googleapis.com/auth/documents.readonly"
+    ],
+    "source_file": "docs_server.py",
+    "source_sha256": "63a9cbf0d3536d3429a634903b30cc9b19d532fa5dd9e1e75bf19d8cd9605685",
+    "deployment_ready": false
+  }
+}

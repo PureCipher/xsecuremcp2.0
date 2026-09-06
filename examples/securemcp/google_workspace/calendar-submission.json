@@ -1,0 +1,66 @@
+{
+  "manifest": {
+    "tool_name": "purecipher-google-calendar",
+    "version": "0.1.0-alpha.1",
+    "author": "purecipher",
+    "description": "PureCipher Google Calendar read-only SecureMCP 2.0 integration. Preparation draft: Google OAuth, durable security storage, controlled consent enrollment, certification and live validation are pending. No callable production endpoint yet.",
+    "permissions": [
+      "read_resource",
+      "network_access",
+      "sensitive_data",
+      "environment_read"
+    ],
+    "requires_consent": true,
+    "idempotent": true,
+    "data_flows": [
+      {
+        "source": "Google Calendar",
+        "destination": "authenticated MCP client",
+        "classification": "restricted",
+        "description": "User-authorized read results; may contain personal and sensitive information."
+      }
+    ],
+    "resource_access": [
+      {
+        "resource_pattern": "google:calendar:*",
+        "access_type": "read",
+        "classification": "restricted"
+      }
+    ]
+  },
+  "display_name": "PureCipher Google Calendar",
+  "description": "PureCipher Google Calendar read-only SecureMCP 2.0 integration. Preparation draft: Google OAuth, durable security storage, controlled consent enrollment, certification and live validation are pending. No callable production endpoint yet.",
+  "homepage_url": "https://purecipher.com",
+  "source_url": "https://github.com/PureCipher/xsecuremcp2.0",
+  "tags": [
+    "google",
+    "securemcp-2.0",
+    "read-only",
+    "authorization-pending"
+  ],
+  "metadata": {
+    "publisher_profile": {
+      "publisher_id": "purecipher",
+      "display_name": "PureCipher",
+      "homepage_url": "https://purecipher.com",
+      "description": "PureCipher integrations with Google Workspace, built using SecureMCP 2.0.",
+      "affiliation": "Independent integrations; not published or endorsed by Google."
+    },
+    "transport": "http",
+    "readiness": "authorization_pending",
+    "live_tested": false,
+    "security_framework": "SecureMCP 2.0",
+    "tools": [
+      "calendar_list_calendars",
+      "calendar_list_events"
+    ],
+    "google_scopes": [
+      "openid",
+      "https://www.googleapis.com/auth/userinfo.email",
+      "https://www.googleapis.com/auth/calendar.readonly"
+    ],
+    "source_file": "calendar_server.py",
+    "source_sha256": "6028770eb4ae060f57a9926efb4ef0d6e883b4736c8f3647bc0103af687517c5",
+    "deployment_ready": false
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "manifest": {
+    "tool_name": "purecipher-google-gmail",
+    "version": "0.1.0-alpha.1",
+    "author": "purecipher",
+    "description": "PureCipher Gmail read-only SecureMCP 2.0 integration. Preparation draft: Google OAuth, durable security storage, controlled consent enrollment, certification and live validation are pending. No callable production endpoint yet.",
+    "permissions": [
+      "read_resource",
+      "network_access",
+      "sensitive_data",
+      "environment_read"
+    ],
+    "requires_consent": true,
+    "idempotent": true,
+    "data_flows": [
+      {
+        "source": "Gmail",
+        "destination": "authenticated MCP client",
+        "classification": "restricted",
+        "description": "User-authorized read results; may contain personal and sensitive information."
+      }
+    ],
+    "resource_access": [
+      {
+        "resource_pattern": "google:gmail:*",
+        "access_type": "read",
+        "classification": "restricted"
+      }
+    ]
+  },
+  "display_name": "PureCipher Gmail",
+  "description": "PureCipher Gmail read-only SecureMCP 2.0 integration. Preparation draft: Google OAuth, durable security storage, controlled consent enrollment, certification and live validation are pending. No callable production endpoint yet.",
+  "homepage_url": "https://purecipher.com",
+  "source_url": "https://github.com/PureCipher/xsecuremcp2.0",
+  "tags": [
+    "google",
+    "securemcp-2.0",
+    "read-only",
+    "authorization-pending"
+  ],
+  "metadata": {
+    "publisher_profile": {
+      "publisher_id": "purecipher",
+      "display_name": "PureCipher",
+      "homepage_url": "https://purecipher.com",
+      "description": "PureCipher integrations with Google Workspace, built using SecureMCP 2.0.",
+      "affiliation": "Independent integrations; not published or endorsed by Google."
+    },
+    "transport": "http",
+    "readiness": "authorization_pending",
+    "live_tested": false,
+    "security_framework": "SecureMCP 2.0",
+    "tools": [
+      "gmail_profile",
+      "gmail_list_messages",
+      "gmail_get_message"
+    ],
+    "google_scopes": [
+      "openid",
+      "https://www.googleapis.com/auth/userinfo.email",
+      "https://www.googleapis.com/auth/gmail.readonly"
+    ],
+    "source_file": "gmail_server.py",
+    "source_sha256": "6bcee7c1070744d2466c2518bb3296caa7c187d865f3ac24577957cda27e095c",
+    "deployment_ready": false
+  }
+}
