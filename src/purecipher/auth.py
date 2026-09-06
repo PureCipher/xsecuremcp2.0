@@ -17,7 +17,7 @@ import jwt
 class RegistryRole(Enum):
     """RBAC personas for the PureCipher registry HTTP API and UI.
 
-    * **viewer** — Authenticated read-only catalog and discovery (no publish, review, or policy).
+    * **viewer** — Catalog discovery plus private client/profile workspace (no publish, review, or policy).
     * **publisher** — May submit listings and use publisher flows; no moderation or policy writes.
     * **reviewer** — May moderate the queue and manage policy; cannot suspend tools (admin-only).
     * **admin** — Platform superuser for all registry actions including suspend and admin consoles.

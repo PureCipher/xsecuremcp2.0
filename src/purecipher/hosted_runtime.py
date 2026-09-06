@@ -374,6 +374,9 @@ def build_hosted_registry_app(
     routes.append(Mount("/", app=registry_app))
 
     app = Starlette(routes=routes, lifespan=hosted_lifespan)
+    from purecipher.middleware.profile_access import ProfileBoundary
+
+    app.add_middleware(ProfileBoundary, registry=registry, guard_only=True)
     app.state.children = children
     app.state.toolset_router = toolset_router
     app.state.curator_proxy_router = curator_proxy_router

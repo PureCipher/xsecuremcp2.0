@@ -66,6 +66,7 @@ from purecipher.middleware.client_actor import (
 from purecipher.middleware.client_aware_middleware import (
     upgrade_middleware_for_client_actor,
 )
+from purecipher.middleware.profile_access import ProfileBoundary, ProfileToolAccess
 from purecipher.moderation import build_review_queue, moderation_action_from_name
 from purecipher.notification_feed import RegistryNotificationFeed
 from purecipher.openapi_store import (
@@ -93,6 +94,7 @@ from purecipher.ui import (
     create_setup_html,
 )
 from purecipher.user_preferences import RegistryUserPreferenceStore
+from purecipher.workspace import WorkspaceStore, mount_workspace
 from securemcp import SecureMCP
 from securemcp.config import (
     AlertConfig,
@@ -473,6 +475,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         schema_managed_by_migrations = is_postgres_dsn(persistence_path)
         if schema_managed_by_migrations:
             migrate_registry_database(persistence_path)
+        self._workspace = WorkspaceStore(persistence_path)
         self._notification_feed = RegistryNotificationFeed(
             persistence_path,
             ensure_schema=not schema_managed_by_migrations,
@@ -607,8 +610,12 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             upgrade_for_client_actor=False,
         )
 
+        self._add_live_security_middleware(
+            ctx, ProfileToolAccess(self), index=1, upgrade_for_client_actor=False
+        )
         if mount_registry_api:
             self.mount_registry_api(prefix=registry_prefix)
+            mount_workspace(self, registry_prefix)
 
         # Iter 13.5: re-attach OpenAPI proxy tools for any listings
         # that were published in a previous run. Restarts of a
@@ -936,6 +943,12 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
     def revoke_client_token(self, token_id: str) -> RegistryClientToken | None:
         return self._client_store.revoke_token(token_id)
+
+    def http_app(self, *args, **kwargs):
+        path = args[0] if args else kwargs.get("path")
+        app = super().http_app(*args, **kwargs)
+        app.add_middleware(ProfileBoundary, registry=self, mcp_path=path or "/mcp")
+        return app
 
     def authenticate_client_token(
         self, presented_secret: str
@@ -1419,7 +1432,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             "evaluated_at": now.isoformat(),
         }
 
-    def summarize_clients_activity(self) -> dict[str, Any]:
+    def summarize_clients_activity(self, clients=None) -> dict[str, Any]:
         """Iter 14.24 — aggregate activity-status counts across every
         registered client, for the Clients dashboard panel.
 
@@ -1455,7 +1468,8 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         """
         from datetime import datetime, timedelta, timezone
 
-        clients = self._client_store.list_clients(limit=10_000)
+        if clients is None:
+            clients = self._client_store.list_clients(limit=10_000)
         ledger = self._ledger_or_none()
         now = datetime.now(timezone.utc)
         seven_days_ago_ts = (now - timedelta(days=7)).timestamp()
@@ -9783,7 +9797,11 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     },
                     status_code=403,
                 )
-            return JSONResponse(self.summarize_clients_activity())
+            return JSONResponse(
+                self.summarize_clients_activity(
+                    self.list_clients_for_caller(session=session, limit=10000)
+                )
+            )
 
         @self.custom_route(f"{prefix}/clients", methods=["POST"])
         async def registry_clients_create(
@@ -10278,6 +10296,8 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             if isinstance(resolved, JSONResponse):
                 return resolved
             sanitize = not _can_manage_client(session, resolved)
+            if sanitize and self._workspace.get(resolved.client_id):
+                return JSONResponse({"error": "Client not found"}, status_code=404)
             payload = self.get_client_governance(
                 resolved.client_id, sanitize_for_public=sanitize
             )

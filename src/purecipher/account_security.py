@@ -229,20 +229,34 @@ class RegistryAccountSecurityStore:
         password: str,
         role: RegistryRole,
         display_name: str,
+        source: str = "admin",
     ) -> dict[str, Any] | None:
+        """Create once; concurrent registration must never overwrite an account."""
         username = username.strip()
-        display_name = display_name.strip() or username
         if not username or not password or self._get_account(username) is not None:
             return None
-        self._save_account(
-            username=username,
-            password_hash=_hash_password(password),
-            role=role,
-            display_name=display_name,
-            source="admin",
-        )
-        account = self._get_account(username)
-        return self._serialize_account(account) if account is not None else None
+        now = _now()
+        account = {
+            "username": username,
+            "password_hash": _hash_password(password),
+            "role": role.value,
+            "display_name": display_name.strip() or username,
+            "source": source,
+            "updated_at": now,
+            "created_at": now,
+            "disabled_at": None,
+        }
+        if is_postgres_dsn(self._db_path):
+            with connection(self._db_path) as conn:
+                cur = conn.execute(
+                    "INSERT INTO purecipher_registry_accounts (username,password_hash,role,display_name,source,updated_at,created_at,disabled_at) VALUES (%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (username) DO NOTHING",
+                    tuple(account.values()),
+                )
+                if cur.rowcount != 1:
+                    return None
+        elif self._memory_accounts.setdefault(username, account) is not account:
+            return None
+        return self._serialize_account(account)
 
     def update_account(
         self,
