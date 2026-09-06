@@ -28,7 +28,7 @@
       }
     ]
   },
-  "display_name": "PureCipher Google Drive",
+  "display_name": "Google Drive",
   "description": "Read-only Google Drive file and folder search and metadata using SecureMCP 2.0. Preparation draft: OAuth authorization, durable security storage, consent enrollment and live validation are pending. No file downloads or content access.",
   "homepage_url": "https://purecipher.com",
   "source_url": "https://github.com/PureCipher/xsecuremcp2.0",
@@ -61,6 +61,13 @@
     ],
     "source_file": "drive_server.py",
     "source_sha256": "12c64f7b06e06ddf90a4a2ec34ca282b750df5fa1defd473f834b7c02bd5d924",
-    "deployment_ready": false
-  }
+    "deployment_ready": false,
+    "server_type": "remote",
+    "configuration": [
+      "oauth"
+    ]
+  },
+  "categories": [
+    "cloud_storage"
+  ]
 }

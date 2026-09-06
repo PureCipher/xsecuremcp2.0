@@ -1,9 +1,9 @@
 {
   "manifest": {
-    "tool_name": "purecipher-grafana",
+    "tool_name": "purecipher-kubernetes",
     "version": "0.1.0-alpha.1",
     "author": "purecipher",
-    "description": "SecureMCP 2.0 adapter preparation for Grafana. Upstream deployment, tool/schema review, authentication, durable security storage, tenant isolation and live validation are pending. No running production endpoint. Grafana URL and least-privilege service account; read-only tool allowlist.",
+    "description": "SecureMCP 2.0 adapter preparation for Kubernetes. Upstream deployment, tool/schema review, authentication, durable security storage, tenant isolation and live validation are pending. No running production endpoint. Dedicated namespace and read-only RBAC; no cluster-admin, secrets access, exec or mutation by default.",
     "permissions": [
       "read_resource",
       "network_access",
@@ -16,7 +16,7 @@
     "idempotent": false,
     "data_flows": [
       {
-        "source": "Grafana",
+        "source": "Kubernetes",
         "destination": "authenticated MCP client",
         "classification": "restricted",
         "description": "Authorized read results may contain sensitive business or personal data."
@@ -24,26 +24,26 @@
     ],
     "resource_access": [
       {
-        "resource_pattern": "grafana:*",
+        "resource_pattern": "kubernetes:*",
         "access_type": "read",
         "classification": "restricted"
       },
       {
-        "resource_pattern": "grafana:*",
+        "resource_pattern": "kubernetes:*",
         "access_type": "write",
         "classification": "restricted"
       }
     ]
   },
-  "display_name": "Grafana",
-  "description": "SecureMCP 2.0 adapter preparation for Grafana. Upstream deployment, tool/schema review, authentication, durable security storage, tenant isolation and live validation are pending. No running production endpoint. Grafana URL and least-privilege service account; read-only tool allowlist.",
+  "display_name": "Kubernetes",
+  "description": "SecureMCP 2.0 adapter preparation for Kubernetes. Upstream deployment, tool/schema review, authentication, durable security storage, tenant isolation and live validation are pending. No running production endpoint. Dedicated namespace and read-only RBAC; no cluster-admin, secrets access, exec or mutation by default.",
   "homepage_url": "https://purecipher.com",
   "source_url": "https://github.com/PureCipher/xsecuremcp2.0",
   "tags": [
     "securemcp-2.0",
     "adapter-preparation",
     "review-pending",
-    "grafana"
+    "kubernetes"
   ],
   "metadata": {
     "publisher_profile": {
@@ -71,26 +71,25 @@
     },
     "deployment_ready": false,
     "upstream": {
-      "title": "Grafana",
-      "icon_url": "https://avatars.githubusercontent.com/u/7195757?s=200&v=4",
+      "title": "Kubernetes",
+      "catalog_title": "Kubernetes",
+      "icon_url": "https://avatars.githubusercontent.com/u/13629408?s=200&v=4",
       "source": {
-        "project": "https://github.com/grafana/mcp-grafana",
-        "branch": "main",
-        "commit": "76ed7dba5a18c9058d58a9ec037cc0e6a6febe49"
+        "project": "https://github.com/Flux159/mcp-server-kubernetes",
+        "commit": "662a19193fa79de1e4fa4f53faa25191c41481dc"
       },
-      "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/grafana/server.yaml",
-      "image_reference": "mcp/grafana",
+      "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/kubernetes/server.yaml",
+      "image_reference": "mcp/kubernetes",
       "archived": false,
-      "requirements": "Grafana URL and least-privilege service account; read-only tool allowlist."
+      "upstream_catalog_status": "listed",
+      "requirements": "Dedicated namespace and read-only RBAC; no cluster-admin, secrets access, exec or mutation by default."
     },
-    "icon_key": "grafana",
+    "icon_key": "kubernetes",
     "server_type": "remote",
-    "configuration": [
-      "secrets"
-    ]
+    "configuration": []
   },
   "categories": [
-    "monitoring",
-    "analytics"
+    "devops",
+    "cloud_platforms"
   ]
 }

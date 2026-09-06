@@ -35,7 +35,7 @@
       }
     ]
   },
-  "display_name": "PureCipher Official ClickHouse",
+  "display_name": "ClickHouse",
   "description": "SecureMCP 2.0 adapter preparation for Official ClickHouse. Upstream deployment, tool/schema review, authentication, durable security storage, tenant isolation and live validation are pending. No running production endpoint. Read-only database account, restricted databases and query limits; block external table functions via database settings.",
   "homepage_url": "https://purecipher.com",
   "source_url": "https://github.com/PureCipher/xsecuremcp2.0",
@@ -66,7 +66,7 @@
     "source_sha256": "1a8a8ad5061119f9a44e589ea020498be3c7b9f3782b3df891b14205dc977549",
     "bundle_sha256": {
       "catalog_adapter.py": "1a8a8ad5061119f9a44e589ea020498be3c7b9f3782b3df891b14205dc977549",
-      "catalog-sources.json": "cdef90b1106c4b5e0e3c9dcaecb53f25b6ee71714478df9f63ba63f9d899d23a",
+      "catalog-sources.json": "6f41972c88962d697c4a1372e913fcc0763a577af5f49bf8e0f3931f02bdbc72",
       "common.py": "6f14140b1ad64f9e2bccbb80088b8159a92d84243e05e0f7c0685b31ee8954dc"
     },
     "deployment_ready": false,
@@ -82,6 +82,14 @@
       "archived": false,
       "requirements": "Read-only database account, restricted databases and query limits; block external table functions via database settings."
     },
-    "icon_key": "clickhouse"
-  }
+    "icon_key": "clickhouse",
+    "server_type": "remote",
+    "configuration": [
+      "secrets"
+    ]
+  },
+  "categories": [
+    "database",
+    "analytics"
+  ]
 }

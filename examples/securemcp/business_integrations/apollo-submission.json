@@ -28,7 +28,7 @@
       }
     ]
   },
-  "display_name": "PureCipher Apollo.io",
+  "display_name": "Apollo.io",
   "description": "Apollo.io prospect previews, company search and authenticated profile using SecureMCP 2.0. Company search is disabled by default because it costs one Apollo credit per page. No enrichment, outreach or contact writes. Preparation draft: approved partner OAuth registration, durable security storage, consent enrollment and live validation are pending. No running production endpoint.",
   "homepage_url": "https://purecipher.com",
   "source_url": "https://github.com/PureCipher/xsecuremcp2.0",
@@ -70,6 +70,14 @@
     "optional_oauth_scopes": [
       "mixed_companies_search"
     ],
-    "company_search_enabled": false
-  }
+    "company_search_enabled": false,
+    "server_type": "remote",
+    "configuration": [
+      "oauth"
+    ]
+  },
+  "categories": [
+    "crm",
+    "marketing"
+  ]
 }

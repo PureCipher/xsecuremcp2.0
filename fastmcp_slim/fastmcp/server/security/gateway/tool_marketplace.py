@@ -67,6 +67,7 @@ class ToolCategory(Enum):
     # Productivity & Business
     PROJECT_MANAGEMENT = "project_management"
     PRODUCTIVITY = "productivity"
+    AUTOMATION = "automation"
     CRM = "crm"
     MARKETING = "marketing"
     ECOMMERCE = "ecommerce"

@@ -1,9 +1,9 @@
 {
   "manifest": {
-    "tool_name": "purecipher-grafana",
+    "tool_name": "purecipher-notion",
     "version": "0.1.0-alpha.1",
     "author": "purecipher",
-    "description": "SecureMCP 2.0 adapter preparation for Grafana. Upstream deployment, tool/schema review, authentication, durable security storage, tenant isolation and live validation are pending. No running production endpoint. Grafana URL and least-privilege service account; read-only tool allowlist.",
+    "description": "SecureMCP 2.0 adapter preparation for Notion. Upstream deployment, tool/schema review, authentication, durable security storage, tenant isolation and live validation are pending. No running production endpoint. Notion workspace authorization, allowed pages and databases, review read/write scopes.",
     "permissions": [
       "read_resource",
       "network_access",
@@ -16,7 +16,7 @@
     "idempotent": false,
     "data_flows": [
       {
-        "source": "Grafana",
+        "source": "Notion",
         "destination": "authenticated MCP client",
         "classification": "restricted",
         "description": "Authorized read results may contain sensitive business or personal data."
@@ -24,26 +24,26 @@
     ],
     "resource_access": [
       {
-        "resource_pattern": "grafana:*",
+        "resource_pattern": "notion:*",
         "access_type": "read",
         "classification": "restricted"
       },
       {
-        "resource_pattern": "grafana:*",
+        "resource_pattern": "notion:*",
         "access_type": "write",
         "classification": "restricted"
       }
     ]
   },
-  "display_name": "Grafana",
-  "description": "SecureMCP 2.0 adapter preparation for Grafana. Upstream deployment, tool/schema review, authentication, durable security storage, tenant isolation and live validation are pending. No running production endpoint. Grafana URL and least-privilege service account; read-only tool allowlist.",
+  "display_name": "Notion",
+  "description": "SecureMCP 2.0 adapter preparation for Notion. Upstream deployment, tool/schema review, authentication, durable security storage, tenant isolation and live validation are pending. No running production endpoint. Notion workspace authorization, allowed pages and databases, review read/write scopes.",
   "homepage_url": "https://purecipher.com",
   "source_url": "https://github.com/PureCipher/xsecuremcp2.0",
   "tags": [
     "securemcp-2.0",
     "adapter-preparation",
     "review-pending",
-    "grafana"
+    "notion"
   ],
   "metadata": {
     "publisher_profile": {
@@ -71,26 +71,27 @@
     },
     "deployment_ready": false,
     "upstream": {
-      "title": "Grafana",
-      "icon_url": "https://avatars.githubusercontent.com/u/7195757?s=200&v=4",
+      "title": "Notion",
+      "catalog_title": "Notion",
+      "icon_url": "https://avatars.githubusercontent.com/u/4792552?s=200&v=4",
       "source": {
-        "project": "https://github.com/grafana/mcp-grafana",
-        "branch": "main",
-        "commit": "76ed7dba5a18c9058d58a9ec037cc0e6a6febe49"
+        "project": "https://github.com/makenotion/notion-mcp-server",
+        "commit": "d7e3bbd62890f9efca2cd54449ac072f3bd1a4ba"
       },
-      "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/grafana/server.yaml",
-      "image_reference": "mcp/grafana",
+      "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/notion/server.yaml",
+      "image_reference": "mcp/notion",
       "archived": false,
-      "requirements": "Grafana URL and least-privilege service account; read-only tool allowlist."
+      "upstream_catalog_status": "listed",
+      "requirements": "Notion workspace authorization, allowed pages and databases, review read/write scopes."
     },
-    "icon_key": "grafana",
+    "icon_key": "notion",
     "server_type": "remote",
     "configuration": [
       "secrets"
     ]
   },
   "categories": [
-    "monitoring",
-    "analytics"
+    "knowledge_management",
+    "productivity"
   ]
 }

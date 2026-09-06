@@ -1,9 +1,9 @@
 {
   "manifest": {
-    "tool_name": "purecipher-grafana",
+    "tool_name": "purecipher-github-reference",
     "version": "0.1.0-alpha.1",
     "author": "purecipher",
-    "description": "SecureMCP 2.0 adapter preparation for Grafana. Upstream deployment, tool/schema review, authentication, durable security storage, tenant isolation and live validation are pending. No running production endpoint. Grafana URL and least-privilege service account; read-only tool allowlist.",
+    "description": "SecureMCP 2.0 adapter preparation for GitHub (Reference). Upstream deployment, tool/schema review, authentication, durable security storage, tenant isolation and live validation are pending. No running production endpoint. Upstream catalog marks this reference archived. Review maintenance; prefer the existing PureCipher GitHub integration.",
     "permissions": [
       "read_resource",
       "network_access",
@@ -16,7 +16,7 @@
     "idempotent": false,
     "data_flows": [
       {
-        "source": "Grafana",
+        "source": "GitHub (Reference)",
         "destination": "authenticated MCP client",
         "classification": "restricted",
         "description": "Authorized read results may contain sensitive business or personal data."
@@ -24,26 +24,26 @@
     ],
     "resource_access": [
       {
-        "resource_pattern": "grafana:*",
+        "resource_pattern": "github-reference:*",
         "access_type": "read",
         "classification": "restricted"
       },
       {
-        "resource_pattern": "grafana:*",
+        "resource_pattern": "github-reference:*",
         "access_type": "write",
         "classification": "restricted"
       }
     ]
   },
-  "display_name": "Grafana",
-  "description": "SecureMCP 2.0 adapter preparation for Grafana. Upstream deployment, tool/schema review, authentication, durable security storage, tenant isolation and live validation are pending. No running production endpoint. Grafana URL and least-privilege service account; read-only tool allowlist.",
+  "display_name": "GitHub (Reference)",
+  "description": "SecureMCP 2.0 adapter preparation for GitHub (Reference). Upstream deployment, tool/schema review, authentication, durable security storage, tenant isolation and live validation are pending. No running production endpoint. Upstream catalog marks this reference archived. Review maintenance; prefer the existing PureCipher GitHub integration.",
   "homepage_url": "https://purecipher.com",
   "source_url": "https://github.com/PureCipher/xsecuremcp2.0",
   "tags": [
     "securemcp-2.0",
     "adapter-preparation",
     "review-pending",
-    "grafana"
+    "github-reference"
   ],
   "metadata": {
     "publisher_profile": {
@@ -71,26 +71,29 @@
     },
     "deployment_ready": false,
     "upstream": {
-      "title": "Grafana",
-      "icon_url": "https://avatars.githubusercontent.com/u/7195757?s=200&v=4",
+      "title": "GitHub (Reference)",
+      "catalog_title": "GitHub (Archived)",
+      "icon_url": "https://avatars.githubusercontent.com/u/182288589?s=200&v=4",
       "source": {
-        "project": "https://github.com/grafana/mcp-grafana",
-        "branch": "main",
-        "commit": "76ed7dba5a18c9058d58a9ec037cc0e6a6febe49"
+        "project": "https://github.com/modelcontextprotocol/servers",
+        "branch": "2025.4.24",
+        "commit": "b4ee623039a6c60053ce67269701ad9e95073306",
+        "dockerfile": "src/github/Dockerfile"
       },
-      "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/grafana/server.yaml",
-      "image_reference": "mcp/grafana",
-      "archived": false,
-      "requirements": "Grafana URL and least-privilege service account; read-only tool allowlist."
+      "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/github/server.yaml",
+      "image_reference": "mcp/github",
+      "archived": true,
+      "upstream_catalog_status": "archived",
+      "requirements": "Upstream catalog marks this reference archived. Review maintenance; prefer the existing PureCipher GitHub integration."
     },
-    "icon_key": "grafana",
+    "icon_key": "github-reference",
     "server_type": "remote",
     "configuration": [
       "secrets"
     ]
   },
   "categories": [
-    "monitoring",
-    "analytics"
+    "version_control",
+    "developer_tools"
   ]
 }

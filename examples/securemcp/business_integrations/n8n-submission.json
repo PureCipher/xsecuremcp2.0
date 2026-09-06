@@ -1,9 +1,9 @@
 {
   "manifest": {
-    "tool_name": "purecipher-grafana",
+    "tool_name": "purecipher-n8n",
     "version": "0.1.0-alpha.1",
     "author": "purecipher",
-    "description": "SecureMCP 2.0 adapter preparation for Grafana. Upstream deployment, tool/schema review, authentication, durable security storage, tenant isolation and live validation are pending. No running production endpoint. Grafana URL and least-privilege service account; read-only tool allowlist.",
+    "description": "SecureMCP 2.0 adapter preparation for n8n. Upstream deployment, tool/schema review, authentication, durable security storage, tenant isolation and live validation are pending. No running production endpoint. Dedicated workspace/API credential, workflow allowlist and approval before execution or updates.",
     "permissions": [
       "read_resource",
       "network_access",
@@ -16,7 +16,7 @@
     "idempotent": false,
     "data_flows": [
       {
-        "source": "Grafana",
+        "source": "n8n",
         "destination": "authenticated MCP client",
         "classification": "restricted",
         "description": "Authorized read results may contain sensitive business or personal data."
@@ -24,26 +24,26 @@
     ],
     "resource_access": [
       {
-        "resource_pattern": "grafana:*",
+        "resource_pattern": "n8n:*",
         "access_type": "read",
         "classification": "restricted"
       },
       {
-        "resource_pattern": "grafana:*",
+        "resource_pattern": "n8n:*",
         "access_type": "write",
         "classification": "restricted"
       }
     ]
   },
-  "display_name": "Grafana",
-  "description": "SecureMCP 2.0 adapter preparation for Grafana. Upstream deployment, tool/schema review, authentication, durable security storage, tenant isolation and live validation are pending. No running production endpoint. Grafana URL and least-privilege service account; read-only tool allowlist.",
+  "display_name": "n8n",
+  "description": "SecureMCP 2.0 adapter preparation for n8n. Upstream deployment, tool/schema review, authentication, durable security storage, tenant isolation and live validation are pending. No running production endpoint. Dedicated workspace/API credential, workflow allowlist and approval before execution or updates.",
   "homepage_url": "https://purecipher.com",
   "source_url": "https://github.com/PureCipher/xsecuremcp2.0",
   "tags": [
     "securemcp-2.0",
     "adapter-preparation",
     "review-pending",
-    "grafana"
+    "n8n"
   ],
   "metadata": {
     "publisher_profile": {
@@ -71,26 +71,27 @@
     },
     "deployment_ready": false,
     "upstream": {
-      "title": "Grafana",
-      "icon_url": "https://avatars.githubusercontent.com/u/7195757?s=200&v=4",
+      "title": "n8n",
+      "catalog_title": "n8n",
+      "icon_url": "https://www.google.com/s2/favicons?domain=n8n.io&sz=64",
       "source": {
-        "project": "https://github.com/grafana/mcp-grafana",
-        "branch": "main",
-        "commit": "76ed7dba5a18c9058d58a9ec037cc0e6a6febe49"
+        "project": "https://github.com/czlonkowski/n8n-mcp",
+        "commit": "1bbfaabbc20f4989d81bc8a2cfc9f16795134ed8"
       },
-      "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/grafana/server.yaml",
-      "image_reference": "mcp/grafana",
+      "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/n8n/server.yaml",
+      "image_reference": "mcp/n8n",
       "archived": false,
-      "requirements": "Grafana URL and least-privilege service account; read-only tool allowlist."
+      "upstream_catalog_status": "listed",
+      "requirements": "Dedicated workspace/API credential, workflow allowlist and approval before execution or updates."
     },
-    "icon_key": "grafana",
+    "icon_key": "n8n",
     "server_type": "remote",
     "configuration": [
       "secrets"
     ]
   },
   "categories": [
-    "monitoring",
-    "analytics"
+    "automation",
+    "productivity"
   ]
 }

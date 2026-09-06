@@ -1,0 +1,174 @@
+{
+  "apollo": [
+    "crm",
+    "marketing"
+  ],
+  "arxiv": [
+    "research"
+  ],
+  "ast-grep": [
+    "developer_tools"
+  ],
+  "atlassian": [
+    "project_management",
+    "collaboration"
+  ],
+  "aws-core": [
+    "cloud_platforms"
+  ],
+  "aws-documentation": [
+    "knowledge_management",
+    "cloud_platforms"
+  ],
+  "brave-search": [
+    "search"
+  ],
+  "clickhouse": [
+    "database",
+    "analytics"
+  ],
+  "cloudwatch": [
+    "monitoring",
+    "cloud_platforms"
+  ],
+  "desktop-commander": [
+    "file_system",
+    "code_execution"
+  ],
+  "docker-hub": [
+    "devops"
+  ],
+  "duckduckgo": [
+    "search"
+  ],
+  "dynatrace": [
+    "monitoring"
+  ],
+  "fetch": [
+    "search",
+    "data_access"
+  ],
+  "filesystem": [
+    "file_system"
+  ],
+  "firecrawl": [
+    "search",
+    "data_access"
+  ],
+  "git": [
+    "version_control"
+  ],
+  "github": [
+    "version_control",
+    "developer_tools"
+  ],
+  "github-reference": [
+    "version_control",
+    "developer_tools"
+  ],
+  "google-calendar": [
+    "productivity"
+  ],
+  "google-docs": [
+    "content_management",
+    "productivity"
+  ],
+  "google-drive": [
+    "cloud_storage"
+  ],
+  "google-gmail": [
+    "communication",
+    "productivity"
+  ],
+  "google-tasks": [
+    "project_management",
+    "productivity"
+  ],
+  "grafana": [
+    "monitoring",
+    "analytics"
+  ],
+  "huggingface": [
+    "machine_learning",
+    "ai_ml"
+  ],
+  "jira": [
+    "project_management"
+  ],
+  "kubernetes": [
+    "devops",
+    "cloud_platforms"
+  ],
+  "markitdown": [
+    "content_management"
+  ],
+  "memory": [
+    "knowledge_management",
+    "ai_ml"
+  ],
+  "mongodb": [
+    "database"
+  ],
+  "n8n": [
+    "automation",
+    "productivity"
+  ],
+  "nodejs-sandbox": [
+    "code_execution"
+  ],
+  "notion": [
+    "knowledge_management",
+    "productivity"
+  ],
+  "obsidian": [
+    "knowledge_management"
+  ],
+  "onedrive": [
+    "cloud_storage"
+  ],
+  "outlook": [
+    "communication",
+    "productivity"
+  ],
+  "playwright": [
+    "automation",
+    "developer_tools"
+  ],
+  "puppeteer": [
+    "automation",
+    "developer_tools"
+  ],
+  "redis": [
+    "database"
+  ],
+  "sequential-thinking": [
+    "ai_ml"
+  ],
+  "slack": [
+    "communication",
+    "collaboration"
+  ],
+  "slack-archived": [
+    "communication",
+    "collaboration"
+  ],
+  "sonarqube": [
+    "security",
+    "developer_tools"
+  ],
+  "stripe": [
+    "payments",
+    "finance"
+  ],
+  "time": [
+    "utility"
+  ],
+  "wikipedia": [
+    "research",
+    "knowledge_management"
+  ],
+  "youtube-transcripts": [
+    "media",
+    "content_management"
+  ]
+}

@@ -1,6 +1,6 @@
 # Catalog expansion — preparation, not activation
 
-The 15 Docker catalog entries in `catalog-sources.json` are upstream references.
+The 35 Docker catalog entries in `catalog-sources.json` are upstream references.
 Their source commits and icon URLs were read from Docker's official registry on
 2026-09-06. Image tags are reference metadata, **not verified image digests**.
 Nothing in this package pulls or launches these images.
@@ -24,8 +24,8 @@ The caller supplies arguments only to approved tools; upstream tool validation
 and provider permissions remain necessary. Do not mark these wrappers certified
 merely because the boundary tests pass.
 
-Slack (Archived) is a separate pending reference and does not replace the existing
-`purecipher-slack` OAuth integration. Slack (Archived) and Puppeteer are blocked
+Slack (Reference) is a separate pending reference and does not replace the existing
+`purecipher-slack` OAuth integration. Slack (Reference), GitHub (Reference), and Puppeteer are blocked
 unless the operator explicitly enables `allow_archived` after maintenance review.
 Prefer the maintained Slack integration and Playwright where suitable.
 
@@ -42,3 +42,24 @@ They contain source packages, not running endpoints. Upstream tool counts and
 live operation are not yet verified; the two declared tools are adapter tools.
 
 Sources: https://github.com/docker/mcp-registry and each entry's `catalog_source`.
+
+## Catalog browsing
+
+The 48 PureCipher preparation drafts have product-only display names and explicit
+categories. Existing listing IDs remain unchanged. Docker's archived classification
+is upstream provenance only; it does not change PureCipher's draft status.
+
+GET /registry/tools and the authenticated GET /registry/me/listings accept q,
+category, configuration (secrets, none, oauth), trust (known), server_type (remote),
+sort, limit and offset. Repeated filters are OR within a group, AND between groups.
+Sorting supports newest, oldest, name_asc, name_desc, popularity and default.
+Default is alphabetical; popularity uses this Registry's installation count.
+Filtering occurs before pagination; facets use only the caller-visible dataset.
+GET /registry/categories supplies the taxonomy, including automation.
+
+Configuration describes declared provider requirements; unknown or additional
+configuration is not classified as no configuration required. Remote describes the
+planned authenticated HTTP SecureMCP wrapper, not deployment readiness. Known
+publisher means an active registered publisher account, not certification or an
+upstream affiliation. All drafts still require review, isolated deployment and
+live validation before publication.

@@ -1,9 +1,9 @@
 {
   "manifest": {
-    "tool_name": "purecipher-grafana",
+    "tool_name": "purecipher-ast-grep",
     "version": "0.1.0-alpha.1",
     "author": "purecipher",
-    "description": "SecureMCP 2.0 adapter preparation for Grafana. Upstream deployment, tool/schema review, authentication, durable security storage, tenant isolation and live validation are pending. No running production endpoint. Grafana URL and least-privilege service account; read-only tool allowlist.",
+    "description": "SecureMCP 2.0 adapter preparation for ast-grep. Upstream deployment, tool/schema review, authentication, durable security storage, tenant isolation and live validation are pending. No running production endpoint. Dedicated code directory and read-only structural search; rewriting requires explicit approval.",
     "permissions": [
       "read_resource",
       "network_access",
@@ -16,7 +16,7 @@
     "idempotent": false,
     "data_flows": [
       {
-        "source": "Grafana",
+        "source": "ast-grep",
         "destination": "authenticated MCP client",
         "classification": "restricted",
         "description": "Authorized read results may contain sensitive business or personal data."
@@ -24,26 +24,26 @@
     ],
     "resource_access": [
       {
-        "resource_pattern": "grafana:*",
+        "resource_pattern": "ast-grep:*",
         "access_type": "read",
         "classification": "restricted"
       },
       {
-        "resource_pattern": "grafana:*",
+        "resource_pattern": "ast-grep:*",
         "access_type": "write",
         "classification": "restricted"
       }
     ]
   },
-  "display_name": "Grafana",
-  "description": "SecureMCP 2.0 adapter preparation for Grafana. Upstream deployment, tool/schema review, authentication, durable security storage, tenant isolation and live validation are pending. No running production endpoint. Grafana URL and least-privilege service account; read-only tool allowlist.",
+  "display_name": "ast-grep",
+  "description": "SecureMCP 2.0 adapter preparation for ast-grep. Upstream deployment, tool/schema review, authentication, durable security storage, tenant isolation and live validation are pending. No running production endpoint. Dedicated code directory and read-only structural search; rewriting requires explicit approval.",
   "homepage_url": "https://purecipher.com",
   "source_url": "https://github.com/PureCipher/xsecuremcp2.0",
   "tags": [
     "securemcp-2.0",
     "adapter-preparation",
     "review-pending",
-    "grafana"
+    "ast-grep"
   ],
   "metadata": {
     "publisher_profile": {
@@ -71,26 +71,24 @@
     },
     "deployment_ready": false,
     "upstream": {
-      "title": "Grafana",
-      "icon_url": "https://avatars.githubusercontent.com/u/7195757?s=200&v=4",
+      "title": "ast-grep",
+      "catalog_title": "ast-grep",
+      "icon_url": "https://avatars.githubusercontent.com/u/114017360?s=200&v=4",
       "source": {
-        "project": "https://github.com/grafana/mcp-grafana",
-        "branch": "main",
-        "commit": "76ed7dba5a18c9058d58a9ec037cc0e6a6febe49"
+        "project": "https://github.com/dgageot/mcp-ast-grep",
+        "commit": "c0a1edaf9cd6b168f2b59bc5a0161ad49a793099"
       },
-      "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/grafana/server.yaml",
-      "image_reference": "mcp/grafana",
+      "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/ast-grep/server.yaml",
+      "image_reference": "mcp/ast-grep",
       "archived": false,
-      "requirements": "Grafana URL and least-privilege service account; read-only tool allowlist."
+      "upstream_catalog_status": "listed",
+      "requirements": "Dedicated code directory and read-only structural search; rewriting requires explicit approval."
     },
-    "icon_key": "grafana",
+    "icon_key": "ast-grep",
     "server_type": "remote",
-    "configuration": [
-      "secrets"
-    ]
+    "configuration": []
   },
   "categories": [
-    "monitoring",
-    "analytics"
+    "developer_tools"
   ]
 }

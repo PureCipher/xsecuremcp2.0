@@ -7,6 +7,7 @@ from pathlib import Path
 
 from fastmcp.server.security.gateway.tool_marketplace import (
     PublishStatus,
+    ToolCategory,
     ToolMarketplace,
 )
 from purecipher.registry import _make_security_backend, _parse_manifest
@@ -15,34 +16,21 @@ from purecipher.registry import _make_security_backend, _parse_manifest
 def main():
     root = Path(sys.argv[1]).resolve()
     service = sys.argv[2]
-    if service not in {
-        "jira",
-        "youtube-transcripts",
-        "grafana",
-        "fetch",
-        "stripe",
-        "onedrive",
-        "duckduckgo",
-        "slack-archived",
+    allowed = set(json.loads((root / "catalog-sources.json").read_text())) | {
         "github",
-        "clickhouse",
-        "playwright",
-        "time",
         "slack",
-        "puppeteer",
-        "sonarqube",
-        "apollo",
+        "jira",
         "outlook",
-        "sequential-thinking",
-        "dynatrace",
+        "onedrive",
+        "apollo",
+        "stripe",
         "huggingface",
-        "brave-search",
-        "filesystem",
-        "memory",
-    }:
+    }
+    if service not in allowed:
         raise ValueError("Unknown integration")
     payload = json.loads((root / (service + "-submission.json")).read_text())
     manifest = _parse_manifest(payload.pop("manifest"))
+    payload["categories"] = {ToolCategory(v) for v in payload.get("categories", [])}
     assert (
         manifest.author == "purecipher"
         and manifest.tool_name == "purecipher-" + service
@@ -71,8 +59,9 @@ def main():
         )
     if (
         existing
-        and existing.metadata.get("bundle_sha256")
-        == payload["metadata"]["bundle_sha256"]
+        and existing.metadata == payload["metadata"]
+        and existing.categories == payload["categories"]
+        and existing.display_name == payload["display_name"]
     ):
         print(manifest.tool_name, "already imported")
         return

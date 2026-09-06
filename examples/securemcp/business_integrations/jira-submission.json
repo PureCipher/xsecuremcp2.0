@@ -28,7 +28,7 @@
       }
     ]
   },
-  "display_name": "PureCipher Jira",
+  "display_name": "Jira",
   "description": "Search and read accessible Jira issues on one explicitly configured cloud site. SecureMCP 2.0 preparation draft: OAuth configuration, durable security storage, controlled consent, live validation and certification are pending. No running production endpoint.",
   "homepage_url": "https://purecipher.com",
   "source_url": "https://github.com/PureCipher/xsecuremcp2.0",
@@ -66,6 +66,13 @@
       "common.py": "6f14140b1ad64f9e2bccbb80088b8159a92d84243e05e0f7c0685b31ee8954dc",
       "oauth.py": "39a475482c55d3a0f5c746690ee3b63fe7ef9d588bb3c9f76ad5de5884cb2c6c"
     },
-    "deployment_ready": false
-  }
+    "deployment_ready": false,
+    "server_type": "remote",
+    "configuration": [
+      "oauth"
+    ]
+  },
+  "categories": [
+    "project_management"
+  ]
 }

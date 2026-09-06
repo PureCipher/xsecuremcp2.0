@@ -28,7 +28,7 @@
       }
     ]
   },
-  "display_name": "PureCipher Google Calendar",
+  "display_name": "Google Calendar",
   "description": "PureCipher Google Calendar read-only SecureMCP 2.0 integration. Preparation draft: Google OAuth, durable security storage, controlled consent enrollment, certification and live validation are pending. No callable production endpoint yet.",
   "homepage_url": "https://purecipher.com",
   "source_url": "https://github.com/PureCipher/xsecuremcp2.0",
@@ -61,6 +61,13 @@
     ],
     "source_file": "calendar_server.py",
     "source_sha256": "6028770eb4ae060f57a9926efb4ef0d6e883b4736c8f3647bc0103af687517c5",
-    "deployment_ready": false
-  }
+    "deployment_ready": false,
+    "server_type": "remote",
+    "configuration": [
+      "oauth"
+    ]
+  },
+  "categories": [
+    "productivity"
+  ]
 }

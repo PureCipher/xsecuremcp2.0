@@ -28,7 +28,7 @@
       }
     ]
   },
-  "display_name": "PureCipher Hugging Face",
+  "display_name": "Hugging Face",
   "description": "Read Hugging Face model and dataset metadata. No inference, execution, uploads or downloads. SecureMCP 2.0 preparation: provider authorization, durable security storage and live validation pending. No running production endpoint.",
   "homepage_url": "https://purecipher.com",
   "source_url": "https://github.com/PureCipher/xsecuremcp2.0",
@@ -68,6 +68,14 @@
       "common.py": "6f14140b1ad64f9e2bccbb80088b8159a92d84243e05e0f7c0685b31ee8954dc"
     },
     "deployment_ready": false,
-    "icon_key": "huggingface"
-  }
+    "icon_key": "huggingface",
+    "server_type": "remote",
+    "configuration": [
+      "oauth"
+    ]
+  },
+  "categories": [
+    "machine_learning",
+    "ai_ml"
+  ]
 }

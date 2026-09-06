@@ -46,6 +46,7 @@ from purecipher.account_security import (
     RegistryAccountSecurityStore,
 )
 from purecipher.auth import RegistryAuthSettings, RegistryRole, RegistrySession
+from purecipher.catalog_query import browse_catalog, label
 from purecipher.clients import (
     CLIENT_KINDS,
     ClientStoreError,
@@ -3572,10 +3573,12 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             except Exception:
                 actors_by_tool = {}
 
+        known_publishers = self._registered_publisher_names()
         tools_payload: list[dict[str, Any]] = []
         for listing in listings:
             detail = self._serialize_listing_detail(listing)
             observed = self._observed_tool_allowlist(listing)
+            detail["known_publisher"] = listing.author in known_publishers
             detail["tool_count"] = len(observed)
             clients: set[str] = set()
             for tool_name in observed:
@@ -5498,9 +5501,16 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         """Return all listings created by a given author (any status)."""
 
         listings = self._marketplace().get_by_author(author)
+        known_publishers = self._registered_publisher_names()
         return {
             "count": len(listings),
-            "tools": [self._serialize_listing_detail(listing) for listing in listings],
+            "tools": [
+                {
+                    **self._serialize_listing_detail(listing),
+                    "known_publisher": listing.author in known_publishers,
+                }
+                for listing in listings
+            ],
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -9104,26 +9114,35 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         async def registry_publish_submit(request: Request):
             return await _handle_publish_form(request)
 
+        @self.custom_route(f"{prefix}/categories", methods=["GET"])
+        async def registry_categories(request: Request) -> JSONResponse:
+            return JSONResponse(
+                {
+                    "categories": [
+                        {"value": c.value, "label": label(c.value)}
+                        for c in ToolCategory
+                    ]
+                }
+            )
+
         @self.custom_route(f"{prefix}/tools", methods=["GET"])
         async def registry_tools(request: Request) -> JSONResponse:
-            tags = set(_split_multi_value(request, "tag")) or None
-            categories = (
-                _coerce_categories(_split_multi_value(request, "category")) or None
-            )
-            limit = int(request.query_params.get("limit", "50"))
             level = _coerce_level(
                 request.query_params.get("min_certification"),
                 default=self.minimum_certification,
             )
+            # Authorization/publication checks happen before search and facets.
             payload = self.list_verified_tools(
-                query=request.query_params.get("q"),
-                author=request.query_params.get("author"),
-                tags=tags,
-                categories=categories,
-                min_certification=level,
-                limit=limit,
+                min_certification=level, limit=self._marketplace().listing_count
             )
-            return JSONResponse(payload)
+            try:
+                return JSONResponse(
+                    browse_catalog(
+                        payload, request.query_params, default_sort="relevance"
+                    )
+                )
+            except ValueError as exc:
+                return JSONResponse({"error": str(exc), "status": 400}, status_code=400)
 
         @self.custom_route(f"{prefix}/tools/{{tool_name}}", methods=["GET"])
         async def registry_tool_detail(request: Request) -> JSONResponse:
@@ -9237,7 +9256,10 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 )
             author = session.username if session is not None else ""
             payload = self.list_author_listings(author)
-            return JSONResponse(payload)
+            try:
+                return JSONResponse(browse_catalog(payload, request.query_params))
+            except ValueError as exc:
+                return JSONResponse({"error": str(exc), "status": 400}, status_code=400)
 
         @self.custom_route(f"{prefix}/install/{{tool_name}}", methods=["GET"])
         async def registry_install_recipes(request: Request) -> JSONResponse:

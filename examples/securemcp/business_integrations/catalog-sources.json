@@ -106,7 +106,7 @@
     "requirements": "Per-session state isolation and bounded input/history sizes."
   },
   "slack-archived": {
-    "title": "Slack (Archived)",
+    "title": "Slack (Reference)",
     "icon_url": "https://avatars.githubusercontent.com/u/6911160?s=200&v=4",
     "source": {
       "project": "https://github.com/modelcontextprotocol/servers",
@@ -117,7 +117,9 @@
     "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/slack/server.yaml",
     "image_reference": "mcp/slack",
     "archived": true,
-    "requirements": "Archived upstream: maintenance review required. Prefer the existing PureCipher Slack OAuth integration."
+    "requirements": "Archived upstream: maintenance review required. Prefer the existing PureCipher Slack OAuth integration.",
+    "catalog_title": "Slack (Archived)",
+    "upstream_catalog_status": "archived"
   },
   "youtube-transcripts": {
     "title": "YouTube Transcripts",
@@ -183,7 +185,7 @@
     "requirements": "Dedicated read-only directory mounts; no host home, secrets or Docker socket; no network."
   },
   "puppeteer": {
-    "title": "Puppeteer (Archived)",
+    "title": "Puppeteer",
     "icon_url": "https://avatars.githubusercontent.com/u/6906516?s=200&v=4",
     "source": {
       "project": "https://github.com/modelcontextprotocol/servers",
@@ -194,6 +196,300 @@
     "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/puppeteer/server.yaml",
     "image_reference": "mcp/puppeteer",
     "archived": true,
-    "requirements": "Archived upstream: maintenance review required. Isolated browser, destination allowlist and per-user sessions."
+    "requirements": "Archived upstream: maintenance review required. Isolated browser, destination allowlist and per-user sessions.",
+    "catalog_title": "Puppeteer (Archived)",
+    "upstream_catalog_status": "archived"
+  },
+  "notion": {
+    "title": "Notion",
+    "catalog_title": "Notion",
+    "icon_url": "https://avatars.githubusercontent.com/u/4792552?s=200&v=4",
+    "source": {
+      "project": "https://github.com/makenotion/notion-mcp-server",
+      "commit": "d7e3bbd62890f9efca2cd54449ac072f3bd1a4ba"
+    },
+    "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/notion/server.yaml",
+    "image_reference": "mcp/notion",
+    "archived": false,
+    "upstream_catalog_status": "listed",
+    "requirements": "Notion workspace authorization, allowed pages and databases, review read/write scopes."
+  },
+  "desktop-commander": {
+    "title": "Desktop Commander",
+    "catalog_title": "Desktop Commander",
+    "icon_url": "https://raw.githubusercontent.com/wonderwhy-er/DesktopCommanderMCP/main/icon.png",
+    "source": {
+      "project": "https://github.com/wonderwhy-er/DesktopCommanderMCP",
+      "commit": "0ad919bc188947fc55b1bf269df62f4b14b3880c"
+    },
+    "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/desktop-commander/server.yaml",
+    "image_reference": "mcp/desktop-commander",
+    "archived": false,
+    "upstream_catalog_status": "listed",
+    "requirements": "Dedicated sandbox with no host home or secrets; explicit command and filesystem policies. Never grant production host shell access."
+  },
+  "wikipedia": {
+    "title": "Wikipedia",
+    "catalog_title": "Wikipedia",
+    "icon_url": "https://avatars.githubusercontent.com/u/56668?s=200&v=4",
+    "source": {
+      "project": "https://github.com/Rudra-ravi/wikipedia-mcp",
+      "commit": "88579193daa42cd9c6d95492448a3b2785d4fbf9"
+    },
+    "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/wikipedia-mcp/server.yaml",
+    "image_reference": "mcp/wikipedia-mcp",
+    "archived": false,
+    "upstream_catalog_status": "listed",
+    "requirements": "Bounded query sizes and Wikipedia-only egress; retrieved content is untrusted."
+  },
+  "docker-hub": {
+    "title": "Docker Hub",
+    "catalog_title": "Docker Hub",
+    "icon_url": "https://avatars.githubusercontent.com/u/5429470?s=200&v=4",
+    "source": {
+      "project": "https://github.com/docker/hub-mcp",
+      "commit": "ad806e2cab0489a296aec0f32f3d3eea807d65c2"
+    },
+    "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/dockerhub/server.yaml",
+    "image_reference": "mcp/dockerhub",
+    "archived": false,
+    "upstream_catalog_status": "listed",
+    "requirements": "Scoped Docker Hub token; repository allowlist and explicit approval for mutations."
+  },
+  "nodejs-sandbox": {
+    "title": "Node.js Sandbox",
+    "catalog_title": "Node.js Sandbox",
+    "icon_url": "https://cdn.jsdelivr.net/npm/simple-icons@v7/icons/nodedotjs.svg",
+    "source": {
+      "project": "https://github.com/alfonsograziano/node-code-sandbox-mcp",
+      "branch": "master",
+      "commit": "60f3e52c239f27e1528dbdf508875da574479ba5"
+    },
+    "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/node-code-sandbox/server.yaml",
+    "image_reference": "mcp/node-code-sandbox",
+    "archived": false,
+    "upstream_catalog_status": "listed",
+    "requirements": "Disposable unprivileged containers with CPU/memory/time limits and restricted egress. Never expose the production Docker socket."
+  },
+  "mongodb": {
+    "title": "MongoDB",
+    "catalog_title": "MongoDB",
+    "icon_url": "https://avatars.githubusercontent.com/u/11214950?v=4",
+    "source": {
+      "project": "https://github.com/mongodb-js/mongodb-mcp-server",
+      "commit": "e99ccd0fde6b4c509d88d9941effa4847c2e93e9"
+    },
+    "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/mongodb/server.yaml",
+    "image_reference": "mcp/mongodb",
+    "archived": false,
+    "upstream_catalog_status": "listed",
+    "requirements": "Least-privilege database account, database/collection allowlists, bounded read-only queries before permitting writes."
+  },
+  "git": {
+    "title": "Git (Reference)",
+    "catalog_title": "Git (Reference)",
+    "icon_url": "https://avatars.githubusercontent.com/u/18133?s=200&v=4",
+    "source": {
+      "project": "https://github.com/modelcontextprotocol/servers",
+      "branch": "2025.4.24",
+      "commit": "b4ee623039a6c60053ce67269701ad9e95073306",
+      "directory": "src/git"
+    },
+    "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/git/server.yaml",
+    "image_reference": "mcp/git",
+    "archived": false,
+    "upstream_catalog_status": "listed",
+    "requirements": "Dedicated repository checkout; path restrictions and explicit approval for mutations or remote pushes."
+  },
+  "atlassian": {
+    "title": "Atlassian",
+    "catalog_title": "Atlassian",
+    "icon_url": "https://avatars.githubusercontent.com/u/43281909?s=200&v=4",
+    "source": {
+      "project": "https://github.com/sooperset/mcp-atlassian",
+      "branch": "main",
+      "commit": "35b1da00c920810e7d4119cdd9fcc5b46eec5b0e"
+    },
+    "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/atlassian/server.yaml",
+    "image_reference": "mcp/atlassian",
+    "archived": false,
+    "upstream_catalog_status": "listed",
+    "requirements": "Confluence/Jira site authorization and project/page scope; separate from the existing Jira integration."
+  },
+  "kubernetes": {
+    "title": "Kubernetes",
+    "catalog_title": "Kubernetes",
+    "icon_url": "https://avatars.githubusercontent.com/u/13629408?s=200&v=4",
+    "source": {
+      "project": "https://github.com/Flux159/mcp-server-kubernetes",
+      "commit": "662a19193fa79de1e4fa4f53faa25191c41481dc"
+    },
+    "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/kubernetes/server.yaml",
+    "image_reference": "mcp/kubernetes",
+    "archived": false,
+    "upstream_catalog_status": "listed",
+    "requirements": "Dedicated namespace and read-only RBAC; no cluster-admin, secrets access, exec or mutation by default."
+  },
+  "markitdown": {
+    "title": "Markitdown",
+    "catalog_title": "Markitdown",
+    "icon_url": "https://avatars.githubusercontent.com/u/6154722?v=4",
+    "source": {
+      "project": "https://github.com/microsoft/markitdown",
+      "commit": "e144e0a2be95b34df17433bac904e635f2c5e551",
+      "directory": "packages/markitdown-mcp"
+    },
+    "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/markitdown/server.yaml",
+    "image_reference": "mcp/markitdown",
+    "archived": false,
+    "upstream_catalog_status": "listed",
+    "requirements": "Sandbox document conversion, input size/type limits, no arbitrary file paths or unrestricted URL fetches."
+  },
+  "github-reference": {
+    "title": "GitHub (Reference)",
+    "catalog_title": "GitHub (Archived)",
+    "icon_url": "https://avatars.githubusercontent.com/u/182288589?s=200&v=4",
+    "source": {
+      "project": "https://github.com/modelcontextprotocol/servers",
+      "branch": "2025.4.24",
+      "commit": "b4ee623039a6c60053ce67269701ad9e95073306",
+      "dockerfile": "src/github/Dockerfile"
+    },
+    "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/github/server.yaml",
+    "image_reference": "mcp/github",
+    "archived": true,
+    "upstream_catalog_status": "archived",
+    "requirements": "Upstream catalog marks this reference archived. Review maintenance; prefer the existing PureCipher GitHub integration."
+  },
+  "n8n": {
+    "title": "n8n",
+    "catalog_title": "n8n",
+    "icon_url": "https://www.google.com/s2/favicons?domain=n8n.io&sz=64",
+    "source": {
+      "project": "https://github.com/czlonkowski/n8n-mcp",
+      "commit": "1bbfaabbc20f4989d81bc8a2cfc9f16795134ed8"
+    },
+    "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/n8n/server.yaml",
+    "image_reference": "mcp/n8n",
+    "archived": false,
+    "upstream_catalog_status": "listed",
+    "requirements": "Dedicated workspace/API credential, workflow allowlist and approval before execution or updates."
+  },
+  "redis": {
+    "title": "Redis",
+    "catalog_title": "Redis",
+    "icon_url": "https://avatars.githubusercontent.com/u/1529926?v=4",
+    "source": {
+      "project": "https://github.com/redis/mcp-redis",
+      "commit": "53df2bcb7754a393f53b6c880ab710b95fefa343"
+    },
+    "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/redis/server.yaml",
+    "image_reference": "mcp/redis",
+    "archived": false,
+    "upstream_catalog_status": "listed",
+    "requirements": "Dedicated Redis ACL user and key prefixes; block administrative and destructive commands."
+  },
+  "obsidian": {
+    "title": "Obsidian",
+    "catalog_title": "Obsidian",
+    "icon_url": "https://avatars.githubusercontent.com/u/65011256?s=200&v=4",
+    "source": {
+      "project": "https://github.com/docker/mcp-obsidian",
+      "upstream": "https://github.com/MarkusPfundstein/mcp-obsidian",
+      "branch": "docker-support",
+      "commit": "b20ad46eea43988a4c1a6f8ec7947ef4c6cbf9a9"
+    },
+    "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/obsidian/server.yaml",
+    "image_reference": "mcp/obsidian",
+    "archived": false,
+    "upstream_catalog_status": "listed",
+    "requirements": "Dedicated vault and scoped REST credential; restrict paths and review note writes separately."
+  },
+  "firecrawl": {
+    "title": "Firecrawl",
+    "catalog_title": "Firecrawl",
+    "icon_url": "https://avatars.githubusercontent.com/u/135057108?s=200&v=4",
+    "source": {
+      "project": "https://github.com/mendableai/firecrawl-mcp-server",
+      "commit": "2bab1cc2f960e32a3071ec592c89e0c46731a45f"
+    },
+    "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/firecrawl/server.yaml",
+    "image_reference": "mcp/firecrawl",
+    "archived": false,
+    "upstream_catalog_status": "listed",
+    "requirements": "API key, destination restrictions, crawl/page limits and credit budget."
+  },
+  "aws-core": {
+    "title": "AWS Core",
+    "catalog_title": "AWS Core",
+    "icon_url": "https://avatars.githubusercontent.com/u/3299148?v=4",
+    "source": {
+      "project": "https://github.com/awslabs/mcp",
+      "commit": "780e3f1d57c77f9c0b88279711c5b95e23cfb91d",
+      "directory": "src/core-mcp-server"
+    },
+    "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/aws-core-mcp-server/server.yaml",
+    "image_reference": "mcp/aws-core-mcp-server",
+    "archived": false,
+    "upstream_catalog_status": "listed",
+    "requirements": "Review delegated AWS server selection and IAM permissions. No implicit server installation or privileged account access."
+  },
+  "aws-documentation": {
+    "title": "AWS Documentation",
+    "catalog_title": "AWS Documentation",
+    "icon_url": "https://avatars.githubusercontent.com/u/3299148?v=4",
+    "source": {
+      "project": "https://github.com/awslabs/mcp",
+      "commit": "636aca8e109b5559006044f035bb89c16e9e5410",
+      "directory": "src/aws-documentation-mcp-server"
+    },
+    "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/aws-documentation/server.yaml",
+    "image_reference": "mcp/aws-documentation",
+    "archived": false,
+    "upstream_catalog_status": "listed",
+    "requirements": "AWS documentation-only egress and bounded retrieval; no AWS account credentials required for documentation reads."
+  },
+  "arxiv": {
+    "title": "ArXiv",
+    "catalog_title": "ArXiv",
+    "icon_url": "https://avatars.githubusercontent.com/u/15390319?v=4",
+    "source": {
+      "project": "https://github.com/jasonleinart/arxiv-mcp-server",
+      "commit": "fe977e538dc24bb2da937c6c9e48febb54083226"
+    },
+    "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/arxiv-mcp-server/server.yaml",
+    "image_reference": "mcp/arxiv-mcp-server",
+    "archived": false,
+    "upstream_catalog_status": "listed",
+    "requirements": "Bounded searches/downloads, dedicated storage, network restrictions and PDF parsing sandbox."
+  },
+  "ast-grep": {
+    "title": "ast-grep",
+    "catalog_title": "ast-grep",
+    "icon_url": "https://avatars.githubusercontent.com/u/114017360?s=200&v=4",
+    "source": {
+      "project": "https://github.com/dgageot/mcp-ast-grep",
+      "commit": "c0a1edaf9cd6b168f2b59bc5a0161ad49a793099"
+    },
+    "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/ast-grep/server.yaml",
+    "image_reference": "mcp/ast-grep",
+    "archived": false,
+    "upstream_catalog_status": "listed",
+    "requirements": "Dedicated code directory and read-only structural search; rewriting requires explicit approval."
+  },
+  "cloudwatch": {
+    "title": "Amazon CloudWatch",
+    "catalog_title": "Amazon CloudWatch",
+    "icon_url": "https://avatars.githubusercontent.com/u/3299148?v=4",
+    "source": {
+      "project": "https://github.com/awslabs/mcp",
+      "commit": "636aca8e109b5559006044f035bb89c16e9e5410",
+      "directory": "src/cloudwatch-mcp-server"
+    },
+    "catalog_source": "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/awslabs-cloudwatch/server.yaml",
+    "image_reference": "mcp/cloudwatch-mcp-server",
+    "archived": false,
+    "upstream_catalog_status": "listed",
+    "requirements": "Scoped read-only AWS role, region/account/log-group allowlists and query-cost limits."
   }
 }
