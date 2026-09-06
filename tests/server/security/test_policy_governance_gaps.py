@@ -959,20 +959,10 @@ class TestSecurityAPIGovernance:
         assert bundle is not None
         assert bundle["risk_posture"] == "strict"
         assert "ccpa" in bundle["tags"]
-        assert bundle["provider_count"] == 4
-
-        provider_types = [p.get("type") for p in bundle["providers"]]
-        assert "compliance_rule" in provider_types
-        assert "rbac" in provider_types
-        assert "denylist" in provider_types
-        assert "rate_limit" in provider_types
-
-        core = bundle["providers"][0]
-        assert core["type"] == "compliance_rule"
-        assert core["framework"] == "CCPA/CPRA"
-        assert len(core["rules"]) == 2
-        assert core["rules"][0]["name"] == "processing_purpose_required"
-        assert core["rules"][1]["name"] == "opt_out_check"
+        assert bundle["provider_count"] == 2
+        assert bundle["providers"][0]["type"] == "ccpa_request"
+        assert bundle["pack_version"] == "2.0.0"
+        assert bundle["source_urls"]
 
     def test_ferpa_bundle_structure(self) -> None:
         from fastmcp.server.security.policy.workbench import get_policy_bundle

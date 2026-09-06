@@ -108,6 +108,7 @@ class PolicyEvaluationContext:
     ferpa_evidence: Any = None
     zero_trust_evidence: Any = None
     pci_evidence: Any = None
+    ccpa_evidence: Any = None
 
 
 @dataclass(frozen=True)

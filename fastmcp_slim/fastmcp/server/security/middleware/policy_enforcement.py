@@ -28,6 +28,7 @@ from fastmcp.server.security.policy.engine import (
     PolicyEngine,
     PolicyViolationError,
 )
+from fastmcp.server.security.policy.policies.ccpa_request import CcpaEvidence
 from fastmcp.server.security.policy.policies.ferpa_request import FerpaEvidence
 from fastmcp.server.security.policy.policies.pci_request import PciEvidence
 from fastmcp.server.security.policy.policies.zero_trust import ZeroTrustEvidence
@@ -66,6 +67,10 @@ class PolicyEnforcementMiddleware(Middleware):
         policy_engine: PolicyEngine,
         *,
         bypass_stdio: bool = False,
+        ccpa_evidence_resolver: Callable[
+            [PolicyEvaluationContext], Awaitable[CcpaEvidence | None]
+        ]
+        | None = None,
         pci_evidence_resolver: Callable[
             [PolicyEvaluationContext], Awaitable[PciEvidence | None]
         ]
@@ -84,6 +89,7 @@ class PolicyEnforcementMiddleware(Middleware):
         self.ferpa_evidence_resolver = ferpa_evidence_resolver
         self.zero_trust_evidence_resolver = zero_trust_evidence_resolver
         self.pci_evidence_resolver = pci_evidence_resolver
+        self.ccpa_evidence_resolver = ccpa_evidence_resolver
 
     async def _evaluate(self, context: PolicyEvaluationContext) -> PolicyResult:
         if self.ferpa_evidence_resolver is not None and not context.action.startswith(
@@ -116,6 +122,17 @@ class PolicyEnforcementMiddleware(Middleware):
                 return _deny_result("PCI evidence is unavailable")
             context = replace(
                 context, pci_evidence=pci_evidence, timestamp=datetime.now(timezone.utc)
+            )
+        if self.ccpa_evidence_resolver is not None:
+            try:
+                ccpa_evidence = await self.ccpa_evidence_resolver(context)
+            except Exception:
+                logger.warning("CCPA evidence resolution failed; denying request")
+                return _deny_result("CCPA evidence is unavailable")
+            context = replace(
+                context,
+                ccpa_evidence=ccpa_evidence,
+                timestamp=datetime.now(timezone.utc),
             )
         return await self.policy_engine.evaluate(context)
 

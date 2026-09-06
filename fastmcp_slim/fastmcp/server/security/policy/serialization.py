@@ -28,6 +28,7 @@ from fastmcp.server.security.policy.policies.allowlist import (
     AllowlistPolicy,
     DenylistPolicy,
 )
+from fastmcp.server.security.policy.policies.ccpa_request import CcpaRequestPolicy
 from fastmcp.server.security.policy.policies.compliance_rule import (
     ComplianceRulePolicy,
 )
@@ -273,6 +274,8 @@ def policy_provider_to_config(provider: PolicyProvider) -> dict[str, Any]:
         return {
             "type": "pci_request"
             if isinstance(provider, PciRequestPolicy)
+            else "ccpa_request"
+            if isinstance(provider, CcpaRequestPolicy)
             else "zero_trust",
             "policy_id": provider.policy_id,
             "version": provider.version,

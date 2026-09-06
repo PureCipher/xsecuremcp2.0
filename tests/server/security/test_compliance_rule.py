@@ -461,48 +461,28 @@ class TestBundleComplianceRuleIntegration:
         assert result.decision == PolicyDecision.DENY
 
     @pytest.mark.anyio
-    async def test_ccpa_bundle_core_provider_evaluates(self) -> None:
+    async def test_ccpa_requires_trusted_evidence(self) -> None:
         from fastmcp.server.security.policy.declarative import load_policy
+        from fastmcp.server.security.policy.policies.ccpa_request import (
+            CcpaRequestPolicy,
+        )
         from fastmcp.server.security.policy.workbench import get_policy_bundle
 
         bundle = get_policy_bundle("ccpa-consumer-privacy")
         assert bundle is not None
-        core_config = bundle["providers"][0]
-        assert core_config["type"] == "compliance_rule"
-
-        provider = load_policy(core_config)
-        assert isinstance(provider, ComplianceRulePolicy)
-
-        untagged = await provider.evaluate(_ctx(tags=frozenset({"safe"})))
-        assert untagged.decision == PolicyDecision.DEFER
-
-        missing_purpose = await provider.evaluate(_ctx(tags=frozenset({"consumer_pi"})))
-        assert missing_purpose.decision == PolicyDecision.DENY
-
-        valid_access = await provider.evaluate(
-            _ctx(
-                tags=frozenset({"consumer_pi"}),
-                metadata={
-                    "processing_purpose": "service_delivery",
-                    "business_role": "business_operator",
-                },
+        provider = load_policy(bundle["providers"][0])
+        assert isinstance(provider, CcpaRequestPolicy)
+        for tags in (frozenset(), frozenset({"data_sharing"})):
+            result = await provider.evaluate(
+                _ctx(
+                    tags=tags,
+                    metadata={
+                        "business_role": "admin",
+                        "consumer_opt_out_verified": "false",
+                    },
+                )
             )
-        )
-        assert valid_access.decision == PolicyDecision.ALLOW
-
-        # Opt-out rule: data_sharing tag denied when opt-out not verified
-        opt_out_blocked = await provider.evaluate(
-            _ctx(tags=frozenset({"data_sharing"}))
-        )
-        assert opt_out_blocked.decision == PolicyDecision.DENY
-
-        opt_out_clear = await provider.evaluate(
-            _ctx(
-                tags=frozenset({"data_sharing"}),
-                metadata={"consumer_opt_out_verified": "false"},
-            )
-        )
-        assert opt_out_clear.decision == PolicyDecision.ALLOW
+            assert result.decision == PolicyDecision.DENY
 
     @pytest.mark.anyio
     async def test_ferpa_requires_trusted_evidence(self) -> None:

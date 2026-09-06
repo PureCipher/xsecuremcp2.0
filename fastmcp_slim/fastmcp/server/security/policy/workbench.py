@@ -507,121 +507,29 @@ _BUNDLES: tuple[PolicyBundle, ...] = (
     ),
     PolicyBundle(
         bundle_id="ccpa-consumer-privacy",
-        title="CCPA/CPRA Consumer Privacy",
-        summary="California Consumer Privacy Act controls for personal information handling.",
-        description=(
-            "Enforces CCPA/CPRA requirements for MCP tools and resources handling "
-            "California consumer personal information. Requires a valid processing "
-            "purpose and authorized business role before granting access. Supports "
-            "opt-out verification for data sales/sharing. Includes RBAC for privacy "
-            "team roles, denylists for unauthorized data monetization, and rate limits."
-        ),
+        title="CCPA/CPRA Request Validation",
+        summary="Validate consumer-data requests against current trusted privacy evidence.",
+        description="Checks every affected consumer, purpose, minimization, recipient restrictions, opt-outs/GPC, minors, sensitive use and consumer access safeguards. Requires exact grants and a server-side evidence resolver. ADMT is conservatively blocked pending a dedicated policy.",
         risk_posture="strict",
         recommended_environments=("staging", "production"),
         tags=("compliance", "ccpa", "cpra", "privacy", "california", "us"),
+        pack_version="2.0.0",
+        regulation_reference="CCPA as amended; 11 CCR Division 6 Chapter 1 (effective January 1, 2026)",
+        source_reviewed_at="2026-09-06",
+        source_urls=(
+            "https://cppa.ca.gov/pdf/20260101_ccpa_statute.pdf",
+            "https://cppa.ca.gov/regulations/pdf/ccpa_statute_eff_20260101.pdf",
+        ),
+        coverage_note="Request validation only; no consumer-rights workflow or business-wide certification. Trusted adapters verify complete data scope, current preferences, notices/contracts and applicable risk evidence. ADMT and legal-exemption overrides are unsupported. Empty grants/issuer/scope deny execution. Existing active policies are not migrated automatically.",
         providers=(
             {
-                "type": "compliance_rule",
-                "policy_id": "ccpa-bundle-core",
-                "version": "1.0.0",
-                "framework": "CCPA/CPRA",
-                "rules": [
-                    {
-                        "name": "processing_purpose_required",
-                        "description": (
-                            "Consumer PI access requires a valid processing purpose "
-                            "aligned with CCPA permitted purposes"
-                        ),
-                        "tags": [
-                            "ccpa_regulated",
-                            "consumer_pi",
-                            "personal_information",
-                            "sensitive_pi",
-                        ],
-                        "checks": [
-                            {
-                                "metadata_key": "processing_purpose",
-                                "allowed_values": [
-                                    "service_delivery",
-                                    "security_integrity",
-                                    "debugging",
-                                    "short_term_transient",
-                                    "quality_maintenance",
-                                    "research",
-                                    "consumer_requested",
-                                ],
-                            },
-                            {
-                                "metadata_key": "business_role",
-                                "allowed_values": [
-                                    "business_operator",
-                                    "service_provider",
-                                    "contractor",
-                                    "privacy_officer",
-                                ],
-                            },
-                        ],
-                        "deny_message": (
-                            "CCPA/CPRA: Consumer personal information access "
-                            "requires a valid processing purpose and authorized "
-                            "business role"
-                        ),
-                        "allow_message": (
-                            "CCPA/CPRA: Consumer PI access permitted for "
-                            "authorized role with valid purpose"
-                        ),
-                    },
-                    {
-                        "name": "opt_out_check",
-                        "description": (
-                            "Data sharing/selling requires verification that "
-                            "the consumer has not opted out"
-                        ),
-                        "tags": ["data_sharing", "data_selling", "cross_context"],
-                        "checks": [
-                            {
-                                "metadata_key": "consumer_opt_out_verified",
-                                "allowed_values": ["false"],
-                            },
-                        ],
-                        "deny_message": (
-                            "CCPA/CPRA: Data sharing/selling blocked — consumer "
-                            "opt-out status must be verified as not opted out"
-                        ),
-                        "allow_message": (
-                            "CCPA/CPRA: Data sharing permitted — consumer has "
-                            "not opted out"
-                        ),
-                    },
-                ],
-            },
-            {
-                "type": "rbac",
-                "policy_id": "ccpa-bundle-rbac",
-                "version": "1.0.0",
-                "role_mappings": {
-                    "business_operator": ["call_tool", "read_resource"],
-                    "service_provider": ["call_tool", "read_resource"],
-                    "privacy_officer": [
-                        "call_tool",
-                        "read_resource",
-                        "manage_policy",
-                        "review_listing",
-                    ],
-                    "admin": ["*"],
-                },
-                "default_decision": "deny",
-            },
-            {
-                "type": "denylist",
-                "policy_id": "ccpa-bundle-denylist",
-                "version": "1.0.0",
-                "denied": [
-                    "admin-panel",
-                    "data:sell-*",
-                    "data:share-unverified-*",
-                    "data:bulk-consumer-*",
-                ],
+                "type": "ccpa_request",
+                "policy_id": "ccpa-request-validation",
+                "version": "2.0.0",
+                "grants": [],
+                "trusted_issuers": [],
+                "scope_id": "",
+                "max_evidence_age_seconds": 60,
             },
             {
                 "type": "rate_limit",

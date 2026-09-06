@@ -653,6 +653,7 @@ class TestSchema:
             "ferpa_request",
             "zero_trust",
             "pci_request",
+            "ccpa_request",
         }
         assert set(types.keys()) == expected
 

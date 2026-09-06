@@ -67,6 +67,7 @@ from fastmcp.server.security.policy.policies.allowlist import (
     AllowlistPolicy,
     DenylistPolicy,
 )
+from fastmcp.server.security.policy.policies.ccpa_request import CcpaRequestPolicy
 from fastmcp.server.security.policy.policies.compliance_rule import (
     ComplianceRulePolicy,
     ComplianceRuleSpec,
@@ -350,6 +351,13 @@ def _build_pci_request(config: dict[str, Any]) -> PciRequestPolicy:
     return PciRequestPolicy(**vars(base))
 
 
+def _build_ccpa_request(config: dict[str, Any]) -> CcpaRequestPolicy:
+    base = _build_zero_trust(
+        {**config, "policy_id": config.get("policy_id", "ccpa-request-validation")}
+    )
+    return CcpaRequestPolicy(**vars(base))
+
+
 def _register_builtins() -> None:
     """Register all built-in policy types with the global registry."""
     builtins = [
@@ -378,6 +386,36 @@ def _register_builtins() -> None:
             },
             starter_config={
                 "type": "pci_request",
+                "grants": [],
+                "trusted_issuers": [],
+                "scope_id": "",
+            },
+        ),
+        PolicyTypeDescriptor(
+            type_key="ccpa_request",
+            factory=_build_ccpa_request,
+            display_name="CCPA/CPRA Request Validation",
+            category="compliance",
+            description="Consumer-specific privacy safeguards with trusted evidence.",
+            field_specs={
+                "grants": {
+                    "label": "Exact grants",
+                    "type": "json_list",
+                    "required": True,
+                },
+                "trusted_issuers": {
+                    "label": "Trusted issuers",
+                    "type": "string_list",
+                    "required": True,
+                },
+                "scope_id": {
+                    "label": "Server and tenant scope",
+                    "type": "string",
+                    "required": True,
+                },
+            },
+            starter_config={
+                "type": "ccpa_request",
                 "grants": [],
                 "trusted_issuers": [],
                 "scope_id": "",
