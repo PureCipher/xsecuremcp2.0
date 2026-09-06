@@ -13,7 +13,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-08-25T04:12:34.009663Z"
+exclude-newer = "2026-08-30T04:04:22.298137Z"
 exclude-newer-span = "P1W"
 
 [options.exclude-newer-package]
@@ -875,6 +875,7 @@ dependencies = [
     { name = "alembic" },
     { name = "fastmcp-slim", extra = ["client", "server"] },
     { name = "griffelib" },
+    { name = "httpx" },
     { name = "psycopg", extra = ["binary"] },
     { name = "psycopg-pool" },
     { name = "pyjwt" },
@@ -947,6 +948,7 @@ requires-dist = [
     { name = "fastmcp-slim", extras = ["openai"], marker = "extra == 'openai'", editable = "fastmcp_slim" },
     { name = "fastmcp-tasks", marker = "extra == 'tasks'", editable = "fastmcp_tasks" },
     { name = "griffelib", specifier = ">=2.0.0" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2.0" },
     { name = "psycopg-pool", specifier = ">=3.2.0" },
     { name = "pyjwt", specifier = ">=2.10.1" },

@@ -58,6 +58,7 @@ allow-direct-references = true
 dependencies = [
     "fastmcp-slim[client,server]=={{ version }}",
     "PyJWT>=2.10.1",
+    "httpx>=0.28.1",
     "alembic>=1.17.2",
     "psycopg[binary]>=3.2.0",
     "psycopg-pool>=3.2.0",
