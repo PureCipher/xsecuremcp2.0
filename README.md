@@ -17,6 +17,35 @@ xSecureMCP is PureCipher’s platform for building MCP servers, applying executi
 
 Security controls are configured explicitly for each deployment. Subclassing `FastMCP` or listing a tool in a registry does not by itself establish that a tool is safe or that every control has been applied.
 
+## How xSecureMCP extends MCP
+
+**MCP is the protocol; FastMCP is a Python framework; xSecureMCP adds configurable security and governance components on top.** xSecureMCP does not define a replacement wire protocol. MCP clients still discover and call tools using MCP messages.
+
+MCP already describes [authorization for HTTP transports](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization), user consent, and [security responsibilities for implementers](https://modelcontextprotocol.io/specification/2025-11-25). FastMCP already provides server/client APIs, middleware, and authentication integration. The additions below are implementation features in this fork, not claims that MCP or FastMCP lack security.
+
+| Area | xSecureMCP adds | Why it matters |
+| --- | --- | --- |
+| **Execution policy** | Configurable policy providers that evaluate operations and can deny execution, with fail-closed handling when configured. | Being authenticated does not mean a caller should be allowed to perform every operation. For example, an assistant may read a record while being forbidden to reset it. |
+| **Consent and contracts** | Consent graphs and contract checks that applications can connect to their identity, approval, and resource rules. | Access can depend on who owns the data, what was approved, and the permitted scope of use—not just whether a request is well formed. |
+| **Provenance and execution receipts** | Ledger records and portable receipts with outcome claims, input/output digests, and integrity proofs. | Operators and clients can inspect evidence about an observed execution when debugging or reviewing an incident. |
+| **Publication and certification** | Publisher manifests, validation, certification checks, registry listings, and optional moderation. | Teams need a review process for what enters their tool catalog, with publisher and trust information alongside connection details. |
+| **Monitoring and response** | Configurable behavioral analysis, security events, and escalation components. | A tool that passed an initial review can still need investigation when observed behavior changes. |
+| **Operational governance** | Policy audit trails, registry roles, and governance views in the companion console. | Administrators need to review access decisions and manage the tool lifecycle across a team. |
+
+These features only cover the execution paths and evidence sources connected to them. A catalog listing does not instrument a remote server. Tool annotations are not enforcement, a receipt is not a guarantee of truthful output, and enabling a policy module does not automatically establish regulatory compliance or process isolation.
+
+For example, consider an assistant working with customer records: MCP carries the tool call; authentication establishes the caller; a configured policy decides whether that caller may read or change the record; consent and contract checks evaluate applicable permissions; provenance records the execution that reaches it. Each control answers a different question. Their coverage and ordering depend on the server configuration.
+
+## Choose how to use it
+
+| Your goal | Start here |
+| --- | --- |
+| Build or adapt an MCP server | Install the fork, define your tools, then enable the controls you need through `SecurityConfig`. Follow the [worked usage guide](docs/using-xsecuremcp.md). |
+| Call a server from an application or agent | Connect an MCP client to that server’s endpoint. Receipt-aware clients can additionally inspect the xSecureMCP result metadata. |
+| Publish a tool for others to discover | Scaffold and edit a publisher project, validate it, configure its registry destination, and submit it with the publisher CLI. |
+| Operate a shared tool catalog | Run PureCipher Registry with authentication and PostgreSQL, then connect the separate xregistry console. |
+| Inspect the hosted backend | Open the Hugging Face Space’s health response. The Space is a registry backend; it does not host the calculator example below. |
+
 ## Install the latest tested build
 
 Python **3.10 or later** is required. The build workflow validates packages on Python **3.12**.
@@ -60,6 +89,32 @@ if __name__ == "__main__":
 ```
 
 Run `python server.py`, then connect an MCP client to `http://127.0.0.1:8000/mcp`. This example enables provenance; choose the additional policy, identity, consent, and contract settings needed for your application in the [security configuration guide](docs/servers/security/settings.mdx).
+
+### Call the server
+
+With `server.py` running, save the following as `client.py` and run `python client.py` in the same virtual environment:
+
+```python
+import asyncio
+
+from fastmcp import Client
+from securemcp.receipts import RECEIPT_META_KEY, verify_execution_receipt
+
+
+async def main():
+    async with Client("http://127.0.0.1:8000/mcp") as client:
+        result = await client.call_tool("add", {"a": 2, "b": 3})
+        print(result.data)  # 5
+        receipt = result.meta[RECEIPT_META_KEY]
+        print(verify_execution_receipt(receipt)["valid"])  # True
+
+
+asyncio.run(main())
+```
+
+The normal tool result remains available to MCP clients. Receipt verification is an explicit client action; clients that do not inspect the metadata do not automatically verify it. The example checks internal integrity. For independently anchored verification, supply a ledger root obtained through a trusted channel.
+
+Continue with the [worked usage guide](docs/using-xsecuremcp.md) to add an execution policy and confirm that a disallowed tool is blocked. That guide also covers adopting the fork in an existing FastMCP server and operating a registry.
 
 ### Execution receipts
 

@@ -19,6 +19,33 @@ xSecureMCP is PureCipher’s platform for building MCP servers, applying executi
 
 [GitHub project](https://github.com/PureCipher/xsecuremcp2.0) · [Python downloads](https://github.com/PureCipher/xsecuremcp2.0/releases/tag/build-latest) · [Registry console](https://github.com/PureCipher/xregistry) · [Documentation](https://github.com/PureCipher/xsecuremcp2.0/tree/main/docs/servers/security)
 
+## What changes beyond MCP, and why
+
+**MCP is the protocol; FastMCP is a Python framework; xSecureMCP adds configurable security and governance components on top.** xSecureMCP does not define a replacement wire protocol. MCP clients still discover and call tools using MCP messages.
+
+MCP already describes [authorization for HTTP transports](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization), user consent, and [security responsibilities for implementers](https://modelcontextprotocol.io/specification/2025-11-25). FastMCP already provides server/client APIs, middleware, and authentication integration. The additions below are implementation features in this fork, not claims that MCP or FastMCP lack security.
+
+| Area | xSecureMCP adds | Why it matters |
+| --- | --- | --- |
+| **Execution policy** | Configurable policy providers that evaluate operations and can deny execution, with fail-closed handling when configured. | Being authenticated does not mean a caller should be allowed to perform every operation. For example, an assistant may read a record while being forbidden to reset it. |
+| **Consent and contracts** | Consent graphs and contract checks that applications can connect to their identity, approval, and resource rules. | Access can depend on who owns the data, what was approved, and the permitted scope of use—not just whether a request is well formed. |
+| **Provenance and execution receipts** | Ledger records and portable receipts with outcome claims, input/output digests, and integrity proofs. | Operators and clients can inspect evidence about an observed execution when debugging or reviewing an incident. |
+| **Publication and certification** | Publisher manifests, validation, certification checks, registry listings, and optional moderation. | Teams need a review process for what enters their tool catalog, with publisher and trust information alongside connection details. |
+| **Monitoring and response** | Configurable behavioral analysis, security events, and escalation components. | A tool that passed an initial review can still need investigation when observed behavior changes. |
+| **Operational governance** | Policy audit trails, registry roles, and governance views in the companion console. | Administrators need to review access decisions and manage the tool lifecycle across a team. |
+
+These features only cover the execution paths and evidence sources connected to them. A catalog listing does not instrument a remote server. Tool annotations are not enforcement, a receipt is not a guarantee of truthful output, and enabling a policy module does not automatically establish regulatory compliance or process isolation.
+
+For example, consider an assistant working with customer records: MCP carries the tool call; authentication establishes the caller; a configured policy decides whether that caller may read or change the record; consent and contract checks evaluate applicable permissions; provenance records the execution that reaches it. Each control answers a different question. Their coverage and ordering depend on the server configuration.
+
+## How to use the project
+
+1. **Try the backend:** use the health request below to inspect this Space. It is the registry service, not a general-purpose agent or the calculator example.
+2. **Build a server:** install the matching fork packages, define your tools, and configure `SecurityConfig` for the controls your application needs.
+3. **Connect a client:** point an MCP client at your server’s endpoint. The [server-and-client quickstart](https://github.com/PureCipher/xsecuremcp2.0#build-an-mcp-server) demonstrates a tool call and receipt verification.
+4. **Check enforcement:** follow the [worked usage guide](https://github.com/PureCipher/xsecuremcp2.0/blob/main/docs/using-xsecuremcp.md) to allow one operation, deny another, and understand the resulting evidence.
+5. **Share and operate:** use PureCipher Publisher to submit projects to your chosen registry, and the separate xregistry console to manage it. Configure authentication, moderation, and persistent storage for your deployment.
+
 ## What this Space runs
 
 This Space hosts the **PureCipher Registry backend API** in a Docker container. It supports tool listings, publisher information, certification checks, moderation, and configurable access control.
