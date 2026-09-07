@@ -14,3 +14,9 @@ pytest-cache-files-*
 *.pyo
 *.pyd
 .DS_Store
+
+# Keep local documentation and editor configuration out of image contexts
+**/.cursor
+**/.cursor/**
+**/*.md
+!**/README.md

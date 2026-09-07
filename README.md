@@ -40,7 +40,7 @@ For example, consider an assistant working with customer records: MCP carries th
 
 | Your goal | Start here |
 | --- | --- |
-| Build or adapt an MCP server | Install the fork, define your tools, then enable the controls you need through `SecurityConfig`. Follow the [worked usage guide](docs/using-xsecuremcp.md). |
+| Build or adapt an MCP server | Install the fork, define your tools, then enable the controls you need through `SecurityConfig`. |
 | Call a server from an application or agent | Connect an MCP client to that server’s endpoint. Receipt-aware clients can additionally inspect the xSecureMCP result metadata. |
 | Publish a tool for others to discover | Scaffold and edit a publisher project, validate it, configure its registry destination, and submit it with the publisher CLI. |
 | Operate a shared tool catalog | Run PureCipher Registry with authentication and PostgreSQL, then connect the separate xregistry console. |
@@ -62,7 +62,7 @@ On Windows, activate the environment with `.venv\Scripts\Activate.ps1` in PowerS
 
 The bundle contains four distributions: `fastmcp`, `fastmcp-slim`, `fastmcp-remote`, and `fastmcp-tasks`. These names are retained for compatibility; the fork also provides the `securemcp` and `purecipher` Python modules and command-line tools. Installing `fastmcp` directly from PyPI selects the upstream distribution.
 
-The [rolling release](https://github.com/PureCipher/xsecuremcp2.0/releases/tag/build-latest) also provides a ZIP bundle, source distributions, dependency constraints, checksums, and build metadata. It is a development build from this repository’s `main` branch. See [builds and installation](.github/WORKFLOWS.md) for details.
+The [rolling release](https://github.com/PureCipher/xsecuremcp2.0/releases/tag/build-latest) also provides a ZIP bundle, source distributions, dependency constraints, checksums, and build metadata. It is a development build from this repository’s `main` branch.
 
 ## Build an MCP server
 
@@ -114,13 +114,13 @@ asyncio.run(main())
 
 The normal tool result remains available to MCP clients. Receipt verification is an explicit client action; clients that do not inspect the metadata do not automatically verify it. The example checks internal integrity. For independently anchored verification, supply a ledger root obtained through a trusted channel.
 
-Continue with the [worked usage guide](docs/using-xsecuremcp.md) to add an execution policy and confirm that a disallowed tool is blocked. That guide also covers adopting the fork in an existing FastMCP server and operating a registry.
+When adding an execution policy, test both an allowed operation and a disallowed operation to confirm enforcement.
 
 ### Execution receipts
 
 With provenance enabled, completed tool calls can carry an execution receipt containing outcome claims, input/output digests, and a ledger inclusion proof. Clients can inspect and verify these receipts through the public `securemcp` API.
 
-Receipt verification checks integrity and consistency. Authenticating an issuer or establishing the truth of a reported outcome requires an appropriate trust relationship; a self-consistent receipt alone does not establish either. See [Execution Receipts](docs/execution-receipts.md) for usage, coverage, and verification boundaries.
+Receipt verification checks integrity and consistency. Authenticating an issuer or establishing the truth of a reported outcome requires an appropriate trust relationship; a self-consistent receipt alone does not establish either.
 
 ## Run the registry backend
 
@@ -189,7 +189,7 @@ Every push to `PureCipher/xsecuremcp2.0:main` runs tests and static checks, buil
 
 A separate daily workflow reports new stable FastMCP releases for manual review. Upstream release-tag imports and merges remain manual. Neither workflow pushes changes to `PrefectHQ/fastmcp`.
 
-See [workflow configuration and retention](.github/WORKFLOWS.md) for permissions, notification setup, and publication behavior.
+The workflow definitions in `.github/workflows/` describe permissions, notification setup, and publication behavior.
 
 ## Develop from source
 
@@ -209,8 +209,14 @@ uv run prek run --all-files
 | [`fastmcp_remote`](fastmcp_remote), [`fastmcp_tasks`](fastmcp_tasks) | Remote and task support packages. |
 | [`tests`](tests) | Framework, registry, security, and packaging tests. |
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) before proposing changes.
+## Contributing
+
+Describe the problem and validation when proposing changes.
 
 ## License and attribution
 
 Licensed under [Apache 2.0](LICENSE). xSecureMCP is maintained by PureCipher and builds on the work of [FastMCP](https://github.com/PrefectHQ/fastmcp) and its contributors.
+
+## Local documentation
+
+Markdown documents other than `README.md` are maintained locally under `docs/` and excluded from GitHub and Hugging Face. Cursor configuration is also local-only.

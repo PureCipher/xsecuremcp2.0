@@ -182,6 +182,4 @@ jobs:
           test -n "$HF_TOKEN" || { echo "Configure the HF_TOKEN Actions secret."; exit 1; }
           git fetch --no-tags origin main
           test "$(git rev-parse FETCH_HEAD)" = "$GITHUB_SHA"
-          uvx --from huggingface_hub==1.30.0 hf upload purecipher/xsecuremcp hf-space . \
-            --repo-type space --delete 'wheels/*.whl' \
-            --commit-message "Deploy tested PureCipher build $GITHUB_SHA"
+          uv run --no-project --with huggingface_hub==1.30.0 python scripts/publish_huggingface.py

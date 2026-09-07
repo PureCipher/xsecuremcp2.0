@@ -24,7 +24,7 @@ mcp = FastMCP("Skills Server")
 # mcp.add_provider(SkillProvider(Path.home() / ".claude/skills/pdf-processing"))
 
 # Option 2: Load all skills from a custom directory
-skills_dir = Path(__file__).parent / "sample_skills"
+skills_dir = Path(__file__).resolve().parents[2] / "docs/examples/skills/sample_skills"
 mcp.add_provider(SkillsDirectoryProvider(roots=skills_dir, reload=True))
 
 # Option 3: Load skills from a platform's default location

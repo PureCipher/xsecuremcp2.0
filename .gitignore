@@ -82,3 +82,8 @@ plans/
 /server.py
 /client.py
 /test.json
+
+# Local-only Markdown and Cursor configuration
+*.md
+!README.md
+.cursor/

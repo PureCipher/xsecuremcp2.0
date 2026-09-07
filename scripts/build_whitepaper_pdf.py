@@ -4,7 +4,7 @@ Usage::
 
     uv run --with markdown --with weasyprint scripts/build_whitepaper_pdf.py [SOURCE.md]
 
-``SOURCE.md`` defaults to ``SECUREMCP_WHITEPAPER.md``. The output names and the
+``SOURCE.md`` defaults to ``docs/SECUREMCP_WHITEPAPER.md``. The output names and the
 running footer title are derived from it, so a new document needs no edits here.
 
 Uses WeasyPrint's Python API rather than its CLI so the resolved
@@ -22,7 +22,7 @@ import markdown
 from weasyprint import HTML
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCE = ROOT / (sys.argv[1] if len(sys.argv) > 1 else "SECUREMCP_WHITEPAPER.md")
+SOURCE = ROOT / (sys.argv[1] if len(sys.argv) > 1 else "docs/SECUREMCP_WHITEPAPER.md")
 HTML_OUT = ROOT / "artifacts" / f"{SOURCE.stem}.html"
 PDF_OUT = ROOT / "artifacts" / f"{SOURCE.stem}.pdf"
 

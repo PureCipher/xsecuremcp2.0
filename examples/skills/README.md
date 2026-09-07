@@ -9,13 +9,17 @@ skills/
 ├── README.md              # This file
 ├── server.py              # MCP server that exposes skills
 ├── client.py              # Example client that discovers and reads skills
-└── sample_skills/         # Example skills directory
+└── ../../docs/examples/skills/sample_skills/  # Local-only skills directory
     ├── pdf-processing/
     │   ├── SKILL.md       # Main skill file
     │   └── reference.md   # Supporting documentation
     └── code-review/
         └── SKILL.md       # Main skill file
 ```
+
+The sample `SKILL.md` files and supporting Markdown are local-only, under
+`docs/examples/skills/sample_skills/`. They are excluded from GitHub and Hugging Face.
+A fresh clone must supply its own skill files before running these examples.
 
 ## Running the Example
 

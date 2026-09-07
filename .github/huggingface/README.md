@@ -43,7 +43,7 @@ For example, consider an assistant working with customer records: MCP carries th
 1. **Try the backend:** use the health request below to inspect this Space. It is the registry service, not a general-purpose agent or the calculator example.
 2. **Build a server:** install the matching fork packages, define your tools, and configure `SecurityConfig` for the controls your application needs.
 3. **Connect a client:** point an MCP client at your server’s endpoint. The [server-and-client quickstart](https://github.com/PureCipher/xsecuremcp2.0#build-an-mcp-server) demonstrates a tool call and receipt verification.
-4. **Check enforcement:** follow the [worked usage guide](https://github.com/PureCipher/xsecuremcp2.0/blob/main/docs/using-xsecuremcp.md) to allow one operation, deny another, and understand the resulting evidence.
+4. **Check enforcement:** allow one operation, deny another, and inspect the resulting evidence. See the [project README](https://github.com/PureCipher/xsecuremcp2.0#readme) for the security configuration and its boundaries.
 5. **Share and operate:** use PureCipher Publisher to submit projects to your chosen registry, and the separate xregistry console to manage it. Configure authentication, moderation, and persistent storage for your deployment.
 
 ## What this Space runs

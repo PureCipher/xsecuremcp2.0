@@ -45,7 +45,7 @@ const {
 } = require("docx");
 
 const ROOT = path.resolve(__dirname, "..");
-const SOURCE = path.resolve(ROOT, process.argv[2] || "SECUREMCP_WHITEPAPER.md");
+const SOURCE = path.resolve(ROOT, process.argv[2] || "docs/SECUREMCP_WHITEPAPER.md");
 const STEM = path.basename(SOURCE, ".md");
 const OUT = path.join(ROOT, "artifacts", `${STEM}.docx`);
 

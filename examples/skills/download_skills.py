@@ -29,7 +29,9 @@ console = Console()
 async def main():
     # For this example, we'll create an in-memory server with skills.
     # In practice, you'd connect to a remote server URL.
-    skills_dir = Path(__file__).parent / "sample_skills"
+    skills_dir = (
+        Path(__file__).resolve().parents[2] / "docs/examples/skills/sample_skills"
+    )
     mcp = FastMCP("Skills Server")
     mcp.add_provider(SkillsDirectoryProvider(roots=skills_dir))
 
