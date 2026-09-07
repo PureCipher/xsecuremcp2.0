@@ -182,4 +182,4 @@ jobs:
           test -n "$HF_TOKEN" || { echo "Configure the HF_TOKEN Actions secret."; exit 1; }
           git fetch --no-tags origin main
           test "$(git rev-parse FETCH_HEAD)" = "$GITHUB_SHA"
-          uv run --no-project --with huggingface_hub==1.30.0 python scripts/publish_huggingface.py
+          uv run --no-config --no-project --with huggingface_hub==1.30.0 python scripts/publish_huggingface.py
