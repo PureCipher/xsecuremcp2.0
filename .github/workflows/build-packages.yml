@@ -123,6 +123,24 @@ jobs:
           echo "Registry health check failed."
           exit 1
 
+      - name: Prepare and test the Hugging Face Docker Space
+        run: |
+          python scripts/prepare_huggingface.py
+          docker build -t xsecuremcp-hf:ci hf-space
+          docker run --rm -v "$PWD/scripts/smoke_installed_package.py:/smoke.py:ro" \
+            xsecuremcp-hf:ci python /smoke.py
+          docker run -d --name hf-smoke -p 127.0.0.1:8001:8000 \
+            -e PURECIPHER_SIGNING_SECRET=ci-smoke-only-not-for-production xsecuremcp-hf:ci
+          trap 'docker logs hf-smoke; docker rm -f hf-smoke' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8001/registry/health; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Hugging Face container health check failed."
+          exit 1
+
       - name: Confirm this is still the current main commit
         env:
           BUILD_COMMIT: ${{ github.sha }}
@@ -153,3 +171,15 @@ jobs:
         with:
           script: |
             await require('./.github/scripts/publish-build.cjs').cleanupImage({ github, context });
+
+      - name: Deploy tested wheels to the Hugging Face Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_HUB_DISABLE_TELEMETRY: "1"
+        run: |
+          test -n "$HF_TOKEN" || { echo "Configure the HF_TOKEN Actions secret."; exit 1; }
+          git fetch --no-tags origin main
+          test "$(git rev-parse FETCH_HEAD)" = "$GITHUB_SHA"
+          uvx --from huggingface_hub==1.30.0 hf upload purecipher/xsecuremcp hf-space . \
+            --repo-type space --delete 'wheels/*.whl' \
+            --commit-message "Deploy tested PureCipher build $GITHUB_SHA"

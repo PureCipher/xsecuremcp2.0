@@ -27,6 +27,25 @@ failure can leave a partially updated publication; the workflow reports failure
 and can be rerun. No upstream version tags or unrelated releases are deleted.
 The rolling `build-latest` tag is the only Git tag this workflow updates.
 
+## Hugging Face Space
+
+After the GitHub publications succeed, the build workflow uploads the tested
+four wheels and locked constraints to
+[purecipher/xsecuremcp](https://huggingface.co/spaces/purecipher/xsecuremcp).
+The Space README selects the Docker SDK and port 8000. Its Dockerfile installs
+the tested wheels and runs as user 1000; CI checks this container's MCP calls,
+database migrations, and registry health before uploading it. Hugging Face
+then builds and starts the Space asynchronously.
+
+The GitHub Actions secret `HF_TOKEN` must have write access to this Space.
+Configure `PURECIPHER_SIGNING_SECRET` in the Space secrets before startup, and
+`DATABASE_URL` for persistent PostgreSQL storage if needed. Existing Space
+secrets and visibility are preserved. The deployment replaces its Dockerfile,
+README, `.dockerignore`, license, build metadata, and `wheels/` artifacts;
+unrelated existing source files are retained but excluded from the Docker build.
+Superseded wheels are removed from the current Space revision. Hub Git history
+is retained. No model or dataset repository is created.
+
 ## Install with pip
 
 GitHub Packages does not provide a native Python/pip registry. The rolling
