@@ -1536,10 +1536,43 @@ for _product in (
             "version": 2,
             "instructions": [
                 "Save a connection and verify it to enable this utility for your profiles.",
-                "Memory and reasoning steps are encrypted and scoped to this connection. Remove the connection to delete its stored state.",
             ],
         }
     )
+
+
+_UTILITY_INSTRUCTIONS = {
+    "time": [
+        "No API key or external account is needed. Save this connection, then choose Verify connection.",
+        "Add Time to a profile and select current-time or timezone-conversion tools. Supply the timezone when calling a tool.",
+    ],
+    "memory": [
+        "Save and verify this connection to use your private knowledge graph.",
+        "Memory is scoped to this connection. Removing the connection deletes its stored state.",
+    ],
+    "sequential-thinking": [
+        "Save and verify this connection to organize reasoning steps in a profile.",
+        "Reasoning state is scoped to this connection. Removing it deletes that stored state.",
+    ],
+    "wikipedia": [
+        "No API key is needed. Save and verify this connection, then select Wikipedia tools in your profile.",
+        "Searches retrieve public Wikipedia content. Review source articles before relying on results.",
+    ],
+    "fetch": [
+        "Save and verify this connection, then allow the Fetch tool in your profile.",
+        "Supply a public URL when calling the tool. Network access remains subject to registry security rules.",
+    ],
+    "aws-documentation": [
+        "No AWS credentials are needed to read public AWS documentation. Save and verify this connection.",
+        "Add documentation tools to your profile. This connection does not grant access to AWS account resources.",
+    ],
+    "arxiv": [
+        "No API key is needed. Save and verify this connection, then select arXiv tools in your profile.",
+        "Search public papers and use the returned paper identifiers to retrieve details.",
+    ],
+}
+for _product, _instructions in _UTILITY_INSTRUCTIONS.items():
+    PRODUCT_SCHEMAS[_product].update({"version": 3, "instructions": _instructions})
 
 
 for _product in ("aws-core", "cloudwatch"):

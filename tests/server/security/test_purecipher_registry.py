@@ -5070,10 +5070,14 @@ class TestRegistryClientActivity:
         )
 
     @staticmethod
-    def _row(timestamp: Any, *, resource_id: str = "tool_x") -> Any:
+    def _row(
+        timestamp: Any, *, resource_id: str = "tool_x", action: Any = "tool_called"
+    ) -> Any:
         from types import SimpleNamespace
 
-        return SimpleNamespace(timestamp=timestamp, resource_id=resource_id)
+        return SimpleNamespace(
+            timestamp=timestamp, resource_id=resource_id, action=action
+        )
 
     def test_never_seen_yields_never_status(self):
         out = self._summarize(ledger_rows=[], tokens=[])
@@ -5098,6 +5102,31 @@ class TestRegistryClientActivity:
         assert out["last_seen_source"] == "ledger"
         assert out["calls_last_hour"] == 1
         assert out["calls_last_24h"] == 1
+
+    def test_receipts_and_audit_events_do_not_inflate_tool_usage(self):
+        from datetime import datetime, timezone
+
+        from fastmcp.server.security.provenance.records import ProvenanceAction
+
+        now = datetime.now(timezone.utc)
+        rows = [
+            self._row(now, action=action)
+            for action in (
+                ProvenanceAction.TOOL_CALLED,
+                ProvenanceAction.EXECUTION_RECEIPT,
+                ProvenanceAction.TOOL_RESULT,
+                ProvenanceAction.POLICY_EVALUATED,
+                ProvenanceAction.ACCESS_DENIED,
+            )
+        ]
+        rows.append(self._row(now, resource_id="__list_tools__"))
+        out = self._summarize(ledger_rows=rows, tokens=[])
+        assert out["calls_last_hour"] == out["calls_last_24h"] == 1
+        assert sum(b["count"] for b in out["hourly_buckets"]) == 1
+        assert out["top_resources"] == [{"resource_id": "tool_x", "count": 1}]
+        audit_only = self._summarize(ledger_rows=rows[1:], tokens=[])
+        assert audit_only["calls_last_24h"] == 0
+        assert audit_only["status_label"] == "live"
 
     def test_status_graduates_with_age(self):
         """Walk a single record from 30s old → 30min old → 6h old →

@@ -48,6 +48,11 @@ from purecipher.account_security import (
 )
 from purecipher.auth import RegistryAuthSettings, RegistryRole, RegistrySession
 from purecipher.catalog_query import browse_catalog, label
+from purecipher.client_usage import (
+    estimated_tokens,
+    is_tool_call,
+    summarize_token_usage,
+)
 from purecipher.clients import (
     CLIENT_KINDS,
     ClientStoreError,
@@ -1137,9 +1142,11 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         recent_records: list[dict[str, Any]] = []
         record_count = 0
         ledger_rows: list[Any] = []
+        ledger_available = False
         if ledger is not None:
             try:
                 ledger_rows = list(ledger.get_records(actor_id=slug, limit=1000))
+                ledger_available = True
             except Exception:
                 ledger_rows = []
             record_count = len(ledger_rows)
@@ -1159,6 +1166,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                             else None
                         ),
                         "contract_id": getattr(row, "contract_id", None),
+                        "token_usage": estimated_tokens(row),
                     }
                 )
 
@@ -1227,6 +1235,9 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             ledger_rows=ledger_rows,
             tokens=tokens,
         )
+
+        if not ledger_available:
+            activity_summary["token_usage_24h"] = None
 
         result: dict[str, Any] = {
             **header,
@@ -1322,8 +1333,8 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
           ``"live"`` (≤60s) / ``"recent"`` (≤15min) /
           ``"idle"`` (≤24h) / ``"dormant"`` (>24h) /
           ``"never"`` (no signal).
-        * ``calls_last_hour`` / ``calls_last_24h``: ledger record
-          counts in those rolling windows.
+        * ``calls_last_hour`` / ``calls_last_24h``: recorded tool-call
+          counts in those rolling windows, excluding receipt and audit events.
         * ``hourly_buckets``: 24-element array of
           ``{hour_offset, count}`` records for the last 24 hours
           (offset 0 = current hour, 23 = 23 hours ago) — drives the
@@ -1386,11 +1397,14 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
         # ── windowed call counts (ledger only — tokens don't carry
         # per-call timestamps, just a single last_used_at).
+        # One TOOL_CALLED event represents a call. Receipts, results and
+        # policy/consent events remain in the feed but must not inflate usage.
+        call_rows = [row for row in ledger_rows if is_tool_call(row)]
         one_hour_ago = now - timedelta(hours=1)
         one_day_ago = now - timedelta(hours=24)
         calls_last_hour = 0
         calls_last_24h = 0
-        for row in ledger_rows:
+        for row in call_rows:
             ts = getattr(row, "timestamp", None)
             if ts is None:
                 continue
@@ -1401,7 +1415,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
         # ── hourly buckets, hour 0 == current hour, 23 == 23h ago
         hourly_counts: list[int] = [0] * 24
-        for row in ledger_rows:
+        for row in call_rows:
             ts = getattr(row, "timestamp", None)
             if ts is None or ts < one_day_ago:
                 continue
@@ -1414,7 +1428,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
         # ── top resources (last 24h window)
         resource_counts: dict[str, int] = {}
-        for row in ledger_rows:
+        for row in call_rows:
             ts = getattr(row, "timestamp", None)
             if ts is None or ts < one_day_ago:
                 continue
@@ -1438,6 +1452,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             "last_seen_source": last_seen_source,
             "idle_seconds": idle_seconds,
             "status_label": status_label,
+            "token_usage_24h": summarize_token_usage(ledger_rows, now),
             "calls_last_hour": calls_last_hour,
             "calls_last_24h": calls_last_24h,
             "hourly_buckets": hourly_buckets,
@@ -1594,7 +1609,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             {
                 k: v
                 for k, v in row.items()
-                if k not in {"resource_id", "contract_id", "record_id"}
+                if k not in {"resource_id", "contract_id", "record_id", "token_usage"}
             }
             for row in ledger.get("recent_records", []) or []
         ]
@@ -1618,6 +1633,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         # are ambient and don't leak counterparty identifiers.
         activity = dict(sanitized.get("activity") or {})
         activity["top_resources"] = []
+        activity.pop("token_usage_24h", None)
         sanitized["activity"] = activity
 
         return sanitized
