@@ -30,6 +30,7 @@ def list_public_publishers(
     listing_serializer: Callable[[ToolListing], dict[str, object]],
     limit: int = 10_000,
     registered_publishers: dict[str, str] | None = None,
+    publisher_details: dict[str, dict[str, str]] | None = None,
 ) -> list[PublisherProfile]:
     """Include registered publishers; derive public metrics only from published listings."""
 
@@ -92,6 +93,21 @@ def list_public_publishers(
                     average_trust=None,
                 )
             )
+    for username, details in (publisher_details or {}).items():
+        # Only active registered publishers may override their public identity.
+        if username not in (registered_publishers or {}):
+            continue
+        publisher_id = publisher_id_from_author(username)
+        profile = by_id[publisher_id]
+        by_id[publisher_id] = replace(
+            profile,
+            summary=replace(
+                profile.summary,
+                display_name=details["display_name"],
+                description=details["description"],
+                website=details["website"],
+            ),
+        )
     profiles = list(by_id.values())
 
     profiles.sort(
@@ -112,6 +128,7 @@ def get_public_publisher_profile(
     listing_serializer: Callable[[ToolListing], dict[str, object]],
     limit: int = 10_000,
     registered_publishers: dict[str, str] | None = None,
+    publisher_details: dict[str, dict[str, str]] | None = None,
 ) -> PublisherProfile | None:
     """Look up a publisher profile from published listings."""
 
@@ -121,6 +138,7 @@ def get_public_publisher_profile(
         listing_serializer=listing_serializer,
         limit=limit,
         registered_publishers=registered_publishers,
+        publisher_details=publisher_details,
     ):
         if profile.summary.publisher_id == publisher_id:
             return profile

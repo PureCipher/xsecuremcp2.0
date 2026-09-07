@@ -3709,6 +3709,10 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             trust_lookup=self._trust_overall,
             listing_serializer=self._serialize_listing_detail,
             registered_publishers=self._registered_publisher_names(),
+            publisher_details={
+                item["owner"]: item
+                for item in self._workspace.list_kind("publisher-profile")
+            },
             limit=limit,
         )
         return {
@@ -3726,6 +3730,10 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             trust_lookup=self._trust_overall,
             listing_serializer=self._serialize_listing_detail,
             registered_publishers=self._registered_publisher_names(),
+            publisher_details={
+                item["owner"]: item
+                for item in self._workspace.list_kind("publisher-profile")
+            },
         )
         if profile is None:
             return {

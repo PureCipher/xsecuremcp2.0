@@ -15,6 +15,16 @@ PureCipher Secured MCP Registry is an opinionated product layer on top of Secure
 
 This is the right MVP for a marketplace-style product because it focuses on verification, trust, and discoverability before taking on the harder runtime-hosting problem.
 
+## Publisher profile editing
+
+Publishers can open **Publisher profile** in the console to edit their public display name, description, and website, then select **Save changes**. The updated identity appears in the publisher directory and on the public publisher page, including before a publisher submits their first server. **Cancel edits** restores the last loaded values.
+
+The account username, publisher ID, server ownership, verification, and access role do not change when public details are edited. Publisher details are public; do not include passwords, API keys, or private contact information in the description or website URL.
+
+`GET /registry/workspace/publisher-profile` returns the signed-in publisher's details and revision. `PUT` accepts `display_name` (required, up to 120 characters), `description` (up to 2,000 characters), `website` (an optional HTTP or HTTPS URL, up to 2,048 characters), and the loaded `revision`. Identity and role fields are rejected. A stale revision returns HTTP 409 so another tab's changes cannot be silently overwritten.
+
+Profiles use the existing `purecipher_workspace` PostgreSQL store with an owner-specific record; no new database migration is required. With PostgreSQL configured, details persist across restarts. Development instances without a PostgreSQL persistence target keep these details only in memory.
+
 ## Quick Start
 
 ```python

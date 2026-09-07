@@ -17,6 +17,8 @@ class PublisherSummary:
     categories: list[str] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
     latest_activity: str = ""
+    description: str = ""
+    website: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize for JSON responses."""
@@ -29,6 +31,8 @@ class PublisherSummary:
             "categories": list(self.categories),
             "tags": list(self.tags),
             "latest_activity": self.latest_activity,
+            "description": self.description,
+            "website": self.website,
         }
 
 
