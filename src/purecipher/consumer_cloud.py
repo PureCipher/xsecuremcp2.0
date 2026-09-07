@@ -87,7 +87,7 @@ PRODUCTS = {
     ),
     "huggingface": (
         "HF_TOKEN",
-        "Hugging Face read token",
+        "Hugging Face scoped access token",
         "https://huggingface.co/api/",
         "whoami-v2",
     ),

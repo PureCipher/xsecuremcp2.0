@@ -1,4 +1,4 @@
-"""Read-only consumer runtimes. Credentials are scoped to one profile call."""
+"""Consumer runtimes. Credentials and capabilities are scoped to one profile call."""
 
 import contextvars
 import hashlib
@@ -35,9 +35,14 @@ def runtime_ready(registry, item):
     if item["product"] not in getattr(registry, "_consumer_products", set()):
         return False
     if item["product"] in GOOGLE:
-        from purecipher.consumer_oauth import load_grant
+        from purecipher.consumer_oauth import load_grant, validate_connection_grant
 
         grant = load_grant(registry, item)
+        if grant:
+            try:
+                validate_connection_grant(registry, item, grant)
+            except ValueError:
+                return False
         return bool(
             grant
             and (
@@ -127,114 +132,15 @@ def register_consumer_tools(registry):
             {"q": query, "count": count},
         )
 
-    @tool("google-gmail")
-    async def gmail_profile() -> dict:
-        """Read the authorized user's Gmail profile."""
-        return await provider_get(
-            "https://gmail.googleapis.com/gmail/v1/users/me/profile",
-            access("google-gmail"),
-        )
+    from purecipher.consumer_google_workspace import (
+        register as register_google_workspace,
+    )
 
-    @tool("google-gmail")
-    async def gmail_list_messages(
-        query: str = "", page_token: str = "", max_results: int = 20
-    ) -> dict:
-        """List message IDs in your authorized Gmail account."""
-        return await provider_get(
-            "https://gmail.googleapis.com/gmail/v1/users/me/messages",
-            access("google-gmail"),
-            {**page(max_results, page_token), "q": query},
-        )
+    register_google_workspace(registry)
 
-    @tool("google-gmail")
-    async def gmail_get_message(message_id: str) -> dict:
-        """Read a message from your authorized Gmail account."""
-        return await provider_get(
-            "https://gmail.googleapis.com/gmail/v1/users/me/messages/"
-            + identifier(message_id),
-            access("google-gmail"),
-            {"format": "full"},
-        )
+    from purecipher.consumer_gmail import register as register_gmail
 
-    @tool("google-docs")
-    async def docs_get_document(document_id: str) -> dict:
-        """Read a Google document accessible to your authorized account."""
-        return await provider_get(
-            "https://docs.googleapis.com/v1/documents/" + identifier(document_id),
-            access("google-docs"),
-        )
-
-    @tool("google-tasks")
-    async def tasks_list_tasklists(page_token: str = "", max_results: int = 20) -> dict:
-        """List your Google task lists."""
-        return await provider_get(
-            "https://tasks.googleapis.com/tasks/v1/users/@me/lists",
-            access("google-tasks"),
-            page(max_results, page_token),
-        )
-
-    @tool("google-tasks")
-    async def tasks_list_tasks(
-        tasklist_id: str, page_token: str = "", max_results: int = 20
-    ) -> dict:
-        """Read tasks in one of your Google task lists."""
-        return await provider_get(
-            "https://tasks.googleapis.com/tasks/v1/lists/"
-            + identifier(tasklist_id)
-            + "/tasks",
-            access("google-tasks"),
-            page(max_results, page_token),
-        )
-
-    @tool("google-calendar")
-    async def calendar_list_calendars(
-        page_token: str = "", max_results: int = 20
-    ) -> dict:
-        """List calendars available to your authorized Google account."""
-        return await provider_get(
-            "https://www.googleapis.com/calendar/v3/users/me/calendarList",
-            access("google-calendar"),
-            page(max_results, page_token),
-        )
-
-    @tool("google-calendar")
-    async def calendar_list_events(
-        calendar_id: str = "primary", page_token: str = "", max_results: int = 20
-    ) -> dict:
-        """Read events in an authorized Google calendar."""
-        return await provider_get(
-            "https://www.googleapis.com/calendar/v3/calendars/"
-            + identifier(calendar_id)
-            + "/events",
-            access("google-calendar"),
-            page(max_results, page_token),
-        )
-
-    @tool("google-drive")
-    async def drive_search_files(
-        query: str = "", page_token: str = "", max_results: int = 20
-    ) -> dict:
-        """Search file metadata in your authorized Google Drive."""
-        params = page(max_results, page_token)
-        params["pageSize"] = params.pop("maxResults")
-        return await provider_get(
-            "https://www.googleapis.com/drive/v3/files",
-            access("google-drive"),
-            {
-                **params,
-                "q": query,
-                "fields": "nextPageToken,files(id,name,mimeType,modifiedTime,webViewLink)",
-            },
-        )
-
-    @tool("google-drive")
-    async def drive_get_file(file_id: str) -> dict:
-        """Read metadata for a Google Drive file; does not download file contents."""
-        return await provider_get(
-            "https://www.googleapis.com/drive/v3/files/" + identifier(file_id),
-            access("google-drive"),
-            {"fields": "id,name,mimeType,modifiedTime,webViewLink"},
-        )
+    register_gmail(registry)
 
     from purecipher.consumer_cloud import register
 
@@ -245,9 +151,39 @@ def register_consumer_tools(registry):
     from purecipher.consumer_aws import register as register_aws
 
     register_aws(registry)
+    from purecipher.consumer_business import register as register_business
+
+    register_business(registry)
+    from purecipher.consumer_observability import register as register_observability
+
+    register_observability(registry)
     from purecipher.consumer_bridge import register as register_bridge
 
     register_bridge(registry)
+
+
+def current_profile_client(registry, profile_id, client):
+    """Recheck the current request token after awaited provider work."""
+    from fastmcp.server.dependencies import get_http_headers
+
+    headers = get_http_headers(include={"authorization", "x-purecipher-profile"})
+    # Direct trusted invocations have no profile HTTP request. The profile ASGI
+    # wrapper strips caller-supplied markers and supplies its own authenticated ID.
+    if not headers.get("x-purecipher-profile"):
+        return client
+    authorization = headers.get("authorization", "")
+    resolved = (
+        registry.authenticate_client_token(authorization[7:].strip())
+        if authorization.lower().startswith("bearer ")
+        else None
+    )
+    if (
+        headers["x-purecipher-profile"] != profile_id
+        or not resolved
+        or resolved[0].client_id != client.client_id
+    ):
+        raise ValueError("Client token revoked or client suspended")
+    return resolved[0]
 
 
 async def resolve_access(registry, profile_id, client, tool_name):
@@ -256,8 +192,14 @@ async def resolve_access(registry, profile_id, client, tool_name):
 
     if tool_name not in allowed_profile_tools(registry, profile_id, client):
         raise ValueError("Tool is not selected in this profile")
-    product = registry._consumer_tool_products[tool_name]
     profile = registry._workspace.get(profile_id)
+    from purecipher.consumer_bridge_tools import selected_product
+
+    product = registry._consumer_tool_products.get(tool_name) or selected_product(
+        registry, profile, tool_name
+    )
+    if not product:
+        raise ValueError("Consumer tool is unavailable in this profile")
     selected = next(s for s in profile["servers"] if tool_name in s["tools"])
     item = registry._workspace.get(selected.get("connection_id", ""))
     if (
@@ -270,12 +212,13 @@ async def resolve_access(registry, profile_id, client, tool_name):
         raise ValueError("Your product connection must be authorized and verified")
     from purecipher.consumer_bridge import PRODUCTS as BRIDGES
 
+    token = None
     if product in BRIDGES:
         headers = {}
     elif product in GOOGLE:
         from purecipher.consumer_oauth import access_token
 
-        token = await access_token(registry, item)
+        token = await access_token(registry, item, tool_name=tool_name)
         headers = {"Authorization": "Bearer " + token}
     elif product in {
         "time",
@@ -296,6 +239,7 @@ async def resolve_access(registry, profile_id, client, tool_name):
 
         headers = product_headers(product, decrypt(registry, item))
     # Revalidate after an awaited refresh; revocations and profile edits win.
+    client = current_profile_client(registry, profile_id, client)
     allowed_profile_tools(registry, profile_id, client)
     current = registry._workspace.get(item["id"])
     current_profile = registry._workspace.get(profile_id)
@@ -305,8 +249,23 @@ async def resolve_access(registry, profile_id, client, tool_name):
         or current_profile["revision"] != profile["revision"]
     ):
         raise ValueError("Connection or profile changed; retry")
+    if product in GOOGLE:
+        from purecipher.consumer_oauth import load_grant, validate_connection_grant
+
+        current_grant = load_grant(registry, current) or {}
+        validate_connection_grant(registry, current, current_grant, tool_name=tool_name)
+        if token is None or not hmac.compare_digest(
+            current_grant.get("access_token", ""), token
+        ):
+            raise ValueError(
+                "Google authorization changed; retry after checking access"
+            )
     return {
         "product": product,
+        "registry": registry,
+        "tool_name": tool_name,
+        "profile_revision": current_profile["revision"],
+        "connection_revision": current["revision"],
         "owner": current["owner"],
         "profile_id": profile_id,
         "client": client,

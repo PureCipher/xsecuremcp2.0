@@ -163,9 +163,19 @@ def mount(registry: Any, prefix: str) -> None:
             return JSONResponse({"error": "Profile not found"}, status_code=404)
         current = record(registry, profile)
         if request.method == "GET":
+            from purecipher.consumer_bridge_tools import selected_descriptors
+
             return JSONResponse(
                 {
                     "profile": scope(profile),
+                    "tool_labels": {
+                        name: descriptor["name"]
+                        for server in profile["servers"]
+                        for name, descriptor in selected_descriptors(
+                            registry, profile["owner"], server
+                        ).items()
+                        if name in server["tools"]
+                    },
                     "client_labels": {
                         cid: getattr(
                             registry._client_store.get_client(cid), "display_name", cid

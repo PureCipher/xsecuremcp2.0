@@ -2,18 +2,33 @@
 
 from typing import Any
 
+from purecipher.consumer_google_permissions import GMAIL_OAUTH_MODES, GOOGLE_OAUTH_MODES
+
 PRODUCT_SCHEMAS: dict[str, dict[str, Any]] = {
     "google-calendar": {
         "id": "google-calendar",
         "title": "Google Calendar",
-        "version": 1,
+        "version": 2,
         "kind": "oauth",
-        "fields": [],
+        "fields": [
+            {
+                "key": "access_mode",
+                "label": "Account access",
+                "type": "select",
+                "required": True,
+                "options": [
+                    item["id"] for item in GOOGLE_OAUTH_MODES["google-calendar"]
+                ],
+                "help": "Read only is the default. Changing access disconnects the previous grant and requires Google authorization again.",
+            }
+        ],
+        "oauth_mode_field": "access_mode",
+        "oauth_modes": GOOGLE_OAUTH_MODES["google-calendar"],
         "scopes": ["https://www.googleapis.com/auth/calendar.readonly"],
         "instructions": [
             "Save this connection, then choose Authorize Google to connect your own account.",
             "The publisher configures the OAuth app. You do not provide its client ID or client secret.",
-            "Review the read-only permissions below. Disconnect removes this registry connection’s grant.",
+            "Choose the access your profile needs. New write permissions require Google authorization again; only selected and approved tools can run.",
         ],
         "source": "https://developers.google.com/identity/protocols/oauth2/web-server",
         "runtime_supported": False,
@@ -22,14 +37,25 @@ PRODUCT_SCHEMAS: dict[str, dict[str, Any]] = {
     "google-drive": {
         "id": "google-drive",
         "title": "Google Drive",
-        "version": 1,
+        "version": 2,
         "kind": "oauth",
-        "fields": [],
+        "fields": [
+            {
+                "key": "access_mode",
+                "label": "Account access",
+                "type": "select",
+                "required": True,
+                "options": [item["id"] for item in GOOGLE_OAUTH_MODES["google-drive"]],
+                "help": "Read only is the default. Changing access disconnects the previous grant and requires Google authorization again.",
+            }
+        ],
+        "oauth_mode_field": "access_mode",
+        "oauth_modes": GOOGLE_OAUTH_MODES["google-drive"],
         "scopes": ["https://www.googleapis.com/auth/drive.metadata.readonly"],
         "instructions": [
             "Save this connection, then choose Authorize Google to connect your own account.",
             "The publisher configures the OAuth app. You do not provide its client ID or client secret.",
-            "Review the read-only permissions below. Disconnect removes this registry connection’s grant.",
+            "Choose the access your profile needs. New write permissions require Google authorization again; only selected and approved tools can run.",
         ],
         "source": "https://developers.google.com/identity/protocols/oauth2/web-server",
         "runtime_supported": False,
@@ -38,14 +64,26 @@ PRODUCT_SCHEMAS: dict[str, dict[str, Any]] = {
     "google-gmail": {
         "id": "google-gmail",
         "title": "Gmail",
-        "version": 1,
+        "version": 2,
         "kind": "oauth",
-        "fields": [],
+        "fields": [
+            {
+                "key": "access_mode",
+                "label": "Gmail access",
+                "type": "select",
+                "required": True,
+                "options": [item["id"] for item in GMAIL_OAUTH_MODES],
+                "help": "Read only is the default. Changing access disconnects the previous grant and requires Google authorization again.",
+            }
+        ],
         "scopes": ["https://www.googleapis.com/auth/gmail.readonly"],
+        "oauth_mode_field": "access_mode",
+        "oauth_modes": GMAIL_OAUTH_MODES,
         "instructions": [
             "Save this connection, then choose Authorize Google to connect your own account.",
             "The publisher configures the OAuth app. You do not provide its client ID or client secret.",
-            "Review the read-only permissions below. Disconnect removes this registry connection’s grant.",
+            "Choose the access your profile needs. Only explicitly selected and approved tools can run, even when Google grants broader permissions.",
+            "Changing access requires authorization again. Disconnect removes this registry connection’s grant.",
         ],
         "source": "https://developers.google.com/identity/protocols/oauth2/web-server",
         "runtime_supported": False,
@@ -54,14 +92,25 @@ PRODUCT_SCHEMAS: dict[str, dict[str, Any]] = {
     "google-docs": {
         "id": "google-docs",
         "title": "Google Docs",
-        "version": 1,
+        "version": 2,
         "kind": "oauth",
-        "fields": [],
+        "fields": [
+            {
+                "key": "access_mode",
+                "label": "Account access",
+                "type": "select",
+                "required": True,
+                "options": [item["id"] for item in GOOGLE_OAUTH_MODES["google-docs"]],
+                "help": "Read only is the default. Changing access disconnects the previous grant and requires Google authorization again.",
+            }
+        ],
+        "oauth_mode_field": "access_mode",
+        "oauth_modes": GOOGLE_OAUTH_MODES["google-docs"],
         "scopes": ["https://www.googleapis.com/auth/documents.readonly"],
         "instructions": [
             "Save this connection, then choose Authorize Google to connect your own account.",
             "The publisher configures the OAuth app. You do not provide its client ID or client secret.",
-            "Review the read-only permissions below. Disconnect removes this registry connection’s grant.",
+            "Choose the access your profile needs. New write permissions require Google authorization again; only selected and approved tools can run.",
         ],
         "source": "https://developers.google.com/identity/protocols/oauth2/web-server",
         "runtime_supported": False,
@@ -70,14 +119,25 @@ PRODUCT_SCHEMAS: dict[str, dict[str, Any]] = {
     "google-tasks": {
         "id": "google-tasks",
         "title": "Google Tasks",
-        "version": 1,
+        "version": 2,
         "kind": "oauth",
-        "fields": [],
+        "fields": [
+            {
+                "key": "access_mode",
+                "label": "Account access",
+                "type": "select",
+                "required": True,
+                "options": [item["id"] for item in GOOGLE_OAUTH_MODES["google-tasks"]],
+                "help": "Read only is the default. Changing access disconnects the previous grant and requires Google authorization again.",
+            }
+        ],
+        "oauth_mode_field": "access_mode",
+        "oauth_modes": GOOGLE_OAUTH_MODES["google-tasks"],
         "scopes": ["https://www.googleapis.com/auth/tasks.readonly"],
         "instructions": [
             "Save this connection, then choose Authorize Google to connect your own account.",
             "The publisher configures the OAuth app. You do not provide its client ID or client secret.",
-            "Review the read-only permissions below. Disconnect removes this registry connection’s grant.",
+            "Choose the access your profile needs. New write permissions require Google authorization again; only selected and approved tools can run.",
         ],
         "source": "https://developers.google.com/identity/protocols/oauth2/web-server",
         "runtime_supported": False,
@@ -1437,9 +1497,9 @@ def _cloud_credentials():
                 }
             )
         schema["instructions"] = [
-            f"Create a read-only credential in your {schema['title']} account with access only to the resources you intend to use.",
-            "Save your credential here, then choose Verify connection. Verification checks account access; individual tools can require additional read permissions.",
-            "Select this connection in your profile. Publishers and other users cannot read or reuse it.",
+            f"Create a scoped credential in your {schema['title']} account for the resources and operations you need. Start with read access; enable provider write permissions only for tools you intend to use.",
+            "Save your credential here, then choose Verify connection. Verification checks account access; each tool still requires its provider permissions and profile approval.",
+            "Select this connection and specific tools in your profile. Creating a connection does not select tools or authorize sending, payments, deletion, or other changes. Publishers and other users cannot read or reuse your credential.",
         ]
         if product in {"outlook", "onedrive"}:
             schema["instructions"].insert(
@@ -1450,6 +1510,10 @@ def _cloud_credentials():
             schema["instructions"].insert(
                 1,
                 "In Notion, explicitly share the required pages with this integration.",
+            )
+        if product == "dynatrace":
+            schema["instructions"].append(
+                "Choose entities.read, problems.read, and metrics.read only for the entity, problem, and metric tools you select. Connection verification checks entity access only."
             )
 
 
@@ -1512,7 +1576,7 @@ for _product in ("aws-core", "cloudwatch"):
             ],
             "instructions": [
                 "Use your own least-privilege AWS credentials. Temporary credentials also require a session token.",
-                "Save and verify to check caller identity. CloudWatch tools require ListMetrics or DescribeLogGroups permissions.",
+                "Save and verify to check caller identity. Each selected operation also needs its named IAM action: inventory uses tag:GetResources or ec2:DescribeRegions/DescribeInstances; CloudWatch metrics, alarms, and logs need their matching read actions.",
                 "Replace temporary credentials when they expire. The Registry never uses its host's AWS credentials.",
             ],
         }
@@ -1556,7 +1620,7 @@ def _upstream_connections():
                     f"Run the {schema['title']} MCP service in your own environment. Configure its product credentials and resource access there.",
                     "Place local stdio services behind an authenticated HTTPS MCP gateway. Do not expose an unauthenticated endpoint.",
                     "Enter your endpoint token and explicitly approve the tools your profiles may call. Verification checks the actual tool schemas.",
-                    "Tool definitions are checked again before each call; changed definitions require reverification. Write and execution tools retain SecureMCP controls.",
+                    "After verification, select individual upstream tools in your profile. Tool definitions are checked again before each call; changed definitions require reverification and renewed profile selection and approval. Write and execution tools retain SecureMCP controls.",
                 ],
             }
         )

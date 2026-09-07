@@ -20,7 +20,17 @@ def test_product_forms_match_consumer_auth_not_publisher_oauth_secrets():
         "google-drive",
     ]:
         spec = PRODUCT_SCHEMAS[slug]
-        assert spec["kind"] == "oauth" and spec["fields"] == []
+        assert spec["kind"] == "oauth"
+        assert not any(field["type"] == "secret" for field in spec["fields"])
+        assert [field["key"] for field in spec["fields"]] == ["access_mode"]
+        assert spec["oauth_mode_field"] == "access_mode"
+        assert spec["oauth_modes"][0]["id"] == "read_only"
+        if slug == "google-gmail":
+            assert {mode["id"] for mode in spec["oauth_modes"]} == {
+                "read_only",
+                "draft_and_send",
+                "manage_mail",
+            }
         assert spec["audience"] == "consumer"
     from purecipher.consumer_cloud import PRODUCTS
 

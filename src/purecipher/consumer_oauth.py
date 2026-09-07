@@ -12,7 +12,13 @@ from urllib.parse import urlencode, urlsplit
 import httpx
 from starlette.responses import JSONResponse, RedirectResponse
 
-from purecipher.product_connections import cipher, view
+from purecipher.consumer_google_permissions import (
+    GOOGLE_OAUTH_MODES,
+    google_access_mode,
+    required_scopes,
+    validate_google_tool_scope,
+)
+from purecipher.product_connections import cipher, decrypt, view
 from purecipher.product_schemas import PRODUCT_SCHEMAS
 
 
@@ -104,10 +110,36 @@ async def token_request(data):
         raise ValueError("Google authorization is unavailable; try again") from None
 
 
-async def access_token(registry, item):
+def validate_connection_grant(registry, item, grant, *, tool_name=None):
+    """Check saved permission intent and provider scopes without refreshing a token."""
+    values = decrypt(registry, item)
+    required = required_scopes(item["product"], values)
+    scopes = grant.get("scope", "")
+    if not isinstance(scopes, str) or not required.issubset(set(scopes.split())):
+        raise ValueError("Google did not grant the required permissions")
+    requested = grant.get("requested_scopes")
+    if requested is not None and (
+        not isinstance(requested, list)
+        or any(not isinstance(scope, str) for scope in requested)
+        or set(requested) != required
+    ):
+        raise ValueError("Requested Google permissions changed; reconnect your account")
+    if item["product"] in GOOGLE_OAUTH_MODES:
+        if (grant.get("access_mode") or "read_only") != google_access_mode(
+            item["product"], values
+        ):
+            raise ValueError(
+                "Google product access changed; authorize your account again"
+            )
+        if tool_name is not None:
+            validate_google_tool_scope(item["product"], grant, tool_name)
+
+
+async def access_token(registry, item, *, tool_name=None):
     grant = load_grant(registry, item)
     if not grant:
         raise ValueError("Authorize your Google account first")
+    validate_connection_grant(registry, item, grant, tool_name=tool_name)
     if grant["expires_at"] > time.time() + 30:
         return grant["access_token"]
     if not grant.get("refresh_token"):
@@ -115,10 +147,8 @@ async def access_token(registry, item):
     refreshed = await token_request(
         {"grant_type": "refresh_token", "refresh_token": grant["refresh_token"]}
     )
-    required = set(PRODUCT_SCHEMAS[item["product"]]["scopes"])
-    if not required.issubset(set(refreshed.get("scope", grant["scope"]).split())):
-        raise ValueError("Google did not grant the required permissions")
     merged = {**grant, **refreshed}
+    validate_connection_grant(registry, item, merged, tool_name=tool_name)
     store_grant(registry, item, merged)
     return merged["access_token"]
 
@@ -154,6 +184,8 @@ def mount_consumer_oauth(registry, prefix):
             )
         try:
             client_id, _, redirect = app_config()
+            values = decrypt(registry, item)
+            scopes = sorted(required_scopes(item["product"], values))
             for previous in registry._workspace.list(
                 item["owner"], "consumer_oauth_state"
             ):
@@ -173,6 +205,10 @@ def mount_consumer_oauth(registry, prefix):
                     "owner": item["owner"],
                     "connection_id": item["id"],
                     "connection_revision": item["revision"],
+                    "requested_scopes": scopes,
+                    "access_mode": google_access_mode(item["product"], values)
+                    if item["product"] in GOOGLE_OAUTH_MODES
+                    else None,
                     "expires_at": time.time() + 600,
                     "used": False,
                     "verifier": cipher(registry).encrypt(verifier.encode()).decode(),
@@ -191,9 +227,7 @@ def mount_consumer_oauth(registry, prefix):
                             "client_id": client_id,
                             "redirect_uri": redirect,
                             "response_type": "code",
-                            "scope": " ".join(
-                                PRODUCT_SCHEMAS[item["product"]]["scopes"]
-                            ),
+                            "scope": " ".join(scopes),
                             "state": state,
                             "code_challenge": challenge,
                             "code_challenge_method": "S256",
@@ -249,10 +283,36 @@ def mount_consumer_oauth(registry, prefix):
                     .decode(),
                 }
             )
-            required = set(PRODUCT_SCHEMAS[item["product"]]["scopes"])
+            values = decrypt(registry, item)
+            required = required_scopes(item["product"], values)
+            # Older pending states only requested the product's default scopes.
+            requested = pending.get(
+                "requested_scopes", PRODUCT_SCHEMAS[item["product"]]["scopes"]
+            )
+            if (
+                not isinstance(requested, list)
+                or any(not isinstance(scope, str) for scope in requested)
+                or set(requested) != required
+            ):
+                raise ValueError("Requested Google permissions changed")
+            mode = (
+                google_access_mode(item["product"], values)
+                if item["product"] in GOOGLE_OAUTH_MODES
+                else None
+            )
+            if (
+                item["product"] in GOOGLE_OAUTH_MODES
+                and (pending.get("access_mode") or "read_only") != mode
+            ):
+                raise ValueError("Requested Google product access changed")
             grant.setdefault("scope", " ".join(required))
-            if not required.issubset(set(grant["scope"].split())):
+            if not isinstance(grant["scope"], str) or not required.issubset(
+                set(grant["scope"].split())
+            ):
                 raise ValueError("Required Google permissions were not granted")
+            grant["requested_scopes"] = sorted(required)
+            if mode is not None:
+                grant["access_mode"] = mode
             store_grant(registry, item, grant)
             return RedirectResponse(
                 "/registry/profiles?connections=1&oauth=success",

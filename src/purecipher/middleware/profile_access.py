@@ -90,7 +90,7 @@ class ProfileToolAccess(Middleware):
             raise ValueError("This tool is not enabled in the profile")
         if context.message.name in getattr(
             self.registry, "_consumer_tool_products", {}
-        ):
+        ) or context.message.name.startswith("up_"):
             from purecipher.consumer_runtime import _ACCESS, resolve_access
 
             headers = get_http_headers(include={"authorization"})
@@ -107,6 +107,18 @@ class ProfileToolAccess(Middleware):
                 resolved[0],
                 context.message.name,
             )
+            if context.message.name.startswith("up_"):
+                from purecipher.consumer_bridge_tools import ConnectedTool
+
+                component = await self.registry.get_tool(context.message.name)
+                if (
+                    not isinstance(component, ConnectedTool)
+                    or component._registry is not self.registry
+                    or component.name != context.message.name
+                ):
+                    raise ValueError(
+                        "Private tool name conflicts with another registered tool"
+                    )
             reset = _ACCESS.set(value)
             try:
                 return await call_next(context)
@@ -117,11 +129,19 @@ class ProfileToolAccess(Middleware):
     async def on_list_tools(self, context, call_next):
         allowed = self.allowed()
         tools = await call_next(context)
-        return (
-            tools
-            if allowed is None
-            else [tool for tool in tools if tool.name in allowed]
-        )
+        if allowed is None:
+            return tools
+        from purecipher.consumer_bridge_tools import ConnectedTool
+
+        return [
+            tool
+            for tool in tools
+            if tool.name in allowed
+            and (
+                not tool.name.startswith("up_")
+                or (isinstance(tool, ConnectedTool) and tool._registry is self.registry)
+            )
+        ]
 
     async def on_message(self, context, call_next):
         allowed = self.allowed()

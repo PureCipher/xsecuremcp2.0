@@ -13,6 +13,7 @@ from urllib.parse import urlsplit
 from cryptography.fernet import Fernet
 from starlette.responses import JSONResponse
 
+from purecipher.consumer_google_permissions import GOOGLE_OAUTH_MODES
 from purecipher.product_schemas import PRODUCT_SCHEMAS
 
 
@@ -42,6 +43,10 @@ def decrypt(registry, item):
 
 def view(registry, item):
     values = decrypt(registry, item)
+    if item["product"] in GOOGLE_OAUTH_MODES:
+        from purecipher.consumer_google_permissions import google_access_mode
+
+        values = {**values, "access_mode": google_access_mode(item["product"], values)}
     schema = PRODUCT_SCHEMAS[item["product"]]
     secrets = {f["key"] for f in schema["fields"] if f["type"] == "secret"}
     missing = [
@@ -50,11 +55,25 @@ def view(registry, item):
         if f["required"] and not values.get(f["key"])
     ]
     from purecipher.consumer_bridge import approved_tools
-    from purecipher.consumer_oauth import configured
+    from purecipher.consumer_bridge_tools import connection_descriptors
+    from purecipher.consumer_oauth import configured, load_grant
     from purecipher.consumer_runtime import GOOGLE, runtime_ready
 
     ready = runtime_ready(registry, item)
     supported = item["product"] in getattr(registry, "_consumer_products", set())
+    oauth_details = {}
+    if item["product"] in GOOGLE_OAUTH_MODES:
+        from purecipher.consumer_google_permissions import required_scopes
+
+        grant = load_grant(registry, item) or {}
+        granted_scope = grant.get("scope", "")
+        oauth_details = {
+            "access_mode": values["access_mode"],
+            "requested_scopes": sorted(required_scopes(item["product"], values)),
+            "granted_scopes": sorted(set(granted_scope.split()))
+            if isinstance(granted_scope, str)
+            else [],
+        }
     return {
         "id": item["id"],
         "product": item["product"],
@@ -75,11 +94,14 @@ def view(registry, item):
         else "settings_incomplete"
         if missing
         else "settings_saved",
-        "upstream_tools": list(approved_tools(registry, item).values()),
+        "upstream_tools": list(connection_descriptors(registry, item).values())
+        if ready
+        else list(approved_tools(registry, item).values()),
         "runtime_ready": ready,
         "runtime_supported": supported,
         "can_authorize": supported and item["product"] in GOOGLE and configured(),
         "can_verify": supported and item["product"] not in GOOGLE,
+        **oauth_details,
     }
 
 
@@ -224,10 +246,15 @@ async def bounded_body(request):
 
 
 def save(registry, item, body, values):
+    from purecipher.consumer_google_permissions import google_access_mode
+
     name = body.get("name", "")
     if not isinstance(name, str) or not 1 <= len(name.strip()) <= 100:
         raise ValueError("Name must be 1–100 characters")
     schema = PRODUCT_SCHEMAS[item["product"]]
+    old_mode = None
+    if item["product"] in GOOGLE_OAUTH_MODES:
+        old_mode = google_access_mode(item["product"], values)
     updates = validate_values(schema, body.get("values", {}))
     secrets = {f["key"] for f in schema["fields"] if f["type"] == "secret"}
     clear = body.get("clear_secrets", [])
@@ -238,6 +265,10 @@ def save(registry, item, body, values):
     for key in clear:
         values.pop(key, None)
     values.update({k: v for k, v in updates.items() if k not in secrets or v})
+    if item["product"] in GOOGLE_OAUTH_MODES:
+        values["access_mode"] = google_access_mode(item["product"], values)
+        if values["access_mode"] != old_mode:
+            item = {k: v for k, v in item.items() if k != "oauth_encrypted"}
     payload = {
         "id": item["id"],
         "owner": item["owner"],
@@ -284,5 +315,14 @@ def connection_blocker(registry, owner, selected):
     from purecipher.consumer_runtime import runtime_ready
 
     if runtime_ready(registry, item):
+        if item["product"] in GOOGLE_OAUTH_MODES:
+            from purecipher.consumer_oauth import load_grant, validate_connection_grant
+
+            grant = load_grant(registry, item) or {}
+            try:
+                for tool in selected.get("tools", []):
+                    validate_connection_grant(registry, item, grant, tool_name=tool)
+            except ValueError as exc:
+                return str(exc)
         return None
     return "Authorize or verify your product connection before activating this profile"

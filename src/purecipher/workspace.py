@@ -114,6 +114,14 @@ def inspected_tools(listing):
     )
 
 
+def selectable_tools(registry, owner, selected, listing):
+    from purecipher.consumer_bridge_tools import selected_descriptors
+
+    return inspected_tools(listing) | set(
+        selected_descriptors(registry, owner, selected)
+    )
+
+
 def profile_blockers(registry, profile):
     blockers = []
     if not profile["client_ids"]:
@@ -132,6 +140,17 @@ def profile_blockers(registry, profile):
             blockers.append(
                 "A selected client is unavailable or belongs to another account"
             )
+    private_names = {
+        name
+        for selected in profile["servers"]
+        for name in selected["tools"]
+        if name.startswith("up_")
+    }
+    if private_names and any(
+        private_names & inspected_tools(listing)
+        for listing in registry._marketplace().search(limit=10000)
+    ):
+        blockers.append("Private tool names conflict with advertised server tools")
     for selected in profile["servers"]:
         from purecipher.product_connections import connection_blocker
 
@@ -155,7 +174,7 @@ def profile_blockers(registry, profile):
             blockers.append(
                 f"{listing.display_name}: deployment or live validation is pending"
             )
-        observed = inspected_tools(listing)
+        observed = selectable_tools(registry, profile["owner"], selected, listing)
         if not selected["tools"] or not set(selected["tools"]).issubset(observed):
             blockers.append(f"{listing.display_name}: select inspected tools")
     from purecipher.profile_governance import blockers as security_blockers
@@ -190,13 +209,24 @@ def allowed_profile_tools(registry, profile_id, client):
 
         allowed.update(selected_tools(profile, selected, client.client_id))
     # A name exposed by multiple listings cannot safely identify one permission.
+    from purecipher.consumer_bridge_tools import selected_descriptors
+
+    private_owners = {}
+    for selected in profile["servers"]:
+        for name in selected_descriptors(registry, profile["owner"], selected):
+            private_owners[name] = private_owners.get(name, 0) + 1
+    advertised_owners = {}
+    for listing in registry._marketplace().search(limit=10000):
+        for name in inspected_tools(listing) & allowed:
+            advertised_owners[name] = advertised_owners.get(name, 0) + 1
     for name in allowed:
-        owners = [
-            item
-            for item in registry._marketplace().search(limit=10000)
-            if name in inspected_tools(item)
-        ]
-        if len(owners) != 1:
+        if name.startswith("up_"):
+            if private_owners.get(name) != 1 or advertised_owners.get(name, 0):
+                raise ValueError(
+                    "Upstream tool is unavailable or ambiguous in this profile"
+                )
+            continue
+        if advertised_owners.get(name) != 1:
             raise ValueError("Ambiguous tool name; server tool names must be unique")
     return allowed
 
@@ -370,7 +400,9 @@ def mount_workspace(registry, prefix):
                 if (
                     not isinstance(tools, list)
                     or not all(isinstance(x, str) for x in tools)
-                    or not set(tools).issubset(inspected_tools(listing))
+                    or not set(tools).issubset(
+                        selectable_tools(registry, session.username, selected, listing)
+                    )
                 ):
                     raise ValueError("Select inspected tools from this server")
                 entry = {"listing_id": listing.listing_id, "tools": sorted(set(tools))}

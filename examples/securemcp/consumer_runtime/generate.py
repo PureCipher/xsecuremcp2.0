@@ -13,6 +13,51 @@ root = Path(__file__).resolve().parents[3]
 server: Any = FastMCP("Descriptor inspection")
 register_consumer_tools(server)
 
+API_SOURCES = {
+    "google-docs": "https://developers.google.com/workspace/docs/api/reference/rest",
+    "google-tasks": "https://developers.google.com/workspace/tasks/reference/rest",
+    "google-calendar": "https://developers.google.com/workspace/calendar/api/v3/reference",
+    "google-drive": "https://developers.google.com/workspace/drive/api/reference/rest/v3",
+    "github": "https://docs.github.com/en/rest?apiVersion=2022-11-28",
+    "github-reference": "https://docs.github.com/en/rest?apiVersion=2022-11-28",
+    "slack": "https://docs.slack.dev/reference/methods/",
+    "slack-archived": "https://docs.slack.dev/reference/methods/",
+    "notion": "https://developers.notion.com/reference/intro",
+    "jira": "https://developer.atlassian.com/cloud/jira/platform/rest/v3/intro/",
+    "atlassian": "https://developer.atlassian.com/cloud/confluence/rest/v2/intro/",
+    "outlook": "https://learn.microsoft.com/en-us/graph/api/resources/mail-api-overview?view=graph-rest-1.0",
+    "onedrive": "https://learn.microsoft.com/en-us/graph/api/resources/onedrive?view=graph-rest-1.0",
+    "stripe": "https://docs.stripe.com/api",
+    "huggingface": "https://huggingface.co/docs/hub/api",
+    "apollo": "https://docs.apollo.io/reference/search-for-contacts",
+    "n8n": "https://docs.n8n.io/api/api-reference/",
+    "aws-core": "https://docs.aws.amazon.com/AWSEC2/latest/APIReference/Welcome.html",
+    "cloudwatch": "https://docs.aws.amazon.com/AmazonCloudWatch/latest/APIReference/Welcome.html",
+    "grafana": "https://grafana.com/docs/grafana/latest/developers/http_api/",
+    "dynatrace": "https://docs.dynatrace.com/docs/dynatrace-api/environment-api",
+    "sonarqube": "https://next.sonarqube.com/sonarqube/web_api",
+    "brave-search": "https://api-dashboard.search.brave.com/app/documentation",
+    "firecrawl": "https://docs.firecrawl.dev/api-reference/introduction",
+    "arxiv": "https://info.arxiv.org/help/api/user-manual.html",
+    "wikipedia": "https://www.mediawiki.org/wiki/API:Main_page",
+}
+
+
+def tool_descriptor(tool: Any) -> dict[str, Any]:
+    descriptor = {
+        "name": tool.name,
+        "description": tool.description,
+        "input_schema": tool.parameters,
+    }
+    annotations = getattr(tool, "annotations", None)
+    if annotations is not None:
+        descriptor["annotations"] = (
+            annotations.model_dump(mode="json", by_alias=True, exclude_none=True)
+            if hasattr(annotations, "model_dump")
+            else dict(annotations)
+        )
+    return descriptor
+
 
 async def main():
     tools = await server.list_tools()
@@ -30,9 +75,16 @@ async def main():
         old = json.loads(
             (root / f"examples/securemcp/{folder}/{stem}-submission.json").read_text()
         )
+        names = sorted(
+            name for name, p in server._consumer_tool_products.items() if p == product
+        )
         manifest = old["manifest"]
-        manifest["version"] = "0.3.0"
-        write_tools = product in BRIDGES or product in {"memory", "sequential-thinking"}
+        manifest["version"] = "0.4.0"
+        product_tools = [tool for tool in tools if tool.name in names]
+        write_tools = product in BRIDGES or any(
+            not tool.annotations or tool.annotations.read_only_hint is not True
+            for tool in product_tools
+        )
         manifest["permissions"] = [
             p
             for p in manifest["permissions"]
@@ -43,18 +95,80 @@ async def main():
             for r in manifest.get("resource_access", [])
             if write_tools or r.get("access_type") == "read"
         ]
-        if product in BRIDGES:
-            description = f"SecureMCP connector for your own {old['display_name']} MCP service. Requires a running authenticated HTTPS upstream and an explicit approved tool list. Upstream tools may write or execute; no upstream service is installed by this listing."
+        # Derive declared effects from actual registered tools. A broadened
+        # implementation must not retain a read-only publication manifest.
+        for permission in [
+            "call_tool",
+            "read_resource",
+            *(["write_resource"] if write_tools else []),
+        ]:
+            if permission not in manifest["permissions"]:
+                manifest["permissions"].append(permission)
+        manifest["idempotent"] = not write_tools
+        if write_tools and not any(
+            resource.get("access_type") == "write"
+            for resource in manifest["resource_access"]
+        ):
+            manifest["resource_access"].append(
+                {
+                    "resource_pattern": f"{product}:*",
+                    "access_type": "write",
+                    "classification": "restricted",
+                }
+            )
+        if product != "google-gmail":
+            manifest["data_flows"] = [
+                {
+                    "source": "authenticated MCP client",
+                    "destination": old["display_name"],
+                    "classification": "restricted",
+                    "description": "Explicitly selected operations use the owner's connection and its granted provider permissions.",
+                },
+                {
+                    "source": old["display_name"],
+                    "destination": "authenticated MCP client",
+                    "classification": "restricted",
+                    "description": "Results are returned only through assigned active profiles and can contain private account data.",
+                },
+            ]
+        if product == "google-gmail":
+            for permission in ("read_resource", "write_resource", "call_tool"):
+                if permission not in manifest["permissions"]:
+                    manifest["permissions"].append(permission)
+            manifest["idempotent"] = False
+            manifest["resource_access"] = [
+                {
+                    "resource_pattern": "google:gmail:*",
+                    "access_type": access,
+                    "classification": "restricted",
+                }
+                for access in ("read", "write")
+            ]
+            manifest["data_flows"] = [
+                {
+                    "source": "Gmail",
+                    "destination": "authenticated MCP client",
+                    "classification": "restricted",
+                    "description": "Account-authorized mailbox results may contain personal and sensitive information.",
+                },
+                {
+                    "source": "authenticated MCP client",
+                    "destination": "Gmail and explicitly addressed email recipients",
+                    "classification": "restricted",
+                    "description": "Explicitly selected and authorized write tools can change mailbox data, manage drafts, and send email to the supplied recipients.",
+                },
+            ]
+            description = f"Registry-hosted Gmail with {len(names)} SecureMCP tools for reading, drafting, sending, and organizing mail. Choose Read only, Read, draft and send, or Manage mail for your own connection. Google OAuth app configuration and account authorization are required."
+        elif product in BRIDGES:
+            description = f"SecureMCP connector for your own {old['display_name']} MCP service. Verify your connection to discover actual tool schemas, then select individual tools in a profile. Upstream tools may write or execute. Requires a running authenticated HTTPS upstream."
         elif product in {"memory", "sequential-thinking"}:
             description = f"Registry-hosted {old['display_name']} with encrypted state scoped to your connection. Use an assigned active profile; state persists until the connection is removed."
         else:
-            description = f"Registry-hosted read-only {old['display_name']} tools using your selected connection. Provider credentials, permissions or account authorization may be required."
-        if product.startswith("google-"):
+            access = "read and change" if write_tools else "read"
+            description = f"{len(names)} product-specific SecureMCP tools to {access} {old['display_name']} data using your own connection. Select only the tools you need; provider permissions and profile approval are required."
+        if product.startswith("google-") and product != "google-gmail":
             description += " Google OAuth app configuration is pending."
         manifest["description"] = description
-        names = sorted(
-            name for name, p in server._consumer_tool_products.items() if p == product
-        )
         metadata = {
             "publisher_profile": old["metadata"].get("publisher_profile", {}),
             "security_framework": "SecureMCP 2.0",
@@ -74,6 +188,7 @@ async def main():
             "runtime": "consumer-profile-v2",
             "runtime_kind": "upstream-connector" if product in BRIDGES else "native",
             "upstream_required": product in BRIDGES,
+            "individual_upstream_tools": product in BRIDGES,
             "bundle_sha256": {
                 p.name: hashlib.sha256(p.read_bytes()).hexdigest()
                 for p in sorted((root / "src/purecipher").glob("consumer_*.py"))
@@ -84,17 +199,65 @@ async def main():
             "introspection": {
                 "source": "registered-runtime-descriptors",
                 "tool_names": names,
-                "tools": [
-                    {
-                        "name": t.name,
-                        "description": t.description,
-                        "input_schema": t.parameters,
-                    }
-                    for t in tools
-                    if t.name in names
-                ],
+                "tools": [tool_descriptor(t) for t in tools if t.name in names],
+            },
+            "tool_coverage": {
+                "version": "0.4.0",
+                "reviewed_at": "2026-09-07",
+                "source_url": API_SOURCES.get(
+                    product, PRODUCT_SCHEMAS[product]["source"]
+                ),
+                "scope": "Owner-approved upstream tools are discovered per connection; public definitions count connector helpers only"
+                if product in BRIDGES
+                else "Implemented product operations; does not claim every vendor API endpoint",
+                "tool_count": len(names),
+                "live_tested": False,
             },
         }
+        if PRODUCT_SCHEMAS[product].get("oauth_modes"):
+            metadata["oauth_access_modes"] = PRODUCT_SCHEMAS[product]["oauth_modes"]
+            metadata["default_access_mode"] = "read_only"
+        if product == "google-gmail":
+            source_file = "src/purecipher/consumer_gmail.py"
+            metadata.update(
+                {
+                    "source_file": source_file,
+                    "source_sha256": hashlib.sha256(
+                        (root / source_file).read_bytes()
+                    ).hexdigest(),
+                    "oauth_access_modes": PRODUCT_SCHEMAS[product].get(
+                        "oauth_modes", []
+                    ),
+                    "default_access_mode": "read_only",
+                    "tool_coverage": {
+                        "version": "0.4.0",
+                        "api": "Gmail API",
+                        "api_version": "v1",
+                        "reviewed_at": "2026-09-07",
+                        "source_url": "https://developers.google.com/workspace/gmail/api/reference/rest",
+                        "scope_source_url": "https://developers.google.com/workspace/gmail/api/auth/scopes",
+                        "scope": "Mailbox product operations; partial Gmail API coverage",
+                        "tool_count": len(names),
+                        "covered": [
+                            "mailbox profile",
+                            "message and thread search and retrieval",
+                            "attachments",
+                            "draft creation, replacement, deletion and sending",
+                            "sending and replying",
+                            "label definitions and message/thread labels",
+                            "message/thread trash and restoration",
+                            "mailbox history",
+                        ],
+                        "excluded": [
+                            "account settings and administration",
+                            "permanent message/thread deletion",
+                            "bulk message mutation",
+                            "push watches and background synchronization",
+                            "message import and insertion",
+                        ],
+                    },
+                }
+            )
         payloads.append(
             {
                 "display_name": old["display_name"],

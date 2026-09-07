@@ -281,6 +281,61 @@ async def verify(values):
         raise ValueError("Could not connect to the upstream MCP service") from None
 
 
+async def call_approved(registry, ctx, tool_name: str, arguments: dict) -> dict:
+    """Execute an owner-approved upstream tool with live profile revalidation."""
+    if len(json.dumps(arguments)) > 64000:
+        raise ValueError("Upstream arguments exceed the connection limit")
+    known = approved_tools(registry, registry._workspace.get(ctx["connection_id"]))
+    if tool_name not in known:
+        raise ValueError("This upstream tool is not approved")
+    schema = known[tool_name]["inputSchema"]
+    try:
+        validators.validator_for(schema)(schema, registry=Registry()).validate(
+            arguments
+        )
+    except (ValidationError, RecursionError):
+        raise ValueError(
+            "Arguments do not match the approved upstream schema"
+        ) from None
+    async with Session(ctx["values"]) as session:
+        actual = await session.tools()
+        if actual != known:
+            raise ValueError(
+                "Upstream tool definitions changed; verify the connection again"
+            )
+        from fastmcp.server.dependencies import get_http_headers
+        from purecipher.consumer_runtime import digest, runtime_ready
+        from purecipher.workspace import allowed_profile_tools
+
+        authorization = get_http_headers(include={"authorization"}).get(
+            "authorization", ""
+        )
+        resolved = (
+            registry.authenticate_client_token(authorization[7:].strip())
+            if authorization.lower().startswith("bearer ")
+            else None
+        )
+        if not resolved or resolved[0].client_id != ctx["client"].client_id:
+            raise ValueError("Client token revoked or client suspended")
+        current = registry._workspace.get(ctx["connection_id"])
+        profile = registry._workspace.get(ctx["profile_id"])
+        allowed = allowed_profile_tools(registry, ctx["profile_id"], resolved[0])
+        if (
+            not current
+            or not profile
+            or not runtime_ready(registry, current)
+            or current.get("verified_values") != digest(registry, ctx["values"])
+            or current["revision"]
+            != ctx.get("connection_revision", current["revision"])
+            or profile["revision"] != ctx.get("profile_revision", profile["revision"])
+            or (ctx.get("tool_name") and ctx["tool_name"] not in allowed)
+        ):
+            raise ValueError("Connection changed or was disconnected")
+        return await session.rpc(
+            "tools/call", {"name": tool_name, "arguments": arguments}
+        )
+
+
 def register(registry):
     from purecipher.consumer_runtime import _ACCESS, access
 
@@ -309,41 +364,7 @@ def register(registry):
 
         async def call_approved_tool(tool_name: str, arguments: dict) -> dict:
             """Call one approved tool on your own upstream MCP service. Effects depend on that tool and may include writes or execution."""
-            ctx = context()
-            known = approved_tools(
-                registry, registry._workspace.get(ctx["connection_id"])
-            )
-            if tool_name not in known:
-                raise ValueError("This upstream tool is not approved")
-            schema = known[tool_name]["inputSchema"]
-            try:
-                validators.validator_for(schema)(schema, registry=Registry()).validate(
-                    arguments
-                )
-            except (ValidationError, RecursionError):
-                raise ValueError(
-                    "Arguments do not match the approved upstream schema"
-                ) from None
-            async with Session(ctx["values"]) as session:
-                actual = await session.tools()
-                if actual != known:
-                    raise ValueError(
-                        "Upstream tool definitions changed; verify the connection again"
-                    )
-                from purecipher.consumer_runtime import digest, runtime_ready
-                from purecipher.workspace import allowed_profile_tools
-
-                current = registry._workspace.get(ctx["connection_id"])
-                if (
-                    not current
-                    or not runtime_ready(registry, current)
-                    or current.get("verified_values") != digest(registry, ctx["values"])
-                ):
-                    raise ValueError("Connection changed or was disconnected")
-                allowed_profile_tools(registry, ctx["profile_id"], ctx["client"])
-                return await session.rpc(
-                    "tools/call", {"name": tool_name, "arguments": arguments}
-                )
+            return await call_approved(registry, context(), tool_name, arguments)
 
         for suffix, fn, read in [
             ("list_approved_tools", list_approved_tools, True),
@@ -362,3 +383,10 @@ def register(registry):
 
     for product in sorted(PRODUCTS):
         one(product)
+    from purecipher.consumer_bridge_tools import (
+        ConnectedToolIdentityTransform,
+        ConnectedToolsProvider,
+    )
+
+    registry.add_provider(ConnectedToolsProvider(registry))
+    registry.add_transform(ConnectedToolIdentityTransform(registry))

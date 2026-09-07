@@ -4,6 +4,16 @@ import json
 from datetime import datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class MemoryRelation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    source: str = Field(min_length=1, max_length=200)
+    target: str = Field(min_length=1, max_length=200)
+    relation_type: str = Field(min_length=1, max_length=200)
+
+
 PRODUCTS = {
     "time",
     "memory",
@@ -21,15 +31,18 @@ def register(registry):
 
     registry._consumer_products = registry._consumer_products | PRODUCTS
 
-    def tool(product, *, read=True):
+    def tool(product, *, read=True, destructive=False):
         def decorate(fn):
             registry._consumer_tool_products[fn.__name__] = product
             registry.tool(
                 annotations={
                     "readOnlyHint": read,
-                    "destructiveHint": False,
-                    "openWorldHint": product == "wikipedia",
-                }
+                    "destructiveHint": destructive,
+                    "idempotentHint": read,
+                    "openWorldHint": product
+                    not in {"memory", "time", "sequential-thinking"},
+                },
+                tags={"risk:low" if read else "risk:high", "resource:" + product},
             )(fn)
             return fn
 
@@ -45,26 +58,33 @@ def register(registry):
             raise ValueError("Connection is no longer available")
         return item
 
-    def read_state(item):
+    def read_payload(item):
         if not item.get("utility_encrypted"):
-            return []
+            return {"entries": [], "relations": []}
         payload = json.loads(
             cipher(registry).decrypt(item["utility_encrypted"].encode())
         )
         if payload["owner"] != item["owner"] or payload["id"] != item["id"]:
             raise ValueError("Utility state identity mismatch")
-        return payload["entries"]
+        return payload
 
-    def write_state(item, entries):
-        item["utility_encrypted"] = (
-            cipher(registry)
-            .encrypt(
-                json.dumps(
-                    {"owner": item["owner"], "id": item["id"], "entries": entries}
-                ).encode()
-            )
-            .decode()
-        )
+    def read_state(item):
+        return read_payload(item)["entries"]
+
+    def write_state(item, entries, relations=None):
+        previous = read_payload(item)
+        if relations is None:
+            relations = previous.get("relations", [])
+        payload = {
+            "owner": item["owner"],
+            "id": item["id"],
+            "entries": entries,
+            "relations": relations,
+        }
+        encoded = json.dumps(payload)
+        if len(encoded.encode()) > 2 * 1024 * 1024:
+            raise ValueError("Encrypted utility state exceeds 2 MiB")
+        item["utility_encrypted"] = cipher(registry).encrypt(encoded.encode()).decode()
         registry._workspace.save(item, item["revision"])
 
     @tool("time")
@@ -126,6 +146,133 @@ def register(registry):
                 if query.casefold() in json.dumps(e).casefold()
             ]
         }
+
+    def names_check(names):
+        if not 1 <= len(names) <= 100 or any(
+            not name.strip() or len(name) > 200 for name in names
+        ):
+            raise ValueError("Choose 1–100 entity names, each up to 200 characters")
+
+    def observations_check(observations):
+        if not 1 <= len(observations) <= 50 or any(
+            not text.strip() or len(text) > 4000 for text in observations
+        ):
+            raise ValueError(
+                "Provide 1–50 nonempty observations, each up to 4000 characters"
+            )
+
+    @tool("memory")
+    async def memory_read_graph() -> dict:
+        """Read all entities and relations in your connection's encrypted knowledge graph."""
+        payload = read_payload(record("memory"))
+        return {
+            "entities": payload["entries"],
+            "relations": payload.get("relations", []),
+        }
+
+    @tool("memory")
+    async def memory_open_entities(names: list[str]) -> dict:
+        """Read selected memory entities and relations between those entities."""
+        names_check(names)
+        payload = read_payload(record("memory"))
+        chosen = set(names)
+        return {
+            "entities": [
+                entry for entry in payload["entries"] if entry["name"] in chosen
+            ],
+            "relations": [
+                relation
+                for relation in payload.get("relations", [])
+                if relation["source"] in chosen and relation["target"] in chosen
+            ],
+        }
+
+    @tool("memory", read=False)
+    async def memory_add_observations(name: str, observations: list[str]) -> dict:
+        """Append unique observations to one existing entity in your encrypted memory."""
+        names_check([name])
+        observations_check(observations)
+        item = record("memory")
+        entries = read_state(item)
+        entry = next((entry for entry in entries if entry["name"] == name), None)
+        if entry is None:
+            raise ValueError("Save this entity before adding observations")
+        merged = list(dict.fromkeys([*entry["observations"], *observations]))
+        if len(merged) > 50:
+            raise ValueError("An entity supports at most 50 observations")
+        entry["observations"] = merged
+        write_state(item, entries)
+        return {"entity": entry}
+
+    @tool("memory", read=False, destructive=True)
+    async def memory_delete_observations(name: str, observations: list[str]) -> dict:
+        """Delete exact matching observations from one memory entity; retains the entity and relations."""
+        names_check([name])
+        observations_check(observations)
+        item = record("memory")
+        entries = read_state(item)
+        entry = next((entry for entry in entries if entry["name"] == name), None)
+        if entry is None:
+            raise ValueError("Memory entity was not found")
+        entry["observations"] = [
+            text for text in entry["observations"] if text not in observations
+        ]
+        write_state(item, entries)
+        return {"entity": entry}
+
+    @tool("memory", read=False)
+    async def memory_create_relations(relations: list[MemoryRelation]) -> dict:
+        """Create directed relations between existing memory entities; duplicate relations are ignored."""
+        if not 1 <= len(relations) <= 100:
+            raise ValueError("Provide 1–100 relations")
+        item = record("memory")
+        payload = read_payload(item)
+        names = {entry["name"] for entry in payload["entries"]}
+        merged = payload.get("relations", [])
+        for relation in relations:
+            if (
+                relation.source not in names
+                or relation.target not in names
+                or not relation.relation_type.strip()
+            ):
+                raise ValueError(
+                    "Each relation must connect existing entities and have a nonempty type"
+                )
+            value = relation.model_dump()
+            if value not in merged:
+                merged.append(value)
+        if len(merged) > 500:
+            raise ValueError("This connection supports 500 memory relations")
+        write_state(item, payload["entries"], merged)
+        return {"relations": merged}
+
+    @tool("memory", read=False, destructive=True)
+    async def memory_delete_relations(relations: list[MemoryRelation]) -> dict:
+        """Delete exact directed relations while retaining their memory entities."""
+        if not 1 <= len(relations) <= 100:
+            raise ValueError("Provide 1–100 relations")
+        item = record("memory")
+        payload = read_payload(item)
+        removed = [relation.model_dump() for relation in relations]
+        current = payload.get("relations", [])
+        remaining = [relation for relation in current if relation not in removed]
+        write_state(item, payload["entries"], remaining)
+        return {"deleted": len(current) - len(remaining)}
+
+    @tool("memory", read=False, destructive=True)
+    async def memory_delete_entities(names: list[str]) -> dict:
+        """Permanently delete selected memory entities and their incident relations from this connection."""
+        names_check(names)
+        item = record("memory")
+        payload = read_payload(item)
+        entries = [entry for entry in payload["entries"] if entry["name"] not in names]
+        relations = [
+            relation
+            for relation in payload.get("relations", [])
+            if relation["source"] not in names and relation["target"] not in names
+        ]
+        write_state(item, entries, relations)
+        return {"deleted": len(payload["entries"]) - len(entries)}
 
     @tool("sequential-thinking", read=False)
     async def sequential_thinking(

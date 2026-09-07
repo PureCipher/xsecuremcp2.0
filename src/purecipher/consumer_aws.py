@@ -22,7 +22,13 @@ async def execute(values, service, operation, params):
             service,
             region_name=region,
             endpoint_url="https://"
-            + {"sts": "sts", "cloudwatch": "monitoring", "logs": "logs"}[service]
+            + {
+                "sts": "sts",
+                "cloudwatch": "monitoring",
+                "logs": "logs",
+                "resourcegroupstaggingapi": "tagging",
+                "ec2": "ec2",
+            }[service]
             + "."
             + region
             + (".amazonaws.com.cn" if region.startswith("cn-") else ".amazonaws.com"),
