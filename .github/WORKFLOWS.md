@@ -36,6 +36,8 @@ The Space README selects the Docker SDK and port 8000. Its Dockerfile installs
 the tested wheels and runs as user 1000; CI checks this container's MCP calls,
 database migrations, and registry health before uploading it. Hugging Face
 then builds and starts the Space asynchronously.
+The Space opens `/registry/health`; it hosts the backend API, while the separate
+registry console is deployed independently. The package's legacy UI stays disabled.
 
 The GitHub Actions secret `HF_TOKEN` must have write access to this Space.
 Configure `PURECIPHER_SIGNING_SECRET` in the Space secrets before startup, and
