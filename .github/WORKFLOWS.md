@@ -34,19 +34,22 @@ four wheels and locked constraints to
 [purecipher/xsecuremcp](https://huggingface.co/spaces/purecipher/xsecuremcp).
 The Space README selects the Docker SDK and port 8000. Its Dockerfile installs
 the tested wheels and runs as user 1000; CI checks this container's MCP calls,
-database migrations, and registry health before uploading it. Hugging Face
+database migrations, registry health, and the rendered README before uploading it. Hugging Face
 then builds and starts the Space asynchronously.
-The Space opens `/registry/health`; it hosts the backend API, while the separate
+The Space opens `/`, which renders the same README as a readable HTML guide.
+Health remains at `/registry/health`. It hosts the backend API, while the separate
 registry console is deployed independently. The package's legacy UI stays disabled.
 Edit `.github/huggingface/README.md` to update the Space page. The build script
 fills its commit and package-version placeholders during publication, so the
-page stays consistent with the installed wheels.
+page stays consistent with the installed wheels. `.github/huggingface/page.html`
+controls the layout; `scripts/huggingface_app.py` serves it alongside the API.
 
 The GitHub Actions secret `HF_TOKEN` must have write access to this Space.
 Configure `PURECIPHER_SIGNING_SECRET` in the Space secrets before startup, and
 `DATABASE_URL` for persistent PostgreSQL storage if needed. Existing Space
 secrets and visibility are preserved. The deployment replaces its Dockerfile,
-README, `.dockerignore`, license, build metadata, and `wheels/` artifacts;
+README, rendered `index.html`, `space_app.py`, `.dockerignore`, license,
+build metadata, and `wheels/` artifacts;
 unrelated existing source files are retained but excluded from the Docker build.
 Superseded wheels are removed from the current Space revision. Hub Git history
 is retained. No model or dataset repository is created.

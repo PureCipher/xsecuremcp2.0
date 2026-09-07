@@ -125,7 +125,7 @@ jobs:
 
       - name: Prepare and test the Hugging Face Docker Space
         run: |
-          python scripts/prepare_huggingface.py
+          uv run --no-sync python scripts/prepare_huggingface.py
           docker build -t xsecuremcp-hf:ci hf-space
           docker run --rm -v "$PWD/scripts/smoke_installed_package.py:/smoke.py:ro" \
             xsecuremcp-hf:ci python /smoke.py
@@ -134,6 +134,8 @@ jobs:
           trap 'docker logs hf-smoke; docker rm -f hf-smoke' EXIT
           for attempt in $(seq 1 30); do
             if curl --fail --silent http://127.0.0.1:8001/registry/health; then
+              curl --fail --silent http://127.0.0.1:8001/ > /tmp/hf-readme.html
+              python -c 'from pathlib import Path; assert "<main id=\"readme\">" in Path("/tmp/hf-readme.html").read_text()'
               exit 0
             fi
             sleep 2

@@ -5,7 +5,7 @@ colorFrom: green
 colorTo: blue
 sdk: docker
 app_port: 8000
-base_path: /registry/health
+base_path: /
 pinned: false
 license: apache-2.0
 short_description: Security and governance for MCP registries
@@ -50,7 +50,7 @@ For example, consider an assistant working with customer records: MCP carries th
 
 This Space hosts the **PureCipher Registry backend API** in a Docker container. It supports tool listings, publisher information, certification checks, moderation, and configurable access control.
 
-The App tab opens the backend’s health-status response. The web console is maintained and deployed separately in [xregistry](https://github.com/PureCipher/xregistry); the backend’s legacy UI is disabled by default.
+The App tab displays this guide. Use the health-status link to inspect the running backend. The web console is maintained and deployed separately in [xregistry](https://github.com/PureCipher/xregistry); the backend’s legacy UI is disabled by default.
 
 | Endpoint | Purpose |
 | --- | --- |

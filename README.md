@@ -44,7 +44,7 @@ For example, consider an assistant working with customer records: MCP carries th
 | Call a server from an application or agent | Connect an MCP client to that server’s endpoint. Receipt-aware clients can additionally inspect the xSecureMCP result metadata. |
 | Publish a tool for others to discover | Scaffold and edit a publisher project, validate it, configure its registry destination, and submit it with the publisher CLI. |
 | Operate a shared tool catalog | Run PureCipher Registry with authentication and PostgreSQL, then connect the separate xregistry console. |
-| Inspect the hosted backend | Open the Hugging Face Space’s health response. The Space is a registry backend; it does not host the calculator example below. |
+| Inspect the hosted backend | Open the Hugging Face Space’s usage guide and health-status link. The Space is a registry backend; it does not host the calculator example below. |
 
 ## Install the latest tested build
 
@@ -167,7 +167,7 @@ A signing secret does not enable user authentication. Review [registry configura
 
 ### Hugging Face
 
-The [PureCipher xSecureMCP Space](https://huggingface.co/spaces/purecipher/xsecuremcp) runs the registry backend and opens its [health endpoint](https://purecipher-xsecuremcp.hf.space/registry/health). Its Docker container installs the same wheels tested by GitHub Actions. The web console is deployed separately.
+The [PureCipher xSecureMCP Space](https://huggingface.co/spaces/purecipher/xsecuremcp) runs the registry backend and displays its README in the App tab, with a separate [health endpoint](https://purecipher-xsecuremcp.hf.space/registry/health). Its Docker container installs the same wheels tested by GitHub Actions. The web console is deployed separately.
 
 ## Package and publish a project
 

@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Learn how to use xSecureMCP: MCP servers, execution policies, receipts, and registry governance." />
+    <title>xSecureMCP — Guide &amp; documentation</title>
+    <style>
+      :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #213344; background: #f5f7f9; line-height: 1.7; }
+      * { box-sizing: border-box; }
+      body { margin: 0; }
+      a { color: #087b77; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+      a:hover { color: #064f4d; }
+      a:focus-visible { outline: 3px solid #36b7b0; outline-offset: 4px; }
+      .topbar { background: #112c3d; color: #fff; padding: 18px max(24px, calc((100vw - 1200px) / 2)); display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; }
+      .brand { color: #fff; text-decoration: none; font-size: 20px; font-weight: 700; letter-spacing: -.5px; }
+      .brand span { color: #8cb2c3; font-size: 11px; letter-spacing: 2px; margin-right: 18px; }
+      .topbar nav { display: flex; gap: 24px; font-size: 14px; }
+      .topbar nav a { color: #d5e7ee; }
+      .layout { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 48px; max-width: 1200px; padding: 48px 24px 80px; margin: auto; }
+      aside { position: sticky; top: 28px; align-self: start; max-height: calc(100vh - 56px); overflow-y: auto; font-size: 13px; }
+      aside p { font-weight: 700; color: #5e7484; text-transform: uppercase; font-size: 11px; letter-spacing: 1.5px; margin: 0 0 16px; }
+      aside a { display: block; color: #526777; text-decoration: none; padding: 7px 0 7px 14px; border-left: 2px solid #dce5e9; line-height: 1.5; }
+      aside a:hover { color: #087b77; border-color: #087b77; }
+      main { background: white; border: 1px solid #e0e7ec; border-radius: 12px; padding: 40px 44px; min-width: 0; }
+      h1, h2, h3 { color: #132f41; line-height: 1.25; scroll-margin-top: 24px; }
+      h1 { font-size: clamp(32px, 5vw, 46px); letter-spacing: -1.5px; margin: 0 0 14px; }
+      h1 + p { font-size: 19px; color: #4b687b; }
+      h2 { font-size: 25px; letter-spacing: -.5px; border-top: 1px solid #e2e9ed; margin: 42px 0 18px; padding-top: 30px; }
+      h3 { font-size: 19px; margin-top: 28px; }
+      p { margin: 0 0 18px; }
+      ul, ol { padding-left: 24px; }
+      li { padding-left: 4px; margin: 10px 0; }
+      code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .85em; background: #edf3f5; border-radius: 4px; padding: 2px 5px; overflow-wrap: anywhere; }
+      pre { padding: 20px; border: 1px solid #dce7eb; border-radius: 8px; background: #f3f7f9; overflow-x: auto; line-height: 1.6; }
+      pre code { background: none; padding: 0; overflow-wrap: normal; }
+      .table-wrap { overflow-x: auto; margin: 22px 0; border: 1px solid #dce6eb; border-radius: 8px; }
+      table { border-collapse: collapse; width: 100%; font-size: 14px; }
+      th { text-align: left; background: #edf4f6; color: #24475a; }
+      th, td { padding: 13px 16px; vertical-align: top; border-bottom: 1px solid #e3ebef; min-width: 140px; }
+      tr:last-child td { border-bottom: 0; }
+      td:first-child { min-width: 150px; }
+      blockquote { border-left: 3px solid #159b94; margin: 24px 0; padding: 12px 20px; background: #eff8f7; }
+      footer { border-top: 1px solid #e0e7ec; margin-top: 36px; padding-top: 20px; color: #637a89; font-size: 13px; }
+      .skip { position: absolute; left: -9999px; }
+      .skip:focus { position: fixed; left: 20px; top: 12px; background: white; padding: 12px; z-index: 2; }
+      @media (max-width: 850px) { .layout { display: block; padding: 24px 16px; } aside { position: static; max-height: none; margin-bottom: 24px; } aside nav { display: flex; gap: 8px; flex-wrap: wrap; } aside a { padding: 6px 10px; border: 1px solid #dae4e9; border-radius: 6px; background: white; } main { padding: 28px 22px; } .brand span { display: block; margin: 0 0 2px; } }
+      @media print { .topbar, aside { display: none; } .layout { display: block; padding: 0; } main { border: 0; padding: 0; } }
+    </style>
+  </head>
+  <body id="top">
+    <a class="skip" href="#readme">Skip to guide</a>
+    <header class="topbar">
+      <a class="brand" href="#top"><span>PURECIPHER</span>xSecureMCP</a>
+      <nav aria-label="Project links">
+        <a href="https://github.com/PureCipher/xsecuremcp2.0" target="_blank" rel="noopener noreferrer">GitHub ↗</a>
+        <a href="https://github.com/PureCipher/xsecuremcp2.0/releases/tag/build-latest" target="_blank" rel="noopener noreferrer">Downloads ↗</a>
+        <a href="/registry/health" target="_blank" rel="noopener noreferrer">API health ↗</a>
+      </nav>
+    </header>
+    <div class="layout">
+      <aside><p>On this page</p><nav aria-label="Guide sections">{{TOC_HTML}}</nav></aside>
+      <main id="readme">
+        {{README_HTML}}
+        <footer>Published from the versioned xSecureMCP README. <a href="#top">Back to top ↑</a></footer>
+      </main>
+    </div>
+  </body>
+</html>
