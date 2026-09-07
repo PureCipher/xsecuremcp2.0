@@ -37,6 +37,10 @@ def test_space_installs_tested_wheels_as_non_root(tmp_path: Path):
     assert '"--port", "8000"' in docker
     assert "sdk: docker\napp_port: 8000" in (output / "README.md").read_text()
     assert "base_path: /registry/health" in (output / "README.md").read_text()
+    readme = (output / "README.md").read_text()
+    assert "{{" not in readme
+    assert f"/commit/{commit}" in readme
+    assert "| Package version | `1.0.0` |" in readme
     assert (output / ".dockerignore").read_text().startswith("*\n")
     for wheel in dist.glob("*.whl"):
         assert (output / "wheels" / wheel.name).read_bytes() == wheel.read_bytes()

@@ -1,188 +1,161 @@
-# SecureMCP
+# xSecureMCP
 
-SecureMCP is a trust-native framework for building MCP servers on top of FastMCP.
+**Security and governance for MCP servers and tool registries.**
 
-This repository now contains three layers:
+xSecureMCP is PureCipher’s platform for building MCP servers, applying execution policies, recording evidence, and publishing tools through a governed registry. It builds on [FastMCP](https://github.com/PrefectHQ/fastmcp) and keeps its Python APIs for tools, resources, prompts, clients, and transports.
 
-- `SecureMCP`: the secure server framework
-- `PureCipher Registry`: a trusted registry for MCP tools and servers
-- `PureCipher Publisher`: publisher tooling for scaffolding, checking, packaging, and publishing SecureMCP projects
+[Python downloads](https://github.com/PureCipher/xsecuremcp2.0/releases/tag/build-latest) · [Hugging Face backend](https://huggingface.co/spaces/purecipher/xsecuremcp) · [Registry console](https://github.com/PureCipher/xregistry) · [Security documentation](docs/servers/security/overview.mdx)
 
-## What SecureMCP adds
+## What’s included
 
-SecureMCP keeps the FastMCP server developer experience, but adds enforceable security controls around tool execution and distribution:
+| Component | Purpose |
+| --- | --- |
+| **SecureMCP** | A Python server layer that connects FastMCP to configurable policy, consent, contracts, provenance, and certification controls. |
+| **PureCipher Registry** | A backend for tool listings, publisher information, certification checks, moderation, and access control. |
+| **PureCipher Publisher** | CLI tools to scaffold, validate, package, and submit MCP projects to a registry. |
+| **xregistry** | The companion web console, maintained in the separate [xregistry repository](https://github.com/PureCipher/xregistry). |
 
-- explicit security manifests
-- runtime policy enforcement
-- consent and contract checks
-- [Execution Receipts](docs/execution-receipts.md): portable tool outcomes with input/output digests and verification proofs
-- provenance and audit trails
-- certification and attestation
-- trust and moderation hooks
+Security controls are configured explicitly for each deployment. Subclassing `FastMCP` or listing a tool in a registry does not by itself establish that a tool is safe or that every control has been applied.
 
-In plain terms: FastMCP exposes capability, and SecureMCP governs capability.
+## Install the latest tested build
 
-## Are we using FastMCP fully?
+Python **3.10 or later** is required. The build workflow validates packages on Python **3.12**.
 
-Mostly on the server side, yes.
+Create and activate a virtual environment, then install the matching fork packages from the rolling GitHub Release:
 
-`SecureMCP` subclasses `FastMCP`, so the normal FastMCP server surface remains available:
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade -r https://github.com/PureCipher/xsecuremcp2.0/releases/download/build-latest/requirements.txt
+```
 
-- tools
-- resources
-- prompts
-- middleware
-- transports
-- auth integration
-- server composition patterns
+On Windows, activate the environment with `.venv\Scripts\Activate.ps1` in PowerShell.
 
-What is not yet fully re-expressed through SecureMCP branding is the broader FastMCP product surface:
+The bundle contains four distributions: `fastmcp`, `fastmcp-slim`, `fastmcp-remote`, and `fastmcp-tasks`. These names are retained for compatibility; the fork also provides the `securemcp` and `purecipher` Python modules and command-line tools. Installing `fastmcp` directly from PyPI selects the upstream distribution.
 
-- FastMCP client APIs are still FastMCP-first, not SecureMCP-first
-- FastMCP app/UI concepts are not wrapped as SecureMCP features
-- package metadata and some repo-level naming still reflect FastMCP
-- the public README had still been mostly upstream FastMCP copy until this rewrite
+The [rolling release](https://github.com/PureCipher/xsecuremcp2.0/releases/tag/build-latest) also provides a ZIP bundle, source distributions, dependency constraints, checksums, and build metadata. It is a development build from this repository’s `main` branch. See [builds and installation](.github/WORKFLOWS.md) for details.
 
-So the right answer is:
+## Build an MCP server
 
-- SecureMCP already inherits most of FastMCP's server capabilities
-- SecureMCP does not yet present every FastMCP capability as a first-class SecureMCP product surface
-
-## Quickstart
+Save this as `server.py`. It creates an HTTP MCP server with provenance enabled:
 
 ```python
-import os
-
-from securemcp import SecureMCP
-from securemcp.config import PolicyConfig, RegistryConfig, SecurityConfig
+from securemcp import SecureMCP, SecurityConfig
+from securemcp.config import ProvenanceConfig
 
 server = SecureMCP(
-    "weather-lookup",
-    security=SecurityConfig(
-        policy=PolicyConfig(),
-        registry=RegistryConfig(),
-    ),
-    mount_security_api=True,
-    security_api_bearer_token=os.environ["SECUREMCP_API_TOKEN"],
+    "calculator",
+    security=SecurityConfig(provenance=ProvenanceConfig()),
 )
 
 
 @server.tool
-def current_weather(city: str) -> str:
-    return f"Sunny in {city}"
+def add(a: int, b: int) -> int:
+    """Add two numbers."""
+    return a + b
 
 
 if __name__ == "__main__":
-    server.run()
+    server.run(transport="http", host="127.0.0.1", port=8000)
 ```
 
-Because `SecureMCP` extends `FastMCP`, the normal FastMCP patterns for tools, resources, prompts, and transports still apply.
+Run `python server.py`, then connect an MCP client to `http://127.0.0.1:8000/mcp`. This example enables provenance; choose the additional policy, identity, consent, and contract settings needed for your application in the [security configuration guide](docs/servers/security/settings.mdx).
 
-## PureCipher Registry
+### Execution receipts
 
-This repo also includes a working product layer called PureCipher: a trusted registry for MCP tools and servers.
+With provenance enabled, completed tool calls can carry an execution receipt containing outcome claims, input/output digests, and a ledger inclusion proof. Clients can inspect and verify these receipts through the public `securemcp` API.
 
-Current PureCipher capabilities include:
+Receipt verification checks integrity and consistency. Authenticating an issuer or establishing the truth of a reported outcome requires an appropriate trust relationship; a self-consistent receipt alone does not establish either. See [Execution Receipts](docs/execution-receipts.md) for usage, coverage, and verification boundaries.
 
-- catalog and listing pages
-- publisher pages
-- moderation and review queue
-- JWT auth and role-based access
-- install recipes
-- SQLite-backed persistence
-- Docker launch flow
+## Run the registry backend
 
-Launch it locally:
+The registry serves an API. Use [xregistry](https://github.com/PureCipher/xregistry) for the web console; the backend’s legacy UI is disabled by default.
+
+For a local evaluation, generate a signing secret and start the backend:
 
 ```bash
-PURECIPHER_SIGNING_SECRET=development-secret uv run purecipher-registry
+export PURECIPHER_SIGNING_SECRET="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
+purecipher-registry --host 127.0.0.1 --port 8001
 ```
 
-By default, the backend now serves the registry API only at:
-
-- `http://127.0.0.1:8001/registry`
-
-The legacy server-rendered UI is disabled by default. Use the Next.js console in the **[xregistry](https://github.com/PureCipher/xregistry)** product repo (clone beside this repo and set `REGISTRY_BACKEND_URL` to this server), or opt back into the old backend UI with:
+Check it from another terminal:
 
 ```bash
-PURECIPHER_SIGNING_SECRET=development-secret uv run purecipher-registry --enable-legacy-ui
+curl http://127.0.0.1:8001/registry/health
 ```
 
-## PureCipher Publisher
+Connect the console by setting its `REGISTRY_BACKEND_URL` to `http://127.0.0.1:8001`.
 
-This repo also includes publisher tooling for SecureMCP projects.
+### Docker
 
-Current publisher commands:
-
-- `purecipher-publisher templates`
-- `purecipher-publisher init`
-- `purecipher-publisher check`
-- `purecipher-publisher login`
-- `purecipher-publisher package`
-- `purecipher-publisher publish`
-
-Example flow:
+The latest tested Linux AMD64 image is available from GitHub Container Registry:
 
 ```bash
-uv run purecipher-publisher init weather-lookup --template http
+docker pull ghcr.io/purecipher/xsecuremcp2.0:latest
+docker run --rm -p 127.0.0.1:8001:8000 \
+  -e PURECIPHER_SIGNING_SECRET \
+  ghcr.io/purecipher/xsecuremcp2.0:latest
+```
+
+Use the signing-secret environment variable from the local example above. If the image requires authentication, sign in to `ghcr.io` with credentials that can read the package.
+
+### Deployment settings
+
+| Setting | Behavior |
+| --- | --- |
+| `PURECIPHER_SIGNING_SECRET` | Required registry signing key. Supply it through your deployment’s secret store. |
+| `DATABASE_URL` | PostgreSQL connection string for persistent registry state. Without it, state is ephemeral. |
+| `PURECIPHER_ENABLE_AUTH` | Set to `true` to enable registry authentication; configure users and JWT settings as described in the registry guide. |
+| `PURECIPHER_REQUIRE_MODERATION` | Set to `true` to place accepted submissions into review before publication. |
+
+A signing secret does not enable user authentication. Review [registry configuration](docs/servers/security/purecipher-registry.mdx) before operating a shared deployment.
+
+### Hugging Face
+
+The [PureCipher xSecureMCP Space](https://huggingface.co/spaces/purecipher/xsecuremcp) runs the registry backend and opens its [health endpoint](https://purecipher-xsecuremcp.hf.space/registry/health). Its Docker container installs the same wheels tested by GitHub Actions. The web console is deployed separately.
+
+## Package and publish a project
+
+Start with the publisher CLI:
+
+```bash
+purecipher-publisher templates
+purecipher-publisher init weather-lookup --template http
 cd weather-lookup
-uv run purecipher-publisher check
-uv run purecipher-publisher package
-uv run purecipher-publisher publish
+purecipher-publisher check
+purecipher-publisher package
 ```
 
-## Installation
+Use `purecipher-publisher login --help` and `purecipher-publisher publish --help` to configure authentication and submit to your registry. The [publisher guide](docs/servers/security/purecipher-publisher.mdx) covers templates, manifests, packaging, and submission.
 
-Today, this repository still builds under the `fastmcp` distribution name in [pyproject.toml](pyproject.toml), while shipping three packages from the same source tree:
+## Builds and upstream updates
 
-- `fastmcp`
-- `securemcp`
-- `purecipher`
+Every push to `PureCipher/xsecuremcp2.0:main` runs tests and static checks, builds the Python packages and Docker images, and checks clean installations and registry health before publication. Successful builds replace the rolling GitHub Release assets and Docker `latest`, then update the Hugging Face Space.
 
-For local development, use:
+A separate daily workflow reports new stable FastMCP releases for manual review. Upstream release-tag imports and merges remain manual. Neither workflow pushes changes to `PrefectHQ/fastmcp`.
 
-```bash
-uv sync
-```
+See [workflow configuration and retention](.github/WORKFLOWS.md) for permissions, notification setup, and publication behavior.
 
-If you want the repo installed in editable mode:
+## Develop from source
 
 ```bash
-uv pip install -e .
-```
-
-The repo now exposes both `fastmcp` and `securemcp` console entrypoints.
-
-For prebuilt Python packages and the Docker image from the latest tested `main`
-commit, see [Builds and installation](.github/WORKFLOWS.md).
-
-- Use `fastmcp` for upstream FastMCP examples and workflows.
-- Use `securemcp` for SecureMCP-specific examples and workflows.
-- FastMCP behavior stays upstream-compatible; SecureMCP is the sibling secure layer.
-
-## Repository shape
-
-- [src/fastmcp](src/fastmcp): upstream FastMCP base
-- [src/securemcp](src/securemcp): SecureMCP facade
-- [src/purecipher](src/purecipher): registry and publisher product layer
-- [docs/servers/security](docs/servers/security): SecureMCP and PureCipher docs
-
-## Development
-
-Required verification workflow:
-
-```bash
+git clone https://github.com/PureCipher/xsecuremcp2.0.git
+cd xsecuremcp2.0
 uv sync
 uv run pytest -n auto
 uv run prek run --all-files
 ```
 
-## Current positioning
+| Location | Contents |
+| --- | --- |
+| [`src/securemcp`](src/securemcp) | SecureMCP server API, configuration, and receipt helpers. |
+| [`src/purecipher`](src/purecipher) | Registry backend and publisher tooling. |
+| [`fastmcp_slim/fastmcp`](fastmcp_slim/fastmcp) | FastMCP core and security implementation. |
+| [`fastmcp_remote`](fastmcp_remote), [`fastmcp_tasks`](fastmcp_tasks) | Remote and task support packages. |
+| [`tests`](tests) | Framework, registry, security, and packaging tests. |
 
-The clean way to think about this repo now is:
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before proposing changes.
 
-- FastMCP is the engine
-- SecureMCP is the secure server layer
-- PureCipher is the trusted registry and publisher product layer
+## License and attribution
 
-That is already enough to describe this codebase as more than a FastMCP fork. It is becoming a SecureMCP platform with a real product surface for both publishers and users.
+Licensed under [Apache 2.0](LICENSE). xSecureMCP is maintained by PureCipher and builds on the work of [FastMCP](https://github.com/PrefectHQ/fastmcp) and its contributors.

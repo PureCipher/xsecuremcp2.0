@@ -45,23 +45,14 @@ def prepare(root: Path, dist: Path, output: Path, commit: str) -> None:
         launchers + "\n\nFROM python:3.12-slim-bookworm AS runtime\n" + runtime
     )
     (output / ".dockerignore").write_text("*\n!Dockerfile\n!wheels/\n!wheels/**\n")
-    (output / "README.md").write_text(
-        "---\ntitle: xsecuremcp\nemoji: 🛡️\ncolorFrom: green\ncolorTo: blue\n"
-        "sdk: docker\napp_port: 8000\nbase_path: /registry/health\n"
-        "pinned: false\nlicense: apache-2.0\n---\n\n"
-        "# PureCipher xSecureMCP\n\n"
-        f"Built from [PureCipher/xsecuremcp2.0 `{commit[:12]}`]"
-        f"(https://github.com/PureCipher/xsecuremcp2.0/commit/{commit}).\n\n"
-        f"Package version: `{build['version']}`. The container installs the "
-        "same wheels tested by GitHub Actions.\n\n"
-        "This Space hosts the registry backend API and opens its health status. "
-        "The separate registry console is not included in this Python package.\n\n"
-        "Set `PURECIPHER_SIGNING_SECRET` in Space secrets before startup. "
-        "Set `DATABASE_URL` to use persistent PostgreSQL storage; otherwise "
-        "registry state is ephemeral and can be lost on restart.\n\n"
-        "[Python bundles and install instructions]"
-        "(https://github.com/PureCipher/xsecuremcp2.0/releases/tag/build-latest)\n"
-    )
+    readme = (root / ".github/huggingface/README.md").read_text()
+    for placeholder, value in {
+        "{{BUILD_COMMIT}}": commit,
+        "{{BUILD_COMMIT_SHORT}}": commit[:12],
+        "{{PACKAGE_VERSION}}": build["version"],
+    }.items():
+        readme = readme.replace(placeholder, value)
+    (output / "README.md").write_text(readme)
 
 
 if __name__ == "__main__":
