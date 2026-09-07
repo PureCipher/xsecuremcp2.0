@@ -1,6 +1,6 @@
 # Python and Docker builds
 
-This repository has one workflow: `build-packages.yml`. Every push to `main`
+The build workflow is `build-packages.yml`. Every push to `main`
 (and a manual run on `main`) tests and publishes the PureCipher fork. It never
 pushes source code or packages to PrefectHQ/FastMCP or PyPI. Upstream release/tag
 imports remain manual.
@@ -87,5 +87,33 @@ versions are preserved. Historical workflow logs are not build packages and
 are left to GitHub's normal retention policy.
 
 All previous sync, publishing, documentation, and maintainer-bot workflows
-remain removed. Future imports from upstream release tags should retain this
-single fork-specific workflow rather than restore upstream automation.
+remain removed. Future imports from upstream release tags should retain these
+fork-specific workflows rather than restore upstream automation.
+
+## Upstream release email notifications
+
+`check-upstream-releases.yml` checks `PrefectHQ/fastmcp` daily at 03:17 UTC
+(08:47 India time). For each newly published **stable release**, it creates one
+issue here assigned to `svkrishna`, with a link to the upstream release notes
+and a reminder to review and merge the release tag into `main` manually.
+It never merges, changes source code, or writes upstream. Prereleases, draft
+releases, and bare tags without a published release are ignored. The starting
+baseline is `v4.0.3`, published September 5, 2026; historical releases do not
+generate alerts. New maintenance releases are included even if a higher major
+version already exists.
+
+GitHub delivers assignment emails according to the recipient's
+[notification settings](https://github.com/settings/notifications). Enable
+**Email** for participating notifications and ensure this repository is not
+ignored. No SMTP password is required. The workflow cannot verify inbox
+delivery or override personal email preferences. To change the recipient, set
+the repository Actions variable `FASTMCP_RELEASE_ASSIGNEE` to an assignable
+GitHub username.
+
+Both open and closed alert issues prevent duplicate notifications; keep their
+hidden release marker intact. Deleting an alert issue allows it to be recreated.
+A manual run defaults to a dry run; clear `dry_run` to send pending alerts.
+When no new release exists, no issue or email is generated. The workflow has
+only source read and fork issue write permissions. GitHub may delay scheduled
+runs and disables schedules in public repositories after 60 days without
+repository activity; re-enable this workflow in Actions if that occurs.

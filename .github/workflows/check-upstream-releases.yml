@@ -1,0 +1,46 @@
+name: Notify about new FastMCP releases
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Check without creating notification issues
+        type: boolean
+        default: true
+
+concurrency:
+  group: upstream-release-notifications
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  notify:
+    if: github.repository == 'PureCipher/xsecuremcp2.0' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+      - name: Test release detection and notification boundaries
+        run: node --test .github/scripts/check-upstream-releases.test.cjs
+      - name: Check published stable releases
+        uses: actions/github-script@v9
+        env:
+          NOTIFY_ASSIGNEE: ${{ vars.FASTMCP_RELEASE_ASSIGNEE || 'svkrishna' }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        with:
+          script: |
+            await require('./.github/scripts/check-upstream-releases.cjs').check({
+              github, context, core,
+              assignee: process.env.NOTIFY_ASSIGNEE,
+              dryRun: process.env.DRY_RUN === 'true',
+            });

@@ -57,7 +57,7 @@ jobs:
           SKIP: no-commit-to-branch
         run: |
           uv run --no-sync prek run --all-files
-          node --test .github/scripts/publish-build.test.cjs
+          node --test .github/scripts/*.test.cjs
           git diff --exit-code
 
       - name: Build Python distributions and export locked runtime dependencies
