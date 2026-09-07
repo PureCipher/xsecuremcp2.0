@@ -153,6 +153,9 @@ uv pip install -e .
 
 The repo now exposes both `fastmcp` and `securemcp` console entrypoints.
 
+For prebuilt Python packages and the Docker image from the latest tested `main`
+commit, see [Builds and installation](.github/WORKFLOWS.md).
+
 - Use `fastmcp` for upstream FastMCP examples and workflows.
 - Use `securemcp` for SecureMCP-specific examples and workflows.
 - FastMCP behavior stays upstream-compatible; SecureMCP is the sibling secure layer.

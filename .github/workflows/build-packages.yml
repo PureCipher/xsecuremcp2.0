@@ -1,0 +1,155 @@
+name: Build pip package and Docker image
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Serialize publication so a previous run cannot delete a newer run's assets.
+concurrency:
+  group: publish-main-build
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/purecipher/xsecuremcp2.0:latest
+
+jobs:
+  build:
+    if: github.repository == 'PureCipher/xsecuremcp2.0' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          version: "0.12.5"
+          python-version: "3.12"
+          enable-cache: true
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Install locked test dependencies
+        run: uv sync --locked
+
+      - name: Run unit tests
+        run: >-
+          uv run --no-sync pytest -n auto --maxprocesses 2 --dist worksteal
+          -m "not integration and not client_process and not subprocess_heavy and not conformance"
+
+      - name: Run integration, subprocess, and conformance tests serially
+        run: >-
+          uv run --no-sync pytest -n 0 --timeout=30
+          -m "integration or client_process or subprocess_heavy or conformance"
+
+      - name: Run static checks and publication safety tests
+        env:
+          SKIP: no-commit-to-branch
+        run: |
+          uv run --no-sync prek run --all-files
+          node --test .github/scripts/publish-build.test.cjs
+          git diff --exit-code
+
+      - name: Build Python distributions and export locked runtime dependencies
+        run: |
+          uv build --all-packages --out-dir dist
+          uv export --locked --no-dev --all-packages --no-emit-workspace \
+            --no-hashes --no-header --no-annotate --output-file dist/constraints.txt
+
+      - name: Prepare the rolling pip bundle
+        id: bundle
+        env:
+          BUILD_COMMIT: ${{ github.sha }}
+        run: python scripts/build_artifacts.py --commit "$BUILD_COMMIT"
+
+      - name: Smoke-test a clean wheel installation
+        run: |
+          uv venv /tmp/securemcp-wheel-smoke
+          uv pip install --python /tmp/securemcp-wheel-smoke/bin/python \
+            --constraint dist/constraints.txt dist/*.whl
+          uv pip check --python /tmp/securemcp-wheel-smoke/bin/python
+          /tmp/securemcp-wheel-smoke/bin/python scripts/smoke_installed_package.py
+          /tmp/securemcp-wheel-smoke/bin/securemcp --help
+          /tmp/securemcp-wheel-smoke/bin/purecipher-registry --help
+          /tmp/securemcp-wheel-smoke/bin/purecipher-publisher --help
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the Docker image locally before publishing
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.purecipher-registry
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: ${{ env.IMAGE }}
+          provenance: false
+          sbom: false
+          build-args: |
+            PACKAGE_VERSION=${{ steps.bundle.outputs.version }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/PureCipher/xsecuremcp2.0
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.bundle.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke-test the Docker runtime and registry health
+        run: |
+          docker run --rm "$IMAGE" securemcp --help
+          docker run --rm "$IMAGE" uv run --no-sync purecipher-registry --help
+          docker run --rm -v "$PWD/scripts/smoke_installed_package.py:/smoke.py:ro" \
+            "$IMAGE" python /smoke.py
+          docker run -d --name registry-smoke -p 127.0.0.1:8000:8000 \
+            -e PURECIPHER_SIGNING_SECRET=ci-smoke-only-not-for-production "$IMAGE"
+          trap 'docker logs registry-smoke; docker rm -f registry-smoke' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8000/registry/health; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Registry health check failed."
+          exit 1
+
+      - name: Confirm this is still the current main commit
+        env:
+          BUILD_COMMIT: ${{ github.sha }}
+        run: |
+          git fetch --no-tags origin main
+          test "$(git rev-parse FETCH_HEAD)" = "$BUILD_COMMIT"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Replace the latest Docker image with the tested image
+        run: |
+          docker push "$IMAGE"
+          reference=$(docker image inspect "$IMAGE" --format '{{index .RepoDigests 0}}')
+          echo "IMAGE_DIGEST=${reference#*@}" >> "$GITHUB_ENV"
+
+      - name: Publish Python files and remove previous rolling release assets
+        uses: actions/github-script@v9
+        with:
+          script: |
+            await require('./.github/scripts/publish-build.cjs').publish({ github, context, core });
+
+      - name: Delete superseded untagged Docker image versions
+        uses: actions/github-script@v9
+        with:
+          script: |
+            await require('./.github/scripts/publish-build.cjs').cleanupImage({ github, context });

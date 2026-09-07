@@ -1,60 +1,91 @@
-# SecureMCP workflow policy
+# Python and Docker builds
 
-All GitHub Actions workflows were removed from `PureCipher/xsecuremcp2.0`
-on 2026-09-07 at the maintainer's request. There is no automated sync, CI,
-publishing, documentation deployment, issue triage, or PR moderation.
+This repository has one workflow: `build-packages.yml`. Every push to `main`
+(and a manual run on `main`) tests and publishes the PureCipher fork. It never
+pushes source code or packages to PrefectHQ/FastMCP or PyPI. Upstream release/tag
+imports remain manual.
 
-FastMCP updates will be taken manually from upstream releases/tags, rather
-than continuously merging upstream `main`. No changes are pushed to
-`PrefectHQ/fastmcp`. Choosing or importing the next release is a separate task.
+## Validation and publication
 
-## Workflow review
+1. Install locked dependencies and run the complete test suite. Unit tests run
+   with two workers; integration, subprocess, and conformance tests run serially.
+   Tests requiring unavailable external credentials retain their existing skips.
+2. Run formatting, lint, typing, and publication-safety tests.
+3. Build the four matching Python workspace packages and export locked runtime
+   constraints. Verify them in a fresh installation, including an MCP tool call,
+   CLI entry points, and database migrations.
+4. Build a Linux AMD64 Docker image and verify the installed packages, launchers,
+   and `/registry/health` endpoint before pushing it.
+5. Publish `ghcr.io/purecipher/xsecuremcp2.0:latest` and the `build-latest`
+   GitHub Release. Remove superseded release assets and untagged image versions
+   only after the new outputs have passed validation and been published.
 
-Each of the following workflows was reviewed and removed:
+A failed test/build does not replace the previous outputs. Publication is
+serialized, and a build whose commit is no longer `main` stops before publishing.
+Python uploads and Docker pushes are separate services, so an upload or cleanup
+failure can leave a partially updated publication; the workflow reports failure
+and can be rerun. No upstream version tags or unrelated releases are deleted.
+The rolling `build-latest` tag is the only Git tag this workflow updates.
 
-| Workflow file | Previous purpose |
-| --- | --- |
-| `auto-close-duplicates.yml` | Close duplicate issues using the Marvin App. |
-| `auto-close-needs-mre.yml` | Close inactive issues awaiting reproductions. |
-| `deploy-docs.yml` | Deploy the upstream Mintlify documentation project. |
-| `marvin-comment-on-issue.yml` | Run the `/marvin` issue assistant. |
-| `marvin-comment-on-pr.yml` | Run the `/marvin` PR assistant. |
-| `marvin-dedupe-issues.yml` | Find and label duplicate issues with AI. |
-| `marvin-label-triage.yml` | Apply upstream labels and contributor policy. |
-| `marvin-test-failure.yml` | Generate AI comments about failed CI runs. |
-| `marvin-triage-issue.yml` | Triage issues for named upstream maintainers. |
-| `minimize-resolved-reviews.yml` | Hide resolved PR review comments. |
-| `publish-fastmcp-slim.yml` | Publish upstream `fastmcp-slim` to PyPI. |
-| `publish-fastmcp.yml` | Publish upstream `fastmcp` and prepare documentation publication. |
-| `publish-fastmcp-remote.yml` | Publish upstream `fastmcp-remote` to PyPI. |
-| `publish-fastmcp-tasks.yml` | Publish upstream `fastmcp-tasks` to PyPI. |
-| `require-issue-link.yml` | Close/reopen external PRs using upstream assignment rules. |
-| `run-schema-crash-test.yml` | Test against an external corpus of 232K schemas. |
-| `run-static.yml` | Run formatting, lint, typing, and repository checks. |
-| `run-tests.yml` | Run the Python/OS test matrix, integration/conformance tests, and package smoke checks. |
-| `run-upgrade-checks.yml` | Test upgraded dependencies and create/close failure issues. |
-| `sync.yml` | Merge upstream `main` into this fork daily and push. |
-| `update-config-schema.yml` | Open generated-schema PRs as Marvin. |
-| `update-sdk-docs.yml` | Open generated SDK-documentation PRs as Marvin. |
+## Install with pip
 
-The three composite actions (`run-claude`, `run-pytest`, and `setup-uv`) are
-also removed because no workflows use them. Helper scripts, generated docs,
-and application code remain intact. Historical Actions runs are not deleted.
-
-## Manual validation
-
-Tests and checks remain available locally:
+GitHub Packages does not provide a native Python/pip registry. The rolling
+GitHub Release hosts wheel files, source distributions, a ZIP bundle, locked
+constraints, and checksums instead:
 
 ```sh
-uv sync
-uv run pytest -n auto
-uv run prek run --all-files
+python -m pip install --upgrade -r https://github.com/PureCipher/xsecuremcp2.0/releases/download/build-latest/requirements.txt
 ```
 
-Run them before committing an upstream release update. Removing automation
-does not resolve the existing Windows/minimum-dependency test failures or
-replace local validation. Inherited upstream contributor/release instructions
-may describe bots and publishing procedures that are not enabled in this fork.
+The existing distribution names (`fastmcp`, `fastmcp-slim`, `fastmcp-remote`, and
+`fastmcp-tasks`) are retained for compatibility. The requirements file points to
+all four matching **fork wheels** on GitHub, so pip does not substitute upstream
+FastMCP wheels. Third-party runtime dependencies come from PyPI at the tested
+locked versions.
 
-Future release imports may contain `.github/workflows` or `.github/actions`.
-Review and exclude those definitions to keep automation disabled.
+Alternatively, download `xsecuremcp2.0-python.zip` from the
+[rolling build release](https://github.com/PureCipher/xsecuremcp2.0/releases/tag/build-latest),
+extract it into an empty directory, then run:
+
+```sh
+python -m pip install --constraint constraints.txt ./*.whl
+```
+
+`SHA256SUMS` and `build.json` identify the files, package version, and source
+commit. The rolling release is marked as a prerelease, not an upstream release.
+
+## Run Docker
+
+```sh
+docker pull ghcr.io/purecipher/xsecuremcp2.0:latest
+docker run --rm -p 8000:8000 \
+  -e PURECIPHER_SIGNING_SECRET="$PURECIPHER_SIGNING_SECRET" \
+  -e DATABASE_URL="$DATABASE_URL" \
+  ghcr.io/purecipher/xsecuremcp2.0:latest
+```
+
+Set a signing secret before running. `DATABASE_URL` points to PostgreSQL for
+persistent storage; omitting it uses ephemeral storage. The image contains
+Node/npm, uv/uvx, and the Docker CLI for package introspection. A Docker daemon
+is not included. The existing Compose file remains available for local source
+builds and PostgreSQL setup.
+
+GHCR packages are private by default even for public source repositories. If
+the image is private, authenticate with `docker login ghcr.io` using a GitHub
+personal access token with `read:packages`, or change the package visibility in
+GitHub if public anonymous pulls are wanted.
+
+## Permissions and retention
+
+GitHub Actions must be enabled for this repository. The workflow uses its
+built-in `GITHUB_TOKEN` with `contents: write` for the rolling release and
+`packages: write` for GHCR. No PyPI token, Docker Hub credentials, or upstream
+repository write access is needed. The publishing repository must have admin
+access to its GHCR package to delete older versions; this is assigned
+implicitly when the workflow creates the package. Manually tagged image
+versions are preserved. Historical workflow logs are not build packages and
+are left to GitHub's normal retention policy.
+
+All previous sync, publishing, documentation, and maintainer-bot workflows
+remain removed. Future imports from upstream release tags should retain this
+single fork-specific workflow rather than restore upstream automation.

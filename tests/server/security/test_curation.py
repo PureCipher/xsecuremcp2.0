@@ -3123,6 +3123,26 @@ class TestStdioIntrospectorEnv:
         assert secret_value not in joined
 
 
+@pytest.fixture
+def offline_pypi_metadata(monkeypatch):
+    """Exercise credential forwarding without depending on live PyPI metadata."""
+    from purecipher.curation.upstream import PyPIUpstreamFetcher
+
+    monkeypatch.setattr(
+        PyPIUpstreamFetcher,
+        "_make_client",
+        lambda self: _FakeHttpClient(
+            _FakeHttpResponse(
+                json_payload={
+                    "info": {"version": "1.0.0", "summary": "Test MCP server"},
+                    "releases": {"1.0.0": []},
+                }
+            )
+        ),
+    )
+
+
+@pytest.mark.usefixtures("offline_pypi_metadata")
 class TestCurateIntrospectRouteEnv:
     """Iter 14.8 — the registry route accepts ``env`` and passes it
     through to the introspector. Validation errors map to 400."""
@@ -3260,6 +3280,7 @@ class TestCurateIntrospectRouteEnv:
         assert captured["env"] is None
 
 
+@pytest.mark.usefixtures("offline_pypi_metadata")
 class TestCurateSubmitRouteEnv:
     """Iter 14.8.1 — submit handler accepts ``env`` and threads it
     into the re-introspect step.
