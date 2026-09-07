@@ -5,8 +5,12 @@ description: Review an incoming external issue (and any gated-closed PR behind i
 
 # Triaging contributions under the issue-link gate
 
+> Upstream reference only: PureCipher/xsecuremcp2.0 does not run this gate.
+> Assigning an issue in this fork does not reopen a PR. See the
+> [fork workflow review](../../../.github/WORKFLOWS.md).
+
 FastMCP auto-closes external PRs unless the author is **assigned to a referenced issue**
-(see [require-issue-link.yml](../../../.github/workflows/require-issue-link.yml)). The practical
+(see the [upstream issue-link workflow](https://github.com/PrefectHQ/fastmcp/blob/e3fb4af36892e6477399df2597f0dd5abd469799/.github/workflows/require-issue-link.yml)). The practical
 effect: contributors open an issue, open a PR, get auto-closed, and ask to be assigned. The
 maintainer almost never sees the PR directly — **the issue is the decision point**, and
 **assigning the author is the single action that reopens their PR** and sends it into review.
