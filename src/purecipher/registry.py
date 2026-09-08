@@ -630,6 +630,8 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             from purecipher.consumer_oauth import mount_consumer_oauth
 
             mount_consumer_oauth(self, registry_prefix)
+            from purecipher.curation.http_auth import mount_curator_auth
+            mount_curator_auth(self, registry_prefix)
             if (
                 os.environ.get("PURECIPHER_CONSUMER_RUNTIME_ENABLED", "false").lower()
                 == "true"
@@ -6021,7 +6023,15 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
         introspector = self._curation_introspector()
         try:
-            introspection = await introspector.introspect(preview.upstream_ref, env=env)
+            from purecipher.curation.http_auth import inspection_headers, inspection_transport
+            try:
+                http_headers = inspection_headers(self, body, session, preview.upstream_ref.identifier)
+                http_transport = inspection_transport(body, session, preview.upstream_ref.identifier)
+            except ValueError as exc:
+                return {"error": str(exc), "status": 400}
+            if (http_headers or http_transport) and raw_hosting_early == "proxy":
+                return {"error": "Inspection credentials cannot be shared through a proxy listing. Choose catalog mode; each end user must authorize separately.", "status": 400}
+            introspection = await introspector.introspect(preview.upstream_ref, env=env, **({"headers": http_headers} if http_headers else {}), **({"transport_options": http_transport} if http_transport else {}))
         except IntrospectionError as exc:
             return {"error": str(exc), "status": 502}
         finally:
@@ -9682,7 +9692,13 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 )
             introspector = self._curation_introspector()
             try:
-                result = await introspector.introspect(preview.upstream_ref, env=env)
+                from purecipher.curation.http_auth import inspection_headers, inspection_transport
+                try:
+                    http_headers = inspection_headers(self, body, session, preview.upstream_ref.identifier)
+                    http_transport = inspection_transport(body, session, preview.upstream_ref.identifier)
+                except ValueError as exc:
+                    return JSONResponse({"error": str(exc)}, status_code=400)
+                result = await introspector.introspect(preview.upstream_ref, env=env, **({"headers": http_headers} if http_headers else {}), **({"transport_options": http_transport} if http_transport else {}))
             except IntrospectionError as exc:
                 return JSONResponse(
                     {"error": str(exc), "status": 502},

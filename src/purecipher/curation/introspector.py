@@ -288,25 +288,24 @@ class HTTPIntrospector:
         client_factory: Any = None,
     ) -> None:
         self._timeout = float(timeout_seconds)
-        self._client_factory = client_factory or (lambda url: Client(url))
+        self._client_factory = client_factory
 
     async def introspect(
         self,
         upstream_ref: UpstreamRef,
         *,
         env: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
+        transport_options: dict | None = None,
     ) -> IntrospectionResult:
         """Connect to the upstream and capture its capabilities.
 
         Args:
             upstream_ref: Must be an HTTP-channel ref with a valid URL.
-            env: Iter 14.8 — currently not supported for HTTP. HTTP MCP
-                servers expect credentials inline in the URL or via
-                bearer headers; we don't have a robust way to pick the
-                right header name from a generic env dict yet, so the
-                wizard hides the credential editor for HTTP upstreams.
-                Passing a non-empty env raises so a curator can't be
-                misled into thinking it's being sent.
+            env: Only supported for local package transports. HTTP uses
+                explicit private headers or transport_options instead.
+            headers: One-shot inspection headers, never listing metadata.
+            transport_options: Private mTLS or AWS signing configuration.
 
         Raises:
             IntrospectionError: On any connect/list failure or timeout.
@@ -321,8 +320,7 @@ class HTTPIntrospector:
             raise IntrospectionError(
                 "Credentials at introspect time are only supported for "
                 "PyPI / npm / Docker upstreams. For HTTP MCP servers, "
-                "embed the token in the URL or expose an authenticated "
-                "endpoint."
+                "use OAuth or the private HTTP credential controls."
             )
         url = upstream_ref.identifier
         if not url:
@@ -332,7 +330,7 @@ class HTTPIntrospector:
         start = loop.time()
         try:
             result = await asyncio.wait_for(
-                self._do_introspect(url, upstream_ref),
+                self._do_introspect(url, upstream_ref, headers, transport_options),
                 timeout=self._timeout,
             )
         except asyncio.TimeoutError as exc:
@@ -344,26 +342,46 @@ class HTTPIntrospector:
             raise
         except Exception as exc:
             # Catch every other underlying exception (network, protocol,
-            # MCP error) and surface as a curator-facing message. We
-            # log at WARNING with full traceback for operators.
-            logger.warning(
-                "Upstream introspection failed for %s: %s",
-                url,
-                exc,
-                exc_info=True,
-            )
+            # MCP error) without logging values that may contain credentials.
+            logger.warning("HTTP MCP inspection failed (%s)", type(exc).__name__)
             raise IntrospectionError(
-                f"Couldn't connect to the upstream MCP server: "
-                f"{type(exc).__name__}: {exc}"
-            ) from exc
+                "Couldn't connect to the upstream MCP server. Check authorization and endpoint availability."
+            ) from None
 
         result.duration_ms = (loop.time() - start) * 1000.0
         return result
 
     async def _do_introspect(
-        self, url: str, upstream_ref: UpstreamRef
+        self,
+        url: str,
+        upstream_ref: UpstreamRef,
+        headers: dict[str, str] | None = None,
+        transport_options: dict | None = None,
     ) -> IntrospectionResult:
-        client = self._client_factory(url)
+        if self._client_factory:
+            client = (
+                self._client_factory(url, headers=headers)
+                if headers
+                else self._client_factory(url)
+            )
+        elif headers or transport_options:
+            from urllib.parse import urlsplit
+
+            from fastmcp.client.transports import SSETransport, StreamableHttpTransport
+            from purecipher.curation.http_transport import client_factory
+
+            factory = client_factory(url, transport_options)
+
+            transport_type = (
+                SSETransport
+                if urlsplit(url).path.rstrip("/").endswith("/sse")
+                else StreamableHttpTransport
+            )
+            client = Client(
+                transport_type(url, headers=headers, httpx_client_factory=factory)
+            )
+        else:
+            client = Client(url)
         async with client:
             tools_raw = await client.list_tools()
             try:
@@ -799,6 +817,8 @@ class Introspector:
         upstream_ref,
         *,
         env: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
+        transport_options: dict | None = None,
     ) -> IntrospectionResult:
         """Dispatch to the right per-channel introspector.
 
@@ -813,12 +833,25 @@ class Introspector:
         from fastmcp.server.security.gateway.tool_marketplace import UpstreamChannel
 
         if upstream_ref.channel == UpstreamChannel.HTTP:
-            return await self._http.introspect(upstream_ref, env=env)
+            return await self._http.introspect(
+                upstream_ref,
+                env=env,
+                headers=headers,
+                **(
+                    {"transport_options": transport_options}
+                    if transport_options
+                    else {}
+                ),
+            )
         if upstream_ref.channel in (
             UpstreamChannel.PYPI,
             UpstreamChannel.NPM,
             UpstreamChannel.DOCKER,
         ):
+            if headers or transport_options:
+                raise IntrospectionError(
+                    "HTTP credentials cannot be used with local packages"
+                )
             return await self._stdio.introspect(upstream_ref, env=env)
         raise IntrospectionError(
             f"Channel {upstream_ref.channel.value} is not supported in this iteration."
