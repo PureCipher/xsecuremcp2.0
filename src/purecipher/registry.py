@@ -146,6 +146,7 @@ class RegistrySubmissionResult:
     attestation: Any
     manifest_digest: str
     listing: ToolListing | None = None
+    release_candidate: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize the submission result for HTTP responses."""
@@ -157,6 +158,8 @@ class RegistrySubmissionResult:
             "report": self.report.to_dict(),
             "attestation": self.attestation.to_dict(),
         }
+        if self.release_candidate is not None:
+            payload["release_candidate"] = self.release_candidate
         if self.listing is not None:
             payload["listing"] = self.listing.to_dict()
         return payload
@@ -5743,6 +5746,39 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 manifest_digest=preflight.manifest_digest,
             )
 
+        existing = self._marketplace().get_by_name(manifest.tool_name)
+        if existing and existing.status == PublishStatus.PUBLISHED:
+            from purecipher.release_candidates import stage
+
+            candidate = stage(
+                self,
+                existing,
+                manifest,
+                preflight,
+                display_name=display_name,
+                description=description,
+                categories=categories,
+                homepage_url=homepage_url,
+                source_url=source_url,
+                tool_license=tool_license,
+                tags=tags,
+                metadata=metadata,
+                changelog=changelog,
+            )
+            return RegistrySubmissionResult(
+                accepted=True,
+                reason="Release candidate submitted; the published version is unchanged.",
+                report=preflight.report,
+                attestation=preflight.attestation,
+                manifest_digest=preflight.manifest_digest,
+                listing=existing,
+                release_candidate={
+                    k: v
+                    for k, v in candidate.items()
+                    if k not in {"snapshot", "previous_release"}
+                },
+            )
+
         from purecipher.token_cost import estimate_definition_tokens
 
         definition_tokens = estimate_definition_tokens(
@@ -6657,6 +6693,10 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     status_code=status_code,
                 )
 
+            if session and manifest.author != session.username:
+                return JSONResponse(
+                    {"error": "Use your own publisher identity"}, status_code=403
+                )
             result = self.submit_tool(
                 manifest,
                 display_name=state["display_name"],
@@ -6710,6 +6750,9 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         from purecipher.notification_inbox import mount as mount_notification_inbox
 
         mount_notification_inbox(self, prefix)
+        from purecipher.release_candidates import mount as mount_releases
+
+        mount_releases(self, prefix)
 
         @self.custom_route(f"{prefix}/me/preferences", methods=["GET"])
         async def registry_my_preferences(request: Request) -> JSONResponse:
@@ -9398,6 +9441,10 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
             try:
                 manifest = _parse_manifest(manifest_data)
+                if session and manifest.author != session.username:
+                    return JSONResponse(
+                        {"error": "Use your own publisher identity"}, status_code=403
+                    )
                 result = self.submit_tool(
                     manifest,
                     display_name=body.get("display_name", ""),

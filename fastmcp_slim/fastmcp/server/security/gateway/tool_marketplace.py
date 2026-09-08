@@ -482,6 +482,7 @@ class ToolListing:
 
     listing_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     publisher_setup: dict[str, Any] = field(default_factory=dict, repr=False)
+    release_records: list[dict[str, Any]] = field(default_factory=list, repr=False)
     tool_name: str = ""
     display_name: str = ""
     description: str = ""
@@ -987,6 +988,7 @@ class ToolMarketplace:
             listing.attestation.to_dict() if listing.attestation is not None else None
         )
         payload["publisher_setup"] = dict(listing.publisher_setup)
+        payload["release_records"] = listing.release_records
         payload["metadata"] = dict(listing.metadata)
         payload["version_history"] = [
             version.to_dict() for version in listing.version_history
@@ -1028,6 +1030,7 @@ class ToolMarketplace:
         listing = ToolListing(
             listing_id=data.get("listing_id", str(uuid.uuid4())),
             publisher_setup=dict(data.get("publisher_setup") or {}),
+            release_records=list(data.get("release_records") or []),
             tool_name=data.get("tool_name", ""),
             display_name=data.get("display_name", ""),
             description=data.get("description", ""),

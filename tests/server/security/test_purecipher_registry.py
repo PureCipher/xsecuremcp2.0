@@ -1049,7 +1049,7 @@ class TestPureCipherRegistry:
                 ):
                     assert detail[key] == anonymous.json()[key]
 
-    def test_submit_tool_requeues_existing_listing_when_moderation_is_enabled(self):
+    def test_submit_tool_preserves_published_listing_and_queues_candidate(self):
         registry = PureCipherRegistry(
             signing_secret=TEST_SIGNING_SECRET,
             require_moderation=True,
@@ -1076,6 +1076,7 @@ class TestPureCipherRegistry:
 
         second = registry.submit_tool(
             _manifest(tool_name="weather-lookup", version="1.1.0"),
+            changelog="Improves weather lookup",
             display_name="Weather Lookup",
             categories={ToolCategory.NETWORK},
             metadata=_runtime_metadata(),
@@ -1084,10 +1085,11 @@ class TestPureCipherRegistry:
 
         assert second.accepted is True
         assert second.listing is not None
-        assert second.listing.status.value == "pending_review"
+        assert second.listing.status.value == "published"
+        assert second.release_candidate["status"] == "pending_review"
 
         detail = registry.get_verified_tool("weather-lookup")
-        assert detail["status"] == 404
+        assert detail["version"] == "1.0.0"
 
     def test_http_registry_ui_route(self):
         registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
@@ -1551,11 +1553,22 @@ class TestPureCipherRegistry:
             categories={ToolCategory.NETWORK},
             requested_level=CertificationLevel.BASIC,
         )
-        registry.submit_tool(
+        update = registry.submit_tool(
             _manifest(tool_name="weather-lookup", version="1.1.0"),
+            changelog="Release weather update",
             display_name="Weather Lookup",
             categories={ToolCategory.NETWORK},
             requested_level=CertificationLevel.BASIC,
+        )
+        from purecipher.release_candidates import decide
+
+        decide(
+            registry,
+            update.listing.listing_id,
+            update.release_candidate["id"],
+            "approve",
+            "reviewer",
+            "Checked",
         )
         app = registry.http_app()
 
@@ -3162,10 +3175,6 @@ class TestServerOverridesGovernance:
         listing_id = self._catalog_listing(registry, tool_name="yanked-tool")
 
         # Submit a second version then yank the first.
-        from fastmcp.server.security.gateway.tool_marketplace import (
-            AttestationKind,
-            HostingMode,
-        )
 
         manifest_v2 = _manifest(
             tool_name="yanked-tool",
@@ -3173,14 +3182,10 @@ class TestServerOverridesGovernance:
             version="1.1.0",
             tags={"curated"},
         )
-        registry.submit_tool(
-            manifest_v2,
-            display_name="Yanked Tool",
-            categories={ToolCategory.NETWORK},
-            attestation_kind=AttestationKind.CURATOR,
-            hosting_mode=HostingMode.CATALOG,
-            curator_id="alice",
-            requested_level=CertificationLevel.BASIC,
+        # This fixture exercises history presentation for specialized listings,
+        # not their separate curation update workflow.
+        registry._marketplace().publish(
+            "yanked-tool", version="1.1.0", author="alice", manifest=manifest_v2
         )
         marketplace = registry._marketplace()
         marketplace.yank_version(
