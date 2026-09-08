@@ -6707,27 +6707,9 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 }
             )
 
-        @self.custom_route(f"{prefix}/notifications", methods=["GET"])
-        async def registry_notifications(request: Request) -> JSONResponse:
-            session = self._session_from_request(request)
-            if self.auth_enabled and session is None:
-                return JSONResponse(
-                    {"error": "Authentication required.", "status": 401},
-                    status_code=401,
-                )
-            role = session.role.value if session is not None else None
-            try:
-                limit = int(request.query_params.get("limit", "40"))
-            except ValueError:
-                limit = 40
-            limit = max(1, min(limit, 100))
-            return JSONResponse(
-                self.get_registry_notifications(
-                    auth_enabled=self.auth_enabled,
-                    role=role,
-                    limit=limit,
-                )
-            )
+        from purecipher.notification_inbox import mount as mount_notification_inbox
+
+        mount_notification_inbox(self, prefix)
 
         @self.custom_route(f"{prefix}/me/preferences", methods=["GET"])
         async def registry_my_preferences(request: Request) -> JSONResponse:

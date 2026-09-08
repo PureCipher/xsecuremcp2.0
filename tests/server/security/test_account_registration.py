@@ -278,7 +278,7 @@ def test_migration_chain_is_repeatable(tmp_path):
     migrate_registry_database(target)
     with sqlite3.connect(target) as conn:
         assert conn.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "20260908_0006",
+            "20260908_0007",
         )
         assert "registration" in [
             row[1]

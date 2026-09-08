@@ -20,7 +20,7 @@ def test_alembic_migration_creates_registry_tables(registry_dsn):
         }
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()
 
-    assert version == ("20260908_0006",)
+    assert version == ("20260908_0007",)
     assert "purecipher_registry_accounts" in tables
     assert "purecipher_registry_sessions" in tables
     assert "purecipher_registry_api_tokens" in tables
