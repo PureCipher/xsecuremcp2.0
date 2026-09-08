@@ -3590,6 +3590,10 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
     ) -> dict[str, Any]:
         """Search the published verified catalog."""
 
+        from purecipher.community import refresh, client_counts
+
+        refresh(self)
+        community_clients = client_counts(self)
         level = min_certification or self.minimum_certification
         listings = self._marketplace().search(
             query=query,
@@ -3627,6 +3631,9 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         for listing in listings:
             detail = self._serialize_listing_detail(listing)
             observed = self._observed_tool_allowlist(listing)
+            detail["active_profile_clients"] = community_clients.get(
+                listing.listing_id, 0
+            )
             detail["known_publisher"] = listing.author in known_publishers
             detail["tool_count"] = len(observed)
             clients: set[str] = set()
@@ -3653,7 +3660,13 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
     def _serialize_listing_with_activity(self, listing: ToolListing) -> dict[str, Any]:
         """Return tool specifications and activity for a resolved visible listing."""
+        from purecipher.community import refresh, client_counts
+
+        refresh(self)
         detail = self._serialize_listing_detail(listing)
+        detail["active_profile_clients"] = client_counts(self).get(
+            listing.listing_id, 0
+        )
         # Enrich both anonymous and authenticated detail responses.
         observed = sorted(self._observed_tool_allowlist(listing))
         detail["tools_observed"] = observed
@@ -5557,6 +5570,10 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
     def list_author_listings(self, author: str) -> dict[str, Any]:
         """Return all listings created by a given author (any status)."""
 
+        from purecipher.community import refresh, client_counts
+
+        refresh(self)
+        community_clients = client_counts(self)
         listings = self._marketplace().get_by_author(author)
         known_publishers = self._registered_publisher_names()
         return {
@@ -5564,9 +5581,18 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             "tools": [
                 {
                     **self._serialize_listing_detail(listing),
+                    "active_profile_clients": community_clients.get(
+                        listing.listing_id, 0
+                    ),
                     "release_summary": next(
                         (
-                            {"version": record["version"], "status": record["status"]}
+                            {
+                                "version": record["version"],
+                                "status": record["status"],
+                                "feedback": (record.get("history") or [{}])[-1].get(
+                                    "reason", ""
+                                ),
+                            }
                             for record in sorted(
                                 listing.release_records,
                                 key=lambda item: (
@@ -6775,6 +6801,9 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         from purecipher.notification_inbox import mount as mount_notification_inbox
 
         mount_notification_inbox(self, prefix)
+        from purecipher.community import mount as mount_community
+
+        mount_community(self, prefix)
         from purecipher.release_candidates import mount as mount_releases
 
         mount_releases(self, prefix)

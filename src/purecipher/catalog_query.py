@@ -115,8 +115,32 @@ def browse_catalog(
             for s, n in sorted(status_counts.items())
         ],
     }
+    workspace_status = params.get("workspace_status")
+    if workspace_status not in {None, "in_review", "needs_attention"}:
+        raise ValueError("Unknown workspace status")
+
+    def matches(item, view):
+        release = (item.get("release_summary") or {}).get("status")
+        if view == "in_review":
+            return item.get("status") == "pending_review" or release == "pending_review"
+        return item.get("status") in {
+            "draft",
+            "rejected",
+            "withdrawn",
+            "suspended",
+        } or (
+            item.get("status") == "published"
+            and release in {"changes_requested", "rejected"}
+        )
+
+    facets["workspace"] = [
+        {"value": view, "count": sum(matches(item, view) for item in listings)}
+        for view in ("in_review", "needs_attention")
+    ]
     results = []
     for item in listings:
+        if workspace_status and not matches(item, workspace_status):
+            continue
         metadata = item.get("metadata") or {}
         declared = metadata.get("configuration")
         if configurations and (

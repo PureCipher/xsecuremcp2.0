@@ -91,6 +91,7 @@ def test_publisher_summary_is_private_and_tracks_pending_release():
     assert registry.list_author_listings("alice")["tools"][0]["release_summary"] == {
         "version": "1.1.0",
         "status": "pending_review",
+        "feedback": "",
     }
     assert "release_summary" not in registry.get_verified_tool("weather-lookup")
     assert registry.list_author_listings("someone-else")["tools"] == []
