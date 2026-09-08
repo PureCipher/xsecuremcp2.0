@@ -87,3 +87,6 @@ plans/
 *.md
 !README.md
 .cursor/
+
+# Operator-generated image build identity; never publisher metadata.
+/src/purecipher/_build_identity.json

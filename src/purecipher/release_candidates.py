@@ -142,6 +142,7 @@ def stage(
             "version_history",
         ):
             snapshot.pop(key, None)
+        baseline = copy.deepcopy(snapshot)
         snapshot.update(
             version=manifest.version,
             manifest=manifest.to_dict(),
@@ -165,6 +166,7 @@ def stage(
             "version": manifest.version,
             "base_version": before["version"],
             "base_digest": fingerprint(before),
+            "base_snapshot": baseline,
             "submitted_at": datetime.now(timezone.utc).isoformat(),
             "submitted_by": manifest.author,
             "notes": changelog.strip(),
@@ -242,6 +244,9 @@ def decide(registry, listing_id, candidate_id, action, actor, reason):
 
 
 def mount(registry, prefix):
+    from purecipher.release_diff import compare
+    from purecipher.source_traceability import describe
+
     @registry.custom_route(f"{prefix}/releases", methods=["GET"])
     @registry.custom_route(f"{prefix}/releases/{{listing_id}}", methods=["GET", "POST"])
     async def route(request):
@@ -302,9 +307,18 @@ def mount(registry, prefix):
                     continue
                 raw = load(mp, item.listing_id)
                 for record in raw.get("release_records", []):
+                    baseline = record.get("base_snapshot") or record.get(
+                        "previous_release"
+                    )
+                    if baseline is None and fingerprint(raw) == record["base_digest"]:
+                        baseline = raw
                     items.append(
                         {
                             **record,
+                            "changes": compare(baseline, record["snapshot"]),
+                            "source_deployment": describe(
+                                record["snapshot"].get("metadata")
+                            ),
                             "listing_id": item.listing_id,
                             "tool_name": item.tool_name,
                             "display_name": item.display_name,

@@ -2869,6 +2869,8 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         return listing
 
     def _serialize_listing_detail(self, listing: ToolListing) -> dict[str, Any]:
+        from purecipher.source_traceability import describe
+
         ctx = self._required_context()
         score = (
             ctx.registry.get_trust_score(listing.tool_name) if ctx.registry else None
@@ -2884,6 +2886,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
         return {
             **listing.to_dict(),
+            "source_deployment": describe(listing.metadata),
             "metadata": dict(listing.metadata),
             "manifest": listing.manifest.to_dict()
             if listing.manifest is not None
@@ -5561,6 +5564,20 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             "tools": [
                 {
                     **self._serialize_listing_detail(listing),
+                    "release_summary": next(
+                        (
+                            {"version": record["version"], "status": record["status"]}
+                            for record in sorted(
+                                listing.release_records,
+                                key=lambda item: (
+                                    item["status"] == "pending_review",
+                                    item["submitted_at"],
+                                ),
+                                reverse=True,
+                            )
+                        ),
+                        None,
+                    ),
                     "known_publisher": listing.author in known_publishers,
                 }
                 for listing in listings
@@ -5745,6 +5762,14 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 attestation=preflight.attestation,
                 manifest_digest=preflight.manifest_digest,
             )
+
+        from purecipher.source_traceability import validate_source
+
+        if metadata is not None and "source_evidence" in metadata:
+            metadata = {
+                **metadata,
+                "source_evidence": validate_source(metadata["source_evidence"]),
+            }
 
         existing = self._marketplace().get_by_name(manifest.tool_name)
         if existing and existing.status == PublishStatus.PUBLISHED:
