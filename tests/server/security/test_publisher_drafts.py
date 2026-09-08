@@ -57,14 +57,15 @@ def test_drafts_reject_nonpublisher_invalid_source_and_oversize():
     app = registry()
     path = "/registry/workspace/publisher-drafts"
     with TestClient(app.http_app()) as client:
-        assert client.post(
-            "/registry/register",
-            json={
-                "username": "viewer-test",
-                "password": "long-fixture-password",
-                "display_name": "Viewer",
-            },
-        ).status_code in (200, 201)
+        from purecipher.auth import RegistryRole
+
+        # Role-boundary fixture is explicitly approved by an administrator.
+        app._account_security.create_account(
+            username="viewer-test",
+            password="long-fixture-password",
+            role=RegistryRole.VIEWER,
+            display_name="Test user",
+        )
         assert (
             client.post(
                 "/registry/login",

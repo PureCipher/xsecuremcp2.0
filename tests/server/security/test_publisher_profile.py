@@ -96,13 +96,14 @@ def test_invalid_profile_does_not_save(change):
 def test_viewers_cannot_edit_or_read_publisher_settings():
     app = registry()
     with TestClient(app.http_app()) as client:
-        client.post(
-            "/registry/register",
-            json={
-                "username": "viewer-test",
-                "password": "long-fixture-password",
-                "display_name": "Viewer",
-            },
+        from purecipher.auth import RegistryRole
+
+        # Role-boundary fixture is explicitly approved by an administrator.
+        app._account_security.create_account(
+            username="viewer-test",
+            password="long-fixture-password",
+            role=RegistryRole.VIEWER,
+            display_name="Test user",
         )
         client.post(
             "/registry/login",

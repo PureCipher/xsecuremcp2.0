@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import secrets
+import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -83,6 +85,7 @@ class RegistryAccountSecurityStore:
         ensure_schema: bool = True,
     ) -> None:
         self._db_path = db_path
+        self._approval_lock = threading.RLock()
         self._memory_accounts: dict[str, dict[str, Any]] = {}
         self._memory_sessions: dict[str, dict[str, Any]] = {}
         self._memory_tokens: dict[str, dict[str, Any]] = {}
@@ -136,6 +139,10 @@ class RegistryAccountSecurityStore:
                 """
             )
 
+            conn.execute(
+                "ALTER TABLE purecipher_registry_accounts ADD COLUMN IF NOT EXISTS registration TEXT NOT NULL DEFAULT '{}'"
+            )
+
     def seed_users(self, users: tuple[RegistryUser, ...]) -> None:
         for user in users:
             if self._get_account(user.username) is not None:
@@ -185,7 +192,7 @@ class RegistryAccountSecurityStore:
         account = self._get_account(username)
         if account is None:
             return None
-        if account.get("disabled_at") is not None:
+        if not self.account_is_approved(username):
             return None
         if not _verify_password(password, str(account["password_hash"])):
             return None
@@ -195,6 +202,127 @@ class RegistryAccountSecurityStore:
             role=RegistryRole(str(account["role"])),
             display_name=str(account["display_name"]),
         )
+
+    @staticmethod
+    def registration_data(account: dict[str, Any]) -> dict[str, Any]:
+        data = json.loads(account.get("registration") or "{}")
+        if not data and account.get("source") == "self-registration":
+            return {"status": "pending", "requested_role": account["role"]}
+        return data
+
+    def account_is_approved(self, username: str) -> bool:
+        account = self._get_account(username)
+        return bool(
+            account
+            and account.get("disabled_at") is None
+            and self.registration_data(account).get("status", "approved") == "approved"
+        )
+
+    def registration_status(
+        self, username: str, password: str
+    ) -> dict[str, Any] | None:
+        account = self._get_account(username)
+        if not account or not _verify_password(password, str(account["password_hash"])):
+            return None
+        data = self.registration_data(account)
+        return {
+            "username": username,
+            "display_name": account["display_name"],
+            "assigned_role": account["role"]
+            if data.get("status", "approved") == "approved"
+            else None,
+            **data,
+            "status": "suspended"
+            if account.get("disabled_at") is not None
+            else data.get("status", "approved"),
+        }
+
+    def review_registration(
+        self,
+        username: str,
+        *,
+        status: str,
+        role: RegistryRole,
+        reason: str,
+        actor: str,
+        expected_revision: int,
+    ) -> dict[str, Any]:
+        if status not in {"approved", "rejected", "information_required", "pending"}:
+            raise ValueError("Invalid decision")
+        with self._approval_lock:
+            if is_postgres_dsn(self._db_path):
+                with connection(self._db_path, row_factory=dict_row) as conn:
+                    row = conn.execute(
+                        "SELECT * FROM purecipher_registry_accounts WHERE username=%s FOR UPDATE",
+                        (username,),
+                    ).fetchone()
+                    account = dict(row) if row else None
+                    data = self._registration_transition(
+                        account, status, role, reason, actor, expected_revision
+                    )
+                    conn.execute(
+                        "UPDATE purecipher_registry_accounts SET registration=%s, role=%s, updated_at=%s WHERE username=%s",
+                        (
+                            json.dumps(data),
+                            role.value if status == "approved" else account["role"],
+                            _now(),
+                            username,
+                        ),
+                    )
+            else:
+                account = self._memory_accounts.get(username)
+                data = self._registration_transition(
+                    account, status, role, reason, actor, expected_revision
+                )
+                account["registration"] = json.dumps(data)
+                if status == "approved":
+                    account["role"] = role.value
+                account["updated_at"] = _now()
+        self.revoke_sessions_for_user(username=username)
+        self.revoke_api_tokens_for_user(username=username)
+        return self._serialize_account(self._get_account(username))
+
+    def _registration_transition(
+        self, account, status, role, reason, actor, expected_revision
+    ):
+        if account is None:
+            raise ValueError("Account request not found")
+        data = self.registration_data(account)
+        if data.get("status") not in {"pending", "information_required"}:
+            raise ValueError("This request has already been decided")
+        if data.get("revision", 0) != expected_revision:
+            raise ValueError("Request changed; refresh before deciding")
+        if status == "pending":
+            if actor != account["username"] or data["status"] != "information_required":
+                raise ValueError("No information was requested")
+        elif actor == account["username"]:
+            raise ValueError("You cannot approve your own request")
+        if role not in {
+            RegistryRole.VIEWER,
+            RegistryRole.PUBLISHER,
+            RegistryRole.REVIEWER,
+        }:
+            raise ValueError("Administrator access cannot be requested")
+        if (
+            status != "approved" or role.value != data.get("requested_role")
+        ) and not reason.strip():
+            raise ValueError("A reason or response is required")
+        event = {
+            "status": status,
+            "actor": actor,
+            "reason": reason.strip(),
+            "at": _iso(_now()),
+            "assigned_role": role.value if status == "approved" else None,
+        }
+        return {
+            **data,
+            "status": status,
+            "revision": expected_revision + 1,
+            "decision_reason": reason.strip(),
+            "decided_by": actor,
+            "decided_at": event["at"],
+            "history": [*data.get("history", []), event],
+        }
 
     def change_password(
         self,
@@ -214,6 +342,7 @@ class RegistryAccountSecurityStore:
             role=RegistryRole(str(account["role"])),
             display_name=str(account["display_name"]),
             source=str(account.get("source") or "local"),
+            disabled_at=account.get("disabled_at"),
         )
         self.revoke_sessions_for_user(username=username)
         return True
@@ -230,6 +359,7 @@ class RegistryAccountSecurityStore:
         role: RegistryRole,
         display_name: str,
         source: str = "admin",
+        registration: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
         """Create once; concurrent registration must never overwrite an account."""
         username = username.strip()
@@ -245,11 +375,19 @@ class RegistryAccountSecurityStore:
             "updated_at": now,
             "created_at": now,
             "disabled_at": None,
+            "registration": json.dumps(
+                registration
+                or (
+                    {"status": "pending", "requested_role": role.value}
+                    if source == "self-registration"
+                    else {}
+                )
+            ),
         }
         if is_postgres_dsn(self._db_path):
             with connection(self._db_path) as conn:
                 cur = conn.execute(
-                    "INSERT INTO purecipher_registry_accounts (username,password_hash,role,display_name,source,updated_at,created_at,disabled_at) VALUES (%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (username) DO NOTHING",
+                    "INSERT INTO purecipher_registry_accounts (username,password_hash,role,display_name,source,updated_at,created_at,disabled_at,registration) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (username) DO NOTHING",
                     tuple(account.values()),
                 )
                 if cur.rowcount != 1:
@@ -257,6 +395,59 @@ class RegistryAccountSecurityStore:
         elif self._memory_accounts.setdefault(username, account) is not account:
             return None
         return self._serialize_account(account)
+
+    def delete_account(self, *, username: str, actor: str) -> dict[str, Any] | None:
+        """Permanently retire access; retain identity references and audit history."""
+        with self._approval_lock:
+
+            def deleted_data(account):
+                data = self.registration_data(account)
+                if data.get("status") == "deleted":
+                    return data
+                at = _iso(_now())
+                return {
+                    **data,
+                    "status": "deleted",
+                    "deleted_at": at,
+                    "deleted_by": actor,
+                    "revision": data.get("revision", 0) + 1,
+                    "history": [
+                        *data.get("history", []),
+                        {
+                            "status": "deleted",
+                            "actor": actor,
+                            "at": at,
+                            "reason": "Account deleted by administrator",
+                        },
+                    ],
+                }
+
+            if is_postgres_dsn(self._db_path):
+                with connection(self._db_path, row_factory=dict_row) as conn:
+                    row = conn.execute(
+                        "SELECT * FROM purecipher_registry_accounts WHERE username=%s FOR UPDATE",
+                        (username,),
+                    ).fetchone()
+                    if not row:
+                        return None
+                    data = deleted_data(dict(row))
+                    conn.execute(
+                        "UPDATE purecipher_registry_accounts SET registration=%s, password_hash=%s, disabled_at=%s, updated_at=%s WHERE username=%s",
+                        (json.dumps(data), "!deleted", _now(), _now(), username),
+                    )
+            else:
+                account = self._memory_accounts.get(username)
+                if account is None:
+                    return None
+                account.update(
+                    registration=json.dumps(deleted_data(account)),
+                    password_hash="!deleted",
+                    disabled_at=_now(),
+                    updated_at=_now(),
+                )
+        self.revoke_sessions_for_user(username=username)
+        self.revoke_api_tokens_for_user(username=username)
+        return self._serialize_account(self._get_account(username))
 
     def update_account(
         self,
@@ -267,7 +458,10 @@ class RegistryAccountSecurityStore:
         disabled: bool | None = None,
     ) -> dict[str, Any] | None:
         account = self._get_account(username)
-        if account is None:
+        if (
+            account is None
+            or self.registration_data(account).get("status") == "deleted"
+        ):
             return None
         current_disabled = account.get("disabled_at")
         current_role = RegistryRole(str(account["role"]))
@@ -300,7 +494,11 @@ class RegistryAccountSecurityStore:
 
     def reset_password(self, *, username: str, new_password: str) -> bool:
         account = self._get_account(username)
-        if account is None or not new_password:
+        if (
+            account is None
+            or not new_password
+            or self.registration_data(account).get("status") == "deleted"
+        ):
             return False
         self._save_account(
             username=str(account["username"]),
@@ -323,6 +521,8 @@ class RegistryAccountSecurityStore:
         user: RegistryUser,
         ttl_seconds: int,
     ) -> RegistrySessionRecord:
+        if not self.account_is_approved(user.username):
+            raise ValueError("Account approval required")
         now = _now()
         record = {
             "session_id": secrets.token_urlsafe(18),
@@ -354,6 +554,8 @@ class RegistryAccountSecurityStore:
         return _session_record(record)
 
     def session_is_active(self, session_id: str, *, username: str) -> bool:
+        if not self.account_is_approved(username):
+            return False
         if not session_id:
             return True
         record = self._get_session(session_id)
@@ -407,8 +609,8 @@ class RegistryAccountSecurityStore:
 
     def create_api_token(self, *, username: str, name: str) -> dict[str, Any]:
         account = self._get_account(username)
-        if account is None:
-            raise ValueError("Unknown user.")
+        if account is None or not self.account_is_approved(username):
+            raise ValueError("Approved account required.")
         token_id = "tok_" + secrets.token_urlsafe(10)
         token = _TOKEN_PREFIX + secrets.token_urlsafe(32)
         now = _now()
@@ -480,6 +682,8 @@ class RegistryAccountSecurityStore:
         record = self._get_token_by_hash(token_hash)
         if record is None or record.get("revoked_at") is not None:
             return None
+        if not self.account_is_approved(str(record["username"])):
+            return None
         now = _now()
         if is_postgres_dsn(self._db_path):
             with connection(self._db_path) as conn:
@@ -503,7 +707,7 @@ class RegistryAccountSecurityStore:
         if is_postgres_dsn(self._db_path):
             with connection(self._db_path, row_factory=dict_row) as conn:
                 cur = conn.execute(
-                    "SELECT username, password_hash, role, display_name, source, updated_at, created_at, disabled_at "
+                    "SELECT username, password_hash, role, display_name, source, updated_at, created_at, disabled_at, registration "
                     "FROM purecipher_registry_accounts WHERE username = %s",
                     (key,),
                 )
@@ -554,6 +758,7 @@ class RegistryAccountSecurityStore:
                     ),
                 )
             return
+        previous = self._memory_accounts.get(username, {})
         self._memory_accounts[username] = {
             "username": username,
             "password_hash": password_hash,
@@ -563,13 +768,14 @@ class RegistryAccountSecurityStore:
             "updated_at": now,
             "created_at": resolved_created_at,
             "disabled_at": disabled_at,
+            "registration": previous.get("registration", "{}"),
         }
 
     def _list_account_rows(self) -> list[dict[str, Any]]:
         if is_postgres_dsn(self._db_path):
             with connection(self._db_path, row_factory=dict_row) as conn:
                 cur = conn.execute(
-                    "SELECT username, password_hash, role, display_name, source, updated_at, created_at, disabled_at "
+                    "SELECT username, password_hash, role, display_name, source, updated_at, created_at, disabled_at, registration "
                     "FROM purecipher_registry_accounts ORDER BY username ASC"
                 )
                 return [dict(row) for row in cur.fetchall()]
@@ -715,7 +921,9 @@ class RegistryAccountSecurityStore:
             "disabled_at": _iso(float(disabled_at))
             if disabled_at is not None
             else None,
-            "active": disabled_at is None,
+            "active": disabled_at is None
+            and self.registration_data(row).get("status", "approved") == "approved",
+            "registration": self.registration_data(row),
         }
 
 

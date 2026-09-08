@@ -4,13 +4,11 @@ from __future__ import annotations
 
 import copy
 import json
-import re
 import time
 import uuid
 
 from starlette.responses import JSONResponse
 
-from purecipher.auth import RegistryRole
 from purecipher.pgdb import connection, is_postgres_dsn
 from purecipher.publishers import publisher_id_from_author
 
@@ -199,7 +197,7 @@ def allowed_profile_tools(registry, profile_id, client):
     account = registry._account_security._get_account(profile["owner"])
     if (
         not account
-        or account.get("disabled_at") is not None
+        or not registry._account_security.account_is_approved(profile["owner"])
         or profile_blockers(registry, profile)
     ):
         raise ValueError("Profile is not ready or its owner is disabled")
@@ -249,51 +247,9 @@ def mount_workspace(registry, prefix):
             return None
         return item
 
-    @registry.custom_route(f"{prefix}/register", methods=["POST"])
-    async def register(request):
-        ip = request.client.host if request.client else "unknown"
-        locked, _ = registry._login_lockout.is_locked("workspace-registration", ip)
-        if locked:
-            return JSONResponse(
-                {"error": "Too many registration attempts; try later"}, status_code=429
-            )
-        registry._login_lockout.register_failure("workspace-registration", ip)
-        try:
-            body = await request.json()
-            username, password = body.get("username", ""), body.get("password", "")
-            if (
-                not isinstance(username, str)
-                or not re.fullmatch(r"[a-z][a-z0-9-]{2,39}", username)
-                or not isinstance(password, str)
-                or not 12 <= len(password) <= 256
-            ):
-                raise ValueError(
-                    "Use a 3–40 character lowercase username and a password of 12–256 characters"
-                )
-            if not registry.auth_enabled:
-                raise ValueError(
-                    "Account registration requires authentication to be enabled"
-                )
-            if publisher_id_from_author(username) != username or any(
-                publisher_id_from_author(account["username"]) == username
-                for account in registry._account_security.list_accounts()
-            ):
-                raise ValueError("That username is unavailable")
-            result = registry._account_security.create_account(
-                username=username,
-                password=password,
-                role=RegistryRole.VIEWER,
-                source="self-registration",
-                display_name=str(body.get("display_name") or username)[:100],
-            )
-            if result is None:
-                raise ValueError("That username is unavailable")
-            registry._user_preferences.set(
-                username, {"workspace": {"defaultLandingPage": "/registry/profiles"}}
-            )
-            return JSONResponse({"created": True}, status_code=201)
-        except (ValueError, TypeError, AttributeError) as exc:
-            return JSONResponse({"error": str(exc)}, status_code=400)
+    from purecipher.account_registration import mount as mount_registration
+
+    mount_registration(registry, prefix)
 
     @registry.custom_route(f"{prefix}/workspace", methods=["GET"])
     async def workspace(request):

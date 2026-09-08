@@ -177,12 +177,14 @@ def test_credentials_are_bound_to_the_encrypted_record_identity():
 def test_end_user_can_save_credentials_without_publisher_role():
     app = registry()
     with TestClient(app.http_app()) as client:
-        assert (
-            client.post(
-                "/registry/register",
-                json={"username": "consumer", "password": "fixture-long-password"},
-            ).status_code
-            == 201
+        from purecipher.auth import RegistryRole
+
+        # Role-boundary fixture is explicitly approved by an administrator.
+        app._account_security.create_account(
+            username="consumer",
+            password="fixture-long-password",
+            role=RegistryRole.VIEWER,
+            display_name="Test user",
         )
         assert (
             client.post(

@@ -7150,7 +7150,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             return JSONResponse({"user": updated})
 
         @self.custom_route(f"{prefix}/admin/users/{{username}}", methods=["DELETE"])
-        async def registry_admin_disable_user(request: Request) -> JSONResponse:
+        async def registry_admin_delete_user(request: Request) -> JSONResponse:
             username = request.path_params.get("username", "")
             session = self._session_from_request(request)
             if self.auth_enabled and session is None:
@@ -7166,7 +7166,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             if session and session.username == username:
                 return JSONResponse(
                     {
-                        "error": "You cannot disable your own admin account.",
+                        "error": "You cannot delete your own admin account.",
                         "status": 400,
                     },
                     status_code=400,
@@ -7176,9 +7176,9 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 return JSONResponse(
                     {"error": guard_error, "status": 400}, status_code=400
                 )
-            updated = self._account_security.update_account(
+            updated = self._account_security.delete_account(
                 username=username,
-                disabled=True,
+                actor=session.username if session else "admin",
             )
             if updated is None:
                 return JSONResponse(
@@ -7187,9 +7187,9 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 )
             self._account_activity.append(
                 username=session.username if session else "admin",
-                event_kind="admin_user_disabled",
-                title="User disabled",
-                detail=f"{username} account was disabled.",
+                event_kind="admin_user_deleted",
+                title="User deleted",
+                detail=f"{username} account was deleted. Identity and audit references were retained.",
                 metadata={"target_username": username},
             )
             return JSONResponse({"user": updated})

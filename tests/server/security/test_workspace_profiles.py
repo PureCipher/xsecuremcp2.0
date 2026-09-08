@@ -58,17 +58,14 @@ def test_registration_cannot_grant_privileged_roles():
                 "role": "admin",
             },
         )
-        assert result.status_code == 201, result.text
+        assert result.status_code == 400
         assert (
             client.post(
                 "/registry/login",
                 json={"username": "new-user", "password": "long-enough-test-password"},
             ).status_code
-            == 200
+            == 401
         )
-        assert client.get("/registry/session").json()["session"]["role"] == "viewer"
-        assert client.get("/registry/admin/users").status_code == 403
-        assert client.get("/registry/workspace").status_code == 200
 
 
 def test_profile_ownership_revision_and_readiness(monkeypatch):
@@ -245,14 +242,26 @@ def test_registration_rejects_client_owner_slug_aliases():
         assert (
             client.post(
                 "/registry/register",
-                json={"username": "alice-", "password": "long-test-password"},
+                json={
+                    "username": "alice-",
+                    "password": "long-test-password",
+                    "email": "fixture@example.test",
+                    "display_name": "Fixture",
+                    "purpose": "Test",
+                },
             ).status_code
             == 400
         )
         assert (
             client.post(
                 "/registry/register",
-                json={"username": "alice--", "password": "long-test-password"},
+                json={
+                    "username": "alice--",
+                    "password": "long-test-password",
+                    "email": "fixture@example.test",
+                    "display_name": "Fixture",
+                    "purpose": "Test",
+                },
             ).status_code
             == 400
         )
