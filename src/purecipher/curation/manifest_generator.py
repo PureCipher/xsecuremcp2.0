@@ -116,7 +116,7 @@ def _filesystem_name_match(
     """Decide whether a tool name implies filesystem access.
 
     A filesystem noun (``file``/``directory``/``folder``/``path``)
-    must appear in the name or description for any inference to
+    must appear in the name for any inference to
     fire. With a noun present, a write-coded verb upgrades the
     suggestion to FILE_SYSTEM_WRITE; otherwise a read-coded verb
     yields FILE_SYSTEM_READ. A noun without any verb still fires
@@ -353,7 +353,10 @@ def derive_manifest_draft(
         # Filesystem inferences need co-occurrence (noun + verb) so
         # they live in their own helper rather than the keyword
         # table. Returns zero or more (scope, rationale) pairs.
-        for scope, rationale in _filesystem_name_match(haystack):
+        # Descriptions may mention unsupported files (e.g. web fetchers),
+        # examples, or returned documentation. Those mentions are not
+        # filesystem evidence; use the tool name and schema arguments.
+        for scope, rationale in _filesystem_name_match(tool.name.lower().replace("_", " ").replace("-", " ")):
             _add_evidence(scope, rationale, f"tool: {tool.name}")
 
         # Schema-argument heuristics. These remain the strongest

@@ -209,6 +209,20 @@ class TestDeriveManifestDraft:
         scopes = {s.scope for s in draft.permission_suggestions}
         assert PermissionScope.NETWORK_ACCESS in scopes
 
+    def test_document_fetch_exclusions_do_not_imply_filesystem(self):
+        intro = IntrospectionResult(
+            upstream_ref=parse_http_upstream("https://learn.microsoft.com/api/mcp"),
+            tools=[CapabilityTool(
+                name="microsoft_docs_fetch",
+                description="Fetch a documentation webpage. Binary files (PDF, DOCX, images, etc.) are not supported. Includes examples that read and write files.",
+                input_schema={"type":"object","properties":{"url":{"type":"string"}}},
+            )],
+        )
+        scopes = {s.scope for s in derive_manifest_draft(intro).permission_suggestions}
+        assert PermissionScope.NETWORK_ACCESS in scopes
+        assert PermissionScope.FILE_SYSTEM_READ not in scopes
+        assert PermissionScope.FILE_SYSTEM_WRITE not in scopes
+
     def test_path_argument_implies_filesystem_read(self):
         intro = IntrospectionResult(
             upstream_ref=parse_http_upstream("https://x.example/mcp"),
