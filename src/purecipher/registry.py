@@ -6358,7 +6358,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 "Submission is below the registry minimum certification level "
                 f"({self.minimum_certification.value})."
             )
-        elif not result.is_certified:
+        elif not result.is_certified or result.report.has_errors:
             summary = (
                 "Certification failed. Resolve validation blockers before publishing."
             )
@@ -6371,7 +6371,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             summary = "Ready to publish."
 
         return RegistryPreflightResult(
-            ready_for_publish=result.is_certified and meets_minimum,
+            ready_for_publish=result.is_certified and meets_minimum and not result.report.has_errors,
             summary=summary,
             requested_level=(requested_level or self.minimum_certification).value,
             effective_certification_level=result.certification_level.value,
