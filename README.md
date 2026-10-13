@@ -220,3 +220,38 @@ Licensed under [Apache 2.0](LICENSE). xSecureMCP is maintained by PureCipher and
 ## Local documentation
 
 Markdown documents other than `README.md` are maintained locally under `docs/` and excluded from GitHub and Hugging Face. Cursor configuration is also local-only.
+
+## Upstream MCP directory for xRegistry
+
+The `purecipher.mcp_directory` module imports Official MCP Registry metadata into
+an independent directory without publishing, certifying, installing, or deleting
+marketplace listings. It mounts public read routes at `/registry/directory` and
+`/registry/directory/{server_id}`. The xRegistry UI uses these for its main
+catalog; the original certified catalog API remains unchanged.
+
+```bash
+.venv/bin/python -m purecipher.mcp_directory sync
+.venv/bin/python -m purecipher.mcp_directory probe --concurrency 64 --timeout 8
+.venv/bin/python scripts/start_local_registry.py
+```
+
+The saved snapshot defaults to `.data/mcp-directory.json`; configure
+`PURECIPHER_DIRECTORY_FILE` to use a persistent mounted path in another
+installation. Sync resumes interrupted downloads from sibling `.pages` files,
+retries transient failures, and atomically replaces the completed snapshot.
+A future successful sync refreshes all source records and invalidates checks
+when their source metadata changes. No recurring scheduler is installed.
+
+Probes perform MCP initialization and tool discovery with no credentials or
+tool calls. They use public-address validation and DNS-pinned transports, cap
+concurrency per host, preserve completed checks, and checkpoint progress.
+`discovery_passed` is not certification or proof that all tools execute.
+The optional `scripts/check_directory_gateway.py` explicitly tests two read-only
+sample operations, including a pinned local npm server, through a temporary
+SecureMCP proxy. Those results do not provision persistent client connections.
+
+The local launcher uses PostgreSQL (override `DATABASE_URL` if needed), keeps
+its generated signing keys in `.data/local-registry-keys.json`, enables auth,
+and listens only on `127.0.0.1:8001`. Its default PostgreSQL credentials match the
+local development compose settings. Existing legacy SQLite files are not migrated
+or modified. Keep `.data/` private and out of source control.

@@ -315,6 +315,27 @@ def _build_client_factory(listing: ToolListing) -> Callable[[], Client]:
             )
 
         def _http_factory() -> Client:
+            declared = ref.metadata.get("transport")
+            if declared:
+                from fastmcp.client.transports import (
+                    SSETransport,
+                    StreamableHttpTransport,
+                )
+                from purecipher.curation.http_transport import client_factory
+
+                if not isinstance(declared, str) or declared not in {
+                    "sse",
+                    "streamable-http",
+                }:
+                    raise ProxyHostingError("Unsupported declared HTTP transport")
+                transport = (
+                    SSETransport if declared == "sse" else StreamableHttpTransport
+                )
+                return Client(
+                    transport(
+                        upstream_url, httpx_client_factory=client_factory(upstream_url)
+                    )
+                )
             return Client(upstream_url)
 
         return _http_factory

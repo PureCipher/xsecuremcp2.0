@@ -364,7 +364,7 @@ class HTTPIntrospector:
                 if headers
                 else self._client_factory(url)
             )
-        elif headers or transport_options:
+        elif headers or transport_options or upstream_ref.metadata.get("transport"):
             from urllib.parse import urlsplit
 
             from fastmcp.client.transports import SSETransport, StreamableHttpTransport
@@ -372,9 +372,19 @@ class HTTPIntrospector:
 
             factory = client_factory(url, transport_options)
 
+            declared = upstream_ref.metadata.get("transport")
+            if declared and (
+                not isinstance(declared, str)
+                or declared not in {"sse", "streamable-http"}
+            ):
+                raise IntrospectionError("Unsupported declared HTTP transport")
             transport_type = (
                 SSETransport
-                if urlsplit(url).path.rstrip("/").endswith("/sse")
+                if (
+                    declared == "sse"
+                    or not declared
+                    and urlsplit(url).path.rstrip("/").endswith("/sse")
+                )
                 else StreamableHttpTransport
             )
             client = Client(

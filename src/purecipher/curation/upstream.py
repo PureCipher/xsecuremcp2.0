@@ -882,10 +882,23 @@ class UpstreamFetcher:
         self._npm = npm_fetcher or NpmUpstreamFetcher()
         self._docker = docker_fetcher or DockerUpstreamFetcher()
 
-    def resolve(self, raw_upstream: str) -> UpstreamPreview:
+    def resolve(
+        self, raw_upstream: str, *, http_transport: str | None = None
+    ) -> UpstreamPreview:
         ref = parse_upstream(raw_upstream)
+        if http_transport is not None and (
+            not isinstance(http_transport, str)
+            or http_transport not in {"sse", "streamable-http"}
+            or ref.channel != UpstreamChannel.HTTP
+        ):
+            raise UpstreamResolutionError(
+                "Declared HTTP transport must be sse or streamable-http and requires an HTTP upstream"
+            )
         if ref.channel == UpstreamChannel.HTTP:
-            return self._http.resolve(raw_upstream)
+            preview = self._http.resolve(raw_upstream)
+            if http_transport:
+                preview.upstream_ref.metadata["transport"] = http_transport
+            return preview
         if ref.channel == UpstreamChannel.PYPI:
             return self._pypi.resolve(raw_upstream)
         if ref.channel == UpstreamChannel.NPM:

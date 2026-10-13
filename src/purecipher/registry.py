@@ -627,10 +627,14 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             self.mount_registry_api(prefix=registry_prefix)
             mount_workspace(self, registry_prefix)
             mount_product_connections(self, registry_prefix)
+            from purecipher.mcp_directory import mount_directory
+
+            mount_directory(self, registry_prefix)
             from purecipher.consumer_oauth import mount_consumer_oauth
 
             mount_consumer_oauth(self, registry_prefix)
             from purecipher.curation.http_auth import mount_curator_auth
+
             mount_curator_auth(self, registry_prefix)
             if (
                 os.environ.get("PURECIPHER_CONSUMER_RUNTIME_ENABLED", "false").lower()
@@ -1843,8 +1847,17 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         accordingly so audit consumers can filter); that's by design
         — operators want to know what their kernel actually said.
         """
+        scope = {
+            "evaluation_mode": "policy_engine_only",
+            "evidence_resolvers_invoked": False,
+            "runtime_readiness_verified": False,
+            "limitations": [
+                "Simulation does not invoke trusted evidence resolvers or verify runtime readiness."
+            ],
+        }
         if engine is None:
             return {
+                **scope,
                 "available": False,
                 "decision": "allow",
                 "reason": (
@@ -1871,6 +1884,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         except Exception as exc:
             logger.exception("Policy simulation failed")
             return {
+                **scope,
                 "available": True,
                 "decision": "error",
                 "reason": f"Policy evaluation raised: {exc!r}",
@@ -1884,6 +1898,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             str(getattr(result, "decision", "")),
         )
         return {
+            **scope,
             "available": True,
             "decision": (decision_value or "").lower() or "allow",
             "reason": getattr(result, "reason", "") or "",
@@ -3592,7 +3607,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
     ) -> dict[str, Any]:
         """Search the published verified catalog."""
 
-        from purecipher.community import refresh, client_counts
+        from purecipher.community import client_counts, refresh
 
         refresh(self)
         community_clients = client_counts(self)
@@ -3662,7 +3677,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
     def _serialize_listing_with_activity(self, listing: ToolListing) -> dict[str, Any]:
         """Return tool specifications and activity for a resolved visible listing."""
-        from purecipher.community import refresh, client_counts
+        from purecipher.community import client_counts, refresh
 
         refresh(self)
         detail = self._serialize_listing_detail(listing)
@@ -5572,7 +5587,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
     def list_author_listings(self, author: str) -> dict[str, Any]:
         """Return all listings created by a given author (any status)."""
 
-        from purecipher.community import refresh, client_counts
+        from purecipher.community import client_counts, refresh
 
         refresh(self)
         community_clients = client_counts(self)
@@ -6011,7 +6026,14 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             return {"error": str(exc), "status": 400}
 
         try:
-            preview = UpstreamFetcher().resolve(raw_input)
+            preview = UpstreamFetcher().resolve(
+                raw_input,
+                **(
+                    {"http_transport": body["upstream_transport"]}
+                    if body.get("upstream_transport")
+                    else {}
+                ),
+            )
         except UpstreamResolutionError as exc:
             return {"error": str(exc), "status": 400}
 
@@ -6023,15 +6045,31 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
         introspector = self._curation_introspector()
         try:
-            from purecipher.curation.http_auth import inspection_headers, inspection_transport
+            from purecipher.curation.http_auth import (
+                inspection_headers,
+                inspection_transport,
+            )
+
             try:
-                http_headers = inspection_headers(self, body, session, preview.upstream_ref.identifier)
-                http_transport = inspection_transport(body, session, preview.upstream_ref.identifier)
+                http_headers = inspection_headers(
+                    self, body, session, preview.upstream_ref.identifier
+                )
+                http_transport = inspection_transport(
+                    body, session, preview.upstream_ref.identifier
+                )
             except ValueError as exc:
                 return {"error": str(exc), "status": 400}
             if (http_headers or http_transport) and raw_hosting_early == "proxy":
-                return {"error": "Inspection credentials cannot be shared through a proxy listing. Choose catalog mode; each end user must authorize separately.", "status": 400}
-            introspection = await introspector.introspect(preview.upstream_ref, env=env, **({"headers": http_headers} if http_headers else {}), **({"transport_options": http_transport} if http_transport else {}))
+                return {
+                    "error": "Inspection credentials cannot be shared through a proxy listing. Choose catalog mode; each end user must authorize separately.",
+                    "status": 400,
+                }
+            introspection = await introspector.introspect(
+                preview.upstream_ref,
+                env=env,
+                **({"headers": http_headers} if http_headers else {}),
+                **({"transport_options": http_transport} if http_transport else {}),
+            )
         except IntrospectionError as exc:
             return {"error": str(exc), "status": 502}
         finally:
@@ -6381,7 +6419,9 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             summary = "Ready to publish."
 
         return RegistryPreflightResult(
-            ready_for_publish=result.is_certified and meets_minimum and not result.report.has_errors,
+            ready_for_publish=result.is_certified
+            and meets_minimum
+            and not result.report.has_errors,
             summary=summary,
             requested_level=(requested_level or self.minimum_certification).value,
             effective_certification_level=result.certification_level.value,
@@ -9614,7 +9654,14 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             )
 
             try:
-                preview = UpstreamFetcher().resolve(raw_input)
+                preview = UpstreamFetcher().resolve(
+                    raw_input,
+                    **(
+                        {"http_transport": body["upstream_transport"]}
+                        if body.get("upstream_transport")
+                        else {}
+                    ),
+                )
             except UpstreamResolutionError as exc:
                 return JSONResponse(
                     {"error": str(exc), "status": 400},
@@ -9684,7 +9731,14 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 )
 
             try:
-                preview = UpstreamFetcher().resolve(raw_input)
+                preview = UpstreamFetcher().resolve(
+                    raw_input,
+                    **(
+                        {"http_transport": body["upstream_transport"]}
+                        if body.get("upstream_transport")
+                        else {}
+                    ),
+                )
             except UpstreamResolutionError as exc:
                 return JSONResponse(
                     {"error": str(exc), "status": 400},
@@ -9692,13 +9746,26 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 )
             introspector = self._curation_introspector()
             try:
-                from purecipher.curation.http_auth import inspection_headers, inspection_transport
+                from purecipher.curation.http_auth import (
+                    inspection_headers,
+                    inspection_transport,
+                )
+
                 try:
-                    http_headers = inspection_headers(self, body, session, preview.upstream_ref.identifier)
-                    http_transport = inspection_transport(body, session, preview.upstream_ref.identifier)
+                    http_headers = inspection_headers(
+                        self, body, session, preview.upstream_ref.identifier
+                    )
+                    http_transport = inspection_transport(
+                        body, session, preview.upstream_ref.identifier
+                    )
                 except ValueError as exc:
                     return JSONResponse({"error": str(exc)}, status_code=400)
-                result = await introspector.introspect(preview.upstream_ref, env=env, **({"headers": http_headers} if http_headers else {}), **({"transport_options": http_transport} if http_transport else {}))
+                result = await introspector.introspect(
+                    preview.upstream_ref,
+                    env=env,
+                    **({"headers": http_headers} if http_headers else {}),
+                    **({"transport_options": http_transport} if http_transport else {}),
+                )
             except IntrospectionError as exc:
                 return JSONResponse(
                     {"error": str(exc), "status": 502},
