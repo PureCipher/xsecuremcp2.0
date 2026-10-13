@@ -220,13 +220,10 @@ class StdioTransport(ClientTransport):
 
     def __del__(self):
         """Ensure that we send a disconnection signal to the transport task if we are being garbage collected."""
-        # Iter 14.6: when ``__init__`` raises before ``_stop_event``
-        # is created (e.g. ``NpxStdioTransport`` raising
-        # ``Command 'npx' not found``), this destructor used to crash
-        # accessing the missing attribute. The exception was ignored
-        # by Python's ``__del__`` machinery but produced noisy
-        # tracebacks in the registry logs alongside the real error.
-        # Guard against the partially-initialised case.
+        # Subclasses validate the command before calling super().__init__, so an
+        # object whose construction raised has no `_stop_event`. Guard instead of
+        # letting the interpreter print "Exception ignored in: __del__" over the
+        # error the caller is actually meant to see.
         stop_event = getattr(self, "_stop_event", None)
         if stop_event is not None and not stop_event.is_set():
             stop_event.set()

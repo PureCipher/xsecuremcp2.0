@@ -356,7 +356,9 @@ def derive_manifest_draft(
         # Descriptions may mention unsupported files (e.g. web fetchers),
         # examples, or returned documentation. Those mentions are not
         # filesystem evidence; use the tool name and schema arguments.
-        for scope, rationale in _filesystem_name_match(tool.name.lower().replace("_", " ").replace("-", " ")):
+        for scope, rationale in _filesystem_name_match(
+            tool.name.lower().replace("_", " ").replace("-", " ")
+        ):
             _add_evidence(scope, rationale, f"tool: {tool.name}")
 
         # Schema-argument heuristics. These remain the strongest

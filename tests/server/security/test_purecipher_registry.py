@@ -5940,15 +5940,24 @@ class TestIter14_11AdminDeregister:
 
 def test_preflight_blocks_restricted_network_data_without_transformations():
     registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
-    manifest = _manifest(data_flows=[DataFlowDeclaration(
-        source="input.secret", destination="https://api.weather.example/data",
-        classification=DataClassification.RESTRICTED,
-        description="Restricted input transmitted to provider.",
-    )])
-    result = registry.preflight_submission(manifest, requested_level=CertificationLevel.BASIC)
+    manifest = _manifest(
+        data_flows=[
+            DataFlowDeclaration(
+                source="input.secret",
+                destination="https://api.weather.example/data",
+                classification=DataClassification.RESTRICTED,
+                description="Restricted input transmitted to provider.",
+            )
+        ]
+    )
+    result = registry.preflight_submission(
+        manifest, requested_level=CertificationLevel.BASIC
+    )
     assert result.report.has_errors
     assert result.ready_for_publish is False
     assert "Ready to publish" not in result.summary
-    submission = registry.submit_tool(manifest, requested_level=CertificationLevel.BASIC)
+    submission = registry.submit_tool(
+        manifest, requested_level=CertificationLevel.BASIC
+    )
     assert submission.accepted is False
     assert registry._marketplace().get_by_name(manifest.tool_name) is None
