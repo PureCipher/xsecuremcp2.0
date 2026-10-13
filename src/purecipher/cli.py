@@ -161,6 +161,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Cookie name used for browser registry sessions.",
     )
     parser.add_argument(
+        "--auth-cookie-secure",
+        action=argparse.BooleanOptionalAction,
+        default=os.getenv("PURECIPHER_AUTH_COOKIE_SECURE", "true").strip().lower()
+        in {"1", "true", "yes", "on"},
+        help="Use Secure session cookies (default true); disable only for local HTTP development.",
+    )
+    parser.add_argument(
         "--jwt-ttl-seconds",
         type=int,
         default=int(os.getenv("PURECIPHER_JWT_TTL_SECONDS", "43200")),
@@ -195,6 +202,7 @@ def build_registry_from_args(args: argparse.Namespace) -> PureCipherRegistry:
         jwt_secret=args.jwt_secret,
         audience=args.jwt_audience,
         cookie_name=args.auth_cookie_name,
+        cookie_secure=args.auth_cookie_secure,
         token_ttl_seconds=args.jwt_ttl_seconds,
         users_json=args.users_json,
     )

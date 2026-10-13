@@ -195,6 +195,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Regenerate manifest.json and runtime.json before packaging and publish.",
     )
+    publish_parser.add_argument(
+        "--release-notes",
+        default=None,
+        help="Describe a version update for independent release review.",
+    )
     publish_parser.set_defaults(handler=_handle_publish)
 
     return parser
@@ -391,6 +396,7 @@ def _handle_publish(args: argparse.Namespace) -> int:
         allow_incomplete=args.allow_incomplete,
         output_dir=args.output_dir,
         refresh_artifacts=args.refresh_artifacts,
+        release_notes=args.release_notes,
     )
     if args.json:
         print(json.dumps(result.to_dict(), indent=2))

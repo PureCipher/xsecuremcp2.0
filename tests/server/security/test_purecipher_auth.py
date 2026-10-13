@@ -53,7 +53,7 @@ def _manifest(**overrides: Any) -> SecurityManifest:
         version="1.0.0",
         author="acme",
         description="Fetch current weather for a city.",
-        permissions={PermissionScope.NETWORK_ACCESS},
+        permissions={PermissionScope.NETWORK_ACCESS, PermissionScope.READ_RESOURCE},
         data_flows=[
             DataFlowDeclaration(
                 source="input.city",
@@ -635,10 +635,28 @@ class TestPureCipherRegistryAuth:
             assert login.status_code == 200
             assert login.json()["session"]["role"] == "publisher"
 
+            wrong_owner = client.post(
+                "/registry/submit",
+                json={"manifest": _manifest(author="another-publisher").to_dict()},
+            )
+            assert wrong_owner.status_code == 403
+            assert wrong_owner.json()["error"] == "Use your own publisher identity"
+
+            invalid_manifest = client.post(
+                "/registry/submit",
+                json={
+                    "manifest": _manifest(
+                        author="publisher", permissions={PermissionScope.NETWORK_ACCESS}
+                    ).to_dict()
+                },
+            )
+            assert invalid_manifest.status_code == 400
+            assert invalid_manifest.json()["accepted"] is False
+
             submit = client.post(
                 "/registry/submit",
                 json={
-                    "manifest": _manifest().to_dict(),
+                    "manifest": _manifest(author="publisher").to_dict(),
                     "display_name": "Weather Lookup",
                     "categories": ["network"],
                     "requested_level": "basic",

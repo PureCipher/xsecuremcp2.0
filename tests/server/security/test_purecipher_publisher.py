@@ -48,7 +48,7 @@ class TestPureCipherPublisherCLI:
     @staticmethod
     def _make_ready_project(project_root):
         config = load_publisher_config(project_root / "purecipher.toml")
-        config.project.publisher = "acme"
+        config.project.publisher = "publisher"
         config.publisher.source_url = "https://github.com/acme/weather-lookup"
         config.publisher.homepage_url = "https://acme.dev/weather-lookup"
         config.runtime.endpoint = "https://mcp.acme.dev/weather-lookup"
@@ -458,7 +458,7 @@ class TestPureCipherPublisherCLI:
         assert queue.status_code == 200
         assert queue.json()["counts"]["pending_review"] == 1
 
-    def test_publish_project_requeues_existing_listing_for_moderated_registry(
+    def test_publish_project_stages_update_without_replacing_published_listing(
         self,
         tmp_path,
     ):
@@ -510,6 +510,8 @@ class TestPureCipherPublisherCLI:
             )
             assert approve.status_code == 200
 
+            # The next request is a publisher CLI call, not the reviewer browser session.
+            client.cookies.clear()
             config.project.version = "0.2.0"
             write_publisher_config(project_root / "purecipher.toml", config)
 
@@ -518,9 +520,14 @@ class TestPureCipherPublisherCLI:
                 base_url="http://testserver",
                 auth_file=auth_file,
                 refresh_artifacts=True,
+                release_notes="Add the next weather lookup version.",
                 client=client,
             )
 
         assert second.accepted is True
-        assert second.listing_status == "pending_review"
-        assert second.review_url == "http://testserver/registry/review"
+        assert second.listing_status == "published"
+        assert second.response_payload["listing"]["version"] == "0.1.0"
+        assert (
+            second.response_payload["release_candidate"]["status"] == "pending_review"
+        )
+        assert second.review_url == "http://testserver/registry/releases"

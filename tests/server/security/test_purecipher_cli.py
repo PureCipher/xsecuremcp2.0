@@ -166,3 +166,39 @@ class TestPureCipherCLI:
 
         with pytest.raises(ValueError, match="signing secret"):
             build_registry_from_args(args)
+
+
+@pytest.mark.parametrize(
+    "env_value,flag,expected",
+    [
+        (None, None, True),
+        ("false", None, False),
+        ("true", None, True),
+        ("false", "--auth-cookie-secure", True),
+        ("true", "--no-auth-cookie-secure", False),
+    ],
+)
+def test_cli_cookie_security_reaches_login_response(
+    monkeypatch, env_value, flag, expected
+):
+    from starlette.testclient import TestClient
+
+    if env_value is None:
+        monkeypatch.delenv("PURECIPHER_AUTH_COOKIE_SECURE", raising=False)
+    else:
+        monkeypatch.setenv("PURECIPHER_AUTH_COOKIE_SECURE", env_value)
+    argv = [
+        "--signing-secret",
+        "cookie-security-test-secret-at-least-32-chars",
+        "--enable-auth",
+    ]
+    if flag:
+        argv.append(flag)
+    registry = build_registry_from_args(build_parser().parse_args(argv))
+    with TestClient(registry.http_app()) as client:
+        response = client.post(
+            "/registry/setup",
+            json={"username": "admin", "password": "test-cookie-password"},
+        )
+        assert response.status_code == 201
+        assert ("; Secure" in response.headers["set-cookie"]) is expected

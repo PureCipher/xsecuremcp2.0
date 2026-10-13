@@ -75,6 +75,7 @@ def publish_project(
     allow_incomplete: bool = False,
     output_dir: str | Path | None = None,
     refresh_artifacts: bool = False,
+    release_notes: str | None = None,
     client: Any | None = None,
 ) -> PublisherPublishResult:
     """Run registry preflight and publish a project."""
@@ -96,6 +97,8 @@ def publish_project(
         )
 
     submission_payload = build_submission_payload(config)
+    if release_notes is not None:
+        submission_payload["changelog"] = release_notes
     preflight_payload = {
         "manifest": submission_payload["manifest"],
         "display_name": submission_payload["display_name"],
@@ -179,6 +182,9 @@ def publish_project(
         if listing_status == "pending_review"
         else None
     )
+    candidate = response_payload.get("release_candidate")
+    if isinstance(candidate, dict):
+        review_url = f"{normalized_base_url}/registry/releases"
     next_url = review_url or listing_url
     return PublisherPublishResult(
         base_url=normalized_base_url,
