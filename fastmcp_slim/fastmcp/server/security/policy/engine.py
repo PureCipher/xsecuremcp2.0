@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
+from fastmcp.exceptions import FastMCPError
 from fastmcp.server.security.policy.provider import (
     AllowAllPolicy,
     Citation,
@@ -57,8 +58,13 @@ class PolicySwapRecord:
     reason: str
 
 
-class PolicyViolationError(Exception):
-    """Raised when a policy evaluation results in DENY."""
+class PolicyViolationError(FastMCPError):
+    """Client-visible error raised when a policy blocks an operation.
+
+    Policy denials are expected control-flow outcomes, not server faults.  Using
+    the FastMCP error base lets protocol handlers return the denial as an MCP
+    operation error instead of the runner masking it as an internal error.
+    """
 
     def __init__(self, result: PolicyResult) -> None:
         self.result = result
