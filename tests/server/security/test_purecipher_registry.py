@@ -1086,6 +1086,7 @@ class TestPureCipherRegistry:
         assert second.accepted is True
         assert second.listing is not None
         assert second.listing.status.value == "published"
+        assert second.release_candidate is not None
         assert second.release_candidate["status"] == "pending_review"
 
         detail = registry.get_verified_tool("weather-lookup")
@@ -1562,6 +1563,8 @@ class TestPureCipherRegistry:
         )
         from purecipher.release_candidates import decide
 
+        assert update.listing is not None
+        assert update.release_candidate is not None
         decide(
             registry,
             update.listing.listing_id,

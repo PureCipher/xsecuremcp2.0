@@ -114,14 +114,12 @@ def mount(registry, prefix):
                 },
                 201,
             )
-        except (ValueError, TypeError, AttributeError):
+        except (ValueError, TypeError, AttributeError) as exc:
             # Validation errors are safe field-level messages; never echo credentials.
-            import sys
-
             return response(
                 {
-                    "error": str(sys.exception())
-                    if isinstance(sys.exception(), ValueError)
+                    "error": str(exc)
+                    if isinstance(exc, ValueError)
                     else "Invalid registration"
                 },
                 400,

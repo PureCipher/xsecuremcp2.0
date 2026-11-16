@@ -59,6 +59,7 @@ def mount(registry, prefix):
         except ValueError:
             limit = 40
         body = {}
+        key = "id"
         if request.method == "POST":
             try:
                 body = await request.json()
@@ -94,6 +95,8 @@ def mount(registry, prefix):
                     + where,
                     (username, *args),
                 ).fetchone()
+                if total is None:
+                    raise RuntimeError("Notification aggregate query returned no row")
                 rows = conn.execute(
                     "SELECT n.id,n.created_at,n.event_kind,n.title,n.body,n.link_path,(r.notification_id IS NOT NULL) FROM purecipher_registry_notifications n LEFT JOIN purecipher_notification_reads r ON r.notification_id=n.id AND r.username=%s WHERE "
                     + where

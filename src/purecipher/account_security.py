@@ -257,6 +257,8 @@ class RegistryAccountSecurityStore:
                         (username,),
                     ).fetchone()
                     account = dict(row) if row else None
+                    if account is None:
+                        raise ValueError("Account request not found")
                     data = self._registration_transition(
                         account, status, role, reason, actor, expected_revision
                     )
@@ -271,6 +273,8 @@ class RegistryAccountSecurityStore:
                     )
             else:
                 account = self._memory_accounts.get(username)
+                if account is None:
+                    raise ValueError("Account request not found")
                 data = self._registration_transition(
                     account, status, role, reason, actor, expected_revision
                 )

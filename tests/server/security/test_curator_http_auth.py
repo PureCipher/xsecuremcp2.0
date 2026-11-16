@@ -628,11 +628,13 @@ async def test_private_key_client_assertion_is_signed_and_short_lived(monkeypatc
     data, headers = auth.token_credentials(
         {**client, "token_endpoint": DISC["token_endpoint"]}
     )
+    token_endpoint = DISC["token_endpoint"]
+    assert isinstance(token_endpoint, str)
     decoded = jwt.decode(
         data["client_assertion"],
         key.public_key(),
         algorithms=["RS256"],
-        audience=DISC["token_endpoint"],
+        audience=token_endpoint,
     )
     assert decoded["iss"] == decoded["sub"] == "registered-client"
     assert decoded["exp"] - decoded["iat"] == 60

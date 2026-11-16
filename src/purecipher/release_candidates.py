@@ -271,6 +271,8 @@ def mount(registry, prefix):
             return response({"error": "Listing not found"}, 404)
         try:
             if request.method == "POST":
+                if listing is None or key is None:
+                    return response({"error": "Listing not found"}, 404)
                 raw = await request.body()
                 if len(raw) > 10000:
                     raise ValueError("Decision too large")

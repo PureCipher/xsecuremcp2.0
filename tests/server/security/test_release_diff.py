@@ -1,4 +1,5 @@
 import copy
+from typing import Any
 
 from purecipher.release_candidates import decide
 from purecipher.release_diff import compare
@@ -7,7 +8,7 @@ from tests.server.security.test_release_candidates import setup
 
 
 def test_inventory_changes_and_security_declarations():
-    before = {
+    before: dict[str, Any] = {
         "manifest": {"permissions": ["read"]},
         "metadata": {
             "introspection": {

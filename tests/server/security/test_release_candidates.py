@@ -21,6 +21,7 @@ def setup(dsn=None):
     )
     first = r.submit_tool(_manifest(author="alice"))
     assert first.accepted
+    assert first.listing is not None
     return r, first.listing.listing_id
 
 
@@ -150,17 +151,18 @@ def test_postgres_candidate_and_promotion_survive_reload(registry_dsn):
     fresh = PureCipherRegistry(
         signing_secret="test-secret", persistence_path=registry_dsn
     )
-    assert fresh._marketplace().get(key).version == "1.0.0"
-    assert fresh._marketplace().get(key).release_records[0]["id"] == candidate["id"]
+    fresh_listing = fresh._marketplace().get(key)
+    assert fresh_listing is not None
+    assert fresh_listing.version == "1.0.0"
+    assert fresh_listing.release_records[0]["id"] == candidate["id"]
     decide(fresh, key, candidate["id"], "approve", "reviewer", "Checked")
     latest = PureCipherRegistry(
         signing_secret="test-secret", persistence_path=registry_dsn
     )
-    assert latest._marketplace().get(key).version == "1.1.0"
-    assert (
-        latest._marketplace().get(key).release_records[0]["previous_release"]["version"]
-        == "1.0.0"
-    )
+    latest_listing = latest._marketplace().get(key)
+    assert latest_listing is not None
+    assert latest_listing.version == "1.1.0"
+    assert latest_listing.release_records[0]["previous_release"]["version"] == "1.0.0"
 
 
 def test_storage_failure_does_not_promote_and_reload_keeps_candidate(monkeypatch):
