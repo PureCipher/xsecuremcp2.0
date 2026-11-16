@@ -211,6 +211,8 @@ class RegistryPreflightResult:
             "effective_certification_level": self.effective_certification_level,
             "minimum_required_level": self.minimum_required_level,
             "meets_minimum": self.meets_minimum,
+            "validation_score_percent": self.report.score_percent,
+            "assurance_tier": self.report.assurance_tier.value,
             "manifest_digest": self.manifest_digest,
             "install_ready": self.install_ready,
             "install_recipes": list(self.install_recipes),

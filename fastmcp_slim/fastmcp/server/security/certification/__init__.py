@@ -20,19 +20,35 @@ from fastmcp.server.security.certification.attestation import (
     ValidationSeverity,
     ValidationReport,
 )
+from fastmcp.server.security.certification.evidence import (
+    AssuranceTier,
+    CertificationEvidenceSource,
+    CertificationTestEvidence,
+    CertificationTestResult,
+    CertificationTestStatus,
+    CertificationTestSuite,
+    StandardCertificationTestSuite,
+)
 from fastmcp.server.security.certification.validator import ManifestValidator
 from fastmcp.server.security.certification.pipeline import CertificationPipeline
 
 __all__ = [
+    "AssuranceTier",
     "AttestationStatus",
+    "CertificationEvidenceSource",
     "CertificationLevel",
     "CertificationPipeline",
+    "CertificationTestEvidence",
+    "CertificationTestResult",
+    "CertificationTestStatus",
+    "CertificationTestSuite",
     "DataClassification",
     "DataFlowDeclaration",
     "ManifestValidator",
     "PermissionScope",
     "ResourceAccessDeclaration",
     "SecurityManifest",
+    "StandardCertificationTestSuite",
     "ToolAttestation",
     "ValidationFinding",
     "ValidationReport",

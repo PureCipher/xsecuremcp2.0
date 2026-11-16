@@ -2364,6 +2364,7 @@ def _render_preflight_panel(preflight: dict[str, Any] | None) -> str:
     report = preflight.get("report") or {}
     install_recipes = list(preflight.get("install_recipes") or [])
     findings = list(report.get("findings") or [])
+    validation_score = f"{preflight.get('validation_score_percent', 0)}%"
     recipe_list = (
         '<div class="detail-note">No setup steps were detected yet. Add an endpoint, command, or Docker image.</div>'
         if not install_recipes
@@ -2400,6 +2401,14 @@ def _render_preflight_panel(preflight: dict[str, Any] | None) -> str:
         <div class="detail-box">
           <div class="label">Safety Level</div>
           <div class="value">{_escape(preflight.get("effective_certification_level") or "n/a")}</div>
+        </div>
+        <div class="detail-box">
+          <div class="label">Validation Score</div>
+          <div class="value">{_escape(validation_score)}</div>
+        </div>
+        <div class="detail-box">
+          <div class="label">Assurance Evidence</div>
+          <div class="value">{_escape(preflight.get("assurance_tier") or "static_analysis")}</div>
         </div>
         <div class="detail-box">
           <div class="label">Required Minimum</div>
@@ -3153,6 +3162,7 @@ def create_listing_detail_html(
     publisher_name = str(detail.get("author") or "unknown")
     manifest = detail.get("manifest") or {}
     attestation = detail.get("attestation") or {}
+    validation_score = f"{attestation.get('validation_score_percent', 0)}%"
     trust = detail.get("trust_score") or {}
     verification = detail.get("verification") or {}
     categories = sorted(detail.get("categories") or [])
@@ -3443,6 +3453,12 @@ def create_listing_detail_html(
                 <dd>{_escape(attestation.get("issuer_id") or "unknown")}</dd>
                 <dt>Status</dt>
                 <dd>{_escape(attestation.get("status") or "unknown")}</dd>
+                <dt>Validation Score</dt>
+                <dd>{_escape(validation_score)}</dd>
+                <dt>Assurance Evidence</dt>
+                <dd>{
+        _escape(attestation.get("assurance_tier") or "static_analysis")
+    }</dd>
                 <dt>Issued</dt>
                 <dd>{_escape(attestation.get("issued_at") or "n/a")}</dd>
                 <dt>Expires</dt>

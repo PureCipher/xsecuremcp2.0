@@ -1504,6 +1504,9 @@ class TestPureCipherRegistry:
             assert "Preflight complete" in preview.text
             assert "What People Will See" in preview.text
             assert "Things To Fix" in preview.text
+            assert "Validation Score" in preview.text
+            assert "Assurance Evidence" in preview.text
+            assert "standard_tested" in preview.text
 
     def test_http_registry_preflight_api(self):
         registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
@@ -1524,6 +1527,16 @@ class TestPureCipherRegistry:
             assert response.status_code == 200
             payload = response.json()
             assert payload["ready_for_publish"] is True
+            assert payload["validation_score_percent"] == round(
+                payload["report"]["score"] * 100
+            )
+            assert (
+                payload["report"]["score_percent"]
+                == payload["validation_score_percent"]
+            )
+            assert payload["assurance_tier"] == "standard_tested"
+            assert payload["report"]["test_evidence"][0]["passed"] is True
+            assert payload["attestation"]["assurance_tier"] == "standard_tested"
             assert payload["install_ready"] is True
             recipe_ids = {recipe["recipe_id"] for recipe in payload["install_recipes"]}
             assert "mcp_client_http" in recipe_ids

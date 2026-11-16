@@ -177,6 +177,9 @@ class TestValidationReport:
         d = r.to_dict()
         assert d["tool_name"] == "test"
         assert d["score"] == 0.85
+        assert d["score_percent"] == 85
+        assert d["assurance_tier"] == "static_analysis"
+        assert d["test_evidence"] == []
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -571,6 +574,8 @@ class TestCertificationPipeline:
         result = pipeline.certify(_good_manifest())
         assert result.is_certified
         assert result.score >= 0.8
+        assert result.score_percent >= 80
+        assert result.assurance_tier.value == "standard_tested"
         assert result.attestation.signature != ""
         assert result.attestation.status == AttestationStatus.VALID
 

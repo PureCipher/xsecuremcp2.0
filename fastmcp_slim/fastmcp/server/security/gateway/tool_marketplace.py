@@ -25,6 +25,7 @@ from fastmcp.server.security.certification.attestation import (
     CertificationLevel,
     ToolAttestation,
 )
+from fastmcp.server.security.certification.evidence import AssuranceTier
 from fastmcp.server.security.certification.manifest import (
     DataClassification,
     DataFlowDeclaration,
@@ -902,6 +903,10 @@ class ToolMarketplace:
             ),
             validation_report_id=data.get("validation_report_id", ""),
             validation_score=data.get("validation_score", 0.0),
+            assurance_tier=AssuranceTier(
+                data.get("assurance_tier", AssuranceTier.STATIC_ANALYSIS.value)
+            ),
+            test_evidence_digest=data.get("test_evidence_digest", ""),
             issued_at=cls._parse_datetime(data.get("issued_at")),
             expires_at=cls._parse_datetime(expires_at) if expires_at else None,
             issuer_id=data.get("issuer_id", ""),

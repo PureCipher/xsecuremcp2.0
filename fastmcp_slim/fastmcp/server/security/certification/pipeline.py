@@ -9,6 +9,7 @@ and the Marketplace for trust level updates.
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
@@ -17,6 +18,16 @@ from fastmcp.server.security.certification.attestation import (
     CertificationLevel,
     ToolAttestation,
     ValidationReport,
+)
+from fastmcp.server.security.certification.evidence import (
+    AssuranceTier,
+    CertificationEvidenceSource,
+    CertificationTestEvidence,
+    CertificationTestResult,
+    CertificationTestStatus,
+    CertificationTestSuite,
+    StandardCertificationTestSuite,
+    assurance_tier_for_evidence,
 )
 from fastmcp.server.security.certification.manifest import SecurityManifest
 from fastmcp.server.security.certification.validator import ManifestValidator
@@ -80,6 +91,10 @@ class CertificationPipeline:
         event_bus: Optional event bus for certification alerts.
         min_level_for_signing: Minimum certification level to produce
             a signed attestation. Below this, attestation is PENDING.
+        test_suites: Operator-configured evidence suites. By default the
+            deterministic SecureMCP standard suite runs over every validation
+            report. Pass an empty sequence to retain static-analysis-only
+            assurance.
         require_crypto_for_valid: If True (default), an attestation can
             only be marked ``VALID`` when a ``crypto_handler`` is
             configured to actually sign it. With no handler the
@@ -100,6 +115,7 @@ class CertificationPipeline:
         event_bus: SecurityEventBus | None = None,
         min_level_for_signing: CertificationLevel = CertificationLevel.BASIC,
         require_crypto_for_valid: bool = True,
+        test_suites: Sequence[CertificationTestSuite] | None = None,
     ) -> None:
         self._issuer_id = issuer_id
         self._crypto = crypto_handler
@@ -109,6 +125,16 @@ class CertificationPipeline:
         self._event_bus = event_bus
         self._min_level_for_signing = min_level_for_signing
         self._require_crypto_for_valid = require_crypto_for_valid
+        self._test_suites = (
+            tuple(test_suites)
+            if test_suites is not None
+            else (StandardCertificationTestSuite(),)
+        )
+        suite_ids = [suite.suite_id for suite in self._test_suites]
+        if any(not suite_id.strip() for suite_id in suite_ids):
+            raise ValueError("Certification test suite IDs must be nonempty")
+        if len(set(suite_ids)) != len(suite_ids):
+            raise ValueError("Certification test suite IDs must be unique")
 
         if crypto_handler is None and not require_crypto_for_valid:
             logger.warning(
@@ -150,12 +176,29 @@ class CertificationPipeline:
         """
         # Step 1: Validate
         report = self._validator.validate(manifest)
-        self._reports[report.report_id] = report
-
         # Step 2: Digest
         manifest_digest = compute_digest(manifest.to_dict())
 
-        # Step 3: Determine level
+        # Step 3: Produce manifest-bound assurance evidence. Suite failures do
+        # not masquerade as passing evidence; they are captured as ERROR
+        # results and keep the assurance tier at static analysis.
+        test_evidence = self._run_test_suites(
+            manifest,
+            report,
+            manifest_digest=manifest_digest,
+        )
+        report.test_evidence = test_evidence
+        report.assurance_tier = assurance_tier_for_evidence(test_evidence)
+        test_evidence_digest = (
+            compute_digest(
+                {"test_evidence": [item.to_dict() for item in test_evidence]}
+            )
+            if test_evidence
+            else ""
+        )
+        self._reports[report.report_id] = report
+
+        # Step 4: Determine level
         effective_level = report.max_certification_level
         if requested_level is not None:
             level_order = list(CertificationLevel)
@@ -165,7 +208,7 @@ class CertificationPipeline:
             else:
                 effective_level = requested_level
 
-        # Step 4: Create attestation
+        # Step 5: Create attestation
         attestation = ToolAttestation(
             manifest_id=manifest.manifest_id,
             tool_name=manifest.tool_name,
@@ -174,12 +217,14 @@ class CertificationPipeline:
             certification_level=effective_level,
             validation_report_id=report.report_id,
             validation_score=report.score,
+            assurance_tier=report.assurance_tier,
+            test_evidence_digest=test_evidence_digest,
             issuer_id=self._issuer_id,
             manifest_digest=manifest_digest,
         )
         attestation.set_default_expiry(self._attestation_duration)
 
-        # Step 5: Sign if level meets threshold
+        # Step 6: Sign if level meets threshold
         level_order = list(CertificationLevel)
         meets_min = level_order.index(effective_level) >= level_order.index(
             self._min_level_for_signing
@@ -205,14 +250,14 @@ class CertificationPipeline:
 
         self._attestations[attestation.attestation_id] = attestation
 
-        # Step 6: Update marketplace
+        # Step 7: Update marketplace
         if (
             self._marketplace is not None
             and attestation.status == AttestationStatus.VALID
         ):
             self._update_marketplace_trust(manifest, effective_level)
 
-        # Step 7: Emit event
+        # Step 8: Emit event
         if self._event_bus is not None:
             self._emit_certification_event(attestation, report)
 
@@ -221,6 +266,65 @@ class CertificationPipeline:
             attestation=attestation,
             manifest_digest=manifest_digest,
         )
+
+    def _run_test_suites(
+        self,
+        manifest: SecurityManifest,
+        report: ValidationReport,
+        *,
+        manifest_digest: str,
+    ) -> list[CertificationTestEvidence]:
+        evidence: list[CertificationTestEvidence] = []
+        for suite in self._test_suites:
+            try:
+                item = suite.run(
+                    manifest,
+                    report,
+                    manifest_digest=manifest_digest,
+                )
+                if (
+                    item.suite_id != suite.suite_id
+                    or item.suite_version != suite.suite_version
+                    or item.source is not suite.source
+                    or item.runner_id != suite.runner_id
+                    or item.manifest_digest != manifest_digest
+                    or item.validation_report_id != report.report_id
+                ):
+                    raise ValueError(
+                        "Certification suite returned evidence with mismatched binding"
+                    )
+            except Exception as exc:
+                logger.exception(
+                    "Certification test suite %s failed",
+                    getattr(suite, "suite_id", "unknown"),
+                )
+                suite_id = str(getattr(suite, "suite_id", "unknown-suite"))
+                suite_version = str(getattr(suite, "suite_version", "unknown"))
+                runner_id = str(getattr(suite, "runner_id", "unknown-runner"))
+                source = getattr(
+                    suite,
+                    "source",
+                    CertificationEvidenceSource.SECUREMCP,
+                )
+                if not isinstance(source, CertificationEvidenceSource):
+                    source = CertificationEvidenceSource.SECUREMCP
+                item = CertificationTestEvidence(
+                    suite_id=suite_id or "unknown-suite",
+                    suite_version=suite_version or "unknown",
+                    source=source,
+                    runner_id=runner_id or "unknown-runner",
+                    manifest_digest=manifest_digest,
+                    validation_report_id=report.report_id,
+                    results=(
+                        CertificationTestResult(
+                            test_id="suite_execution",
+                            status=CertificationTestStatus.ERROR,
+                            summary=f"Suite execution failed: {type(exc).__name__}",
+                        ),
+                    ),
+                )
+            evidence.append(item)
+        return evidence
 
     def verify_attestation(
         self,
@@ -439,7 +543,10 @@ class CertificationPipeline:
                 data={
                     "tool_name": attestation.tool_name,
                     "certification_level": attestation.certification_level.value,
+                    "assurance_tier": attestation.assurance_tier.value,
                     "score": report.score,
+                    "score_percent": report.score_percent,
+                    "test_evidence_count": len(report.test_evidence),
                     "findings_count": len(report.findings),
                     "error_count": report.error_count,
                     "warning_count": report.warning_count,
@@ -485,6 +592,18 @@ class CertificationResult:
     def score(self) -> float:
         """Validation score."""
         return self.report.score
+
+    @property
+    def score_percent(self) -> int:
+        """Validation score expressed as a whole-number percentage."""
+
+        return self.report.score_percent
+
+    @property
+    def assurance_tier(self) -> AssuranceTier:
+        """Depth of evidence supporting the certification decision."""
+
+        return self.report.assurance_tier
 
 
 class AttestationVerification:

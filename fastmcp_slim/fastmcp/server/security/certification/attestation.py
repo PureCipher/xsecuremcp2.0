@@ -11,7 +11,24 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from enum import Enum
+from math import isfinite
 from typing import Any
+
+from fastmcp.server.security.certification.evidence import (
+    AssuranceTier,
+    CertificationTestEvidence,
+)
+
+
+def score_to_percent(score: float) -> int:
+    """Convert a normalized score to a bounded whole-number percentage."""
+
+    if isinstance(score, bool) or not isinstance(score, int | float):
+        raise TypeError("score must be a finite number")
+    numeric_score = float(score)
+    if not isfinite(numeric_score):
+        raise ValueError("score must be a finite number")
+    return round(max(0.0, min(1.0, numeric_score)) * 100)
 
 
 class CertificationLevel(Enum):
@@ -86,6 +103,8 @@ class ValidationReport:
         findings: All validation findings.
         score: Normalized score from 0.0 (fail) to 1.0 (perfect).
         max_certification_level: Highest certification the tool qualifies for.
+        assurance_tier: Depth of test evidence supporting the decision.
+        test_evidence: Manifest-bound evidence emitted by certification suites.
         validated_at: When validation was performed.
         metadata: Additional report data.
     """
@@ -96,8 +115,16 @@ class ValidationReport:
     findings: list[ValidationFinding] = field(default_factory=list)
     score: float = 0.0
     max_certification_level: CertificationLevel = CertificationLevel.UNCERTIFIED
+    assurance_tier: AssuranceTier = AssuranceTier.STATIC_ANALYSIS
+    test_evidence: list[CertificationTestEvidence] = field(default_factory=list)
     validated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     metadata: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def score_percent(self) -> int:
+        """Validation score expressed as an operator-friendly percentage."""
+
+        return score_to_percent(self.score)
 
     @property
     def has_errors(self) -> bool:
@@ -146,7 +173,10 @@ class ValidationReport:
                 for f in self.findings
             ],
             "score": self.score,
+            "score_percent": self.score_percent,
             "max_certification_level": self.max_certification_level.value,
+            "assurance_tier": self.assurance_tier.value,
+            "test_evidence": [item.to_dict() for item in self.test_evidence],
             "validated_at": self.validated_at.isoformat(),
             "metadata": self.metadata,
         }
@@ -170,6 +200,8 @@ class ToolAttestation:
         status: Current lifecycle status.
         validation_report_id: ID of the validation report.
         validation_score: Score from validation.
+        assurance_tier: Depth of test evidence supporting the certification.
+        test_evidence_digest: Digest binding the signed attestation to its evidence.
         issued_at: When the attestation was created.
         expires_at: When it expires.
         issuer_id: Who issued the attestation.
@@ -187,6 +219,8 @@ class ToolAttestation:
     status: AttestationStatus = AttestationStatus.PENDING
     validation_report_id: str = ""
     validation_score: float = 0.0
+    assurance_tier: AssuranceTier = AssuranceTier.STATIC_ANALYSIS
+    test_evidence_digest: str = ""
     issued_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     expires_at: datetime | None = None
     issuer_id: str = ""
@@ -206,13 +240,19 @@ class ToolAttestation:
         """Set expiry relative to issue time."""
         self.expires_at = self.issued_at + duration
 
+    @property
+    def validation_score_percent(self) -> int:
+        """Validation score expressed as a bounded whole-number percentage."""
+
+        return score_to_percent(self.validation_score)
+
     def signable_payload(self) -> dict[str, Any]:
         """Get the payload that should be signed.
 
         Returns a deterministic dictionary of the fields that
         constitute the attestation's identity and claims.
         """
-        return {
+        payload = {
             "attestation_id": self.attestation_id,
             "manifest_id": self.manifest_id,
             "manifest_digest": self.manifest_digest,
@@ -226,10 +266,23 @@ class ToolAttestation:
             "expires_at": self.expires_at.isoformat() if self.expires_at else None,
             "issuer_id": self.issuer_id,
         }
+        # Preserve verification compatibility for attestations created before
+        # test evidence existed: their historical signatures did not contain
+        # these keys. New evidence-bearing attestations bind both values.
+        if (
+            self.test_evidence_digest
+            or self.assurance_tier is not AssuranceTier.STATIC_ANALYSIS
+        ):
+            payload["assurance_tier"] = self.assurance_tier.value
+            payload["test_evidence_digest"] = self.test_evidence_digest
+        return payload
 
     def to_dict(self) -> dict[str, Any]:
         """Full serialization including signature."""
         d = self.signable_payload()
+        d.setdefault("assurance_tier", self.assurance_tier.value)
+        d.setdefault("test_evidence_digest", self.test_evidence_digest)
+        d["validation_score_percent"] = self.validation_score_percent
         d["status"] = self.status.value
         d["signature"] = self.signature
         d["metadata"] = self.metadata

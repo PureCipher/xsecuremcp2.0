@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 
 from fastmcp.server.security.alerts.bus import SecurityEventBus
 from fastmcp.server.security.certification.attestation import CertificationLevel
+from fastmcp.server.security.certification.evidence import CertificationTestSuite
 from fastmcp.server.security.certification.pipeline import CertificationPipeline
 from fastmcp.server.security.certification.validator import ManifestValidator
 from fastmcp.server.security.compliance.reports import (
@@ -556,6 +557,9 @@ class CertificationConfig:
         crypto_handler: Handler for signing attestations. Reuses contracts crypto if None.
         validator: Pre-built ManifestValidator. If None, defaults are used.
         min_level_for_signing: Minimum certification level to produce signed attestations.
+        test_suites: Optional operator-configured assurance evidence suites. The
+            built-in standard suite is used when this is None; an empty tuple
+            explicitly selects static-analysis-only assurance.
     """
 
     pipeline: CertificationPipeline | None = None
@@ -563,6 +567,7 @@ class CertificationConfig:
     crypto_handler: ContractCryptoHandler | None = None
     validator: ManifestValidator | None = None
     min_level_for_signing: CertificationLevel = CertificationLevel.BASIC
+    test_suites: tuple[CertificationTestSuite, ...] | None = None
 
     def get_pipeline(
         self,
@@ -582,6 +587,7 @@ class CertificationConfig:
             marketplace=marketplace,
             event_bus=event_bus,
             min_level_for_signing=self.min_level_for_signing,
+            test_suites=self.test_suites,
         )
 
 
