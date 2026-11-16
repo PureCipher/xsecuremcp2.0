@@ -19,7 +19,7 @@ What the built-in subset does NOT cover:
 
 - Virtual documents / imports / user-defined functions.
 - ``with`` modifiers, partial evaluation, future.keywords.
-- Numeric operators beyond equality and membership.
+- Arithmetic and numeric operators beyond ordered comparisons.
 - Regex (intentional — keeps policies auditable).
 
 If your policy needs any of the above, either stick with Cedar for
@@ -107,8 +107,8 @@ class _InputRef:
     """Represents ``input.<path>.<path>...`` in a Rego expression.
 
     Path segments are evaluated against the input document at
-    decision time; a missing segment resolves to ``None`` (falsy in
-    Rego too).
+    decision time; a missing segment resolves to an undefined sentinel,
+    distinct from an explicitly stored ``null`` value.
     """
 
     path: tuple[str, ...]
@@ -148,7 +148,7 @@ class _Call:
 
 @dataclass(frozen=True)
 class _BinOp:
-    op: str  # ==, !=, in, ":="
+    op: str  # ==, !=, >, >=, <, <=, in, ":="
     lhs: Any
     rhs: Any
 
@@ -179,6 +179,16 @@ class _Rule:
 class _Module:
     package: str
     rules: tuple[_Rule, ...]
+
+
+class _UndefinedType:
+    """Rego's undefined value, distinct from JSON ``null``."""
+
+    def __repr__(self) -> str:
+        return "undefined"
+
+
+_UNDEFINED = _UndefinedType()
 
 
 # ── Parser ─────────────────────────────────────────────────────────
@@ -343,8 +353,9 @@ def _parse_expression(raw: str) -> Any:
     if text.startswith("startswith("):
         return _parse_call(text)
 
-    # Binary: splits on the first top-level ==, !=, or ``in``.
-    for op in ("==", "!=", " in "):
+    # Binary: split on the first top-level supported operator. Longer
+    # operators must be checked before their single-character prefixes.
+    for op in ("==", "!=", ">=", "<=", ">", "<", " in "):
         idx = _find_top_level(text, op)
         if idx is not None:
             lhs = text[:idx].strip()
@@ -380,7 +391,11 @@ def _find_top_level(text: str, needle: str) -> int | None:
 
 def _parse_atom(text: str) -> Any:
     text = text.strip()
-    if text.startswith("input"):
+    if text == "input":
+        return _InputRef(())
+    if text.startswith("input."):
+        if not re.fullmatch(r"input(?:\.[A-Za-z_][A-Za-z0-9_]*)+", text):
+            raise RegoParseError(f"Malformed input reference: {text!r}")
         parts = text.split(".")
         return _InputRef(tuple(parts[1:]))
     if text.startswith(("sprintf(", "startswith(")):
@@ -492,9 +507,11 @@ def _eval_atom(node: Any, bindings: dict[str, Any], input_doc: dict[str, Any]) -
         cursor: Any = input_doc
         for seg in node.path:
             if isinstance(cursor, dict):
-                cursor = cursor.get(seg)
+                if seg not in cursor:
+                    return _UNDEFINED
+                cursor = cursor[seg]
             else:
-                return None
+                return _UNDEFINED
         return cursor
     if isinstance(node, _Call):
         if node.name == "sprintf":
@@ -505,15 +522,19 @@ def _eval_atom(node: Any, bindings: dict[str, Any], input_doc: dict[str, Any]) -
             args = list(values) if isinstance(values, list) else [values]
             return _rego_sprintf(fmt, args)
         if node.name == "startswith":
-            s = _eval_atom(node.args[0], bindings, input_doc) or ""
-            prefix = _eval_atom(node.args[1], bindings, input_doc) or ""
-            return isinstance(s, str) and s.startswith(str(prefix))
+            s = _eval_atom(node.args[0], bindings, input_doc)
+            prefix = _eval_atom(node.args[1], bindings, input_doc)
+            if s is _UNDEFINED or prefix is _UNDEFINED:
+                return False
+            return (
+                isinstance(s, str) and isinstance(prefix, str) and s.startswith(prefix)
+            )
         raise RegoParseError(f"Unsupported builtin: {node.name}")
     if isinstance(node, str):
         # Bare identifier (variable binding) — resolved from the local
         # bindings dict; unknown names are treated as None (Rego's
         # undefined).
-        return bindings.get(node)
+        return bindings.get(node, _UNDEFINED)
     return node
 
 
@@ -543,14 +564,34 @@ def _eval_expression(
 ) -> bool:
     if isinstance(node, _BinOp):
         if node.op == ":=":
-            bindings[node.lhs] = _eval_atom(node.rhs, bindings, input_doc)
+            value = _eval_atom(node.rhs, bindings, input_doc)
+            if value is _UNDEFINED:
+                return False
+            bindings[node.lhs] = value
             return True
         lhs = _eval_atom(node.lhs, bindings, input_doc)
         rhs = _eval_atom(node.rhs, bindings, input_doc)
+        if lhs is _UNDEFINED or rhs is _UNDEFINED:
+            return False
         if node.op == "==":
             return lhs == rhs
         if node.op == "!=":
             return lhs != rhs
+        if node.op in {">", ">=", "<", "<="}:
+            if (
+                not isinstance(lhs, (int, float))
+                or isinstance(lhs, bool)
+                or not isinstance(rhs, (int, float))
+                or isinstance(rhs, bool)
+            ):
+                return False
+            if node.op == ">":
+                return lhs > rhs
+            if node.op == ">=":
+                return lhs >= rhs
+            if node.op == "<":
+                return lhs < rhs
+            return lhs <= rhs
         if node.op == "in":
             if isinstance(rhs, (set, frozenset, list, tuple)):
                 return lhs in rhs
@@ -563,7 +604,8 @@ def _eval_expression(
     if isinstance(node, _Literal):
         return bool(node.value)
     if isinstance(node, _InputRef):
-        return bool(_eval_atom(node, bindings, input_doc))
+        value = _eval_atom(node, bindings, input_doc)
+        return value is not _UNDEFINED and bool(value)
     return False
 
 
@@ -685,7 +727,8 @@ def _all_body_exprs_true(
 def _resolve_default(module: _Module, rule_name: str, fallback: Any) -> Any:
     for rule in module.rules:
         if rule.head and rule.head[0] == "default" and rule.head[1] == rule_name:
-            return rule.head[2]
+            value = rule.head[2]
+            return value.value if isinstance(value, _Literal) else value
     return fallback
 
 

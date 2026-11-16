@@ -53,6 +53,7 @@ def _ctx(
     approval_ticket: str | None = None,
     tags: frozenset[str] | None = None,
     actor_id: str = "agent-1",
+    metadata: dict | None = None,
 ) -> PolicyEvaluationContext:
     """Shorthand for building an evaluation context in a test.
 
@@ -70,6 +71,7 @@ def _ctx(
         approval_granted=approval_granted,
         approval_ticket=approval_ticket,
         tags=tags or frozenset(),
+        metadata=metadata or {},
     )
 
 
@@ -438,6 +440,111 @@ class TestRegoEvaluator:
         result = p.evaluate(_ctx(environment="staging"))
         assert result.decision == PolicyDecision.DENY
         assert "locked down" in result.reason
+
+    async def test_default_allow_false_defers_and_engine_denies(self):
+        policy = RegoPolicy(
+            """
+            package t
+            default allow = false
+            allow {
+                input.resource_id == "weather_lookup"
+            }
+            """
+        )
+        context = _ctx(resource_id="export_all_data")
+        assert policy.evaluate(context).decision == PolicyDecision.DEFER
+        result = await PolicyEngine(providers=[policy], fail_closed=True).evaluate(
+            context
+        )
+        assert result.decision == PolicyDecision.DENY
+
+    @pytest.mark.parametrize(
+        "operator, amount, expected",
+        [
+            (">", 501, PolicyDecision.DENY),
+            (">", 500, PolicyDecision.DEFER),
+            (">=", 500, PolicyDecision.DENY),
+            ("<", 499, PolicyDecision.DENY),
+            ("<=", 500, PolicyDecision.DENY),
+        ],
+    )
+    def test_numeric_comparisons(self, operator, amount, expected):
+        policy = RegoPolicy(
+            f"""
+            package t
+            default allow = false
+            deny[msg] {{
+                input.metadata.arguments.amount {operator} 500
+                msg := "over limit"
+            }}
+            """
+        )
+        result = policy.evaluate(_ctx(metadata={"arguments": {"amount": amount}}))
+        assert result.decision == expected
+
+    def test_missing_field_is_undefined_for_inequality(self):
+        policy = RegoPolicy(
+            """
+            package t
+            default allow = false
+            allow {
+                input.metadata.arguments.region != "eu"
+            }
+            """
+        )
+        assert (
+            policy.evaluate(_ctx(metadata={"arguments": {}})).decision
+            == PolicyDecision.DEFER
+        )
+        assert (
+            policy.evaluate(_ctx(metadata={"arguments": {"region": "us"}})).decision
+            == PolicyDecision.ALLOW
+        )
+
+    def test_missing_field_is_distinct_from_explicit_null(self):
+        policy = RegoPolicy(
+            """
+            package t
+            default allow = false
+            allow {
+                input.metadata.arguments.region == null
+            }
+            """
+        )
+        assert (
+            policy.evaluate(_ctx(metadata={"arguments": {}})).decision
+            == PolicyDecision.DEFER
+        )
+        assert (
+            policy.evaluate(_ctx(metadata={"arguments": {"region": None}})).decision
+            == PolicyDecision.ALLOW
+        )
+
+    def test_startswith_does_not_match_missing_field(self):
+        policy = RegoPolicy(
+            """
+            package t
+            default allow = false
+            allow {
+                startswith(input.metadata.arguments.region, "")
+            }
+            """
+        )
+        assert (
+            policy.evaluate(_ctx(metadata={"arguments": {}})).decision
+            == PolicyDecision.DEFER
+        )
+
+    def test_unsupported_operator_is_rejected_at_load_time(self):
+        with pytest.raises(RegoParseError, match="Malformed input reference"):
+            RegoPolicy(
+                """
+                package t
+                allow {
+                    input.metadata.amount + 1
+                }
+                """
+            )
 
 
 class TestCedarEvaluator:
