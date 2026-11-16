@@ -23,6 +23,9 @@ venv/
 env/
 ENV/
 .env
+.env.*
+!.env.example
+!.env.*.example
 
 # System files
 .DS_Store
@@ -40,6 +43,7 @@ src/fastmcp/_version.py
 .project
 .pydevproject
 .settings/
+*.code-workspace
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -50,6 +54,7 @@ src/fastmcp/_version.py
 dmypy.json
 .pyre/
 .pytype/
+.ruff_cache/
 
 # Local development
 .python-version
@@ -76,6 +81,14 @@ plans/
 .cursor/
 .claude/
 .agents/
+.codex/
+
+# Temporary slide previews and document render/revision workspaces
+/.tmp_slides/
+/_slidereview/
+/artifacts/*render.*/
+/artifacts/*final.*/
+/artifacts/*revision.*/
 
 # Common FastMCP test files
 /test.py

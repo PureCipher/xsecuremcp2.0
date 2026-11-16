@@ -15,6 +15,18 @@ pytest-cache-files-*
 *.pyd
 .DS_Store
 
+# Local credentials, assistant configuration, and document work products
+.env
+.env.*
+**/.claude
+**/.agents
+**/.codex
+**/*.code-workspace
+.tmp_slides
+_slidereview
+artifacts
+output
+
 # Keep local documentation and editor configuration out of image contexts
 **/.cursor
 **/.cursor/**
