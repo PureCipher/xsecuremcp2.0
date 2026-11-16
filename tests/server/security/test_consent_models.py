@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastmcp.server.security.consent.models import (
     ConsentCondition,
@@ -56,12 +56,12 @@ class TestConsentEdge:
         assert not edge.is_valid()
 
     def test_edge_not_valid_when_expired(self):
-        past = datetime.now(timezone.utc) - timedelta(hours=1)
+        past = datetime.now(UTC) - timedelta(hours=1)
         edge = ConsentEdge(expires_at=past)
         assert not edge.is_valid()
 
     def test_edge_valid_before_expiry(self):
-        future = datetime.now(timezone.utc) + timedelta(hours=1)
+        future = datetime.now(UTC) + timedelta(hours=1)
         edge = ConsentEdge(expires_at=future)
         assert edge.is_valid()
 

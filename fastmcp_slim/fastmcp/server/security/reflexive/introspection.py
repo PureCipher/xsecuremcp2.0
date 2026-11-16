@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 import uuid
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from fastmcp.server.security.reflexive.models import (
@@ -308,7 +308,7 @@ class IntrospectionEngine:
             "verdict": introspection_result.verdict.value,
             "constraints": list(introspection_result.constraints),
             "assessed_at": introspection_result.assessed_at.isoformat(),
-            "bound_at": datetime.now(timezone.utc).isoformat(),
+            "bound_at": datetime.now(UTC).isoformat(),
         }
 
         self._accountability_log.append(

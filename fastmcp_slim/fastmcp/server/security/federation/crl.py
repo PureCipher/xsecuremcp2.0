@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
@@ -56,7 +56,7 @@ class CRLEntry:
     tool_name: str = ""
     attestation_id: str = ""
     reason: RevocationReason = RevocationReason.MANUAL_REVOCATION
-    revoked_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    revoked_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     revoked_by: str = ""
     propagated: bool = False
     source_peer_id: str = ""

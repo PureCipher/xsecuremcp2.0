@@ -10,7 +10,7 @@ import asyncio
 import logging
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastmcp.server.security.contracts.agent_registry import AgentKeyRegistry
@@ -57,8 +57,8 @@ class NegotiationSession:
     server_id: str = ""
     current_terms: list[ContractTerm] = field(default_factory=list)
     round_count: int = 0
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    last_activity: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    last_activity: datetime = field(default_factory=lambda: datetime.now(UTC))
     status: NegotiationStatus = NegotiationStatus.PENDING
     contract: Contract | None = None
 
@@ -289,7 +289,7 @@ class ContextBroker:
             )
 
         # Check session timeout
-        elapsed = datetime.now(timezone.utc) - session.last_activity
+        elapsed = datetime.now(UTC) - session.last_activity
         if elapsed > self.session_timeout:
             session.status = NegotiationStatus.REJECTED
             return ContractNegotiationResponse(
@@ -317,7 +317,7 @@ class ContextBroker:
                 reason=f"Maximum negotiation rounds ({self.max_rounds}) exceeded",
             )
 
-        session.last_activity = datetime.now(timezone.utc)
+        session.last_activity = datetime.now(UTC)
         session.round_count += 1
 
         # Log the counter-proposal received

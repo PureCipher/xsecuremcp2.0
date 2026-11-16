@@ -28,7 +28,7 @@ from __future__ import annotations
 import inspect
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, cast
 
 from fastmcp.server.security.policy.provider import (
@@ -132,7 +132,7 @@ class SimulationReport:
     denied: int = 0
     deferred: int = 0
     errors: int = 0
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def summary(self) -> str:
         """Return a human-readable summary of the simulation."""
@@ -243,7 +243,7 @@ async def simulate(
     if isinstance(target, PolicyEngine):
         providers = target.providers  # Gets a copy
     elif isinstance(target, list):
-        providers = cast(list[PolicyProvider], list(target))
+        providers = list(target)
     else:
         # Single provider
         providers = [cast(PolicyProvider, target)]
@@ -252,7 +252,7 @@ async def simulate(
 
     for scenario in scenarios:
         context = scenario.to_context()
-        start = datetime.now(timezone.utc)
+        start = datetime.now(UTC)
         per_provider: list[ProviderResult] = []
         final_result: PolicyResult | None = None
         error: str | None = None
@@ -330,7 +330,7 @@ async def simulate(
                 policy_id="simulation-error",
             )
 
-        elapsed = (datetime.now(timezone.utc) - start).total_seconds() * 1000
+        elapsed = (datetime.now(UTC) - start).total_seconds() * 1000
 
         sr = ScenarioResult(
             scenario=scenario,

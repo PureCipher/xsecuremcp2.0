@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from fastmcp.server.security.provenance.merkle import MerkleProof
@@ -48,7 +48,7 @@ class VerificationBundle:
     chain_successor_hash: str = ""
     ledger_root_hash: str = ""
     ledger_record_count: int = 0
-    exported_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    exported_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize for JSON export."""
@@ -201,7 +201,7 @@ def export_chain_dump(
 
     return {
         "format": "securemcp-provenance-export-v1",
-        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "exported_at": datetime.now(UTC).isoformat(),
         "record_count": len(records),
         "merkle_root": root_hash,
         "chain_digest": chain_digest,

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from fastmcp.server.security.reflexive.models import (
@@ -479,7 +479,7 @@ class EscalationEngine:
             # Check cooldown
             last = self._last_trigger.get(rule.rule_id)
             if last is not None:
-                elapsed = (datetime.now(timezone.utc) - last).total_seconds()
+                elapsed = (datetime.now(UTC) - last).total_seconds()
                 if elapsed < rule.cooldown_seconds:
                     continue
 
@@ -490,7 +490,7 @@ class EscalationEngine:
                 continue
 
             # Trigger!
-            self._last_trigger[rule.rule_id] = datetime.now(timezone.utc)
+            self._last_trigger[rule.rule_id] = datetime.now(UTC)
             self._escalation_history.append((event, rule, rule.action))
             triggered.append((rule.action, rule))
 

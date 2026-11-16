@@ -1,6 +1,7 @@
 """Server-side evidence hook; institutional workflows are deliberately external."""
 
 from dataclasses import replace
+from datetime import UTC
 from typing import Any
 
 import pytest
@@ -43,12 +44,12 @@ async def test_resolver_outage_denies():
 
 @pytest.mark.anyio
 async def test_evidence_time_is_evaluated_after_resolver_returns():
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
     bound = request()
 
     async def resolve(context):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         return replace(
             bound.ferpa_evidence,
             verified_at=now,

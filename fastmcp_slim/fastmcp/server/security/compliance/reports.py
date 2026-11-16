@@ -10,7 +10,7 @@ import enum
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastmcp.server.security.compliance.frameworks import (
     ComplianceFramework,
@@ -52,7 +52,7 @@ class ReportFinding:
     message: str = ""
     recommendation: str = ""
     evidence: dict = field(default_factory=dict)
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def __post_init__(self):
         if not self.finding_id:
@@ -138,7 +138,7 @@ class ComplianceReport:
     framework_id: str = ""
     framework_name: str = ""
     sections: list[ReportSection] = field(default_factory=list)
-    generated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    generated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     metadata: dict = field(default_factory=dict)
 
     def __post_init__(self):

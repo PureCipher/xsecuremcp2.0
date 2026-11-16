@@ -14,7 +14,7 @@ import time
 import uuid
 from collections.abc import Awaitable, Mapping
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
@@ -428,7 +428,7 @@ class TrustFederation:
 
         self._peer_scores[peer_id][tool_name] = score
         peer.shared_scores += 1
-        peer.last_sync = datetime.now(timezone.utc)
+        peer.last_sync = datetime.now(UTC)
 
         return True
 
@@ -480,7 +480,7 @@ class TrustFederation:
         )
 
         peer.shared_revocations += 1
-        peer.last_sync = datetime.now(timezone.utc)
+        peer.last_sync = datetime.now(UTC)
 
         logger.warning(
             "Revocation propagated from peer %s: %s (emergency: %s)",
@@ -846,7 +846,7 @@ class TrustFederation:
     @staticmethod
     def _record_push_success(peer: FederationPeer, start: float) -> BroadcastDelivery:
         peer.pushed_revocations += 1
-        peer.last_push_at = datetime.now(timezone.utc)
+        peer.last_push_at = datetime.now(UTC)
         # A peer that was UNREACHABLE before successfully receiving a
         # push is now reachable again — restore ACTIVE status.
         if peer.status == PeerStatus.UNREACHABLE:

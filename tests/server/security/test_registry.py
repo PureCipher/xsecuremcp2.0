@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastmcp.server.security.certification.attestation import (
     AttestationStatus,
@@ -93,7 +93,7 @@ class TestTrustRecord:
         a = ToolAttestation(
             status=AttestationStatus.VALID,
             certification_level=CertificationLevel.STANDARD,
-            issued_at=datetime.now(timezone.utc) - timedelta(days=200),
+            issued_at=datetime.now(UTC) - timedelta(days=200),
         )
         a.set_default_expiry(timedelta(days=90))
         r = TrustRecord(attestation=a)
@@ -242,7 +242,7 @@ class TestTrustScoring:
         reg = TrustRegistry()
         record = reg.register("tool-a")
         # Fake an older registration
-        record.registered_at = datetime.now(timezone.utc) - timedelta(days=60)
+        record.registered_at = datetime.now(UTC) - timedelta(days=60)
         reg._recompute_score(record)
         assert record.trust_score.age_component > 0.5
 

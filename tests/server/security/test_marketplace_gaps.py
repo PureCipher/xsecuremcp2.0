@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from unittest.mock import MagicMock
 
@@ -63,7 +63,7 @@ def _make_attestation(
         **overrides,
     )
     if valid and att.expires_at is None:
-        att.expires_at = datetime.now(timezone.utc) + timedelta(days=90)
+        att.expires_at = datetime.now(UTC) + timedelta(days=90)
     return att
 
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Awaitable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, Protocol, runtime_checkable
 
@@ -96,7 +96,7 @@ class PolicyEvaluationContext:
     action: str
     resource_id: str
     metadata: dict[str, Any] = field(default_factory=dict)
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
     tags: frozenset[str] = field(default_factory=frozenset)
     principal_type: str = "agent"
     resource_type: str = "tool"
@@ -190,7 +190,7 @@ class PolicyResult:
     decision: PolicyDecision
     reason: str
     policy_id: str
-    evaluated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    evaluated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     constraints: list[str] = field(default_factory=list)
     citations: tuple[Citation, ...] = field(default_factory=tuple)
 

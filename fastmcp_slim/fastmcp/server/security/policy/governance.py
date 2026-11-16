@@ -31,7 +31,7 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
@@ -81,7 +81,7 @@ class PolicyProposalEvent:
     event: str
     actor: str
     note: str = ""
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def to_dict(self) -> dict[str, Any]:
         """Export as JSON-serializable dict."""
@@ -127,7 +127,7 @@ class PolicyProposal:
     metadata: dict[str, Any] = field(default_factory=dict)
     assigned_reviewer: str | None = None
     status: ProposalStatus = ProposalStatus.DRAFT
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     validation_result: ValidationResult | None = None
     simulation_report: Any = None  # SimulationReport, avoid circular import
     approved_by: str | None = None
@@ -592,7 +592,7 @@ class PolicyGovernor:
             )
 
         proposal.approved_by = approver
-        proposal.approved_at = datetime.now(timezone.utc)
+        proposal.approved_at = datetime.now(UTC)
         proposal.status = ProposalStatus.APPROVED
         proposal.decision_trail.append(
             PolicyProposalEvent(
@@ -782,7 +782,7 @@ class PolicyGovernor:
                 "provider_count": len(proposal.replacement_providers),
             }
 
-        proposal.deployed_at = datetime.now(timezone.utc)
+        proposal.deployed_at = datetime.now(UTC)
         proposal.status = ProposalStatus.DEPLOYED
         proposal.decision_trail.append(
             PolicyProposalEvent(

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
@@ -117,14 +117,14 @@ class ServerRegistration:
     capabilities: set[ServerCapability] = field(default_factory=set)
     trust_level: TrustLevel = TrustLevel.UNVERIFIED
     version: str = ""
-    registered_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    last_heartbeat: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    registered_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    last_heartbeat: datetime = field(default_factory=lambda: datetime.now(UTC))
     metadata: dict[str, Any] = field(default_factory=dict)
     tags: set[str] = field(default_factory=set)
 
     def is_healthy(self, timeout_seconds: float = 300) -> bool:
         """Check if the server has reported recently."""
-        elapsed = (datetime.now(timezone.utc) - self.last_heartbeat).total_seconds()
+        elapsed = (datetime.now(UTC) - self.last_heartbeat).total_seconds()
         return elapsed < timeout_seconds
 
     def has_capability(self, cap: ServerCapability) -> bool:
@@ -175,7 +175,7 @@ class SecurityStatus:
     layers: dict[str, dict[str, Any]] = field(default_factory=dict)
     uptime_seconds: float = 0.0
     total_operations: int = 0
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to a dictionary."""

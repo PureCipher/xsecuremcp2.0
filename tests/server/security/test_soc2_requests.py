@@ -1,5 +1,5 @@
 from dataclasses import replace
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -18,7 +18,7 @@ from fastmcp.server.security.policy.serialization import policy_provider_to_conf
 
 def fixture(effects=frozenset({"read"}), classification="internal"):
     # Sunday, outside the old global weekday gate; ordinary reads remain valid.
-    now = datetime(2026, 9, 6, 23, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 9, 6, 23, 0, tzinfo=UTC)
     c = PolicyEvaluationContext(
         actor_id="client",
         action="call_tool",
@@ -323,7 +323,7 @@ async def test_live_resolver_supplies_bound_evidence_and_missing_result_denies()
         calls.append(ctx)
         if len(calls) > 1:
             return None
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         return replace(
             c.soc2_evidence, verified_at=now, expires_at=now + timedelta(seconds=30)
         )

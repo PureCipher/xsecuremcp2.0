@@ -20,7 +20,7 @@ import json
 import logging
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, Protocol, runtime_checkable
 
@@ -173,7 +173,7 @@ class ChainAnchor:
     anchor_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     merkle_root: str = ""
     record_count: int = 0
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
     chain_name: str = ""
     tx_id: str = ""
     previous_anchor_id: str = ""

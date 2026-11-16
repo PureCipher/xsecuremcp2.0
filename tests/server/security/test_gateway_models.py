@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastmcp.server.security.gateway.models import (
     AuditQuery,
@@ -42,7 +42,7 @@ class TestServerRegistration:
         assert reg.is_healthy()
 
     def test_is_healthy_stale(self):
-        old = datetime.now(timezone.utc) - timedelta(minutes=10)
+        old = datetime.now(UTC) - timedelta(minutes=10)
         reg = ServerRegistration(last_heartbeat=old)
         assert not reg.is_healthy(timeout_seconds=300)
 

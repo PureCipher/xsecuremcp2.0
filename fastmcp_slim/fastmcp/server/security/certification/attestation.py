@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from enum import Enum
 from typing import Any
 
@@ -96,7 +96,7 @@ class ValidationReport:
     findings: list[ValidationFinding] = field(default_factory=list)
     score: float = 0.0
     max_certification_level: CertificationLevel = CertificationLevel.UNCERTIFIED
-    validated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    validated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -187,7 +187,7 @@ class ToolAttestation:
     status: AttestationStatus = AttestationStatus.PENDING
     validation_report_id: str = ""
     validation_score: float = 0.0
-    issued_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    issued_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     expires_at: datetime | None = None
     issuer_id: str = ""
     signature: str = ""
@@ -199,7 +199,7 @@ class ToolAttestation:
         if self.status != AttestationStatus.VALID:
             return False
         if self.expires_at is not None:
-            return datetime.now(timezone.utc) < self.expires_at
+            return datetime.now(UTC) < self.expires_at
         return True
 
     def set_default_expiry(self, duration: timedelta = timedelta(days=90)) -> None:

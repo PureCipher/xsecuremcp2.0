@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import math
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from fastmcp.server.security.certification.attestation import (
@@ -122,7 +122,7 @@ class TrustRegistry:
                 existing.tags.update(tags)
             if metadata:
                 existing.metadata.update(metadata)
-            existing.updated_at = datetime.now(timezone.utc)
+            existing.updated_at = datetime.now(UTC)
             self._recompute_score(existing)
             return existing
 
@@ -177,7 +177,7 @@ class TrustRegistry:
             return False
 
         record.reputation_events.append(event)
-        record.updated_at = datetime.now(timezone.utc)
+        record.updated_at = datetime.now(UTC)
 
         old_score = record.trust_score.overall
         self._recompute_score(record)
@@ -199,7 +199,7 @@ class TrustRegistry:
             return False
 
         record.attestation = attestation
-        record.updated_at = datetime.now(timezone.utc)
+        record.updated_at = datetime.now(UTC)
         self._recompute_score(record)
         return True
 
@@ -328,7 +328,7 @@ class TrustRegistry:
         Uses a saturation curve: score = 1 - e^(-t/τ)
         where τ is the half-saturation time.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         age_days = (now - record.registered_at).total_seconds() / 86400.0
         if age_days <= 0:
             return 0.0

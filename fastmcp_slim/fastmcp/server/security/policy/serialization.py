@@ -17,7 +17,7 @@ from __future__ import annotations
 import importlib
 from collections import defaultdict
 from dataclasses import fields, is_dataclass
-from datetime import datetime, time, timezone
+from datetime import UTC, datetime, time
 from enum import Enum
 from typing import Any, cast
 
@@ -160,7 +160,7 @@ def policy_snapshot(
         "format": _SNAPSHOT_FORMAT,
         "providers": [policy_provider_to_config(provider) for provider in providers],
         "metadata": dict(metadata or {}),
-        "captured_at": datetime.now(timezone.utc).isoformat(),
+        "captured_at": datetime.now(UTC).isoformat(),
     }
 
 

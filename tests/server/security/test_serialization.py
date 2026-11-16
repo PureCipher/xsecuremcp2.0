@@ -1,6 +1,6 @@
 """Round-trip serialization tests for all SecureMCP data models."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastmcp.server.security.consent.models import (
     ConsentCondition,
@@ -101,7 +101,7 @@ class TestProvenanceRecordSerialization:
 
 class TestExchangeLogEntrySerialization:
     def test_round_trip(self):
-        ts = datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+        ts = datetime(2025, 1, 15, 12, 0, 0, tzinfo=UTC)
         entry = ExchangeLogEntry(
             entry_id="exlog-000001",
             session_id="sess-1",
@@ -129,7 +129,7 @@ class TestExchangeLogEntrySerialization:
             entry_id="exlog-000002",
             session_id="s",
             event_type=ExchangeEventType.ACCEPTED,
-            timestamp=datetime(2025, 1, 1, tzinfo=timezone.utc),
+            timestamp=datetime(2025, 1, 1, tzinfo=UTC),
             actor_id="a",
         )
         data = exchange_entry_to_dict(entry)
@@ -301,7 +301,7 @@ class TestConsentConditionSerialization:
 
 class TestConsentEdgeSerialization:
     def test_round_trip(self):
-        ts = datetime(2025, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+        ts = datetime(2025, 6, 1, 12, 0, 0, tzinfo=UTC)
         edge = ConsentEdge(
             source_id="source-1",
             target_id="target-1",
@@ -331,7 +331,7 @@ class TestConsentEdgeSerialization:
         assert restored.metadata == {"reason": "testing"}
 
     def test_edge_with_expiry(self):
-        exp = datetime(2025, 12, 31, tzinfo=timezone.utc)
+        exp = datetime(2025, 12, 31, tzinfo=UTC)
         edge = ConsentEdge(
             source_id="a",
             target_id="b",

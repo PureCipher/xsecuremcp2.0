@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastmcp.server.security.policy.provider import (
     PolicyDecision,
@@ -85,7 +85,7 @@ class RateLimitPolicy:
 
     def get_remaining(self, actor_id: str) -> int:
         """Get remaining requests for an actor in the current window."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         self._prune(actor_id, now)
         return max(0, self.max_requests - len(self._request_log[actor_id]))
 

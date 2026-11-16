@@ -14,7 +14,7 @@ from __future__ import annotations
 import time
 from collections import deque
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from fastmcp.server.security.reflexive.models import DriftEvent, DriftSeverity
@@ -72,8 +72,8 @@ class ActorProfile:
     drift_events: list[DriftEvent] = field(default_factory=list)
     raw_threat_score: float = 0.0
     last_score_update: float = field(default_factory=time.monotonic)
-    first_seen: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    last_seen: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    first_seen: datetime = field(default_factory=lambda: datetime.now(UTC))
+    last_seen: datetime = field(default_factory=lambda: datetime.now(UTC))
     metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -164,7 +164,7 @@ class ActorProfileManager:
         Returns True if this is a *new* tool for the actor (scope expansion).
         """
         profile = self.get_or_create(actor_id)
-        profile.last_seen = datetime.now(timezone.utc)
+        profile.last_seen = datetime.now(UTC)
         is_new = tool_name not in profile.known_tools
         profile.known_tools.add(tool_name)
         profile.operation_history.append(("tool:" + tool_name, time.monotonic()))
@@ -176,7 +176,7 @@ class ActorProfileManager:
         Returns True if this is a *new* resource for the actor.
         """
         profile = self.get_or_create(actor_id)
-        profile.last_seen = datetime.now(timezone.utc)
+        profile.last_seen = datetime.now(UTC)
         is_new = resource_uri not in profile.known_resources
         profile.known_resources.add(resource_uri)
         profile.operation_history.append(("resource:" + resource_uri, time.monotonic()))
@@ -188,7 +188,7 @@ class ActorProfileManager:
         Returns True if this is a *new* prompt for the actor.
         """
         profile = self.get_or_create(actor_id)
-        profile.last_seen = datetime.now(timezone.utc)
+        profile.last_seen = datetime.now(UTC)
         is_new = prompt_name not in profile.known_prompts
         profile.known_prompts.add(prompt_name)
         profile.operation_history.append(("prompt:" + prompt_name, time.monotonic()))
@@ -197,7 +197,7 @@ class ActorProfileManager:
     def record_operation(self, actor_id: str, operation: str) -> None:
         """Record a generic operation for pattern tracking."""
         profile = self.get_or_create(actor_id)
-        profile.last_seen = datetime.now(timezone.utc)
+        profile.last_seen = datetime.now(UTC)
         profile.operation_history.append((operation, time.monotonic()))
 
     # ── Threat scoring ────────────────────────────────────────────────

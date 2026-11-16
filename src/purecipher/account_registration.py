@@ -1,7 +1,7 @@
 """Administrator-approved registration without issuing applicant sessions."""
 
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from urllib.parse import urlsplit
 
 from starlette.responses import JSONResponse
@@ -75,7 +75,7 @@ def mount(registry, prefix):
                 "review_experience": text(
                     body, "review_experience", 1000, role == "reviewer"
                 ),
-                "submitted_at": datetime.now(timezone.utc).isoformat(),
+                "submitted_at": datetime.now(UTC).isoformat(),
                 "history": [],
             }
             if registration["website"]:

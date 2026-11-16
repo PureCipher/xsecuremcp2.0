@@ -275,7 +275,7 @@ class SecurityEventBus:
                     asyncio.to_thread(sub.handler, event),
                     timeout=timeout_s,
                 )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self._timeout_count += 1
             self._error_count += 1
             logger.warning(

@@ -2,7 +2,7 @@
 
 **Security and governance for MCP servers and tool registries.**
 
-xSecureMCP is PureCipher’s platform for building MCP servers, applying execution policies, recording evidence, and publishing tools through a governed registry. It builds on [FastMCP](https://github.com/PrefectHQ/fastmcp) and keeps its Python APIs for tools, resources, prompts, clients, and transports.
+xSecureMCP is PureCipher’s platform for building MCP servers, applying execution policies, recording evidence, and publishing tools through a governed registry. It currently builds on [FastMCP 4.2.0](https://github.com/PrefectHQ/fastmcp/releases/tag/v4.2.0) and keeps its Python APIs for tools, resources, prompts, clients, and transports.
 
 [Python downloads](https://github.com/PureCipher/xsecuremcp2.0/releases/tag/build-latest) · [Hugging Face backend](https://huggingface.co/spaces/purecipher/xsecuremcp) · [Registry console](https://github.com/PureCipher/xregistry) · [Security documentation](docs/servers/security/overview.mdx)
 
@@ -48,7 +48,7 @@ For example, consider an assistant working with customer records: MCP carries th
 
 ## Install the latest tested build
 
-Python **3.10 or later** is required. The build workflow validates packages on Python **3.12**.
+Python **3.11 or later** is required. The build workflow validates packages on Python **3.12**.
 
 Create and activate a virtual environment, then install the matching fork packages from the rolling GitHub Release:
 

@@ -35,7 +35,7 @@ import logging
 import threading
 from collections import deque
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from fastmcp.server.security.policy.provider import (
@@ -95,7 +95,7 @@ class AuditEntry:
     constraints: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
     tags: frozenset[str] = field(default_factory=frozenset)
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
     elapsed_ms: float = 0.0
     environment: str = "production"
     risk: str = "low"
@@ -219,7 +219,7 @@ class PolicyAuditLog:
             constraints=list(result.constraints),
             metadata=dict(context.metadata),
             tags=context.tags,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             elapsed_ms=elapsed_ms,
             environment=environment,
             risk=risk,

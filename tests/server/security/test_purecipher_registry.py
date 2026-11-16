@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC
 from typing import Any, cast
 
 import pytest
@@ -1998,7 +1999,7 @@ class TestServerContractGovernance:
     ):
         """Seed a single ACTIVE contract with one term whose
         constraint payload references one or more tool names."""
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         from fastmcp.server.security.contracts.schema import (
             Contract,
@@ -2021,7 +2022,7 @@ class TestServerContractGovernance:
                 )
             ],
             status=ContractStatus.ACTIVE,
-            expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
         )
         broker._active_contracts[cid] = contract
         return contract
@@ -2201,7 +2202,7 @@ class TestServerContractGovernance:
     def test_expired_contracts_are_excluded(self):
         """Only currently-valid contracts should count — expired
         contracts shouldn't ghost-bind to tools."""
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         from fastmcp.server.security.contracts.schema import (
             Contract,
@@ -2225,7 +2226,7 @@ class TestServerContractGovernance:
                 )
             ],
             status=ContractStatus.ACTIVE,
-            expires_at=datetime.now(timezone.utc) - timedelta(hours=1),
+            expires_at=datetime.now(UTC) - timedelta(hours=1),
         )
         broker._active_contracts[expired.contract_id] = expired
 
@@ -2378,7 +2379,7 @@ class TestServerConsentGovernance:
         """Seed an ACTIVE consent edge directly into the graph's
         internal state — the public ``grant`` API requires nodes
         and emits audit/event traffic we don't need here."""
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         from fastmcp.server.security.consent.models import (
             ConsentEdge,
@@ -2390,7 +2391,7 @@ class TestServerConsentGovernance:
             target_id=target_id,
             scopes=scopes or {"execute"},
             status=ConsentStatus.ACTIVE,
-            expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
             metadata=metadata or {},
         )
         graph._edges[edge.edge_id] = edge
@@ -2558,7 +2559,7 @@ class TestServerConsentGovernance:
         assert row["grant_sources"] == ["tool:weather-lookup"]
 
     def test_expired_consent_edges_excluded(self):
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         from fastmcp.server.security.consent.models import (
             ConsentEdge,
@@ -2574,7 +2575,7 @@ class TestServerConsentGovernance:
             target_id="ghost-agent",
             scopes={"call:tool-a"},
             status=ConsentStatus.ACTIVE,
-            expires_at=datetime.now(timezone.utc) - timedelta(hours=1),
+            expires_at=datetime.now(UTC) - timedelta(hours=1),
         )
         graph._edges[expired.edge_id] = expired
         graph._outgoing.setdefault("ghost-owner", []).append(expired)
@@ -3382,7 +3383,7 @@ class TestServerObservability:
         drift_type_value: str = "frequency_spike",
     ):
         """Seed a drift event directly into the analyzer's history."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         from fastmcp.server.security.reflexive.models import (
             DriftEvent,
@@ -3398,7 +3399,7 @@ class TestServerObservability:
             observed_value=50.0,
             baseline_value=5.0,
             deviation=9.0,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             metadata=metadata or {},
         )
         analyzer._drift_history.append(event)
@@ -5099,9 +5100,9 @@ class TestRegistryClientActivity:
         assert out["top_resources"] == []
 
     def test_recent_ledger_record_yields_live(self):
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         out = self._summarize(
             ledger_rows=[self._row(now)],
             tokens=[],
@@ -5112,11 +5113,11 @@ class TestRegistryClientActivity:
         assert out["calls_last_24h"] == 1
 
     def test_receipts_and_audit_events_do_not_inflate_tool_usage(self):
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         from fastmcp.server.security.provenance.records import ProvenanceAction
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         rows = [
             self._row(now, action=action)
             for action in (
@@ -5141,9 +5142,9 @@ class TestRegistryClientActivity:
         2 days old; status should step through live → recent → idle
         → dormant.
         """
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         # Thresholds (mirror _summarize_client_activity):
         #   live ≤ 60s; recent ≤ 15min; idle ≤ 24h; dormant > 24h.
         cases = [
@@ -5164,19 +5165,19 @@ class TestRegistryClientActivity:
         active because its token authenticated. We fall back to
         the token's ``last_used_at`` to capture that signal.
         """
-        from datetime import datetime, timezone
+        from datetime import datetime
         from types import SimpleNamespace
 
-        now_ts = datetime.now(timezone.utc).timestamp()
+        now_ts = datetime.now(UTC).timestamp()
         token = SimpleNamespace(last_used_at=now_ts - 5)
         out = self._summarize(ledger_rows=[], tokens=[token])
         assert out["status_label"] == "live"
         assert out["last_seen_source"] == "token"
 
     def test_top_resources_orders_by_frequency(self):
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         rows = (
             [self._row(now, resource_id="alpha") for _ in range(3)]
             + [self._row(now, resource_id="beta") for _ in range(5)]
@@ -5190,9 +5191,9 @@ class TestRegistryClientActivity:
 
     def test_hourly_buckets_match_offset_semantics(self):
         """Bucket at offset 0 = current hour; offset 5 = 5h ago."""
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         rows = [
             self._row(now),  # offset 0
             self._row(now - timedelta(hours=5, minutes=10)),  # offset 5

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -262,7 +262,7 @@ class TestQuery:
 
     def test_query_since(self):
         log = PolicyAuditLog()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         log.record(_ctx(resource_id="old"), _result())
         entries = log.query(since=now - timedelta(seconds=1))
         assert len(entries) == 1

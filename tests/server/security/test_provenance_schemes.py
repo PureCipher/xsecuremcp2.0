@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC
+
 from fastmcp.server.security.provenance.records import ProvenanceAction
 from fastmcp.server.security.provenance.schemes import (
     BlockchainAnchoredLedger,
@@ -77,9 +79,9 @@ class TestChainAnchor:
         assert len(h) == 64
 
     def test_deterministic_hash(self) -> None:
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        fixed_ts = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        fixed_ts = datetime(2026, 1, 1, tzinfo=UTC)
         a1 = ChainAnchor(
             anchor_id="a1",
             merkle_root="root",

@@ -9,7 +9,7 @@ from __future__ import annotations
 import enum
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 class ComplianceStatus(enum.Enum):
@@ -83,7 +83,7 @@ class ComplianceFramework:
     version: str = "1.0"
     description: str = ""
     requirements: list[ComplianceRequirement] = field(default_factory=list)
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     metadata: dict = field(default_factory=dict)
 
     def __post_init__(self):

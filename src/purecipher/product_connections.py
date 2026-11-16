@@ -7,7 +7,7 @@ import json
 import math
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from urllib.parse import urlsplit
 
 from cryptography.fernet import Fernet
@@ -282,7 +282,7 @@ def save(registry, item, body, values):
             "encrypted": cipher(registry)
             .encrypt(json.dumps(payload).encode())
             .decode(),
-            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(UTC).isoformat(),
         },
         expected=item.get("revision"),
     )

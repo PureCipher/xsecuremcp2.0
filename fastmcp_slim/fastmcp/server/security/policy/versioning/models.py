@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 
@@ -30,7 +30,7 @@ class PolicyVersion:
     policy_set_id: str = ""
     version_number: int = 0
     policy_data: dict[str, Any] = field(default_factory=dict)
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     author: str = ""
     description: str = ""
     tags: frozenset[str] = field(default_factory=frozenset)

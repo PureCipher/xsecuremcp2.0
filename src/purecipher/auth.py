@@ -7,7 +7,7 @@ import json
 import os
 import secrets
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from enum import Enum
 from typing import Any
 
@@ -195,7 +195,7 @@ class RegistryAuthSettings:
     def issue_token(self, user: RegistryUser, *, session_id: str | None = None) -> str:
         """Issue a signed JWT for a user."""
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         expires_at = now + timedelta(seconds=self.token_ttl_seconds)
         resolved_session_id = session_id or secrets.token_urlsafe(18)
         payload = {
@@ -237,7 +237,7 @@ class RegistryAuthSettings:
 
         exp = payload.get("exp")
         expires_at = (
-            datetime.fromtimestamp(exp, tz=timezone.utc).isoformat()
+            datetime.fromtimestamp(exp, tz=UTC).isoformat()
             if isinstance(exp, int | float)
             else ""
         )

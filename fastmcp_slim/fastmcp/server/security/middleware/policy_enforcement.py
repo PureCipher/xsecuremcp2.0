@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, cast
 
 import mcp.types as mt
@@ -133,7 +133,7 @@ class PolicyEnforcementMiddleware(Middleware):
                 logger.warning("FERPA evidence resolution failed; denying request")
                 return _deny_result("FERPA evidence is unavailable")
             context = replace(
-                context, ferpa_evidence=evidence, timestamp=datetime.now(timezone.utc)
+                context, ferpa_evidence=evidence, timestamp=datetime.now(UTC)
             )
         if self.zero_trust_evidence_resolver is not None:
             try:
@@ -144,7 +144,7 @@ class PolicyEnforcementMiddleware(Middleware):
             context = replace(
                 context,
                 zero_trust_evidence=zero_evidence,
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
             )
         if self.pci_evidence_resolver is not None:
             try:
@@ -153,7 +153,7 @@ class PolicyEnforcementMiddleware(Middleware):
                 logger.warning("PCI evidence resolution failed; denying request")
                 return _deny_result("PCI evidence is unavailable")
             context = replace(
-                context, pci_evidence=pci_evidence, timestamp=datetime.now(timezone.utc)
+                context, pci_evidence=pci_evidence, timestamp=datetime.now(UTC)
             )
         if self.ccpa_evidence_resolver is not None:
             try:
@@ -164,7 +164,7 @@ class PolicyEnforcementMiddleware(Middleware):
             context = replace(
                 context,
                 ccpa_evidence=ccpa_evidence,
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
             )
         if self.soc2_evidence_resolver is not None:
             try:
@@ -175,7 +175,7 @@ class PolicyEnforcementMiddleware(Middleware):
             context = replace(
                 context,
                 soc2_evidence=soc2_evidence,
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
             )
         if self.gdpr_evidence_resolver is not None:
             try:
@@ -186,7 +186,7 @@ class PolicyEnforcementMiddleware(Middleware):
             context = replace(
                 context,
                 gdpr_evidence=gdpr_evidence,
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
             )
         if self.hipaa_evidence_resolver is not None:
             try:
@@ -197,7 +197,7 @@ class PolicyEnforcementMiddleware(Middleware):
             context = replace(
                 context,
                 hipaa_evidence=hipaa_evidence,
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
             )
         if self.published_tool_evidence_resolver is not None:
             try:
@@ -212,7 +212,7 @@ class PolicyEnforcementMiddleware(Middleware):
             context = replace(
                 context,
                 published_tool_evidence=published_evidence,
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
             )
         if self.change_evidence_resolver is not None:
             try:
@@ -223,7 +223,7 @@ class PolicyEnforcementMiddleware(Middleware):
             context = replace(
                 context,
                 change_evidence=change_evidence,
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
             )
         return await self.policy_engine.evaluate(context)
 

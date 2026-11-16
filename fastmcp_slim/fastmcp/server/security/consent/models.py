@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
@@ -125,7 +125,7 @@ class ConsentEdge:
     scopes: set[str] = field(default_factory=set)
     status: ConsentStatus = ConsentStatus.ACTIVE
     conditions: list[ConsentCondition] = field(default_factory=list)
-    granted_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    granted_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     expires_at: datetime | None = None
     granted_by: str = ""
     delegatable: bool = False
@@ -139,7 +139,7 @@ class ConsentEdge:
         if self.status != ConsentStatus.ACTIVE:
             return False
         if self.expires_at is not None:
-            check_time = now or datetime.now(timezone.utc)
+            check_time = now or datetime.now(UTC)
             if check_time >= self.expires_at:
                 return False
         return True
@@ -190,7 +190,7 @@ class ConsentDecision:
     granted: bool = False
     path: list[ConsentEdge] = field(default_factory=list)
     reason: str = ""
-    evaluated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    evaluated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 # ---------------------------------------------------------------------------
@@ -366,4 +366,4 @@ class FederatedConsentDecision:
     peer_decisions: dict[str, ConsentDecision] = field(default_factory=dict)
     access_rights: AccessRights | None = None
     reason: str = ""
-    evaluated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    evaluated_at: datetime = field(default_factory=lambda: datetime.now(UTC))

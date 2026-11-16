@@ -2,7 +2,7 @@
 
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from starlette.responses import JSONResponse
 
@@ -128,7 +128,7 @@ def mount_publisher_drafts(registry, prefix):
                 "id": key,
                 "owner": session.username,
                 "kind": "publisher-draft",
-                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(UTC).isoformat(),
                 "encrypted": cipher(registry)
                 .encrypt(json.dumps(payload).encode())
                 .decode(),

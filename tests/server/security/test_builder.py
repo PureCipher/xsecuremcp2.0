@@ -1,7 +1,7 @@
 """Tests for the fluent PolicyBuilder API."""
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -187,7 +187,7 @@ class TestPolicyBuilderComposite:
         # Create policy restricting to business hours
         policy = PolicyBuilder().restrict_hours(start_hour=9, end_hour=17).build()
         # 12:00 UTC on a Monday
-        ts = datetime(2026, 3, 9, 12, 0, tzinfo=timezone.utc)
+        ts = datetime(2026, 3, 9, 12, 0, tzinfo=UTC)
         ctx = PolicyEvaluationContext(
             actor_id="agent-1",
             action="call_tool",

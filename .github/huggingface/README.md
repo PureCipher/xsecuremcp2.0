@@ -73,7 +73,7 @@ In a Python virtual environment, install the four matching fork distributions fr
 python -m pip install --upgrade -r https://github.com/PureCipher/xsecuremcp2.0/releases/download/build-latest/requirements.txt
 ```
 
-The distributions retain the names `fastmcp`, `fastmcp-slim`, `fastmcp-remote`, and `fastmcp-tasks` for compatibility. They include the `securemcp` and `purecipher` modules. Python 3.10 or later is required; builds are validated on Python 3.12.
+The distributions retain the names `fastmcp`, `fastmcp-slim`, `fastmcp-remote`, and `fastmcp-tasks` for compatibility. They include the `securemcp` and `purecipher` modules. Python 3.11 or later is required; builds are validated on Python 3.12.
 
 See the [GitHub quickstart](https://github.com/PureCipher/xsecuremcp2.0#build-an-mcp-server) to build a server, or the [publisher guide](https://github.com/PureCipher/xsecuremcp2.0/blob/main/docs/servers/security/purecipher-publisher.mdx) to package and submit a project. The [GitHub Release](https://github.com/PureCipher/xsecuremcp2.0/releases/tag/build-latest) also provides a ZIP bundle, checksums, and source distributions.
 

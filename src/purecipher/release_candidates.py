@@ -6,7 +6,7 @@ import json
 import re
 import threading
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from starlette.responses import JSONResponse
 
@@ -66,7 +66,7 @@ def save(mp, before, after):
                 "UPDATE tool_listings SET data=%s, updated_at=%s WHERE namespace=%s AND item_id=%s AND data=%s",
                 (
                     Jsonb(after),
-                    datetime.now(timezone.utc).timestamp(),
+                    datetime.now(UTC).timestamp(),
                     mp._marketplace_id,
                     before["listing_id"],
                     Jsonb(before),
@@ -167,7 +167,7 @@ def stage(
             "base_version": before["version"],
             "base_digest": fingerprint(before),
             "base_snapshot": baseline,
-            "submitted_at": datetime.now(timezone.utc).isoformat(),
+            "submitted_at": datetime.now(UTC).isoformat(),
             "submitted_by": manifest.author,
             "notes": changelog.strip(),
             "snapshot": snapshot,
@@ -220,7 +220,7 @@ def decide(registry, listing_id, candidate_id, action, actor, reason):
                         "attestation_id", ""
                     ),
                     "changelog": record["notes"],
-                    "published_at": datetime.now(timezone.utc).isoformat(),
+                    "published_at": datetime.now(UTC).isoformat(),
                     "yanked": False,
                     "yank_reason": "",
                 },
@@ -236,10 +236,10 @@ def decide(registry, listing_id, candidate_id, action, actor, reason):
                 "action": action,
                 "actor": actor,
                 "reason": reason,
-                "at": datetime.now(timezone.utc).isoformat(),
+                "at": datetime.now(UTC).isoformat(),
             }
         )
-        after["updated_at"] = datetime.now(timezone.utc).isoformat()
+        after["updated_at"] = datetime.now(UTC).isoformat()
         return save(mp, before, after)
 
 

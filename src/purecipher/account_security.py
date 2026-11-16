@@ -9,7 +9,7 @@ import secrets
 import threading
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from purecipher.auth import RegistryRole, RegistryUser
@@ -37,7 +37,7 @@ def _now() -> float:
 def _iso(value: float | None) -> str | None:
     if value is None:
         return None
-    return datetime.fromtimestamp(float(value), tz=timezone.utc).isoformat()
+    return datetime.fromtimestamp(float(value), tz=UTC).isoformat()
 
 
 def _hash_password(password: str, *, salt: str | None = None) -> str:

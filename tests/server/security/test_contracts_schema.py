@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastmcp.server.security.contracts.schema import (
     Contract,
@@ -54,14 +54,14 @@ class TestContract:
     def test_contract_not_valid_when_expired(self):
         contract = Contract(
             status=ContractStatus.ACTIVE,
-            expires_at=datetime.now(timezone.utc) - timedelta(hours=1),
+            expires_at=datetime.now(UTC) - timedelta(hours=1),
         )
         assert not contract.is_valid()
 
     def test_contract_valid_before_expiry(self):
         contract = Contract(
             status=ContractStatus.ACTIVE,
-            expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
         )
         assert contract.is_valid()
 

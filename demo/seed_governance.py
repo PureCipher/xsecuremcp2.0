@@ -11,7 +11,7 @@ import asyncio
 import json
 import os
 import urllib.request
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 # Override with REGISTRY_URL=http://localhost:8001 if your registry runs on the
 # CLI default port. Auth-disabled registries are handled in main() (token="").
@@ -62,7 +62,7 @@ def seed_consent_graph() -> None:
             scopes={"execute", "read"},
             granted_by="admin",
             metadata={"reason": "Demo access"},
-            expires_at=datetime.now(timezone.utc) + timedelta(days=30),
+            expires_at=datetime.now(UTC) + timedelta(days=30),
         )
         print(f"  Granted: {tool} → {CLIENT_SLUG}")
     print(f"  Graph: {graph.node_count} nodes, {graph.edge_count} edges")

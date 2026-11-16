@@ -7,7 +7,7 @@ All serialization uses JSON-safe dicts (no pickle).
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from fastmcp.server.security.consent.models import (
@@ -57,7 +57,7 @@ def _str_to_dt(s: str) -> datetime:
     """Parse ISO 8601 string to datetime (UTC)."""
     dt = datetime.fromisoformat(s)
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
     return dt
 
 
@@ -209,7 +209,7 @@ def baseline_from_dict(data: dict[str, Any]) -> BehavioralBaseline:
         else float("-inf"),
         last_updated=_str_to_dt(data["last_updated"])
         if data.get("last_updated")
-        else datetime.now(timezone.utc),
+        else datetime.now(UTC),
     )
 
 

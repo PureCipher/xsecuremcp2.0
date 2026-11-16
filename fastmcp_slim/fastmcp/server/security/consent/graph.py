@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from fastmcp.server.security.consent.models import (
@@ -285,7 +285,7 @@ class ConsentGraph:
             "source_id": source_id,
             "target_id": target_id,
             "scopes": list(scopes),
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
         self._audit_log.append(audit_entry)
         if self._backend is not None:
@@ -389,7 +389,7 @@ class ConsentGraph:
             "parent_edge_id": parent_edge_id,
             "new_target_id": new_target_id,
             "scopes": list(effective_scopes),
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
         self._audit_log.append(audit_entry)
         if self._backend is not None:
@@ -444,7 +444,7 @@ class ConsentGraph:
         audit_entry = {
             "action": "revoke",
             "edge_id": edge_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
         self._audit_log.append(audit_entry)
         if self._backend is not None:
@@ -500,7 +500,7 @@ class ConsentGraph:
         Returns:
             ConsentDecision with granted status and path.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # 1. Check direct edges from source to target
         direct = self._check_direct(

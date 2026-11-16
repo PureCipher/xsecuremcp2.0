@@ -2,7 +2,7 @@
 
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from urllib.parse import urlsplit
 
 from psycopg.errors import UniqueViolation
@@ -132,7 +132,7 @@ def mount_publisher_profile(registry, prefix):
             "id": key,
             "owner": session.username,
             "kind": "publisher-profile",
-            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(UTC).isoformat(),
         }
         try:
             saved = registry._workspace.save(record, expected=revision or None)

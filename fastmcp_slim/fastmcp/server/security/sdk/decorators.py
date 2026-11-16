@@ -19,11 +19,12 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import inspect
 import logging
 import uuid
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from fastmcp.server.security.certification.manifest import (
@@ -121,7 +122,7 @@ class SecurityDecorator:
 
     decorator_id: str = ""
     registered_tools: dict[str, SecurityDecoratorConfig] = field(default_factory=dict)
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     # Optional enforcement wiring. Typed loosely to avoid a circular import
     # between client.py and decorators.py.
     client: Any = None  # SecureMCPClient | None
@@ -255,7 +256,7 @@ class SecurityDecorator:
     ) -> Callable[..., Any]:
         cfg = self.register(tool_name, config=config, **config_kwargs)
 
-        if asyncio.iscoroutinefunction(fn):
+        if inspect.iscoroutinefunction(fn):
 
             @functools.wraps(fn)
             async def async_wrapper(*args: Any, **kwargs: Any) -> Any:

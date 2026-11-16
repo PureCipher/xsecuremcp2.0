@@ -11,7 +11,7 @@ import json
 import logging
 import secrets
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
@@ -198,7 +198,7 @@ class ExchangeLog:
             entry_id=f"exlog-{self._entry_counter:06d}",
             session_id=session_id,
             event_type=event_type,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             actor_id=actor_id,
             data=data,
             data_hash=data_hash,

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import copy
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from fastmcp.server.security.policy.serialization import describe_policy_config
@@ -25,7 +25,7 @@ _DEFAULT_STATE: dict[str, Any] = {
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _copy_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:

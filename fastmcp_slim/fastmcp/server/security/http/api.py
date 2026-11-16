@@ -42,7 +42,7 @@ import inspect
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
 from starlette.requests import Request
@@ -418,7 +418,7 @@ class SecurityAPI:
         return {
             "total_tools": self.registry.record_count,
             "tools": tools,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
     def get_trust_score(self, tool_name: str) -> dict[str, Any]:
@@ -458,7 +458,7 @@ class SecurityAPI:
         return {
             "total_entries": len(entries),
             "entries": [e.to_dict() for e in entries],
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
     def is_revoked(self, tool_name: str) -> dict[str, Any]:
@@ -499,7 +499,7 @@ class SecurityAPI:
             "total_records": self.provenance_ledger.record_count,
             "returned": len(records),
             "records": [r.to_dict() for r in records],
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
     def get_provenance_chain_status(self) -> dict[str, Any]:
@@ -516,7 +516,7 @@ class SecurityAPI:
             "root_hash": ledger.root_hash,
             "chain_digest": ledger.get_chain_digest(),
             "scheme": ledger.get_scheme_status(),
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
     def get_provenance_proof(self, record_id: str) -> dict[str, Any]:
@@ -598,7 +598,7 @@ class SecurityAPI:
             "has_audit_log": self.policy_audit_log is not None,
             "versioning": versioning,
             "governance": governance,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
     def get_policy_audit(
@@ -633,7 +633,7 @@ class SecurityAPI:
         return {
             "total_entries": len(entries),
             "entries": [e.to_dict() for e in entries],
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
     def get_policy_audit_statistics(self) -> dict[str, Any]:
@@ -735,7 +735,7 @@ class SecurityAPI:
         return {
             "count": len(bundles),
             "bundles": bundles,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
     def get_policy_packs(self) -> dict[str, Any]:
@@ -745,7 +745,7 @@ class SecurityAPI:
         return {
             "count": len(packs),
             "packs": packs,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
     def get_policy_environment_profiles(self) -> dict[str, Any]:
@@ -755,7 +755,7 @@ class SecurityAPI:
         return {
             "count": len(environments),
             "environments": environments,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
     def get_policy_promotions(self) -> dict[str, Any]:
@@ -765,7 +765,7 @@ class SecurityAPI:
         return {
             "count": len(promotions),
             "promotions": promotions,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
     def export_policy_snapshot(
@@ -788,7 +788,7 @@ class SecurityAPI:
                         "suggested_filename": (
                             f"securemcp-policy-v{version.version_number}.json"
                         ),
-                        "generated_at": datetime.now(timezone.utc).isoformat(),
+                        "generated_at": datetime.now(UTC).isoformat(),
                     }
 
             return {
@@ -827,7 +827,7 @@ class SecurityAPI:
                 if current_version is None
                 else f"securemcp-policy-live-v{current_version.version_number}.json"
             ),
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
     async def stage_policy_bundle(
@@ -1131,7 +1131,7 @@ class SecurityAPI:
             "version_count": len(versions),
             "current_version": current.version_number if current else None,
             "versions": [policy_version_to_dict(v) for v in versions],
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
     async def rollback_policy_version(
@@ -1553,7 +1553,7 @@ class SecurityAPI:
                 "recent_promotions": self._policy_workbench().list_promotions(limit=6),
             },
             "risks": risk_items,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
     def preview_policy_migration(
@@ -1653,7 +1653,7 @@ class SecurityAPI:
                     "migration_target": target["label"],
                 },
             },
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
     # ── Validation ─────────────────────────────────────────────
@@ -1878,7 +1878,7 @@ class SecurityAPI:
         return {
             "total_alerts": len(alerts),
             "alerts": alerts,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
     # ── Governance ────────────────────────────────────────────
@@ -1911,7 +1911,7 @@ class SecurityAPI:
                 and proposal.get("status") not in terminal_statuses
             ),
             "proposals": serialized,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
     def get_governance_proposal(self, proposal_id: str) -> dict[str, Any]:
@@ -2860,7 +2860,7 @@ class SecurityAPI:
             "status": "healthy" if components else "unconfigured",
             "components": components,
             "component_count": len(components),
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
 

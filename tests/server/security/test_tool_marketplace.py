@@ -6,7 +6,7 @@ trust registry integration, and event bus integration.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -45,9 +45,9 @@ def _make_attestation(
         status=AttestationStatus.VALID if valid else AttestationStatus.EXPIRED,
     )
     if valid:
-        att.expires_at = datetime.now(timezone.utc) + timedelta(days=365)
+        att.expires_at = datetime.now(UTC) + timedelta(days=365)
     else:
-        att.expires_at = datetime.now(timezone.utc) - timedelta(days=1)
+        att.expires_at = datetime.now(UTC) - timedelta(days=1)
     return att
 
 

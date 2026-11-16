@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import time
 from collections import deque
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from purecipher.pgdb import connection, is_postgres_dsn
@@ -128,7 +128,7 @@ class RegistryAccountActivityStore:
                     "id": id_,
                     "created_at": datetime.fromtimestamp(
                         float(created_at),
-                        tz=timezone.utc,
+                        tz=UTC,
                     ).isoformat(),
                     "username": row_username,
                     "event_kind": event_kind,

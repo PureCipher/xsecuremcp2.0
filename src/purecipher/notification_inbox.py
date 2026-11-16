@@ -1,6 +1,6 @@
 """Per-account read state for the role-scoped notification feed."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from starlette.responses import JSONResponse
 
@@ -106,9 +106,7 @@ def mount(registry, prefix):
             items = [
                 dict(
                     id=r[0],
-                    created_at=datetime.fromtimestamp(
-                        r[1], tz=timezone.utc
-                    ).isoformat(),
+                    created_at=datetime.fromtimestamp(r[1], tz=UTC).isoformat(),
                     event_kind=r[2],
                     title=r[3],
                     body=r[4],

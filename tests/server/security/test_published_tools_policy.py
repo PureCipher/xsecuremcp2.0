@@ -1,5 +1,5 @@
 from dataclasses import replace
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -17,7 +17,7 @@ from fastmcp.server.security.policy.serialization import policy_provider_to_conf
 
 
 def fixture():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     c = PolicyEvaluationContext(
         actor_id="client",
         action="call_tool",

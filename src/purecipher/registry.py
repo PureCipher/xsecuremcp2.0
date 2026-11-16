@@ -6,7 +6,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Generic, TypedDict, cast
 from urllib.parse import quote, urlencode
 
@@ -1303,7 +1303,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 "publisher_url": (f"{prefix}/publishers/{record.owner_publisher_id}"),
                 "client_url": f"{prefix}/clients/{slug}",
             },
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
         if sanitize_for_public:
@@ -1353,9 +1353,9 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
           ``sanitize_for_public`` (the resource ids would leak who
           the client is talking to).
         """
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # ── last_seen_at composition (ledger ∨ token last_used_at)
         ledger_latest_dt: datetime | None = None
@@ -1373,9 +1373,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 token_latest = float(last_used)
 
         token_latest_dt: datetime | None = (
-            datetime.fromtimestamp(token_latest, tz=timezone.utc)
-            if token_latest > 0
-            else None
+            datetime.fromtimestamp(token_latest, tz=UTC) if token_latest > 0 else None
         )
 
         last_seen_at: datetime | None = None
@@ -1503,12 +1501,12 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         That refactor is left for a future iteration since current
         deployments don't see N that large.
         """
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         if clients is None:
             clients = self._client_store.list_clients(limit=10_000)
         ledger = self._ledger_or_none()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         seven_days_ago_ts = (now - timedelta(days=7)).timestamp()
 
         activity_counts = {
@@ -1723,7 +1721,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         request_metadata = dict(metadata or {})
         request_metadata.setdefault("simulated", True)
         request_tags = list(tags or [])
-        timestamp = datetime.now(timezone.utc)
+        timestamp = datetime.now(UTC)
 
         # ── Policy ───────────────────────────────────────────────
         ctx = self._required_context()
@@ -1827,7 +1825,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             "reflexive": reflexive_trace,
             "verdict": verdict,
             "blockers": blockers,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
     async def _simulate_policy(
@@ -2206,7 +2204,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             )
         return {
             "planes": planes,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
     def enable_plane(
@@ -2838,7 +2836,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             limit=limit,
         )
         return {
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "items": items,
         }
 
@@ -3140,7 +3138,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             "registered_tools": trust_registry.record_count,
             "verified_tools": len(published),
             "pending_review": len(pending),
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
     def get_policy_management(self) -> dict[str, Any]:
@@ -3167,7 +3165,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             "environments": environments,
             "promotions": promotions,
             "simulation_defaults": self.get_default_policy_simulation_scenarios(),
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
     def get_default_policy_simulation_scenarios(self) -> list[dict[str, Any]]:
@@ -3663,7 +3661,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             "count": len(listings),
             "tools": tools_payload,
             "minimum_certification": level.value,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
     def get_verified_tool(self, tool_name: str) -> dict[str, Any]:
@@ -3711,7 +3709,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
         # Single ledger pass → connected clients + a 7-day daily usage series.
         clients: set[str] = set()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         buckets = [0, 0, 0, 0, 0, 0, 0]  # index 6 = today
         total = 0
         last_at = None
@@ -3770,7 +3768,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         return {
             "count": len(profiles),
             "publishers": [profile.summary.to_dict() for profile in profiles],
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
     def get_publisher_profile(self, publisher_id: str) -> dict[str, Any]:
@@ -3896,7 +3894,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             "links": {
                 "policy_kernel_url": f"{self._registry_prefix}/policy",
             },
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
     def _summarize_registry_policy(self) -> dict[str, Any]:
@@ -4123,7 +4121,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 "reflexive_core_url": f"{self._registry_prefix}/reflexive",
                 "publisher_url": (f"{self._registry_prefix}/publishers/{publisher_id}"),
             },
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
         if sanitize_for_public:
@@ -4279,7 +4277,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             "links": {
                 "reflexive_core_url": f"{self._registry_prefix}/reflexive",
             },
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
     def _analyzer_or_none(self):
@@ -4620,7 +4618,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             "links": {
                 "moderation_queue_url": f"{self._registry_prefix}/review",
             },
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
     def _summarize_listing_overrides(
@@ -4815,7 +4813,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             "links": {
                 "provenance_ledger_url": f"{self._registry_prefix}/provenance",
             },
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
     def _ledger_or_none(self):
@@ -5045,7 +5043,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 # the registry root).
                 "consent_graph_url": f"{self._registry_prefix}/consent",
             },
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
     def _consent_graph_or_none(self):
@@ -5332,7 +5330,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 # if the operator wires it).
                 "contract_broker_url": f"{self._registry_prefix}/contracts",
             },
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
     def _broker_or_none(self):
@@ -5562,7 +5560,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             "tool_name": listing.tool_name,
             "display_name": listing.display_name,
             "version": listing.version,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "recipes": [recipe.to_dict() for recipe in recipes],
         }
 
@@ -5575,7 +5573,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         )
         counts = {section: len(items) for section, items in sections.items()}
         return {
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "require_moderation": self._marketplace().require_moderation,
             "counts": counts,
             "sections": {
@@ -5625,7 +5623,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 }
                 for listing in listings
             ],
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
     def moderate_listing(
@@ -6941,7 +6939,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                         username=username,
                         limit=limit,
                     ),
-                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                    "generated_at": datetime.now(UTC).isoformat(),
                 }
             )
 
@@ -7019,7 +7017,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     "username": username,
                     "current_session_id": session.session_id if session else "",
                     "items": self._account_security.list_sessions(username=username),
-                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                    "generated_at": datetime.now(UTC).isoformat(),
                 }
             )
 
@@ -7063,7 +7061,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 {
                     "username": username,
                     "items": self._account_security.list_api_tokens(username=username),
-                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                    "generated_at": datetime.now(UTC).isoformat(),
                 }
             )
 
@@ -7142,7 +7140,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     "users": users,
                     "roles": [role.value for role in RegistryRole],
                     "counts": _account_role_counts(users),
-                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                    "generated_at": datetime.now(UTC).isoformat(),
                 }
             )
 
@@ -7513,7 +7511,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 {
                     "source": {k: v for k, v in record.items() if k != "spec_json"},
                     "operations": ops,
-                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                    "generated_at": datetime.now(UTC).isoformat(),
                 }
             )
 
@@ -7598,7 +7596,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 {
                     "toolset": record,
                     "operation_count": len(selected),
-                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                    "generated_at": datetime.now(UTC).isoformat(),
                 }
             )
 
@@ -7777,7 +7775,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                             record["scheme_kind"], record["secret"]
                         ),
                     },
-                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                    "generated_at": datetime.now(UTC).isoformat(),
                 }
             )
 
@@ -7809,7 +7807,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             return JSONResponse(
                 {
                     "credentials": credentials,
-                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                    "generated_at": datetime.now(UTC).isoformat(),
                 }
             )
 
@@ -7855,7 +7853,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 {
                     "deleted": True,
                     "credential_id": credential_id,
-                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                    "generated_at": datetime.now(UTC).isoformat(),
                 }
             )
 
@@ -8045,7 +8043,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     "content_type": result.content_type,
                     "body": result.body,
                     "validation_warnings": result.validation_warnings,
-                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                    "generated_at": datetime.now(UTC).isoformat(),
                 }
             )
 
@@ -8170,7 +8168,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                         }
                         for L in listings
                     ],
-                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                    "generated_at": datetime.now(UTC).isoformat(),
                 }
             )
 
@@ -9414,7 +9412,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     "versions": [
                         v.to_dict() for v in reversed(versions)
                     ],  # newest first
-                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                    "generated_at": datetime.now(UTC).isoformat(),
                 }
             )
 
@@ -9464,7 +9462,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     raise ValueError("The saved server tool name must remain unchanged")
                 if not isinstance(runtime, dict):
                     raise ValueError("Runtime configuration must be an object")
-                setup = {**body, "saved_at": datetime.now(timezone.utc).isoformat()}
+                setup = {**body, "saved_at": datetime.now(UTC).isoformat()}
                 self._marketplace().save_publisher_setup(listing, setup)
             except (ValueError, TypeError) as exc:
                 return JSONResponse({"error": str(exc)}, status_code=400)

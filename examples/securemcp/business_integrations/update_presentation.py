@@ -2,7 +2,7 @@
 
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastmcp.server.security.gateway.tool_marketplace import (
@@ -59,7 +59,7 @@ def main():
     for listing, name, selected, metadata in changes:
         listing.display_name, listing.categories = name, selected
         listing.metadata = metadata
-        listing.updated_at = datetime.now(timezone.utc)
+        listing.updated_at = datetime.now(UTC)
         marketplace._persist_listing(listing)
     saved = ToolMarketplace(backend=backend)
     for service, assigned in categories.items():

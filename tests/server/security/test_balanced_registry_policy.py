@@ -1,5 +1,5 @@
 from dataclasses import replace
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -31,7 +31,7 @@ def fixture():
     }
     p = load_policy(config)
     assert isinstance(p, ZeroTrustPolicy)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     c = PolicyEvaluationContext(
         actor_id="client",
         action="call_tool",

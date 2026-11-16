@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 from purecipher.client_usage import estimated_tokens, summarize_token_usage
@@ -8,7 +8,7 @@ def row(action="tool_called", metadata=None, age=1, resource="time_current"):
     return SimpleNamespace(
         action=action,
         resource_id=resource,
-        timestamp=datetime.now(timezone.utc) - timedelta(hours=age),
+        timestamp=datetime.now(UTC) - timedelta(hours=age),
         metadata=metadata,
     )
 
@@ -21,7 +21,7 @@ def test_persisted_counts_are_aggregated_once_and_missing_usage_is_explicit():
         row(),
         row(metadata={"input_tokens": 2, "output_tokens": 0}),
     ]
-    result = summarize_token_usage(records, datetime.now(timezone.utc))
+    result = summarize_token_usage(records, datetime.now(UTC))
     assert result["input_tokens"] == 8
     assert result["output_tokens"] == 34
     assert result["total_tokens"] == 42
@@ -32,7 +32,7 @@ def test_persisted_counts_are_aggregated_once_and_missing_usage_is_explicit():
 
 
 def test_unknown_invalid_and_empty_are_distinct():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     assert summarize_token_usage([], now)["total_tokens"] == 0
     assert summarize_token_usage([row()], now)["total_tokens"] is None
     for value in [-1, True, "3", 1.5, None]:

@@ -15,7 +15,7 @@ import os
 import tempfile
 import time
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -27,7 +27,7 @@ SOURCE = "https://registry.modelcontextprotocol.io/v0.1/servers"
 
 
 def now():
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def snapshot_path():

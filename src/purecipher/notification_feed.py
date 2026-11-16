@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import time
 from collections import deque
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from purecipher.pgdb import connection, is_postgres_dsn
@@ -139,7 +139,7 @@ class RegistryNotificationFeed:
                 audiences_t, auth_enabled=auth_enabled, role=role
             ):
                 continue
-            ts = datetime.fromtimestamp(float(created_at), tz=timezone.utc).isoformat()
+            ts = datetime.fromtimestamp(float(created_at), tz=UTC).isoformat()
             out.append(
                 {
                     "id": id_,

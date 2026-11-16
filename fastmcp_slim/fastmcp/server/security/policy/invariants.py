@@ -11,7 +11,7 @@ import inspect
 import logging
 from collections.abc import Awaitable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, Protocol, cast, runtime_checkable
 
@@ -67,7 +67,7 @@ class InvariantVerificationResult:
     invariant: Invariant
     satisfied: bool
     counter_example: dict[str, Any] | None = None
-    verified_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    verified_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     verifier_id: str = "unknown"
 
 

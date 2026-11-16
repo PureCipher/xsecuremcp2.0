@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from fastmcp.server.security.dashboard.snapshot import (
@@ -56,7 +56,7 @@ _COMPONENT_ICONS: dict[str, str] = {
 
 def _relative_time(dt: datetime) -> str:
     """Format a datetime as a human-readable relative time string."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     delta = now - dt
     seconds = int(delta.total_seconds())
 
@@ -373,7 +373,7 @@ class DashboardDataBridge:
             "timeline_events": self.build_timeline_events(),
             "top_tools": top_tools,
             "health_banner": banner,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
     def export_json(self, indent: int = 2) -> str:

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from fastmcp.server.security.gateway.tool_marketplace import (
@@ -59,7 +59,7 @@ _CATEGORY_LABELS: dict[str, str] = {
 
 def _relative_time(dt: datetime) -> str:
     """Format a datetime as a relative time string."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     delta = now - dt
     seconds = int(delta.total_seconds())
     if seconds < 60:
@@ -301,7 +301,7 @@ class MarketplaceDataBridge:
             "listings": self.build_listings(),
             "categories": self.build_category_breakdown(),
             "moderation_queue": self.build_moderation_queue(),
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
     def export_json(self, indent: int = 2) -> str:

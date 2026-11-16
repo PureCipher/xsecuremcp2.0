@@ -7,7 +7,7 @@ consent propagation, and HTTP endpoints.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastmcp.server.security.consent.federation import FederatedConsentGraph
 from fastmcp.server.security.consent.graph import ConsentGraph
@@ -523,7 +523,7 @@ class TestAccessRightsComputation:
 
     def test_access_rights_with_expiry(self):
         g = _make_graph()
-        future = datetime.now(timezone.utc) + timedelta(hours=1)
+        future = datetime.now(UTC) + timedelta(hours=1)
         g.grant(
             "data-resource",
             "agent-1",
@@ -911,7 +911,7 @@ class TestFullLifecycle:
             "patient-data",
             "ml-agent",
             {"read", "execute"},
-            expires_at=datetime.now(timezone.utc) + timedelta(hours=2),
+            expires_at=datetime.now(UTC) + timedelta(hours=2),
         )
 
         # 4. Add a federation peer

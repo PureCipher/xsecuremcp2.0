@@ -11,7 +11,7 @@ import hashlib
 import json
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
@@ -66,7 +66,7 @@ class ProvenanceRecord:
     action: ProvenanceAction = ProvenanceAction.CUSTOM
     actor_id: str = ""
     resource_id: str = ""
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
     input_hash: str = ""
     output_hash: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)

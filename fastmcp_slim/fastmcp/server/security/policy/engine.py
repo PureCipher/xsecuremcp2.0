@@ -10,7 +10,7 @@ import asyncio
 import inspect
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
 from fastmcp.server.security.policy.provider import (
@@ -223,7 +223,7 @@ class PolicyEngine:
             The aggregate PolicyResult.
         """
         self._evaluation_count += 1
-        start_time = datetime.now(timezone.utc)
+        start_time = datetime.now(UTC)
 
         # Track the first REQUIRE_APPROVAL seen in this run — if no
         # provider denies, it becomes the aggregate outcome. Cleared
@@ -412,9 +412,7 @@ class PolicyEngine:
     ) -> None:
         """Record an evaluation to the audit log and monitor."""
         if self._audit_log is not None:
-            elapsed_ms = (
-                datetime.now(timezone.utc) - start_time
-            ).total_seconds() * 1000
+            elapsed_ms = (datetime.now(UTC) - start_time).total_seconds() * 1000
             try:
                 self._audit_log.record(context, result, elapsed_ms=elapsed_ms)
             except Exception:
@@ -493,7 +491,7 @@ class PolicyEngine:
                 old_version=old_version,
                 new_policy_id=new_id,
                 new_version=new_version,
-                swapped_at=datetime.now(timezone.utc),
+                swapped_at=datetime.now(UTC),
                 reason=reason,
             )
             self._swap_history.append(record)

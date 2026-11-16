@@ -91,6 +91,8 @@ async def test_uv_transport_module():
                 command="uv",
                 args=[
                     "run",
+                    "--python",
+                    sys.executable,
                     "--directory",
                     tmpdir,
                     "--with-editable",

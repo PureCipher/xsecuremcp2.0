@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from fastmcp.server.security.consent.graph import ConsentGraph
@@ -245,7 +245,7 @@ class FederatedConsentGraph:
         Returns:
             A ``FederatedConsentDecision`` capturing the full evaluation.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # 1. Determine applicable jurisdictions
         jurisdictions = self._applicable_jurisdictions_for_query(query)
@@ -441,7 +441,7 @@ class FederatedConsentGraph:
                 "action": "consent_propagated",
                 "edge_id": edge_id,
                 "target_peers": list(results.keys()),
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
         )
 
@@ -481,7 +481,7 @@ class FederatedConsentGraph:
         scopes = set(edge_data.get("scopes", []))
         metadata = dict(edge_data.get("metadata", {}))
         metadata["propagated_from"] = peer_id
-        metadata["propagated_at"] = datetime.now(timezone.utc).isoformat()
+        metadata["propagated_at"] = datetime.now(UTC).isoformat()
 
         # Ensure nodes exist
         for nid in [source_id, target_id]:
@@ -502,7 +502,7 @@ class FederatedConsentGraph:
                 "action": "consent_received",
                 "edge_id": edge.edge_id,
                 "peer_id": peer_id,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
         )
 

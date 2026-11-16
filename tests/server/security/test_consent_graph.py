@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastmcp.server.security.consent.graph import ConsentGraph
 from fastmcp.server.security.consent.models import (
@@ -57,7 +57,7 @@ class TestConsentGraphGrant:
 
     def test_grant_with_expiry(self):
         g = ConsentGraph()
-        future = datetime.now(timezone.utc) + timedelta(hours=1)
+        future = datetime.now(UTC) + timedelta(hours=1)
         edge = g.grant("owner", "agent", {"read"}, expires_at=future)
         assert edge.expires_at == future
 
@@ -132,7 +132,7 @@ class TestConsentGraphEvaluate:
 
     def test_expired_consent_denied(self):
         g = ConsentGraph()
-        past = datetime.now(timezone.utc) - timedelta(hours=1)
+        past = datetime.now(UTC) - timedelta(hours=1)
         g.grant("owner", "agent", {"read"}, expires_at=past)
         decision = g.evaluate(
             ConsentQuery(

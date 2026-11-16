@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import os
 import threading
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager, suppress
 from typing import Any, TypeGuard
 
@@ -86,7 +86,7 @@ def connection(
     dsn: str,
     *,
     row_factory: Any = tuple_row,
-) -> Iterator[psycopg.Connection]:
+) -> Generator[psycopg.Connection, None, None]:
     """Borrow a pooled connection with the requested row factory.
 
     Returned to the pool on exit. With autocommit on, each executed
@@ -103,7 +103,7 @@ def transaction(
     dsn: str,
     *,
     row_factory: Any = tuple_row,
-) -> Iterator[psycopg.Connection]:
+) -> Generator[psycopg.Connection, None, None]:
     """Borrow a pooled connection wrapped in an explicit transaction.
 
     Commits on clean exit, rolls back on exception. Use when several

@@ -10,7 +10,7 @@ from __future__ import annotations
 import enum
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from fastmcp.server.security.alerts.bus import SecurityEventBus
@@ -52,7 +52,7 @@ class ComponentHealth:
     level: HealthLevel = HealthLevel.UNKNOWN
     message: str = ""
     metrics: dict = field(default_factory=dict)
-    checked_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    checked_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def __post_init__(self):
         if not self.component_id:
@@ -81,7 +81,7 @@ class TimelineEntry:
     actor_id: str = ""
     resource_id: str = ""
     data: dict = field(default_factory=dict)
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def __post_init__(self):
         if not self.entry_id:
@@ -111,7 +111,7 @@ class DashboardSnapshot:
     component_health: list[ComponentHealth] = field(default_factory=list)
     recent_timeline: list[TimelineEntry] = field(default_factory=list)
     summary: dict = field(default_factory=dict)
-    generated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    generated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def __post_init__(self):
         if not self.snapshot_id:

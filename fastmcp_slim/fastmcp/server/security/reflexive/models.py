@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
@@ -73,7 +73,7 @@ class DriftEvent:
     observed_value: float = 0.0
     baseline_value: float = 0.0
     deviation: float = 0.0
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -102,7 +102,7 @@ class BehavioralBaseline:
     variance: float = 0.0
     min_value: float = float("inf")
     max_value: float = float("-inf")
-    last_updated: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    last_updated: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     @property
     def std_dev(self) -> float:
@@ -123,7 +123,7 @@ class BehavioralBaseline:
             self.min_value = value
         if value > self.max_value:
             self.max_value = value
-        self.last_updated = datetime.now(timezone.utc)
+        self.last_updated = datetime.now(UTC)
 
     def compute_deviation(self, value: float) -> float:
         """Compute how many standard deviations a value is from the mean.
@@ -262,5 +262,5 @@ class IntrospectionResult:
     should_halt: bool = False
     should_require_confirmation: bool = False
     constraints: list[str] = field(default_factory=list)
-    assessed_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    assessed_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     metadata: dict[str, Any] = field(default_factory=dict)

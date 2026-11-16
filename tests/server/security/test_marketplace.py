@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastmcp.server.security.gateway.marketplace import Marketplace
 from fastmcp.server.security.gateway.models import (
@@ -172,7 +172,7 @@ class TestMarketplaceSearch:
     def test_search_healthy_only(self):
         mp = Marketplace()
         mp.register(name="Healthy", endpoint="http://h")
-        old = datetime.now(timezone.utc) - timedelta(minutes=10)
+        old = datetime.now(UTC) - timedelta(minutes=10)
         reg = mp.register(name="Stale", endpoint="http://s")
         reg.last_heartbeat = old
 

@@ -1,7 +1,7 @@
 """Tests for built-in policy types (RBAC, ABAC, Temporal, ResourceScoped, RateLimit)."""
 
 import asyncio
-from datetime import datetime, time, timedelta, timezone
+from datetime import UTC, datetime, time, timedelta
 
 from fastmcp.server.security.policy.policies.abac import AttributeBasedPolicy
 from fastmcp.server.security.policy.policies.rate_limit import RateLimitPolicy
@@ -31,7 +31,7 @@ def _ctx(
         resource_id=resource_id,
         metadata=metadata or {},
         tags=tags or frozenset(),
-        timestamp=timestamp or datetime.now(timezone.utc),
+        timestamp=timestamp or datetime.now(UTC),
     )
 
 
@@ -160,7 +160,7 @@ class TestAttributeBasedPolicy:
 class TestTimeBasedPolicy:
     def test_within_window(self):
         # Create a timestamp at 12:00 on a Monday (weekday=0)
-        ts = datetime(2026, 3, 9, 12, 0, tzinfo=timezone.utc)  # Monday
+        ts = datetime(2026, 3, 9, 12, 0, tzinfo=UTC)  # Monday
         policy = TimeBasedPolicy(
             allowed_days=frozenset({0, 1, 2, 3, 4}),
             allowed_start_time=time(9, 0),
@@ -171,7 +171,7 @@ class TestTimeBasedPolicy:
         assert result.decision == PolicyDecision.ALLOW
 
     def test_outside_hours(self):
-        ts = datetime(2026, 3, 9, 20, 0, tzinfo=timezone.utc)  # Monday 8pm
+        ts = datetime(2026, 3, 9, 20, 0, tzinfo=UTC)  # Monday 8pm
         policy = TimeBasedPolicy(
             allowed_start_time=time(9, 0),
             allowed_end_time=time(17, 0),
@@ -181,7 +181,7 @@ class TestTimeBasedPolicy:
         assert result.decision == PolicyDecision.DENY
 
     def test_wrong_day(self):
-        ts = datetime(2026, 3, 8, 12, 0, tzinfo=timezone.utc)  # Sunday
+        ts = datetime(2026, 3, 8, 12, 0, tzinfo=UTC)  # Sunday
         policy = TimeBasedPolicy(
             allowed_days=frozenset({0, 1, 2, 3, 4}),  # Mon-Fri only
         )
@@ -191,7 +191,7 @@ class TestTimeBasedPolicy:
 
     def test_overnight_window(self):
         # Night shift: 22:00 to 06:00
-        ts = datetime(2026, 3, 9, 2, 0, tzinfo=timezone.utc)  # 2am
+        ts = datetime(2026, 3, 9, 2, 0, tzinfo=UTC)  # 2am
         policy = TimeBasedPolicy(
             allowed_start_time=time(22, 0),
             allowed_end_time=time(6, 0),
@@ -202,7 +202,7 @@ class TestTimeBasedPolicy:
 
     def test_utc_offset(self):
         # 10:00 UTC = 15:30 India time (UTC+5:30, but we use integer offset so UTC+5)
-        ts = datetime(2026, 3, 9, 10, 0, tzinfo=timezone.utc)
+        ts = datetime(2026, 3, 9, 10, 0, tzinfo=UTC)
         policy = TimeBasedPolicy(
             allowed_start_time=time(14, 0),
             allowed_end_time=time(16, 0),
@@ -287,7 +287,7 @@ class TestRateLimitPolicy:
 
     def test_window_expiry(self):
         policy = RateLimitPolicy(max_requests=2, window_seconds=60)
-        old_ts = datetime.now(timezone.utc) - timedelta(seconds=120)
+        old_ts = datetime.now(UTC) - timedelta(seconds=120)
 
         # Two old requests
         for _ in range(2):

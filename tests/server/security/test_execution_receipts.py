@@ -1,7 +1,7 @@
 """Execution receipt integrity, transport, persistence, and API regressions."""
 
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import mcp.types as mt
 import pytest
@@ -28,7 +28,7 @@ from fastmcp.tools.base import ToolResult
 
 
 def issue(ledger):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return issue_execution_receipt(
         ledger,
         actor_id="alice",

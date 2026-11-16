@@ -8,7 +8,7 @@ by capability, trust level, or tags.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from fastmcp.server.security.gateway.models import (
@@ -150,7 +150,7 @@ class Marketplace:
             "server_id": reg.server_id,
             "name": name,
             "endpoint": endpoint,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
         self._audit_log.append(audit_entry)
         if self._backend is not None:
@@ -199,7 +199,7 @@ class Marketplace:
         audit_entry = {
             "action": "unregister",
             "server_id": server_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
         self._audit_log.append(audit_entry)
         if self._backend is not None:
@@ -237,7 +237,7 @@ class Marketplace:
         reg = self._servers.get(server_id)
         if reg is None:
             return False
-        reg.last_heartbeat = datetime.now(timezone.utc)
+        reg.last_heartbeat = datetime.now(UTC)
         # Persist updated heartbeat
         if self._backend is not None:
             from fastmcp.server.security.storage.serialization import (
@@ -281,7 +281,7 @@ class Marketplace:
             "server_id": server_id,
             "old_level": old_level.value,
             "new_level": trust_level.value,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
         self._audit_log.append(audit_entry)
         if self._backend is not None:

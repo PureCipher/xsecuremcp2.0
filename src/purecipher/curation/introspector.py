@@ -333,7 +333,7 @@ class HTTPIntrospector:
                 self._do_introspect(url, upstream_ref, headers, transport_options),
                 timeout=self._timeout,
             )
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             raise IntrospectionError(
                 f"Upstream did not respond within {int(self._timeout)}s. "
                 "Check the URL and try again."
@@ -588,7 +588,7 @@ class StdioIntrospector:
                 self._do_introspect(client, upstream_ref),
                 timeout=self._timeout,
             )
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             # Docker pulls can be slow on cold cache; mention this in
             # the timeout copy so the curator knows it's a one-time
             # cost rather than a "this MCP server is broken" signal.

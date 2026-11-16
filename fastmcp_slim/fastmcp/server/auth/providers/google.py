@@ -1,7 +1,7 @@
 """Google OAuth provider for FastMCP.
 
 This module provides a complete Google OAuth integration that's ready to use
-with just a client ID and client secret. It handles all the complexity of
+with a client ID, client secret, and base URL. It handles all the complexity of
 Google's OAuth flow, token validation, and user management.
 
 Example:
@@ -12,7 +12,8 @@ Example:
     # Simple Google OAuth protection
     auth = GoogleProvider(
         client_id="your-google-client-id.apps.googleusercontent.com",
-        client_secret="your-google-client-secret"
+        client_secret="your-google-client-secret",
+        base_url="https://my-server.com",
     )
 
     mcp = FastMCP("My Protected Server", auth=auth)
@@ -31,6 +32,7 @@ from pydantic import AnyHttpUrl
 
 from fastmcp.server.auth import TokenVerifier
 from fastmcp.server.auth.auth import AccessToken
+from fastmcp.server.auth.identity_assertion import IdentityAssertion
 from fastmcp.server.auth.oauth_proxy import OAuthProxy
 from fastmcp.utilities.auth import parse_scopes
 from fastmcp.utilities.logging import get_logger
@@ -298,6 +300,7 @@ class GoogleProvider(OAuthProxy):
         extra_authorize_params: dict[str, str] | None = None,
         http_client: httpx2.AsyncClient | None = None,
         enable_cimd: bool = True,
+        identity_assertion: IdentityAssertion | None = None,
     ):
         """Initialize Google OAuth provider.
 
@@ -362,6 +365,8 @@ class GoogleProvider(OAuthProxy):
                 refresh gracefully (e.g. `mcp-remote`). See `OAuthProxy` for details.
             token_expiry_threshold_seconds: Number of seconds before actual expiry to
                 treat a token as expired, refreshing early to avoid races. Defaults to 0.
+            identity_assertion: Optional SEP-990 ID-JAG configuration for
+                identity-bound token exchange. Disabled by default.
         """
         # Parse scopes if provided as string
         # Google requires at least one scope - openid is the minimal OIDC scope
@@ -426,6 +431,7 @@ class GoogleProvider(OAuthProxy):
             extra_authorize_params=extra_authorize_params_final,
             valid_scopes=valid_scopes_final,
             enable_cimd=enable_cimd,
+            identity_assertion=identity_assertion,
         )
 
         logger.debug(

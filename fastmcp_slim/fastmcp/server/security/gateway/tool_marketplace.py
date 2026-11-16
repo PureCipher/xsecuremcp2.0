@@ -16,7 +16,7 @@ import uuid
 from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -191,7 +191,7 @@ class ModerationDecision:
     moderator_id: str = ""
     action: ModerationAction = ModerationAction.APPROVE
     reason: str = ""
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -225,7 +225,7 @@ class ToolVersion:
     manifest_digest: str = ""
     attestation_id: str = ""
     changelog: str = ""
-    published_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    published_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     yanked: bool = False
     yank_reason: str = ""
 
@@ -264,7 +264,7 @@ class ToolReview:
     title: str = ""
     body: str = ""
     verified_user: bool = False
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to dictionary."""
@@ -299,7 +299,7 @@ class InstallRecord:
     tool_listing_id: str = ""
     installer_id: str = ""
     version: str = ""
-    installed_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    installed_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     uninstalled_at: datetime | None = None
     active: bool = True
     signature_verified: bool = False
@@ -497,8 +497,8 @@ class ToolListing:
     moderation_log: list[ModerationDecision] = field(default_factory=list)
     install_count: int = 0
     active_installs: int = 0
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     homepage_url: str = ""
     source_url: str = ""
     license: str = ""
@@ -821,7 +821,7 @@ class ToolMarketplace:
     def _parse_datetime(value: Any, *, default: datetime | None = None) -> datetime:
         if isinstance(value, str) and value:
             return datetime.fromisoformat(value)
-        return default or datetime.now(timezone.utc)
+        return default or datetime.now(UTC)
 
     @classmethod
     def _deserialize_manifest(
@@ -918,7 +918,7 @@ class ToolMarketplace:
             changelog=data.get("changelog", ""),
             published_at=datetime.fromisoformat(data["published_at"])
             if data.get("published_at")
-            else datetime.now(timezone.utc),
+            else datetime.now(UTC),
             yanked=data.get("yanked", False),
             yank_reason=data.get("yank_reason", ""),
         )
@@ -933,7 +933,7 @@ class ToolMarketplace:
             reason=data.get("reason", ""),
             created_at=datetime.fromisoformat(data["created_at"])
             if data.get("created_at")
-            else datetime.now(timezone.utc),
+            else datetime.now(UTC),
             metadata=dict(data.get("metadata", {})),
         )
 
@@ -949,7 +949,7 @@ class ToolMarketplace:
             verified_user=data.get("verified_user", False),
             created_at=datetime.fromisoformat(data["created_at"])
             if data.get("created_at")
-            else datetime.now(timezone.utc),
+            else datetime.now(UTC),
         )
 
     @staticmethod
@@ -962,7 +962,7 @@ class ToolMarketplace:
             version=data.get("version", ""),
             installed_at=datetime.fromisoformat(data["installed_at"])
             if data.get("installed_at")
-            else datetime.now(timezone.utc),
+            else datetime.now(UTC),
             uninstalled_at=datetime.fromisoformat(uninstalled_at)
             if uninstalled_at
             else None,
@@ -1188,7 +1188,7 @@ class ToolMarketplace:
                 listing.curator_id = curator_id
             if hosting_mode != HostingMode.CATALOG:
                 listing.hosting_mode = hosting_mode
-            listing.updated_at = datetime.now(timezone.utc)
+            listing.updated_at = datetime.now(UTC)
 
             # Record version history if version changed
             if version and version != old_version:
@@ -1411,7 +1411,7 @@ class ToolMarketplace:
             verified_user=verified_user,
         )
         listing.reviews.append(review)
-        listing.updated_at = datetime.now(timezone.utc)
+        listing.updated_at = datetime.now(UTC)
 
         # Persist review
         if self._backend is not None:
@@ -1567,7 +1567,7 @@ class ToolMarketplace:
                 not installer_id or record.installer_id == installer_id
             ):
                 record.active = False
-                record.uninstalled_at = datetime.now(timezone.utc)
+                record.uninstalled_at = datetime.now(UTC)
                 listing = self._listings.get(listing_id)
                 if listing is not None:
                     listing.active_installs = max(0, listing.active_installs - 1)
@@ -1622,7 +1622,7 @@ class ToolMarketplace:
             if v.version == version:
                 v.yanked = True
                 v.yank_reason = reason
-                listing.updated_at = datetime.now(timezone.utc)
+                listing.updated_at = datetime.now(UTC)
                 self._persist_listing(listing)
                 logger.info(
                     "Version %s yanked for %s: %s",
@@ -1646,7 +1646,7 @@ class ToolMarketplace:
             if v.version == version:
                 v.yanked = False
                 v.yank_reason = ""
-                listing.updated_at = datetime.now(timezone.utc)
+                listing.updated_at = datetime.now(UTC)
                 self._persist_listing(listing)
                 return True
         return False
@@ -1717,7 +1717,7 @@ class ToolMarketplace:
             listing.status = new_status
 
         listing.moderation_log.append(decision)
-        listing.updated_at = datetime.now(timezone.utc)
+        listing.updated_at = datetime.now(UTC)
 
         self._persist_listing(listing)
         self._emit_event(f"TOOL_MODERATED_{action.value.upper()}", listing)
@@ -1748,7 +1748,7 @@ class ToolMarketplace:
         if listing is None:
             return False
         listing.status = status
-        listing.updated_at = datetime.now(timezone.utc)
+        listing.updated_at = datetime.now(UTC)
         self._persist_listing(listing)
         return True
 
@@ -1764,7 +1764,7 @@ class ToolMarketplace:
             return False
 
         listing.attestation = attestation
-        listing.updated_at = datetime.now(timezone.utc)
+        listing.updated_at = datetime.now(UTC)
 
         if self._trust_registry is not None:
             self._trust_registry.update_attestation(listing.tool_name, attestation)

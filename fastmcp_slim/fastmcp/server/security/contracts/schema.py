@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from enum import Enum
 from typing import Any
 
@@ -103,7 +103,7 @@ class Contract:
     agent_id: str = ""
     terms: list[ContractTerm] = field(default_factory=list)
     status: ContractStatus = ContractStatus.DRAFT
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     expires_at: datetime | None = None
     signatures: dict[str, str] = field(default_factory=dict)
     version: int = 1
@@ -115,7 +115,7 @@ class Contract:
         if self.status != ContractStatus.ACTIVE:
             return False
         if self.expires_at is not None:
-            return datetime.now(timezone.utc) < self.expires_at
+            return datetime.now(UTC) < self.expires_at
         return True
 
     def is_signed_by(self, party: str) -> bool:

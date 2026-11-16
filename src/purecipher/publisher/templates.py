@@ -190,7 +190,7 @@ def _build_pyproject(config: PublisherProjectConfig) -> str:
 name = {json.dumps(config.project.name)}
 version = {json.dumps(config.project.version)}
 description = {json.dumps(config.project.description)}
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = ["fastmcp>=0.0.0"]
 
 [build-system]

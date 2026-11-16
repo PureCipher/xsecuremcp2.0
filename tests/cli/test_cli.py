@@ -5,7 +5,8 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from fastmcp.cli.cli import _parse_env_var, app
+from fastmcp.cli.cli import app
+from fastmcp.cli.install.shared import parse_env_var
 
 
 class TestMainCLI:
@@ -21,18 +22,18 @@ class TestMainCLI:
 
     def test_parse_env_var_valid(self):
         """Test parsing valid environment variables."""
-        key, value = _parse_env_var("KEY=value")
+        key, value = parse_env_var("KEY=value")
         assert key == "KEY"
         assert value == "value"
 
-        key, value = _parse_env_var("COMPLEX_KEY=complex=value=with=equals")
+        key, value = parse_env_var("COMPLEX_KEY=complex=value=with=equals")
         assert key == "COMPLEX_KEY"
         assert value == "complex=value=with=equals"
 
     def test_parse_env_var_invalid(self):
         """Test parsing invalid environment variables exits."""
         with pytest.raises(SystemExit) as exc_info:
-            _parse_env_var("INVALID_FORMAT")
+            parse_env_var("INVALID_FORMAT")
         assert isinstance(exc_info.value, SystemExit)
         assert exc_info.value.code == 1
 
@@ -605,6 +606,23 @@ def test_tool(x: int) -> int:
         assert "FastMCP" in captured.out
         assert "MCP" in captured.out
         assert "Use --format [fastmcp|mcp] for complete JSON output" in captured.out
+
+    async def test_inspect_command_text_summary_keeps_brackets(self, tmp_path, capsys):
+        """Square brackets in server metadata are shown literally, not parsed as markup."""
+        server_file = tmp_path / "test_server.py"
+        server_file.write_text("""
+import fastmcp
+
+mcp = fastmcp.FastMCP("demo [dev]", instructions="Use [path] or see [/docs]")
+""")
+
+        command, bound, _ = app.parse_args(["inspect", str(server_file)])
+
+        await command(**bound.arguments)
+
+        captured = capsys.readouterr()
+        assert "demo [dev]" in captured.out
+        assert "Use [path] or see [/docs]" in captured.out
 
     async def test_inspect_command_with_real_server(self, tmp_path):
         """Test inspect command with a real server file."""

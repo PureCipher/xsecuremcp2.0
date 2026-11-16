@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -32,7 +32,7 @@ async def test_simulation_never_claims_runtime_readiness(kind):
         resource_id="specific-tool",
         metadata={"approved": True, "verified": True},
         tags=[],
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
     )
     assert result["evaluation_mode"] == "policy_engine_only"
     assert result["evidence_resolvers_invoked"] is False

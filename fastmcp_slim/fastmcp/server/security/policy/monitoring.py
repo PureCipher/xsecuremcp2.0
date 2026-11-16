@@ -28,7 +28,7 @@ import logging
 import threading
 from collections import deque
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
@@ -65,7 +65,7 @@ class MonitoringAlert:
     metric: str
     current_value: float
     threshold: float
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def to_dict(self) -> dict[str, Any]:
         """Export as JSON-serializable dict."""
@@ -149,7 +149,7 @@ class PolicyMonitor:
             decision=decision.lower(),
             resource_id=resource_id,
             actor_id=actor_id,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
         )
         with self._lock:
             self._records.append(record)
@@ -164,7 +164,7 @@ class PolicyMonitor:
             List of new alerts (empty if everything is normal).
         """
         alerts: list[MonitoringAlert] = []
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         cutoff = now - timedelta(seconds=self._window_seconds)
 
         with self._lock:
@@ -247,7 +247,7 @@ class PolicyMonitor:
         Returns:
             Dict with current rates, counts, and window stats.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         cutoff = now - timedelta(seconds=self._window_seconds)
 
         with self._lock:

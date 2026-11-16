@@ -1,7 +1,7 @@
 """FERPA v2 request boundaries and serialization."""
 
 from dataclasses import replace
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -19,7 +19,7 @@ from fastmcp.server.security.policy.workbench import get_policy_bundle
 
 
 def request(basis="consent"):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     context = PolicyEvaluationContext(
         actor_id="client-1",
         action="call_tool",

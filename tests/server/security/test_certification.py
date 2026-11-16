@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 from fastmcp.server.security.certification.attestation import (
@@ -199,7 +199,7 @@ class TestToolAttestation:
     def test_expired_attestation(self):
         a = ToolAttestation(
             status=AttestationStatus.VALID,
-            issued_at=datetime.now(timezone.utc) - timedelta(days=100),
+            issued_at=datetime.now(UTC) - timedelta(days=100),
         )
         a.set_default_expiry(timedelta(days=90))
         assert not a.is_valid()

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import mcp.types as mt
 
@@ -154,11 +154,11 @@ class ProvenanceRecordingMiddleware(Middleware):
             "arguments": redacted_arguments,
         }
 
-        started_at = datetime.now(timezone.utc)
+        started_at = datetime.now(UTC)
         try:
             result = await call_next(context)
         except Exception as exc:
-            completed_at = datetime.now(timezone.utc)
+            completed_at = datetime.now(UTC)
             input_tokens, _ = _estimate_call_tokens(arguments, None)
             self.ledger.record(
                 action=ProvenanceAction.ERROR,
@@ -186,7 +186,7 @@ class ProvenanceRecordingMiddleware(Middleware):
         if isinstance(result, InputRequiredToolResult):
             return result
 
-        completed_at = datetime.now(timezone.utc)
+        completed_at = datetime.now(UTC)
         output_data = {
             "content": [
                 block.model_dump(mode="json", by_alias=True) for block in result.content

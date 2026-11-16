@@ -188,7 +188,14 @@ class TestSecureMCPCLI:
             await command(**bound.arguments)
 
         assert exc_info.value.code == 0
-        assert calls[-1][-4:] == ["securemcp", "run", "server.py", "--no-banner"]
+        assert calls[-1][-6:] == [
+            "securemcp",
+            "run",
+            "server.py",
+            "--no-banner",
+            "--transport",
+            "stdio",
+        ]
 
     async def test_securemcp_dev_apps_launcher_uses_securemcp_module(self, monkeypatch):
         captured: dict[str, Any] = {}
