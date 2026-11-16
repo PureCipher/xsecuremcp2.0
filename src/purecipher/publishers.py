@@ -31,6 +31,7 @@ def list_public_publishers(
     limit: int = 10_000,
     registered_publishers: dict[str, str] | None = None,
     publisher_details: dict[str, dict[str, str]] | None = None,
+    publisher_identities: dict[str, dict[str, object]] | None = None,
 ) -> list[PublisherProfile]:
     """Include registered publishers; derive public metrics only from published listings."""
 
@@ -108,6 +109,34 @@ def list_public_publishers(
                 website=details["website"],
             ),
         )
+    for username, identity in (publisher_identities or {}).items():
+        # Only active registered publishers may receive a public proof badge.
+        if username not in (registered_publishers or {}):
+            continue
+        publisher_id = publisher_id_from_author(username)
+        profile = by_id[publisher_id]
+        domains = identity.get("verified_domains", [])
+        if not isinstance(domains, list) or not all(
+            isinstance(domain, str) for domain in domains
+        ):
+            continue
+        raw_key_ids = identity.get("signing_key_ids", [])
+        key_ids = (
+            [key_id for key_id in raw_key_ids if isinstance(key_id, str)]
+            if isinstance(raw_key_ids, list)
+            else []
+        )
+        by_id[publisher_id] = replace(
+            profile,
+            summary=replace(
+                profile.summary,
+                domain_verified=identity.get("domain_verified") is True,
+                verified_domains=list(domains),
+                identity_verified_at=str(identity.get("identity_verified_at") or ""),
+                signing_key_bound=identity.get("signing_key_bound") is True,
+                signing_key_ids=key_ids,
+            ),
+        )
     profiles = list(by_id.values())
 
     profiles.sort(
@@ -129,6 +158,7 @@ def get_public_publisher_profile(
     limit: int = 10_000,
     registered_publishers: dict[str, str] | None = None,
     publisher_details: dict[str, dict[str, str]] | None = None,
+    publisher_identities: dict[str, dict[str, object]] | None = None,
 ) -> PublisherProfile | None:
     """Look up a publisher profile from published listings."""
 
@@ -139,6 +169,7 @@ def get_public_publisher_profile(
         limit=limit,
         registered_publishers=registered_publishers,
         publisher_details=publisher_details,
+        publisher_identities=publisher_identities,
     ):
         if profile.summary.publisher_id == publisher_id:
             return profile

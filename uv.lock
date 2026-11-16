@@ -844,6 +844,8 @@ source = { editable = "." }
 dependencies = [
     { name = "alembic" },
     { name = "boto3" },
+    { name = "cryptography" },
+    { name = "dnspython" },
     { name = "fastmcp-slim", extra = ["client", "server"] },
     { name = "griffelib" },
     { name = "httpx" },
@@ -913,6 +915,8 @@ dev = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.17.2" },
     { name = "boto3", specifier = ">=1.40.0,<2" },
+    { name = "cryptography", specifier = ">=43.0.0" },
+    { name = "dnspython", specifier = ">=2.7.0" },
     { name = "fastmcp-slim", extras = ["anthropic"], marker = "extra == 'anthropic'", editable = "fastmcp_slim" },
     { name = "fastmcp-slim", extras = ["apps"], marker = "extra == 'apps'", editable = "fastmcp_slim" },
     { name = "fastmcp-slim", extras = ["azure"], marker = "extra == 'azure'", editable = "fastmcp_slim" },

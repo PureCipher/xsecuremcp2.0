@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import os
 
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from starlette.testclient import TestClient
 
 from purecipher import PureCipherRegistry, RegistryAuthSettings
@@ -17,6 +20,7 @@ from purecipher.publisher import (
     write_publisher_config,
 )
 from purecipher.publisher.cli import build_parser, init_project, main
+from purecipher.publisher.signing import bind_signing_key, load_private_signing_key
 
 TEST_SIGNING_SECRET = "purecipher-registry-signing-secret-for-tests"
 TEST_JWT_SECRET = "purecipher-registry-jwt-secret-for-tests"
@@ -42,6 +46,16 @@ TEST_USERS_JSON = json.dumps(
         },
     ]
 )
+
+
+class RecordingClient:
+    def __init__(self, client):
+        self.client = client
+        self.posts = []
+
+    def post(self, path, **kwargs):
+        self.posts.append((path, kwargs.get("json")))
+        return self.client.post(path, **kwargs)
 
 
 class TestPureCipherPublisherCLI:
@@ -155,6 +169,43 @@ class TestPureCipherPublisherCLI:
 
         with pytest.raises(SystemExit):
             parser.parse_args([])
+
+    def test_parser_supports_signing_key_commands(self):
+        parser = build_parser()
+
+        publish = parser.parse_args(
+            ["publish", "publisher-project", "--signing-key", "publisher-key.pem"]
+        )
+        bind = parser.parse_args(
+            [
+                "bind-key",
+                "--signing-key",
+                "publisher-key.pem",
+                "--label",
+                "Release key",
+            ]
+        )
+
+        assert publish.signing_key == "publisher-key.pem"
+        assert bind.command == "bind-key"
+        assert bind.signing_key == "publisher-key.pem"
+        assert bind.label == "Release key"
+
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX permission check")
+    def test_private_signing_key_must_be_owner_only(self, tmp_path):
+        private_key = Ed25519PrivateKey.generate()
+        key_path = tmp_path / "publisher-key.pem"
+        key_path.write_bytes(
+            private_key.private_bytes(
+                serialization.Encoding.PEM,
+                serialization.PrivateFormat.PKCS8,
+                serialization.NoEncryption(),
+            )
+        )
+        key_path.chmod(0o644)
+
+        with pytest.raises(ValueError, match="chmod 600"):
+            load_private_signing_key(key_path)
 
     def test_package_project_writes_publish_ready_artifacts(self, tmp_path):
         project_root = tmp_path / "weather-lookup"
@@ -323,6 +374,96 @@ class TestPureCipherPublisherCLI:
             listing = client.get("/registry/tools/weather-lookup")
             assert listing.status_code == 200
             assert listing.json()["tool_name"] == "weather-lookup"
+
+    def test_bind_and_publish_signs_one_canonical_manifest_without_uploading_key(
+        self, tmp_path
+    ):
+        project_root = tmp_path / "weather-lookup"
+        init_project(
+            project_name="weather-lookup",
+            template_name="stdio",
+            project_root=project_root,
+        )
+        self._make_ready_project(project_root)
+        private_key = Ed25519PrivateKey.generate()
+        key_path = tmp_path / "publisher-key.pem"
+        key_path.write_bytes(
+            private_key.private_bytes(
+                serialization.Encoding.PEM,
+                serialization.PrivateFormat.PKCS8,
+                serialization.NoEncryption(),
+            )
+        )
+        key_path.chmod(0o600)
+
+        app = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            auth_settings=self._auth_settings(),
+        )
+
+        async def verifier(domain, method, token, *, dns_lookup=None, https_fetch=None):
+            del domain, method, token, dns_lookup, https_fetch
+            return None
+
+        app._publisher_domain_verifier = verifier
+        auth_file = tmp_path / "publisher-auth.json"
+        with TestClient(app.http_app()) as client:
+            login_to_registry(
+                base_url="http://testserver",
+                username="publisher",
+                password="publisher123",
+                auth_file=auth_file,
+                client=client,
+            )
+            domain_challenge = client.post(
+                "/registry/workspace/publisher-identity/challenges",
+                json={"domain": "publisher.example", "method": "dns_txt"},
+            ).json()["challenge"]
+            verified = client.post(
+                "/registry/workspace/publisher-identity/challenges/"
+                f"{domain_challenge['challenge_id']}/verify"
+            )
+            assert verified.status_code == 200, verified.text
+
+            recording_client = RecordingClient(client)
+            binding = bind_signing_key(
+                key_path,
+                base_url="http://testserver",
+                auth_file=auth_file,
+                label="Release key",
+                client=recording_client,
+            )
+            result = publish_project(
+                project_root,
+                base_url="http://testserver",
+                auth_file=auth_file,
+                signing_key=key_path,
+                client=recording_client,
+            )
+
+        recorded = dict(recording_client.posts)
+        challenge_request = recorded[
+            "/registry/workspace/publisher-identity/keys/challenges"
+        ]
+        completion_path = next(
+            path
+            for path, _payload in recording_client.posts
+            if path.endswith("/complete")
+        )
+        assert set(challenge_request) == {"public_key_pem", "label"}
+        assert "PUBLIC KEY" in challenge_request["public_key_pem"]
+        assert set(recorded[completion_path]) == {"signature"}
+        assert "PRIVATE KEY" not in json.dumps(recording_client.posts)
+
+        preflight = recorded["/registry/preflight"]
+        submitted = recorded["/registry/submit"]
+        assert preflight["manifest"] == submitted["manifest"]
+        assert preflight["publisher_signature"] == submitted["publisher_signature"]
+        assert binding.key["key_id"] == submitted["publisher_signature"]["key_id"]
+        assert (
+            result.preflight["publisher_identity"]["author_signature_verified"] is True
+        )
+        assert result.accepted is True
 
     def test_publish_project_uses_env_token_when_auth_file_is_missing(
         self,

@@ -15,6 +15,11 @@ from purecipher.publisher.package import (
     build_submission_payload,
     package_project,
 )
+from purecipher.publisher.signing import (
+    canonicalize_manifest,
+    load_private_signing_key,
+    sign_manifest,
+)
 
 
 @dataclass(frozen=True)
@@ -76,6 +81,7 @@ def publish_project(
     output_dir: str | Path | None = None,
     refresh_artifacts: bool = False,
     release_notes: str | None = None,
+    signing_key: str | Path | None = None,
     client: Any | None = None,
 ) -> PublisherPublishResult:
     """Run registry preflight and publish a project."""
@@ -97,6 +103,15 @@ def publish_project(
         )
 
     submission_payload = build_submission_payload(config)
+    submission_payload["manifest"] = canonicalize_manifest(
+        submission_payload["manifest"]
+    )
+    if signing_key is not None:
+        private_key = load_private_signing_key(signing_key)
+        submission_payload["publisher_signature"] = sign_manifest(
+            private_key,
+            submission_payload["manifest"],
+        ).to_dict()
     if release_notes is not None:
         submission_payload["changelog"] = release_notes
     preflight_payload = {
@@ -106,6 +121,10 @@ def publish_project(
         "metadata": submission_payload["metadata"],
         "requested_level": submission_payload["requested_level"],
     }
+    if "publisher_signature" in submission_payload:
+        preflight_payload["publisher_signature"] = submission_payload[
+            "publisher_signature"
+        ]
     resolved_token = resolve_registry_token(
         base_url=normalized_base_url,
         token=token,

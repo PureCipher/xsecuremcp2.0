@@ -80,6 +80,8 @@ def test_profile_updates_public_directory_without_changing_account_or_ownership(
         {"website": "//example.com"},
         {"role": "admin"},
         {"publisher_id": "bob"},
+        {"domain_verified": True},
+        {"verified_domains": ["example.com"]},
         {"display_name": None},
         {"revision": True},
         {"revision": -1},

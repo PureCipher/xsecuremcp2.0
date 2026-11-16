@@ -23,7 +23,47 @@ The account username, publisher ID, server ownership, verification, and access r
 
 `GET /registry/workspace/publisher-profile` returns the signed-in publisher's details and revision. `PUT` accepts `display_name` (required, up to 120 characters), `description` (up to 2,000 characters), `website` (an optional HTTP or HTTPS URL, up to 2,048 characters), and the loaded `revision`. Identity and role fields are rejected. A stale revision returns HTTP 409 so another tab's changes cannot be silently overwritten.
 
-Profiles use the existing `purecipher_workspace` PostgreSQL store with an owner-specific record; no new database migration is required. With PostgreSQL configured, details persist across restarts. Development instances without a PostgreSQL persistence target keep these details only in memory.
+### Verified publisher domains
+
+An authenticated publisher can establish higher-assurance external identity by proving control of a public domain. Create a one-hour challenge with `POST /registry/workspace/publisher-identity/challenges` and choose either `dns_txt` or `https_well_known`. The response gives the exact TXT record or HTTPS well-known file to publish. Submit the challenge ID to `POST /registry/workspace/publisher-identity/challenges/{challenge_id}/verify` after the proof is visible.
+
+Domain proofs expire after 90 days and must then be renewed. Proof endpoints are HTTPS-only, do not follow redirects, are response-size bounded, pin the public DNS address used for the connection, and reject private, loopback, link-local, or other non-global destinations even if proxy traffic has an operator allowlist. DNS values and HTTPS bodies must exactly match the issued high-entropy token. A domain can be current for only one publisher, and failed challenges have a bounded attempt count.
+
+The public publisher response exposes only `domain_verified`, `verified_domains`, and `identity_verified_at`; challenge tokens, proof digests, account details, and revocation reasons remain private. The UI deliberately says **Domain verified**. This proves control of the named domain, not legal-entity review or ownership of an organization. An administrator can revoke a proof or require fresh verification through `POST /registry/admin/publisher-identities/{domain}`.
+
+Profiles, challenges, and verification records use the existing `purecipher_workspace` PostgreSQL store with owner-specific records; no new database migration is required. With PostgreSQL configured, details persist across restarts. Development instances without a PostgreSQL persistence target keep these details only in memory.
+
+### Publisher manifest signing
+
+After verifying a domain, a publisher can bind an Ed25519 public key to the account. `POST /registry/workspace/publisher-identity/keys/challenges` accepts the public key in SubjectPublicKeyInfo PEM form and returns a one-hour, publisher-specific canonical challenge. The publisher signs that exact UTF-8 challenge locally and completes enrollment through `POST /registry/workspace/publisher-identity/keys/challenges/{challenge_id}/complete`. The private key is never sent to the registry. Challenges and failed attempts are bounded, and a publisher can keep up to five active keys for rotation.
+
+Key enrollment is a permanent opt-in for manifest-author signing. Once an account has enrolled a key, every author submission must include a valid `publisher_signature`, even if all of its keys are later revoked. This prevents revocation from silently downgrading the account to unsigned publishing. Multiple active keys are supported during rotation; a revoked key fingerprint cannot be re-enrolled.
+
+The request field has this exact shape:
+
+```json
+{
+  "publisher_signature": {
+    "algorithm": "ed25519",
+    "key_id": "pcpk_<sha256-public-key-fingerprint>",
+    "signature": "<base64-signature>"
+  }
+}
+```
+
+The signed UTF-8 bytes are sorted, compact JSON for the following payload. `manifest_digest` is the registry's digest of the complete canonical `SecurityManifest`:
+
+```json
+{
+  "manifest_digest": "<canonical-manifest-digest>",
+  "publisher_id": "<manifest-author>",
+  "schema": "purecipher.manifest-author-signature.v1"
+}
+```
+
+The registry verifies the signature during both preflight and submit. It stores only registry-derived `publisher_identity` evidence and discards any publisher-supplied value under that metadata key. A key remains usable only while at least one domain recorded when it was activated is still currently verified. Revocation or domain-proof expiry also blocks later approval of an already staged manual-review submission or release candidate.
+
+Public publisher summaries expose only whether a current signing key is bound and its key IDs. `GET /registry/publishers/{publisher_id}/signing-keys` exposes the corresponding active public keys so clients can independently inspect them; revoked keys, challenge material, and revocation reasons remain private. Manifest signing proves that an enrolled key authorized the exact manifest and that its domain binding is current. It does not constitute legal-entity verification.
 
 ## Quick Start
 
@@ -116,6 +156,16 @@ The MVP exposes a narrow HTTP surface:
 | `GET /registry/publishers` | Public publisher summaries for published listings |
 | `GET /registry/publishers?view=html` | Server-rendered publisher directory |
 | `GET /registry/publishers/{publisher_id}` | Server-rendered publisher profile page |
+| `GET /registry/workspace/publisher-identity` | Signed-in publisher's domain-proof status and active challenges |
+| `POST /registry/workspace/publisher-identity/challenges` | Create a DNS TXT or HTTPS well-known challenge |
+| `POST /registry/workspace/publisher-identity/challenges/{challenge_id}/verify` | Verify an externally published challenge |
+| `DELETE /registry/workspace/publisher-identity/challenges/{challenge_id}` | Cancel an owned challenge |
+| `POST /registry/admin/publisher-identities/{domain}` | Revoke a domain proof or require re-verification (admin only) |
+| `GET /registry/workspace/publisher-identity/keys` | List the signed-in publisher's keys, signing requirement, and active key challenges |
+| `POST /registry/workspace/publisher-identity/keys/challenges` | Create an Ed25519 key proof-of-possession challenge |
+| `POST /registry/workspace/publisher-identity/keys/challenges/{challenge_id}/complete` | Complete key enrollment with a challenge signature |
+| `POST /registry/workspace/publisher-identity/keys/{key_id}` | Revoke an owned publisher signing key |
+| `GET /registry/publishers/{publisher_id}/signing-keys` | Return a publisher's active, currently domain-bound public keys |
 | `GET /registry/review` | Browser moderation queue for pending and managed listings |
 | `GET /registry/review/submissions` | JSON moderation queue payload |
 | `POST /registry/review/{listing_id}/{action_name}` | Apply moderation actions such as `approve`, `reject`, `suspend`, or `unsuspend` |

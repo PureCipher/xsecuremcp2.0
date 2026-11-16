@@ -2239,6 +2239,8 @@ def _render_featured_publishers(
           <div class="catalog-row">
             <strong><a href="{_escape(_publisher_href(registry_prefix=registry_prefix, publisher_id=str(item.get("publisher_id", ""))))}">{_escape(item.get("display_name") or item.get("publisher_id"))}</a></strong>
             <span class="pill">{_escape(item.get("listing_count", 0))} tools</span>
+            {_publisher_domain_badge(item)}
+            {_publisher_signing_badge(item)}
           </div>
           <div class="catalog-meta">
             confidence {_percent(item.get("average_trust"))} ·
@@ -2253,6 +2255,27 @@ def _render_featured_publishers(
         """
         for item in items
     )
+
+
+def _publisher_domain_badge(summary: dict[str, Any]) -> str:
+    """Render external domain proof without implying legal organization review."""
+
+    domains = summary.get("verified_domains")
+    if summary.get("domain_verified") is not True or not isinstance(domains, list):
+        return ""
+    safe_domains = [domain for domain in domains if isinstance(domain, str) and domain]
+    if not safe_domains:
+        return ""
+    label = f"Domain verified: {safe_domains[0]}"
+    if len(safe_domains) > 1:
+        label += f" +{len(safe_domains) - 1}"
+    return f'<span class="pill">{_escape(label)}</span>'
+
+
+def _publisher_signing_badge(summary: dict[str, Any]) -> str:
+    if summary.get("signing_key_bound") is not True:
+        return ""
+    return '<span class="pill">Manifest author signing enabled</span>'
 
 
 def _render_publish_primary_paths(
@@ -3651,6 +3674,8 @@ def create_publisher_index_html(
               <div class="catalog-row">
                 <strong><a href="{_escape(_publisher_href(registry_prefix=registry_prefix, publisher_id=str(item.get("publisher_id", ""))))}">{_escape(item.get("display_name") or item.get("publisher_id"))}</a></strong>
                 <span class="pill">{_escape(item.get("listing_count", 0))} tools</span>
+                {_publisher_domain_badge(item)}
+                {_publisher_signing_badge(item)}
               </div>
               <div class="catalog-meta">
                 confidence {_percent(item.get("average_trust"))} ·
@@ -3783,6 +3808,8 @@ def create_publisher_profile_html(
           <span class="listing-chip">{
         _escape(summary.get("publisher_id") or "unknown")
     }</span>
+          {_publisher_domain_badge(summary)}
+          {_publisher_signing_badge(summary)}
         </div>
         <div class="metrics">
           <div class="metric">

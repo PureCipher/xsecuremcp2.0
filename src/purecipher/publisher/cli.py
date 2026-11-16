@@ -13,6 +13,7 @@ from purecipher.publisher.check import check_project, sync_project_artifacts
 from purecipher.publisher.config import load_publisher_config, write_publisher_config
 from purecipher.publisher.package import package_project
 from purecipher.publisher.publish import publish_project
+from purecipher.publisher.signing import bind_signing_key
 from purecipher.publisher.templates import (
     available_templates,
     build_project_config,
@@ -200,7 +201,33 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Describe a version update for independent release review.",
     )
+    publish_parser.add_argument(
+        "--signing-key",
+        default=None,
+        help="Owner-only Ed25519 private-key PEM used to sign the canonical manifest.",
+    )
     publish_parser.set_defaults(handler=_handle_publish)
+
+    bind_key_parser = subparsers.add_parser(
+        "bind-key",
+        help="Prove possession and bind an Ed25519 signing key to the publisher.",
+    )
+    bind_key_parser.add_argument("--signing-key", required=True)
+    bind_key_parser.add_argument(
+        "--registry-url",
+        default=None,
+        help="Registry base URL. Defaults to purecipher.toml.",
+    )
+    bind_key_parser.add_argument(
+        "--project-path",
+        default=".",
+        help="Project directory used to discover purecipher.toml.",
+    )
+    bind_key_parser.add_argument("--auth-file", default=None)
+    bind_key_parser.add_argument("--token", default=None)
+    bind_key_parser.add_argument("--label", default="")
+    bind_key_parser.add_argument("--json", action="store_true")
+    bind_key_parser.set_defaults(handler=_handle_bind_key)
 
     return parser
 
@@ -397,6 +424,7 @@ def _handle_publish(args: argparse.Namespace) -> int:
         output_dir=args.output_dir,
         refresh_artifacts=args.refresh_artifacts,
         release_notes=args.release_notes,
+        signing_key=args.signing_key,
     )
     if args.json:
         print(json.dumps(result.to_dict(), indent=2))
@@ -412,6 +440,28 @@ def _handle_publish(args: argparse.Namespace) -> int:
     if result.review_url is not None:
         print("- moderation: listing is waiting for review")
     print(f"- preflight: {result.preflight.get('summary', 'no summary returned')}")
+    return 0
+
+
+def _handle_bind_key(args: argparse.Namespace) -> int:
+    registry_url = _resolve_registry_url(
+        registry_url=args.registry_url,
+        project_path=args.project_path,
+    )
+    result = bind_signing_key(
+        args.signing_key,
+        base_url=registry_url,
+        auth_file=args.auth_file,
+        token=args.token,
+        label=args.label,
+    )
+    if args.json:
+        print(json.dumps(result.to_dict(), indent=2))
+        return 0
+    print(f"Bound publisher signing key at {result.base_url}")
+    print(f"- key id: {result.key.get('key_id', 'unknown')}")
+    print(f"- algorithm: {result.key.get('algorithm', 'unknown')}")
+    print(f"- status: {result.key.get('status', 'unknown')}")
     return 0
 
 

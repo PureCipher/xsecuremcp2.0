@@ -19,6 +19,11 @@ class PublisherSummary:
     latest_activity: str = ""
     description: str = ""
     website: str = ""
+    domain_verified: bool = False
+    verified_domains: list[str] = field(default_factory=list)
+    identity_verified_at: str = ""
+    signing_key_bound: bool = False
+    signing_key_ids: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize for JSON responses."""
@@ -33,6 +38,11 @@ class PublisherSummary:
             "latest_activity": self.latest_activity,
             "description": self.description,
             "website": self.website,
+            "domain_verified": self.domain_verified,
+            "verified_domains": list(self.verified_domains),
+            "identity_verified_at": self.identity_verified_at,
+            "signing_key_bound": self.signing_key_bound,
+            "signing_key_ids": list(self.signing_key_ids),
         }
 
 

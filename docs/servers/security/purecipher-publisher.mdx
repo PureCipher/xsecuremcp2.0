@@ -15,6 +15,8 @@ PureCipher Publisher Accelerator is the publisher-side companion to PureCipher R
 - writes package summaries for humans and CI-friendly automation
 - stores registry login tokens locally for repeatable publish flows
 - supports direct bearer-token publish flows for CI
+- binds Ed25519 publisher keys without uploading the private key
+- signs one canonical manifest for registry preflight and submission
 - runs registry preflight and submits directly to PureCipher Registry
 - reports whether a published listing is live immediately or waiting for review
 - keeps the generated artifacts in sync with the config
@@ -29,6 +31,7 @@ uv run purecipher-publisher init weather-lookup --template http
 uv run purecipher-publisher check weather-lookup
 uv run purecipher-publisher package weather-lookup
 uv run purecipher-publisher login --project-path weather-lookup --username publisher
+uv run purecipher-publisher bind-key --project-path weather-lookup --signing-key publisher-key.pem
 uv run purecipher-publisher publish weather-lookup
 ```
 
@@ -134,21 +137,48 @@ An explicit CLI token takes precedence over the environment variable:
 uv run purecipher-publisher publish weather-lookup --token your-registry-token
 ```
 
+## Publisher signing key
+
+Publisher manifest signing is optional until the account enrolls its first key. Before enrollment, prove control of a publisher domain through the registry's publisher-identity workflow. Then generate an Ed25519 private key and restrict the file to its owner:
+
+```bash
+openssl genpkey -algorithm Ed25519 -out publisher-key.pem
+chmod 600 publisher-key.pem
+```
+
+Keep this file out of source control. The accelerator accepts only an unencrypted Ed25519 PEM whose file permissions do not grant group or other access.
+
+Bind its public key to the signed-in publisher account:
+
+```bash
+uv run purecipher-publisher bind-key \
+  --project-path weather-lookup \
+  --signing-key publisher-key.pem \
+  --label "Primary release key"
+```
+
+The command sends the public key, receives a short-lived canonical challenge, signs it locally, and returns only the proof signature. The private key never leaves the publisher machine.
+
+Once any key has been enrolled, signed publishing remains required for that account. Revoking every key does not restore unsigned publishing; bind a replacement key before revoking the final usable key. Domain proof must also remain current.
+
 ## Publish
 
 Once the project is ready, publish directly to the registry:
 
 ```bash
-uv run purecipher-publisher publish weather-lookup
+uv run purecipher-publisher publish weather-lookup \
+  --signing-key publisher-key.pem
 ```
 
 The publish flow:
 
 1. reruns the local check
 2. refreshes package artifacts
-3. calls `/registry/preflight`
-4. submits to `/registry/submit`
-5. returns the listing status and the best next URL for the publisher
+3. resolves generated manifest IDs and timestamps once
+4. signs that canonical manifest locally when `--signing-key` is supplied
+5. calls `/registry/preflight`
+6. submits the same manifest and signature to `/registry/submit`
+7. returns the listing status and the best next URL for the publisher
 
 If the project still contains placeholder metadata, publish is blocked by default. Use `purecipher-publisher check` first, fix the reported issues, and then rerun `publish`.
 
@@ -163,6 +193,5 @@ This phase now covers:
 - package artifact generation with summary files
 - registry login
 - CI-friendly token-based publish
+- Ed25519 key enrollment and local manifest signing
 - registry publish with moderation-aware feedback
-
-The next logical phase is publisher polish: release-oriented metadata, CI examples, and a smoother handoff from local packaging into team workflows.
