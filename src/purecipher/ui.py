@@ -2364,6 +2364,8 @@ def _render_preflight_panel(preflight: dict[str, Any] | None) -> str:
     report = preflight.get("report") or {}
     install_recipes = list(preflight.get("install_recipes") or [])
     findings = list(report.get("findings") or [])
+    manual_review = preflight.get("manual_review") or {}
+    review_reasons = list(manual_review.get("reasons") or [])
     validation_score = f"{preflight.get('validation_score_percent', 0)}%"
     recipe_list = (
         '<div class="detail-note">No setup steps were detected yet. Add an endpoint, command, or Docker image.</div>'
@@ -2409,6 +2411,12 @@ def _render_preflight_panel(preflight: dict[str, Any] | None) -> str:
         <div class="detail-box">
           <div class="label">Assurance Evidence</div>
           <div class="value">{_escape(preflight.get("assurance_tier") or "static_analysis")}</div>
+        </div>
+        <div class="detail-box">
+          <div class="label">Manual Review</div>
+          <div class="value">{_escape("required" if manual_review.get("required") else "not required")}</div>
+          <div class="detail-note">Priority: {_escape(manual_review.get("risk") or "routine")}</div>
+          <div class="detail-note">{_escape(", ".join(str(reason) for reason in review_reasons) or "No review signals")}</div>
         </div>
         <div class="detail-box">
           <div class="label">Required Minimum</div>
@@ -3557,6 +3565,16 @@ def _render_review_item(item: dict[str, Any], *, registry_prefix: str) -> str:
             f'<button type="submit" formaction="{_escape(f"{registry_prefix}/review/{listing_id}/{action}")}">{_escape(action.replace("-", " ").title())}</button>'
             for action in actions
         )
+    review_risk = str(item.get("manual_review_risk") or "routine")
+    review_reasons = [
+        str(reason).replace("_", " ").replace(":", ": ")
+        for reason in list(item.get("manual_review_reasons") or [])
+    ]
+    review_note = (
+        f'<div class="detail-note">Why review: {_escape(", ".join(review_reasons))}</div>'
+        if review_reasons
+        else ""
+    )
 
     return f"""
     <article class="moderation-card">
@@ -3571,8 +3589,12 @@ def _render_review_item(item: dict[str, Any], *, registry_prefix: str) -> str:
       </div>
       <div class="detail-note" style="margin-top: 10px;">
         Safety level: {_escape(item.get("certification_level") or "uncertified")} ·
+        Assurance: {_escape(item.get("assurance_tier") or "static_analysis")} ·
+        Validation: {_escape(item.get("validation_score_percent", 0))}% ·
+        Review priority: {_escape(review_risk)} ·
         Updated: {_escape(item.get("updated_at") or "n/a")}
       </div>
+      {review_note}
       <form class="moderation-form" method="post" action="{_escape(f"{registry_prefix}/review/{listing_id}/{actions[0] if actions else 'approve'}")}">
         <!-- moderator_id is derived from the authenticated session on
              the server side; submitting it from the form is now ignored. -->
@@ -3883,7 +3905,7 @@ def create_review_queue_html(
         <h1>Review shared tools</h1>
         <p class="subtle" style="margin-top: 8px;">Server: {
         _escape(server_name)
-    } · Require moderation: {_escape(queue.get("require_moderation", False))}</p>
+    } · Manual review mode: {_escape(queue.get("manual_review_mode", "disabled"))}</p>
         <p class="hero-copy">
           Review new submissions, manage live tools, and pause tools when they need attention.
         </p>

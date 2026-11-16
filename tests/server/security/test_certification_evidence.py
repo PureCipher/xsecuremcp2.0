@@ -481,3 +481,87 @@ def test_expired_publisher_evidence_is_rejected():
             crypto_handler=_crypto(),
             publisher_evidence_verifier=_publisher_verifier(),
         ).certify(manifest, publisher_evidence=(evidence,))
+
+
+def test_manual_review_is_chained_into_a_resigned_attestation():
+    manifest = _manifest()
+    pipeline = CertificationPipeline(crypto_handler=_crypto())
+    result = pipeline.certify(manifest)
+    automated_digest = result.attestation.test_evidence_digest
+
+    evidence = pipeline.record_manual_review(
+        result.attestation,
+        reviewer_id="reviewer-1",
+        summary="Risk exception reviewed and approved.",
+    )
+
+    assert evidence.source is CertificationEvidenceSource.REVIEWER
+    assert evidence.manifest_digest == result.manifest_digest
+    assert evidence.validation_report_id == result.report.report_id
+    assert result.attestation.assurance_tier is AssuranceTier.MANUAL_REVIEWED
+    assert result.attestation.test_evidence_digest != automated_digest
+    assert result.report.assurance_tier is AssuranceTier.MANUAL_REVIEWED
+    assert result.report.test_evidence[-1] == evidence
+    assert pipeline.verify_attestation(result.attestation, manifest).valid is True
+
+
+def test_manual_review_works_after_validation_report_is_not_in_memory():
+    manifest = _manifest()
+    result = CertificationPipeline(crypto_handler=_crypto()).certify(manifest)
+    restarted_pipeline = CertificationPipeline(crypto_handler=_crypto())
+
+    evidence = restarted_pipeline.record_manual_review(
+        result.attestation,
+        reviewer_id="reviewer-after-restart",
+    )
+
+    assert evidence.passed is True
+    assert result.attestation.assurance_tier is AssuranceTier.MANUAL_REVIEWED
+    assert (
+        restarted_pipeline.verify_attestation(
+            result.attestation,
+            manifest,
+        ).valid
+        is True
+    )
+
+
+def test_manual_review_rejects_tampered_or_static_attestations():
+    manifest = _manifest()
+    pipeline = CertificationPipeline(crypto_handler=_crypto())
+    result = pipeline.certify(manifest)
+    result.attestation.author = "tampered"
+
+    with pytest.raises(ValueError, match="verifiable"):
+        pipeline.record_manual_review(
+            result.attestation,
+            reviewer_id="reviewer-1",
+        )
+
+    static = CertificationPipeline(
+        crypto_handler=_crypto(),
+        test_suites=(),
+    ).certify(manifest)
+    with pytest.raises(ValueError, match="standard test evidence"):
+        pipeline.record_manual_review(
+            static.attestation,
+            reviewer_id="reviewer-1",
+        )
+
+
+def test_manual_review_rejects_a_different_certification_issuer():
+    manifest = _manifest()
+    result = CertificationPipeline(
+        issuer_id="issuer-a",
+        crypto_handler=_crypto(),
+    ).certify(manifest)
+    other_issuer = CertificationPipeline(
+        issuer_id="issuer-b",
+        crypto_handler=_crypto(),
+    )
+
+    with pytest.raises(ValueError, match="issuer"):
+        other_issuer.record_manual_review(
+            result.attestation,
+            reviewer_id="reviewer-1",
+        )

@@ -18,12 +18,15 @@ from purecipher.auth import (
 from purecipher.install import InstallRecipe
 from purecipher.models import PublisherProfile, PublisherSummary, ReviewQueueItem
 from purecipher.registry import PureCipherRegistry, RegistrySubmissionResult
+from purecipher.review_risk import ManualReviewMode, ManualReviewRisk
 
 __all__ = [
     "CertificationLevel",
     "DataClassification",
     "DataFlowDeclaration",
     "InstallRecipe",
+    "ManualReviewMode",
+    "ManualReviewRisk",
     "PermissionScope",
     "PublisherProfile",
     "PublisherSummary",

@@ -67,6 +67,14 @@ def build_review_queue_item(
 ) -> ReviewQueueItem:
     """Build a moderation queue projection for a listing."""
 
+    review = listing.metadata.get("manual_review")
+    if not isinstance(review, dict):
+        review = {}
+    reasons = review.get("reasons")
+    if not isinstance(reasons, list):
+        reasons = []
+    attestation = listing.attestation
+
     return ReviewQueueItem(
         listing_id=listing.listing_id,
         tool_name=listing.tool_name,
@@ -79,6 +87,18 @@ def build_review_queue_item(
         version=listing.version,
         updated_at=listing.updated_at.isoformat(),
         available_actions=list(AVAILABLE_ACTIONS.get(listing.status, ())),
+        assurance_tier=(
+            attestation.assurance_tier.value
+            if attestation is not None
+            else "static_analysis"
+        ),
+        validation_score_percent=(
+            attestation.validation_score_percent if attestation is not None else 0
+        ),
+        manual_review_required=review.get("required") is True,
+        manual_review_risk=str(review.get("risk") or "routine"),
+        manual_review_reasons=[str(reason) for reason in reasons],
+        manual_review_status=str(review.get("status") or "not_required"),
     )
 
 
@@ -90,10 +110,20 @@ def build_review_queue(
 ) -> dict[str, list[ReviewQueueItem]]:
     """Build moderation queue sections from the marketplace."""
 
+    def sort_key(item: ToolListing) -> tuple[int, float]:
+        review = item.metadata.get("manual_review")
+        risk = (
+            str(review.get("risk", "routine"))
+            if isinstance(review, dict)
+            else "routine"
+        )
+        risk_priority = {"high": 0, "elevated": 1, "routine": 2}
+        return risk_priority.get(risk, 3), -item.updated_at.timestamp()
+
     sections: dict[str, list[ReviewQueueItem]] = {}
     for status in QUEUE_STATUSES:
         listings = marketplace.search(status=status, limit=limit_per_status)
-        ordered = sorted(listings, key=lambda item: item.updated_at, reverse=True)
+        ordered = sorted(listings, key=sort_key)
         sections[status.value] = [
             build_review_queue_item(item, trust_lookup=trust_lookup) for item in ordered
         ]

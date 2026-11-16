@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
@@ -478,6 +479,90 @@ class CertificationPipeline:
     def get_report(self, report_id: str) -> ValidationReport | None:
         """Look up a validation report by ID."""
         return self._reports.get(report_id)
+
+    def record_manual_review(
+        self,
+        attestation: ToolAttestation,
+        *,
+        reviewer_id: str,
+        summary: str = "",
+    ) -> CertificationTestEvidence:
+        """Bind an authenticated approval into a re-signed attestation.
+
+        The review digest chains from the prior automated-evidence digest so
+        approval still works after a registry restart, when the in-memory
+        validation report may no longer be available. Callers must authenticate
+        and authorize ``reviewer_id`` before invoking this method.
+        """
+
+        if not isinstance(attestation, ToolAttestation):
+            raise ValueError("attestation must be a ToolAttestation")
+        if not isinstance(reviewer_id, str) or not reviewer_id.strip():
+            raise ValueError("reviewer_id must be nonempty")
+        if len(reviewer_id) > 240:
+            raise ValueError("reviewer_id is too long")
+        if not isinstance(summary, str):
+            raise ValueError("summary must be a string")
+        if not attestation.is_valid():
+            raise ValueError("Only a valid attestation can receive manual review")
+        if attestation.assurance_tier is AssuranceTier.STATIC_ANALYSIS:
+            raise ValueError("Manual review requires passing standard test evidence")
+        if attestation.assurance_tier is AssuranceTier.MANUAL_REVIEWED:
+            raise ValueError("Attestation is already manually reviewed")
+        if not attestation.test_evidence_digest:
+            raise ValueError("Manual review requires an automated evidence digest")
+        if self._crypto is None:
+            raise ValueError("Manual review requires an attestation signing key")
+        if attestation.issuer_id != self._issuer_id:
+            raise ValueError("Manual review issuer does not match the pipeline")
+        if not self.verify_attestation(attestation).valid:
+            raise ValueError("Manual review requires a verifiable attestation")
+
+        evidence = CertificationTestEvidence(
+            suite_id="securemcp-manual-review",
+            suite_version="1.0.0",
+            source=CertificationEvidenceSource.REVIEWER,
+            runner_id=f"reviewer:{reviewer_id.strip()}",
+            manifest_digest=attestation.manifest_digest,
+            validation_report_id=attestation.validation_report_id,
+            results=(
+                CertificationTestResult(
+                    test_id="manual_review_approval",
+                    status=CertificationTestStatus.PASSED,
+                    summary=(
+                        summary.strip()[:1024]
+                        or "Authenticated reviewer approved the submission"
+                    ),
+                ),
+            ),
+        )
+        chained_digest = compute_digest(
+            {
+                "prior_test_evidence_digest": attestation.test_evidence_digest,
+                "manual_review_evidence": evidence.to_dict(),
+            }
+        )
+        candidate = replace(
+            attestation,
+            assurance_tier=AssuranceTier.MANUAL_REVIEWED,
+            test_evidence_digest=chained_digest,
+        )
+        signature = self._crypto.sign(
+            candidate.signable_payload(),
+            signer_id=self._issuer_id,
+        )
+        candidate.signature = signature.signature
+
+        attestation.assurance_tier = candidate.assurance_tier
+        attestation.test_evidence_digest = candidate.test_evidence_digest
+        attestation.signature = candidate.signature
+        self._attestations[attestation.attestation_id] = attestation
+
+        report = self._reports.get(attestation.validation_report_id)
+        if report is not None:
+            report.test_evidence.append(evidence)
+            report.assurance_tier = AssuranceTier.MANUAL_REVIEWED
+        return evidence
 
     def find_attestations(
         self,

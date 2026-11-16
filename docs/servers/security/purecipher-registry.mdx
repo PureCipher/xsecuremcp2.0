@@ -165,7 +165,13 @@ PURECIPHER_SIGNING_SECRET=development-secret uv run purecipher-registry --port 8
 
 Then open [http://localhost:8000/registry](http://localhost:8000/registry).
 
-To launch directly into moderation mode:
+To route only elevated/high-risk submissions to reviewers:
+
+```bash
+PURECIPHER_SIGNING_SECRET=development-secret PURECIPHER_MANUAL_REVIEW_MODE=risk_based uv run purecipher-registry --port 8000
+```
+
+To retain the legacy behavior that sends every submission to review:
 
 ```bash
 PURECIPHER_SIGNING_SECRET=development-secret PURECIPHER_REQUIRE_MODERATION=true uv run purecipher-registry --port 8000
@@ -279,7 +285,7 @@ registry = PureCipherRegistry(
 )
 ```
 
-The CLI and Docker launchers use the same setting through `PURECIPHER_REGISTRY_DB` or `--database-path`. Moderation mode can also be toggled through `PURECIPHER_REQUIRE_MODERATION=true`, and auth can be enabled through `PURECIPHER_ENABLE_AUTH=true`.
+The CLI and Docker launchers use the same setting through `PURECIPHER_REGISTRY_DB` or `--database-path`. Manual-review routing is configured with `PURECIPHER_MANUAL_REVIEW_MODE=disabled|all|risk_based`; `PURECIPHER_REQUIRE_MODERATION=true` remains a legacy alias for `all`. Auth can be enabled through `PURECIPHER_ENABLE_AUTH=true`.
 
 ## OpenAPI Proxy Egress
 
@@ -293,19 +299,46 @@ For isolated local development, exact hosts can be opted in with
 hostname lists. Treat either override as a network-security exception and keep
 it out of production configuration.
 
-## Moderation Mode
+## Risk-based Manual Review
 
-If you want new listings to enter a review queue instead of going straight into the public catalog, enable moderation:
+Manual-review routing has three explicit modes:
+
+- `disabled` publishes every accepted submission immediately while still
+  reporting its review risk in preflight
+- `all` preserves the legacy behavior in which every accepted submission waits
+  for approval
+- `risk_based` publishes routine submissions immediately and queues only
+  elevated/high-risk submissions and explicit exceptions
+
+For risk-based routing:
 
 ```python
 registry = PureCipherRegistry(
     "purecipher-registry",
     signing_secret="development-secret",
-    require_moderation=True,
+    manual_review_mode="risk_based",
+    manual_review_score_threshold=85,
 )
 ```
 
-In that mode, accepted submissions land in `pending_review`. They are visible under `GET /registry/review` and `GET /registry/review/submissions`, and they only appear in the public catalog after an explicit moderation action such as `approve`.
+High-risk signals include write, subprocess, and sensitive-data permissions;
+restricted/PII/PHI/financial data; and non-author attestations. Elevated
+exceptions include a score below the configured threshold, a requested
+certification level that was not achieved, failing publisher functional tests,
+and a publisher's explicit `"manual_review_requested": true` request. Publisher
+metadata cannot lower or clear these signals.
+
+Queued submissions land in `pending_review`. `GET /registry/review/submissions`
+returns the risk, reasons, score, assurance tier, and high/elevated/routine
+priority counts; high-risk work is ordered first. On approval, the registry
+creates reviewer evidence, chains it to the prior automated-evidence digest,
+sets the assurance tier to `manual_reviewed`, and re-signs the attestation. A
+tampered, expired, unsigned, or otherwise unverifiable attestation cannot be
+approved. Production deployments should enable registry authentication so the
+reviewer identity comes from an authorized reviewer/admin session.
+
+`require_moderation=True` and `PURECIPHER_REQUIRE_MODERATION=true` remain
+supported aliases for `all`.
 
 ## Submission Contract
 
@@ -348,13 +381,16 @@ The registry will:
 3. verify any supplied publisher evidence against operator-trusted CI runners
 4. bind the resulting assurance tier and test-evidence digest into the signed attestation
 5. reject the submission if it fails certification or misses the minimum required level
-6. publish accepted tools into the verified catalog
+6. route accepted submissions according to the manual-review policy
+7. publish routine tools or hold review-required tools in `pending_review`
 
 Preflight responses expose both score forms:
 
 - `report.score` is the normalized value from `0.0` through `1.0`
 - `report.score_percent` and top-level `validation_score_percent` are the same
   score as a bounded whole-number percentage
+- `manual_review_required`, `manual_review_risk`, and `manual_review` explain
+  the routing decision before submission
 
 Certification level and assurance tier are intentionally separate. The level
 (`basic`, `standard`, and so on) is the outcome of manifest policy and
@@ -366,7 +402,8 @@ outcome:
   failed or errored test
 - `publisher_tested` means all supplied functional tests passed and their
   evidence was signed by an operator-trusted publisher runner
-- `manual_reviewed` is reserved for a separately trusted reviewer workflow; a
+- `manual_reviewed` means an authorized reviewer approved the queued listing
+  and the registry re-signed the attestation with chained reviewer evidence; a
   publisher cannot self-assert either higher tier through manifest metadata
 
 The standard suite does not execute publisher code or contact publisher

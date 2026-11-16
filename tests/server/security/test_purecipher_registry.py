@@ -12,6 +12,7 @@ from starlette.testclient import TestClient
 from fastmcp import Client
 from fastmcp.server.security.certification.attestation import CertificationLevel
 from fastmcp.server.security.certification.evidence import (
+    AssuranceTier,
     CertificationEvidenceSource,
     CertificationTestEvidence,
     CertificationTestResult,
@@ -31,7 +32,7 @@ from fastmcp.server.security.contracts.crypto import (
     SigningAlgorithm,
     compute_digest,
 )
-from purecipher import PureCipherRegistry, ToolCategory
+from purecipher import ManualReviewMode, PureCipherRegistry, ToolCategory
 from purecipher.auth import RegistryAuthSettings
 from purecipher.registry import _parse_manifest
 
@@ -630,6 +631,11 @@ class TestPureCipherRegistry:
             assert approve_payload["listing"]["status"] == "published"
             assert approve_payload["decision"]["moderator_id"] == "local"
             assert approve_payload["decision"]["moderator_id"] != "moderator-1"
+            assert (
+                approve_payload["listing"]["attestation"]["assurance_tier"]
+                == "manual_reviewed"
+            )
+            assert "manual_review" in approve_payload["decision"]["metadata"]
 
             published_catalog = client.get("/registry/tools")
             assert published_catalog.status_code == 200
@@ -656,6 +662,148 @@ class TestPureCipherRegistry:
             assert unsuspend.status_code == 200
             assert unsuspend.json()["listing"]["status"] == "published"
             assert unsuspend.json()["decision"]["moderator_id"] == "local"
+
+    def test_risk_based_review_publishes_routine_submission_immediately(self):
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            manual_review_mode=ManualReviewMode.RISK_BASED,
+        )
+
+        preflight = registry.preflight_submission(_manifest())
+        result = registry.submit_tool(_manifest(tool_name="routine-tool"))
+
+        assert preflight.manual_review.risk.value == "routine"
+        assert preflight.manual_review.required is False
+        assert result.accepted is True
+        assert result.listing is not None
+        assert result.listing.status.value == "published"
+        assert result.listing.metadata["manual_review"]["status"] == "not_required"
+
+    def test_risk_based_review_queues_high_risk_and_records_signed_approval(self):
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            manual_review_mode="risk_based",
+        )
+        high_risk_manifest = _manifest(
+            tool_name="shell-runner",
+            permissions={
+                PermissionScope.READ_RESOURCE,
+                PermissionScope.SUBPROCESS_EXEC,
+            },
+        )
+
+        result = registry.submit_tool(high_risk_manifest)
+
+        assert result.accepted is True
+        assert result.listing is not None
+        assert result.listing.status.value == "pending_review"
+        assessment = result.listing.metadata["manual_review"]
+        assert assessment["required"] is True
+        assert assessment["risk"] == "high"
+        assert "high_risk_permission:subprocess_exec" in assessment["reasons"]
+
+        queue = registry.get_moderation_queue()
+        pending = queue["sections"]["pending_review"]
+        assert queue["manual_review_mode"] == "risk_based"
+        assert queue["priority_counts"]["high"] == 1
+        assert pending[0]["manual_review_risk"] == "high"
+        assert pending[0]["assurance_tier"] == "standard_tested"
+
+        approval = registry.moderate_listing(
+            result.listing.listing_id,
+            action_name="approve",
+            moderator_id="security-reviewer",
+            reason="Subprocess boundary and command allowlist reviewed.",
+        )
+
+        assert "error" not in approval
+        assert result.listing.status.value == "published"
+        assert result.attestation.assurance_tier is AssuranceTier.MANUAL_REVIEWED
+        assert result.listing.metadata["manual_review"]["status"] == "approved"
+        assert result.listing.metadata["manual_review"]["reviewer_id"] == (
+            "security-reviewer"
+        )
+        assert registry.verify_tool("shell-runner")["verification"]["valid"] is True
+
+    def test_risk_queue_prioritizes_high_risk_over_requested_exception(self):
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            manual_review_mode="risk_based",
+        )
+        elevated = registry.submit_tool(
+            _manifest(tool_name="exception-tool"),
+            manual_review_requested=True,
+        )
+        high = registry.submit_tool(
+            _manifest(
+                tool_name="filesystem-writer",
+                permissions={
+                    PermissionScope.READ_RESOURCE,
+                    PermissionScope.FILE_SYSTEM_WRITE,
+                },
+            )
+        )
+
+        assert elevated.accepted is True
+        assert high.accepted is True
+        pending = registry.get_moderation_queue()["sections"]["pending_review"]
+        assert [item["tool_name"] for item in pending] == [
+            "filesystem-writer",
+            "exception-tool",
+        ]
+        assert [item["manual_review_risk"] for item in pending] == [
+            "high",
+            "elevated",
+        ]
+
+    def test_manual_approval_rejects_tampered_attestation(self):
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            manual_review_mode="risk_based",
+        )
+        result = registry.submit_tool(
+            _manifest(tool_name="tampered-review"),
+            manual_review_requested=True,
+        )
+        assert result.listing is not None
+        result.attestation.author = "tampered"
+
+        approval = registry.moderate_listing(
+            result.listing.listing_id,
+            action_name="approve",
+            moderator_id="security-reviewer",
+        )
+
+        assert approval["status"] == 400
+        assert "does not verify" in approval["error"]
+        assert result.listing.status.value == "pending_review"
+
+    def test_review_rejection_records_terminal_review_state(self):
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            manual_review_mode="risk_based",
+        )
+        result = registry.submit_tool(
+            _manifest(tool_name="rejected-exception"),
+            manual_review_requested=True,
+        )
+        assert result.listing is not None
+
+        rejection = registry.moderate_listing(
+            result.listing.listing_id,
+            action_name="reject",
+            moderator_id="security-reviewer",
+            reason="Exception is not justified.",
+        )
+
+        assert "error" not in rejection
+        assert result.listing.status.value == "rejected"
+        review = result.listing.metadata["manual_review"]
+        assert review["status"] == "rejected"
+        assert review["reviewer_id"] == "security-reviewer"
+        assert rejection["decision"]["metadata"]["manual_review"]["status"] == (
+            "rejected"
+        )
 
     def test_login_lockout_after_repeated_failures(self):
         """Regression: registry must rate-limit failed logins per
@@ -1602,12 +1750,49 @@ class TestPureCipherRegistry:
                 == payload["validation_score_percent"]
             )
             assert payload["assurance_tier"] == "standard_tested"
+            assert payload["manual_review_required"] is False
+            assert payload["manual_review_risk"] == "routine"
             assert payload["report"]["test_evidence"][0]["passed"] is True
             assert payload["attestation"]["assurance_tier"] == "standard_tested"
             assert payload["install_ready"] is True
             recipe_ids = {recipe["recipe_id"] for recipe in payload["install_recipes"]}
             assert "mcp_client_http" in recipe_ids
             assert "docker_compose" in recipe_ids
+
+    def test_http_preflight_can_request_exception_review(self):
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            manual_review_mode="risk_based",
+        )
+
+        with TestClient(registry.http_app()) as client:
+            response = client.post(
+                "/registry/preflight",
+                json={
+                    "manifest": _manifest().to_dict(),
+                    "manual_review_requested": True,
+                },
+            )
+            invalid = client.post(
+                "/registry/preflight",
+                json={
+                    "manifest": _manifest().to_dict(),
+                    "manual_review_requested": "yes",
+                },
+            )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["manual_review_required"] is True
+        assert payload["manual_review_risk"] == "elevated"
+        assert (
+            "publisher_requested_exception_review"
+            in payload["manual_review"]["reasons"]
+        )
+        assert invalid.status_code == 400
+        assert invalid.json()["error"] == (
+            "`manual_review_requested` must be a boolean"
+        )
 
     def test_http_preflight_accepts_trusted_publisher_test_evidence(self):
         manifest = _manifest()

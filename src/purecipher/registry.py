@@ -17,6 +17,7 @@ from starlette.responses import JSONResponse, RedirectResponse, Response
 
 from fastmcp.server.security.certification.attestation import CertificationLevel
 from fastmcp.server.security.certification.evidence import (
+    AssuranceTier,
     CertificationEvidenceSource,
     CertificationTestEvidence,
     CertificationTestResult,
@@ -96,6 +97,12 @@ from purecipher.publishers import (
     get_public_publisher_profile,
     list_public_publishers,
     publisher_id_from_author,
+)
+from purecipher.review_risk import (
+    ManualReviewAssessment,
+    ManualReviewMode,
+    assess_manual_review,
+    resolve_manual_review_mode,
 )
 from purecipher.ui import (
     SAMPLE_MANIFEST_JSON,
@@ -209,6 +216,7 @@ class RegistryPreflightResult:
     install_recipes: list[dict[str, Any]]
     report: Any
     attestation: Any
+    manual_review: ManualReviewAssessment
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize the preflight result for HTTP responses."""
@@ -222,6 +230,9 @@ class RegistryPreflightResult:
             "meets_minimum": self.meets_minimum,
             "validation_score_percent": self.report.score_percent,
             "assurance_tier": self.report.assurance_tier.value,
+            "manual_review_required": self.manual_review.required,
+            "manual_review_risk": self.manual_review.risk.value,
+            "manual_review": self.manual_review.to_dict(),
             "manifest_digest": self.manifest_digest,
             "install_ready": self.install_ready,
             "install_recipes": list(self.install_recipes),
@@ -326,6 +337,14 @@ def _coerce_categories(values: list[str] | set[str] | None) -> set[ToolCategory]
     if not values:
         return set()
     return {ToolCategory(value) for value in values}
+
+
+def _coerce_request_bool(value: Any, field_name: str, *, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if not isinstance(value, bool):
+        raise ValueError(f"`{field_name}` must be a boolean")
+    return value
 
 
 def _bounded_string(
@@ -623,6 +642,8 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         enable_legacy_registry_ui: bool = True,
         mount_security_api: bool = True,
         require_moderation: bool = False,
+        manual_review_mode: ManualReviewMode | str | None = None,
+        manual_review_score_threshold: int = 85,
         persistence_path: str | None = None,
         publisher_evidence_verifier: PublisherEvidenceVerifier | None = None,
         security: SecurityConfig | None = None,
@@ -659,9 +680,24 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 "certification pipeline instead of passing both options."
             )
 
+        resolved_manual_review_mode = resolve_manual_review_mode(
+            require_moderation=require_moderation,
+            manual_review_mode=manual_review_mode,
+        )
+        if isinstance(manual_review_score_threshold, bool) or not isinstance(
+            manual_review_score_threshold, int
+        ):
+            raise ValueError("manual_review_score_threshold must be an integer")
+        if not 0 <= manual_review_score_threshold <= 100:
+            raise ValueError("manual_review_score_threshold must be between 0 and 100")
+
         self._issuer_id = issuer_id
         self._minimum_certification = minimum_certification
-        self._require_moderation = require_moderation
+        self._manual_review_mode = resolved_manual_review_mode
+        self._manual_review_score_threshold = manual_review_score_threshold
+        self._require_moderation = (
+            resolved_manual_review_mode is not ManualReviewMode.DISABLED
+        )
         self._registry_prefix = registry_prefix
         self._enable_legacy_registry_ui = enable_legacy_registry_ui
         # Saved for the Iter 9 runtime toggles. When an admin
@@ -777,7 +813,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             signing_secret=signing_secret,
             issuer_id=issuer_id,
             minimum_certification=minimum_certification,
-            require_moderation=require_moderation,
+            require_moderation=(resolved_manual_review_mode is ManualReviewMode.ALL),
             persistence_path=persistence_path,
             publisher_evidence_verifier=publisher_evidence_verifier,
             enable_contracts=enable_contracts,
@@ -809,6 +845,14 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         )
 
         self._validate_registry_context(self._required_context())
+        if (
+            self._manual_review_mode is ManualReviewMode.RISK_BASED
+            and self._marketplace().require_moderation
+        ):
+            raise ValueError(
+                "Risk-based manual review requires a marketplace whose global "
+                "require_moderation flag is disabled"
+            )
 
         # Iter 10: wire client-actor resolution into the security
         # middleware chain. The resolver runs first and stashes the
@@ -3353,6 +3397,8 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             "issuer_id": self._issuer_id,
             "minimum_certification": self.minimum_certification.value,
             "require_moderation": self._require_moderation,
+            "manual_review_mode": self._manual_review_mode.value,
+            "manual_review_score_threshold": self._manual_review_score_threshold,
             "auth_enabled": self.auth_enabled,
             "require_resolved_principal": self.require_resolved_principal,
             "bootstrap_required": self._bootstrap_required(),
@@ -5793,10 +5839,18 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             trust_lookup=self._trust_overall,
         )
         counts = {section: len(items) for section, items in sections.items()}
+        pending_items = sections.get(PublishStatus.PENDING_REVIEW.value, [])
+        priority_counts = {
+            risk: sum(1 for item in pending_items if item.manual_review_risk == risk)
+            for risk in ("high", "elevated", "routine")
+        }
         return {
             "generated_at": datetime.now(UTC).isoformat(),
-            "require_moderation": self._marketplace().require_moderation,
+            "require_moderation": self._require_moderation,
+            "manual_review_mode": self._manual_review_mode.value,
+            "manual_review_score_threshold": self._manual_review_score_threshold,
             "counts": counts,
+            "priority_counts": priority_counts,
             "sections": {
                 section: [item.to_dict() for item in items]
                 for section, items in sections.items()
@@ -5866,12 +5920,88 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             }
 
         marketplace = self._marketplace()
+        listing = marketplace.get(listing_id)
+        decision_metadata = dict(metadata or {})
+        existing_review = (
+            listing.metadata.get("manual_review") if listing is not None else None
+        )
+        if (
+            action is ModerationAction.APPROVE
+            and listing is not None
+            and listing.status is PublishStatus.PENDING_REVIEW
+            and isinstance(existing_review, dict)
+            and listing.attestation is not None
+            and listing.attestation.assurance_tier is not AssuranceTier.MANUAL_REVIEWED
+        ):
+            verification = self._certification_pipeline().verify_attestation(
+                listing.attestation,
+                listing.manifest,
+            )
+            if not verification.valid:
+                return {
+                    "error": (
+                        "Cannot approve a listing whose certification attestation "
+                        "does not verify"
+                    ),
+                    "status": 400,
+                }
+            try:
+                review_evidence = self._certification_pipeline().record_manual_review(
+                    listing.attestation,
+                    reviewer_id=moderator_id or "purecipher-admin",
+                    summary=reason,
+                )
+            except ValueError as exc:
+                return {"error": str(exc), "status": 400}
+            review_state = {
+                **listing.metadata["manual_review"],
+                "status": "approved",
+                "reviewer_id": moderator_id or "purecipher-admin",
+                "completed_at": datetime.now(UTC).isoformat(),
+                "evidence_id": review_evidence.evidence_id,
+                "evidence_digest": review_evidence.digest,
+            }
+            listing.metadata["manual_review"] = review_state
+            listing.metadata["manual_review_evidence"] = review_evidence.to_dict()
+            decision_metadata["manual_review"] = {
+                "evidence_id": review_evidence.evidence_id,
+                "evidence_digest": review_evidence.digest,
+                "risk": review_state.get("risk", "routine"),
+                "reasons": list(review_state.get("reasons") or []),
+            }
+        elif (
+            listing is not None
+            and listing.status is PublishStatus.PENDING_REVIEW
+            and isinstance(existing_review, dict)
+            and action
+            in {
+                ModerationAction.REJECT,
+                ModerationAction.REQUEST_CHANGES,
+                ModerationAction.DEREGISTER,
+            }
+        ):
+            review_status = {
+                ModerationAction.REJECT: "rejected",
+                ModerationAction.REQUEST_CHANGES: "changes_requested",
+                ModerationAction.DEREGISTER: "deregistered",
+            }[action]
+            listing.metadata["manual_review"] = {
+                **existing_review,
+                "status": review_status,
+                "reviewer_id": moderator_id or "purecipher-admin",
+                "completed_at": datetime.now(UTC).isoformat(),
+            }
+            decision_metadata["manual_review"] = {
+                "status": review_status,
+                "risk": existing_review.get("risk", "routine"),
+                "reasons": list(existing_review.get("reasons") or []),
+            }
         decision = marketplace.moderate(
             listing_id,
             moderator_id=moderator_id or "purecipher-admin",
             action=action,
             reason=reason,
-            metadata=metadata,
+            metadata=decision_metadata,
         )
         if decision is None:
             return {"error": f"Listing '{listing_id}' not found", "status": 404}
@@ -5966,6 +6096,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         changelog: str = "",
         requested_level: CertificationLevel | None = None,
         publisher_test_evidence: Sequence[CertificationTestEvidence] = (),
+        manual_review_requested: bool = False,
         attestation_kind: Any = None,
         upstream_ref: Any = None,
         curator_id: str = "",
@@ -6017,6 +6148,8 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             metadata=metadata,
             requested_level=effective_requested_level,
             publisher_test_evidence=publisher_test_evidence,
+            attestation_kind=kind,
+            manual_review_requested=manual_review_requested,
         )
         if not preflight.ready_for_publish:
             return RegistrySubmissionResult(
@@ -6083,15 +6216,21 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             categories=categories,
             manifest=manifest,
             attestation=preflight.attestation,
+            status=(
+                PublishStatus.PENDING_REVIEW
+                if preflight.manual_review.required
+                else PublishStatus.PUBLISHED
+            ),
             homepage_url=homepage_url,
             source_url=source_url,
             tool_license=tool_license,
             tags=tags or manifest.tags,
             metadata={
+                **(metadata or {}),
                 "issuer_id": self._issuer_id,
                 "verified_registry": "purecipher",
                 "definition_tokens": definition_tokens,
-                **(metadata or {}),
+                "manual_review": preflight.manual_review.to_dict(),
             },
             changelog=changelog,
             attestation_kind=kind,
@@ -6105,12 +6244,14 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         display = listing.display_name or tool
         all_personas = ("viewer", "publisher", "reviewer", "admin")
         if listing.status == PublishStatus.PENDING_REVIEW:
+            review_reasons = ", ".join(preflight.manual_review.reasons[:3])
             self.record_registry_notification(
                 event_kind="listing_pending_review",
                 title=f"Listing submitted for review: {display}",
                 body=(
                     f"{tool} v{listing.version} is queued for moderator approval "
                     f"before it appears in the public catalog."
+                    + (f" Review signals: {review_reasons}." if review_reasons else "")
                 ),
                 link_path=f"{prefix}/listings/{quote(tool, safe='')}",
                 audiences=all_personas,
@@ -6134,7 +6275,11 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
         return RegistrySubmissionResult(
             accepted=True,
-            reason="Accepted into the PureCipher verified registry.",
+            reason=(
+                "Accepted and queued for manual review."
+                if listing.status is PublishStatus.PENDING_REVIEW
+                else "Accepted into the PureCipher verified registry."
+            ),
             report=preflight.report,
             attestation=preflight.attestation,
             manifest_digest=preflight.manifest_digest,
@@ -6585,8 +6730,13 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         metadata: dict[str, Any] | None = None,
         requested_level: CertificationLevel | None = None,
         publisher_test_evidence: Sequence[CertificationTestEvidence] = (),
+        attestation_kind: AttestationKind = AttestationKind.AUTHOR,
+        manual_review_requested: bool = False,
     ) -> RegistryPreflightResult:
         """Validate a submission without publishing it."""
+
+        if not isinstance(manual_review_requested, bool):
+            raise ValueError("manual_review_requested must be a boolean")
 
         result = self._certification_pipeline().certify(
             manifest,
@@ -6597,6 +6747,16 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         meets_minimum = level_order.index(
             result.certification_level
         ) >= level_order.index(self.minimum_certification)
+        review_assessment = assess_manual_review(
+            manifest,
+            result.report,
+            mode=self._manual_review_mode,
+            requested_level=requested_level or self.minimum_certification,
+            effective_level=result.certification_level,
+            attestation_kind=attestation_kind,
+            score_threshold_percent=self._manual_review_score_threshold,
+            exception_requested=manual_review_requested,
+        )
 
         preview_listing = ToolListing(
             tool_name=manifest.tool_name,
@@ -6608,9 +6768,10 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             manifest=manifest,
             attestation=result.attestation if result.is_certified else None,
             metadata={
+                **(metadata or {}),
                 "issuer_id": self._issuer_id,
                 "verified_registry": "purecipher",
-                **(metadata or {}),
+                "manual_review": review_assessment.to_dict(),
             },
         )
         install_recipes = build_install_recipes(
@@ -6640,6 +6801,13 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             )
         else:
             summary = "Ready to publish."
+        if (
+            result.is_certified
+            and meets_minimum
+            and not result.report.has_errors
+            and review_assessment.required
+        ):
+            summary = f"{summary} Manual review is required before publication."
 
         return RegistryPreflightResult(
             ready_for_publish=result.is_certified
@@ -6662,6 +6830,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             ],
             report=result.report,
             attestation=result.attestation,
+            manual_review=review_assessment,
         )
 
     def verify_tool(
@@ -9787,6 +9956,10 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     publisher_test_evidence=_parse_publisher_test_evidence(
                         body.get("publisher_test_evidence")
                     ),
+                    manual_review_requested=_coerce_request_bool(
+                        body.get("manual_review_requested"),
+                        "manual_review_requested",
+                    ),
                 )
             except (KeyError, TypeError, ValueError) as exc:
                 return JSONResponse(
@@ -9829,6 +10002,10 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     requested_level=_coerce_level(body.get("requested_level")),
                     publisher_test_evidence=_parse_publisher_test_evidence(
                         body.get("publisher_test_evidence")
+                    ),
+                    manual_review_requested=_coerce_request_bool(
+                        body.get("manual_review_requested"),
+                        "manual_review_requested",
                     ),
                 )
             except (KeyError, TypeError, ValueError) as exc:

@@ -66,6 +66,12 @@ class ReviewQueueItem:
     version: str
     updated_at: str
     available_actions: list[str] = field(default_factory=list)
+    assurance_tier: str = "static_analysis"
+    validation_score_percent: int = 0
+    manual_review_required: bool = False
+    manual_review_risk: str = "routine"
+    manual_review_reasons: list[str] = field(default_factory=list)
+    manual_review_status: str = "not_required"
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize for JSON responses."""
@@ -82,6 +88,12 @@ class ReviewQueueItem:
             "version": self.version,
             "updated_at": self.updated_at,
             "available_actions": list(self.available_actions),
+            "assurance_tier": self.assurance_tier,
+            "validation_score_percent": self.validation_score_percent,
+            "manual_review_required": self.manual_review_required,
+            "manual_review_risk": self.manual_review_risk,
+            "manual_review_reasons": list(self.manual_review_reasons),
+            "manual_review_status": self.manual_review_status,
         }
 
 

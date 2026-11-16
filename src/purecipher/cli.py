@@ -13,6 +13,7 @@ from fastmcp.server.security.certification.attestation import CertificationLevel
 from purecipher.auth import RegistryAuthSettings
 from purecipher.hosted_runtime import build_hosted_registry_app
 from purecipher.registry import PureCipherRegistry
+from purecipher.review_risk import ManualReviewMode
 
 
 def _env_flag(name: str) -> bool:
@@ -134,7 +135,29 @@ def build_parser() -> argparse.ArgumentParser:
         "--require-moderation",
         action="store_true",
         default=_env_flag("PURECIPHER_REQUIRE_MODERATION"),
-        help="Place accepted submissions into pending review instead of immediate publication.",
+        help=(
+            "Legacy alias for --manual-review-mode=all; place every accepted "
+            "submission into pending review."
+        ),
+    )
+    parser.add_argument(
+        "--manual-review-mode",
+        choices=[mode.value for mode in ManualReviewMode],
+        default=_env_or_file("PURECIPHER_MANUAL_REVIEW_MODE"),
+        help=(
+            "Manual-review routing: disabled, all, or risk_based. Defaults to "
+            "PURECIPHER_MANUAL_REVIEW_MODE, or to 'all' when "
+            "--require-moderation is set."
+        ),
+    )
+    parser.add_argument(
+        "--manual-review-score-threshold",
+        type=int,
+        default=int(os.getenv("PURECIPHER_MANUAL_REVIEW_SCORE_THRESHOLD", "85")),
+        help=(
+            "In risk_based mode, scores below this percentage require review "
+            "(default: 85)."
+        ),
     )
     parser.add_argument(
         "--enable-auth",
@@ -227,6 +250,8 @@ def build_registry_from_args(args: argparse.Namespace) -> PureCipherRegistry:
         persistence_path=args.database_path,
         mount_security_api=not args.disable_security_api,
         require_moderation=args.require_moderation,
+        manual_review_mode=args.manual_review_mode,
+        manual_review_score_threshold=args.manual_review_score_threshold,
         auth_settings=auth_settings,
         require_resolved_principal=(
             True if getattr(args, "require_resolved_principal", False) else None

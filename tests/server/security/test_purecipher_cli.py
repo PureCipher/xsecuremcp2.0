@@ -78,6 +78,14 @@ class TestPureCipherCLI:
 
         assert args.require_moderation is True
 
+    def test_parser_reads_manual_review_mode_from_env(self, monkeypatch):
+        monkeypatch.setenv("PURECIPHER_MANUAL_REVIEW_MODE", "risk_based")
+        parser = build_parser()
+
+        args = parser.parse_args(["--signing-secret", "test-secret"])
+
+        assert args.manual_review_mode == "risk_based"
+
     def test_parser_reads_enable_auth_from_env(self, monkeypatch):
         monkeypatch.setenv("PURECIPHER_ENABLE_AUTH", "true")
         parser = build_parser()
@@ -149,6 +157,27 @@ class TestPureCipherCLI:
 
         assert isinstance(registry, PureCipherRegistry)
         assert registry.get_registry_health()["require_moderation"] is True
+        assert registry.get_registry_health()["manual_review_mode"] == "all"
+
+    def test_build_registry_from_args_enables_risk_based_review(self):
+        parser = build_parser()
+        args = parser.parse_args(
+            [
+                "--signing-secret",
+                "test-secret",
+                "--manual-review-mode",
+                "risk_based",
+                "--manual-review-score-threshold",
+                "90",
+            ]
+        )
+
+        registry = build_registry_from_args(args)
+        health = registry.get_registry_health()
+
+        assert health["require_moderation"] is True
+        assert health["manual_review_mode"] == "risk_based"
+        assert health["manual_review_score_threshold"] == 90
 
     def test_build_registry_from_args_enables_auth(self):
         parser = build_parser()
