@@ -3,10 +3,10 @@ client slug as ``actor_id`` when one is available.
 
 The four SecureMCP middlewares (policy / contract / consent /
 provenance / reflexive) each independently extract ``actor_id``
-from ``fastmcp.server.dependencies.get_access_token()`` and
-truncate the token to an opaque 8-char prefix. That extraction
-predates PureCipher's MCP-client identity model and is
-unaware of our opaque API tokens.
+from ``fastmcp.server.dependencies.get_access_token()``. Unresolved
+opaque tokens become token-derived pseudonymous principals. That
+extraction predates PureCipher's MCP-client identity model and is
+unaware of our registry client records.
 
 These thin subclasses override the actor-extraction step on each
 upstream middleware to *prefer* the contextvar-resolved client
@@ -54,7 +54,7 @@ from purecipher.middleware.client_actor import current_client_actor
 
 class ClientAwarePolicyEnforcementMiddleware(PolicyEnforcementMiddleware):
     """``PolicyEnforcementMiddleware`` that prefers the resolved
-    client slug as ``actor_id`` over the access-token prefix.
+    client slug as ``actor_id`` over a token-derived pseudonymous principal.
 
     The upstream middleware builds its
     :class:`PolicyEvaluationContext` inside ``_build_context``.

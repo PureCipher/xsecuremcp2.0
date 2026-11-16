@@ -161,6 +161,7 @@ Use the signing-secret environment variable from the local example above. If the
 | `PURECIPHER_SIGNING_SECRET` | Required registry signing key. Supply it through your deployment’s secret store. |
 | `DATABASE_URL` | PostgreSQL connection string for persistent registry state. Without it, state is ephemeral. |
 | `PURECIPHER_ENABLE_AUTH` | Set to `true` to enable registry authentication; configure users and JWT settings as described in the registry guide. |
+| `PURECIPHER_REQUIRE_RESOLVED_PRINCIPAL` | Require registry and curator-proxy MCP callers to authenticate with a registered client token. PostgreSQL-backed production registries enforce this automatically. |
 | `PURECIPHER_REQUIRE_MODERATION` | Set to `true` to place accepted submissions into review before publication. |
 
 A signing secret does not enable user authentication. Review [registry configuration](docs/servers/security/purecipher-registry.mdx) before operating a shared deployment.

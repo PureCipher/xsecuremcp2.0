@@ -1711,6 +1711,29 @@ class TestCuratorProxyHosting:
 
         assert isinstance(proxy, SecureMCP)
 
+    def test_proxy_inherits_strict_principal_enforcement(self):
+        from fastmcp.server.security.gateway.tool_marketplace import HostingMode
+        from purecipher.curation import build_curator_proxy_server
+        from purecipher.middleware.client_actor import (
+            ClientActorResolverMiddleware,
+        )
+
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            require_resolved_principal=True,
+        )
+        listing = self._curated_listing(hosting_mode=HostingMode.PROXY)
+
+        proxy = build_curator_proxy_server(
+            listing,
+            shared_context=registry.security_context,
+            registry=registry,
+        )
+
+        resolver = proxy.middleware[0]
+        assert isinstance(resolver, ClientActorResolverMiddleware)
+        assert resolver.require_resolved_principal is True
+
     def test_build_proxy_refuses_listing_without_observed_tools(self):
         from fastmcp.server.security.gateway.tool_marketplace import HostingMode
         from purecipher.curation import (

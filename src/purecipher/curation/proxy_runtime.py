@@ -538,8 +538,8 @@ def build_curator_proxy_server(
         # runs. When the caller passed a registry, we install a
         # resolver at the front of the chain so consent / contract
         # middleware see stable client identity. Without it they fall
-        # back to the token-prefix actor (keeps behavior for callers
-        # that only plumb a shared security context).
+        # back to a token-derived pseudonymous actor in development
+        # (keeps behavior for callers that only plumb a shared context).
         if registry is not None:
             proxy.middleware.insert(0, ClientActorResolverMiddleware(registry))
 
@@ -576,7 +576,7 @@ class CuratorProxyRouter:
                 :class:`ClientActorResolverMiddleware` so bearer
                 tokens resolve to the issuing client's slug —
                 lets consent/contract enforcement key off stable
-                client identity rather than a token-prefix stub.
+                client identity rather than a token-derived pseudonym.
         """
         self._lookup = listing_lookup
         self._auth_settings = auth_settings

@@ -86,6 +86,14 @@ class TestPureCipherCLI:
 
         assert args.enable_auth is True
 
+    def test_parser_reads_required_principal_from_env(self, monkeypatch):
+        monkeypatch.setenv("PURECIPHER_REQUIRE_RESOLVED_PRINCIPAL", "true")
+        parser = build_parser()
+
+        args = parser.parse_args(["--signing-secret", "test-secret"])
+
+        assert args.require_resolved_principal is True
+
     def test_build_registry_from_args(self):
         parser = build_parser()
         args = parser.parse_args(
@@ -158,6 +166,21 @@ class TestPureCipherCLI:
 
         assert isinstance(registry, PureCipherRegistry)
         assert registry.get_registry_health()["auth_enabled"] is True
+
+    def test_build_registry_from_args_can_require_resolved_principal(self):
+        parser = build_parser()
+        args = parser.parse_args(
+            [
+                "--signing-secret",
+                "test-secret",
+                "--require-resolved-principal",
+            ]
+        )
+
+        registry = build_registry_from_args(args)
+
+        assert registry.require_resolved_principal is True
+        assert registry.get_registry_health()["require_resolved_principal"] is True
 
     def test_build_registry_requires_secret(self):
         parser = build_parser()

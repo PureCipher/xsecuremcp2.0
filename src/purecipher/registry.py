@@ -136,6 +136,26 @@ def _make_security_backend(persistence_path: str | None) -> Any:
     return None
 
 
+def _resolve_required_principal_setting(
+    persistence_path: str | None,
+    requested: bool | None,
+) -> bool:
+    """Resolve strict client identity without permitting production opt-out.
+
+    PostgreSQL is this service's production persistence engine, so a
+    PostgreSQL-backed registry always requires a registered client principal.
+    Ephemeral development registries can opt into the same behavior explicitly.
+    """
+
+    production = is_postgres_dsn(persistence_path)
+    if production and requested is False:
+        raise ValueError(
+            "PostgreSQL-backed production registries cannot disable resolved "
+            "client-principal enforcement."
+        )
+    return production or requested is True
+
+
 @dataclass
 class RegistrySubmissionResult:
     """Outcome of a registry submission attempt."""
@@ -430,6 +450,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         persistence_path: str | None = None,
         security: SecurityConfig | None = None,
         auth_settings: RegistryAuthSettings | None = None,
+        require_resolved_principal: bool | None = None,
         security_api_require_auth: bool | None = None,
         security_api_bearer_token: str | None = None,
         security_api_auth_verifier: Any = None,
@@ -479,6 +500,10 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         self._auth_settings.validate()
 
         self._persistence_path = persistence_path
+        self._require_resolved_principal = _resolve_required_principal_setting(
+            persistence_path,
+            require_resolved_principal,
+        )
         # PostgreSQL is the only durable engine: its schema is created by the
         # Alembic migration chain. Any non-Postgres target runs ephemeral
         # (each store falls back to in-memory), so no migration is needed.
@@ -606,8 +631,8 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         # middleware chain. The resolver runs first and stashes the
         # resolved slug in a contextvar; the four downstream
         # middlewares are upgraded in-place to PureCipher-aware
-        # subclasses that prefer the contextvar over the access-
-        # token prefix when populating ``actor_id``. Net effect:
+        # subclasses that prefer the contextvar over a token-derived
+        # pseudonymous principal when populating ``actor_id``. Net effect:
         # every plane (Policy, Contract, Consent, Provenance,
         # Reflexive) sees a stable per-client identifier when an
         # MCP client presents a registry-issued bearer token.
@@ -675,6 +700,12 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         """Return True when registry auth is enabled."""
 
         return self._auth_settings.enabled
+
+    @property
+    def require_resolved_principal(self) -> bool:
+        """Return whether MCP calls require a registered client identity."""
+
+        return self._require_resolved_principal
 
     @staticmethod
     def _build_default_security(
@@ -3138,6 +3169,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             "minimum_certification": self.minimum_certification.value,
             "require_moderation": self._require_moderation,
             "auth_enabled": self.auth_enabled,
+            "require_resolved_principal": self.require_resolved_principal,
             "bootstrap_required": self._bootstrap_required(),
             "registered_tools": trust_registry.record_count,
             "verified_tools": len(published),

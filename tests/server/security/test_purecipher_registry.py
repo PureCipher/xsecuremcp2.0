@@ -4544,7 +4544,7 @@ class TestRegistryClientIdentities:
         consent / provenance / reflexive middlewares for client-aware
         subclasses and inserts the resolver at the head of the chain.
         Without this wiring, every plane would fall back to the
-        SecureMCP default actor extraction (truncated bearer token)
+        SecureMCP default token-derived pseudonymous actor
         and the client slug would never reach downstream telemetry.
         """
         from purecipher.middleware.client_actor import (
@@ -4582,6 +4582,193 @@ class TestRegistryClientIdentities:
         assert ClientAwareConsentEnforcementMiddleware in live_chain_types
         assert ClientAwareProvenanceRecordingMiddleware in live_chain_types
         assert ClientAwareReflexiveMiddleware in live_chain_types
+
+    def test_ephemeral_registry_keeps_resolved_principal_optional(self):
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
+
+        assert registry.require_resolved_principal is False
+
+    def test_postgres_production_requires_resolved_principal(self):
+        from purecipher.registry import _resolve_required_principal_setting
+
+        dsn = "postgresql://registry:secret@db.example/purecipher"
+        assert _resolve_required_principal_setting(dsn, None) is True
+        assert _resolve_required_principal_setting(dsn, True) is True
+        with pytest.raises(ValueError, match="cannot disable"):
+            _resolve_required_principal_setting(dsn, False)
+
+    async def test_strict_resolver_rejects_missing_client_token(self):
+        from fastmcp.server.middleware.middleware import MiddlewareContext
+        from purecipher.middleware.client_actor import (
+            ResolvedPrincipalRequiredError,
+        )
+
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            require_resolved_principal=True,
+        )
+        resolver = registry.middleware[0]
+        reached_downstream = False
+
+        async def call_next(context):
+            del context
+            nonlocal reached_downstream
+            reached_downstream = True
+
+        context = MiddlewareContext(message=object(), method="tools/call")
+        with pytest.raises(
+            ResolvedPrincipalRequiredError,
+            match="valid registered client token",
+        ):
+            await resolver(context, call_next)
+        assert reached_downstream is False
+
+    async def test_strict_resolver_rejects_invalid_or_revoked_token(self, monkeypatch):
+        from fastmcp.server.middleware.middleware import MiddlewareContext
+        from purecipher.middleware.client_actor import (
+            ResolvedPrincipalRequiredError,
+        )
+
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            require_resolved_principal=True,
+        )
+        issued = registry.register_client(
+            display_name="Revoked Principal",
+            owner_publisher_id="acme",
+            slug="revoked-principal",
+        )
+        registry.revoke_client_token(issued["token"]["token_id"])
+        resolver = registry.middleware[0]
+        monkeypatch.setattr(
+            resolver,
+            "_extract_bearer_token",
+            lambda _context: issued["secret"],
+        )
+
+        async def call_next(context):
+            del context
+            raise AssertionError("unresolved identity reached downstream middleware")
+
+        context = MiddlewareContext(message=object(), method="tools/call")
+        with pytest.raises(ResolvedPrincipalRequiredError):
+            await resolver(context, call_next)
+
+    async def test_strict_resolver_exposes_registered_client_identity(
+        self, monkeypatch
+    ):
+        from fastmcp.server.middleware.middleware import MiddlewareContext
+        from purecipher.middleware.client_actor import (
+            current_client_actor,
+            current_client_record,
+        )
+
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            require_resolved_principal=True,
+        )
+        issued = registry.register_client(
+            display_name="Resolved Principal",
+            owner_publisher_id="acme",
+            slug="resolved-principal",
+        )
+        resolver = registry.middleware[0]
+        monkeypatch.setattr(
+            resolver,
+            "_extract_bearer_token",
+            lambda _context: issued["secret"],
+        )
+
+        async def call_next(context):
+            del context
+            assert current_client_actor() == "resolved-principal"
+            assert current_client_record().slug == "resolved-principal"
+            return "accepted"
+
+        context = MiddlewareContext(message=object(), method="tools/call")
+        assert await resolver(context, call_next) == "accepted"
+        assert current_client_actor() is None
+        assert current_client_record() is None
+
+    async def test_strict_resolver_fails_closed_on_store_error(self, monkeypatch):
+        from fastmcp.server.middleware.middleware import MiddlewareContext
+        from purecipher.middleware.client_actor import (
+            ResolvedPrincipalRequiredError,
+        )
+
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            require_resolved_principal=True,
+        )
+        resolver = registry.middleware[0]
+        monkeypatch.setattr(
+            resolver,
+            "_extract_bearer_token",
+            lambda _context: "pcc_non_secret_test_value",
+        )
+
+        def fail_resolution(_token):
+            raise RuntimeError("identity store unavailable")
+
+        monkeypatch.setattr(registry, "authenticate_client_token", fail_resolution)
+
+        async def call_next(context):
+            del context
+            raise AssertionError("resolver failure reached downstream middleware")
+
+        context = MiddlewareContext(message=object(), method="tools/call")
+        with pytest.raises(ResolvedPrincipalRequiredError):
+            await resolver(context, call_next)
+
+    def test_strict_principal_enforcement_at_http_mcp_boundary(self):
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            require_resolved_principal=True,
+            enable_contracts=False,
+            enable_consent=False,
+            enable_provenance=False,
+            enable_reflexive=False,
+        )
+        issued = registry.register_client(
+            display_name="HTTP Principal",
+            owner_publisher_id="acme",
+            slug="http-principal",
+        )
+        initialize = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "principal-test", "version": "1"},
+            },
+        }
+        headers = {"accept": "application/json, text/event-stream"}
+
+        with TestClient(registry.http_app(transport="streamable-http")) as client:
+            missing = client.post("/mcp", headers=headers, json=initialize)
+            invalid = client.post(
+                "/mcp",
+                headers={**headers, "authorization": "Bearer invalid-token"},
+                json=initialize,
+            )
+            valid = client.post(
+                "/mcp",
+                headers={
+                    **headers,
+                    "authorization": f"Bearer {issued['secret']}",
+                },
+                json=initialize,
+            )
+
+        assert missing.status_code == 200
+        assert invalid.status_code == 200
+        assert "valid registered client token" in missing.text
+        assert "valid registered client token" in invalid.text
+        assert valid.status_code == 200
+        assert '"result"' in valid.text
+        assert "valid registered client token" not in valid.text
 
     def test_get_client_governance_projects_per_plane_summary(self):
         registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)

@@ -143,6 +143,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Enable JWT login and role-based access for registry routes.",
     )
     parser.add_argument(
+        "--require-resolved-principal",
+        action="store_true",
+        default=_env_flag("PURECIPHER_REQUIRE_RESOLVED_PRINCIPAL"),
+        help=(
+            "Require registry and curator-proxy MCP requests to authenticate as "
+            "a registered client. Automatically enforced for PostgreSQL-backed "
+            "production registries."
+        ),
+    )
+    parser.add_argument(
         "--jwt-secret",
         default=_env_or_file("PURECIPHER_JWT_SECRET") or "",
         help=(
@@ -218,6 +228,9 @@ def build_registry_from_args(args: argparse.Namespace) -> PureCipherRegistry:
         mount_security_api=not args.disable_security_api,
         require_moderation=args.require_moderation,
         auth_settings=auth_settings,
+        require_resolved_principal=(
+            True if getattr(args, "require_resolved_principal", False) else None
+        ),
     )
 
 

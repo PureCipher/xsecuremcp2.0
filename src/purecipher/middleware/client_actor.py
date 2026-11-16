@@ -4,10 +4,9 @@ Iteration 10 lights up real client identities across every
 SecureMCP control plane. The challenge: each downstream middleware
 (policy / contract / consent / provenance / reflexive) builds its
 ``actor_id`` independently by reading
-``fastmcp.server.dependencies.get_access_token()`` and truncating
-the token to a redacted 8-char prefix. With our opaque API tokens
-that prefix is meaningless ("pcc_abc1...") — what we actually want
-is the client's slug (``"claude-desktop"``, ``"acme-sales-bot"``,
+``fastmcp.server.dependencies.get_access_token()``. Unresolved opaque
+tokens become token-derived pseudonymous principals — what we actually
+want is the client's slug (``"claude-desktop"``, ``"acme-sales-bot"``,
 etc.) so downstream telemetry filters consistently per client.
 
 This module contributes two pieces:
@@ -18,9 +17,12 @@ This module contributes two pieces:
    * Reads the ``Authorization: Bearer ...`` header.
    * Hands the token to the registry's
      :meth:`PureCipherRegistry.authenticate_client_token` method.
-   * If valid + the client is active, stashes the resolved client's
+   * If valid and the client is active, stashes the resolved client's
      slug in a module-level :class:`~contextvars.ContextVar` for
      the duration of the call.
+   * In strict mode, rejects missing, invalid, revoked, suspended, or
+     otherwise unresolvable credentials before governance middleware can
+     attach evidence to a pseudonymous principal.
 
 2. :func:`current_client_actor` — small read accessor for that
    contextvar. The PureCipher-specific subclasses of the four
@@ -29,10 +31,10 @@ This module contributes two pieces:
    the SecureMCP default extraction when no client token was
    presented.
 
-Net effect: when a real MCP client sends a bearer token, every
-plane sees the same stable ``actor_id`` (the client's slug). When
-no token is presented, behavior is unchanged from default
-SecureMCP.
+Net effect: when a real MCP client sends a bearer token, every plane
+sees the same stable ``actor_id`` (the client's slug). Development
+deployments retain the permissive fallback unless strict mode is
+requested; production registry deployments enable strict mode.
 """
 
 from __future__ import annotations
@@ -41,6 +43,7 @@ import logging
 from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any
 
+from fastmcp.exceptions import AuthorizationError
 from fastmcp.server.middleware.middleware import (
     CallNext,
     Middleware,
@@ -51,6 +54,15 @@ if TYPE_CHECKING:
     from purecipher.registry import PureCipherRegistry
 
 logger = logging.getLogger(__name__)
+
+
+class ResolvedPrincipalRequiredError(AuthorizationError):
+    """Raised when strict client-principal resolution cannot authenticate."""
+
+
+_RESOLVED_PRINCIPAL_REQUIRED_MESSAGE = (
+    "A valid registered client token is required for this MCP endpoint."
+)
 
 
 # Single global contextvar for the currently-resolving client.
@@ -90,15 +102,28 @@ class ClientActorResolverMiddleware(Middleware):
 
     The middleware runs first (inserted at index 0 of
     ``ctx.middleware`` by :class:`PureCipherRegistry`). It
-    intentionally does NOT enforce — even when a token is
-    missing or invalid, the request proceeds. Authentication is
-    the existing auth chain's job; this middleware is a *resolver*
-    that lets downstream telemetry attribute the call when an
-    identifier is available.
+    Development deployments may use it only as a resolver, preserving
+    the framework's token-derived pseudonymous fallback. Strict deployments
+    enforce resolved registry identity and reject the request before any
+    downstream governance plane observes an unresolved actor.
     """
 
-    def __init__(self, registry: PureCipherRegistry) -> None:
+    def __init__(
+        self,
+        registry: PureCipherRegistry,
+        *,
+        require_resolved_principal: bool | None = None,
+    ) -> None:
         self._registry = registry
+        if require_resolved_principal is None:
+            require_resolved_principal = registry.require_resolved_principal
+        self._require_resolved_principal = bool(require_resolved_principal)
+
+    @property
+    def require_resolved_principal(self) -> bool:
+        """Return whether unresolved client identity is rejected."""
+
+        return self._require_resolved_principal
 
     async def __call__(
         self,
@@ -108,21 +133,31 @@ class ClientActorResolverMiddleware(Middleware):
         token_value = self._extract_bearer_token(context)
         token_actor: str | None = None
         token_record: Any = None
+        resolution_failed = False
         if token_value:
             try:
                 resolved = self._registry.authenticate_client_token(token_value)
             except Exception:
-                # Defensive: a bug in the resolver path must never
-                # block the request. Log + proceed without an
-                # attributed actor.
                 logger.exception(
-                    "ClientActorResolverMiddleware: failed to resolve token"
+                    "Client principal resolution failed%s",
+                    "; denying request" if self._require_resolved_principal else "",
                 )
                 resolved = None
+                resolution_failed = True
             if resolved is not None:
                 client, _ = resolved
                 token_actor = client.slug
                 token_record = client
+
+        if token_actor is None and self._require_resolved_principal:
+            if not resolution_failed:
+                logger.warning(
+                    "Denied MCP request without a resolved client principal "
+                    "(method=%s, source=%s)",
+                    context.method or "unknown",
+                    context.source,
+                )
+            raise ResolvedPrincipalRequiredError(_RESOLVED_PRINCIPAL_REQUIRED_MESSAGE)
 
         actor_token = _current_client_actor.set(token_actor)
         record_token = _current_client_record.set(token_record)
@@ -142,9 +177,8 @@ class ClientActorResolverMiddleware(Middleware):
         * the header is missing,
         * the header value isn't ``Bearer ...``.
 
-        We avoid raising in any of these cases — the resolver runs
-        on every call and shouldn't block traffic that doesn't
-        carry a client token.
+        Extraction itself never raises. The caller decides whether a missing
+        token is allowed or rejected according to strict-mode configuration.
         """
         try:
             from fastmcp.server.dependencies import get_http_request
@@ -167,6 +201,7 @@ class ClientActorResolverMiddleware(Middleware):
 
 __all__ = [
     "ClientActorResolverMiddleware",
+    "ResolvedPrincipalRequiredError",
     "current_client_actor",
     "current_client_record",
 ]

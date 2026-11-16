@@ -1,9 +1,9 @@
 """Persistent client identity + token store for the PureCipher registry.
 
-Iteration 10 introduces first-class MCP-client identities. Until
-this iteration the registry's middleware extracted ``actor_id``
-from a redacted access-token prefix — a synthetic string with no
-addressable identity behind it. With clients in place, every
+Iteration 10 introduces first-class MCP-client identities. Without
+a resolved registry client, framework middleware can derive a
+pseudonymous ``actor_id`` from an opaque token — a synthetic string
+with no addressable identity behind it. With clients in place, every
 governance plane (Policy, Contracts, Consent, Provenance,
 Reflexive) can reason about *which* MCP client made a call and
 operators can attach trust posture to specific identities rather

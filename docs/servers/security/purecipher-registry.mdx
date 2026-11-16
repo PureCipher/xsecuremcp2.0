@@ -255,6 +255,18 @@ If auth is enabled and `PURECIPHER_USERS_JSON` is omitted, the registry falls ba
 
 For production, define your own user list and use a longer secret.
 
+## MCP Client Identity Enforcement
+
+PostgreSQL-backed production registries require registry and curator-proxy MCP
+requests to resolve to an active registered client. Missing, unknown, revoked,
+or suspended client tokens are rejected before policy, contract, consent,
+provenance, or reflexive middleware can attach activity to a token-derived
+pseudonymous principal. This production safeguard cannot be disabled.
+
+Ephemeral development registries preserve the permissive fallback by default.
+Set `PURECIPHER_REQUIRE_RESOLVED_PRINCIPAL=true` or pass
+`--require-resolved-principal` to exercise the production behavior locally.
+
 ## Persistence
 
 `PureCipherRegistry` can persist catalog state to SQLite:
