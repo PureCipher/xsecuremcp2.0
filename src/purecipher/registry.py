@@ -2365,6 +2365,8 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
 
             ledger = ProvenanceLedger(ledger_id=server_id, backend=backend)
             ctx.provenance_ledger = ledger
+            if ctx.policy_audit_log is not None:
+                ctx.policy_audit_log.attach_provenance_ledger(ledger)
             self._add_live_security_middleware(
                 ctx, ProvenanceRecordingMiddleware(ledger=ledger)
             )
@@ -2425,6 +2427,8 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 ProvenanceRecordingMiddleware,
             )
 
+            if ctx.policy_audit_log is not None:
+                ctx.policy_audit_log.attach_provenance_ledger(None)
             ctx.provenance_ledger = None
             self._remove_live_security_middleware(ctx, ProvenanceRecordingMiddleware)
             return

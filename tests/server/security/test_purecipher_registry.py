@@ -4221,6 +4221,20 @@ class TestRuntimeControlPlaneToggles:
             )
             assert entry["enabled"] is True
 
+    def test_provenance_toggle_updates_policy_denial_sink(self):
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
+        ctx = registry._required_context()
+        assert ctx.policy_audit_log is not None
+        assert ctx.policy_audit_log.provenance_ledger is ctx.provenance_ledger
+
+        registry.disable_plane("provenance", actor_id="alice")
+        assert ctx.provenance_ledger is None
+        assert ctx.policy_audit_log.provenance_ledger is None
+
+        registry.enable_plane("provenance", actor_id="alice")
+        assert ctx.provenance_ledger is not None
+        assert ctx.policy_audit_log.provenance_ledger is ctx.provenance_ledger
+
     def test_unknown_plane_raises_value_error(self):
         registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
         import pytest

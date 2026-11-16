@@ -36,7 +36,7 @@ import threading
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastmcp.server.security.policy.provider import (
     Citation,
@@ -46,6 +46,9 @@ from fastmcp.server.security.policy.provider import (
 )
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from fastmcp.server.security.provenance.ledger import ProvenanceLedger
 
 
 @dataclass(frozen=True)
@@ -133,10 +136,16 @@ class PolicyAuditLog:
     """In-memory audit log for policy decisions.
 
     Thread-safe bounded log with query, filtering, and export capabilities.
+    Execution denials are retained ahead of routine discovery decisions so
+    repeated component listing cannot erase evidence of blocked operations.
+    When a provenance ledger is attached, those denials are also written to
+    its tamper-evident chain and inherit the ledger backend's durability.
 
     Args:
-        max_entries: Maximum number of entries to retain (oldest are evicted).
-            Defaults to 10,000.
+        max_entries: Maximum number of entries to retain. Routine entries are
+            evicted before execution denials. Defaults to 10,000.
+        provenance_ledger: Optional ledger that receives actionable denials as
+            ``ACCESS_DENIED`` records.
 
     Example::
 
@@ -145,13 +154,22 @@ class PolicyAuditLog:
         recent_denials = audit.query(decision=PolicyDecision.DENY, limit=20)
     """
 
-    def __init__(self, max_entries: int = 10_000) -> None:
-        self._entries: deque[AuditEntry] = deque(maxlen=max_entries)
+    def __init__(
+        self,
+        max_entries: int = 10_000,
+        *,
+        provenance_ledger: ProvenanceLedger | None = None,
+    ) -> None:
+        if max_entries < 0:
+            raise ValueError("max_entries must be non-negative")
+        self._entries: deque[AuditEntry] = deque()
         self._max_entries = max_entries
+        self._provenance_ledger = provenance_ledger
         self._lock = threading.Lock()
         self._total_recorded: int = 0
         self._total_allowed: int = 0
         self._total_denied: int = 0
+        self._dropped_entries: int = 0
 
     @property
     def size(self) -> int:
@@ -177,6 +195,22 @@ class PolicyAuditLog:
     def total_denied(self) -> int:
         """Total DENY decisions recorded."""
         return self._total_denied
+
+    @property
+    def dropped_entries(self) -> int:
+        """Routine entries omitted because protected denials filled the log."""
+        return self._dropped_entries
+
+    @property
+    def provenance_ledger(self) -> ProvenanceLedger | None:
+        """Ledger receiving durable denial records, when configured."""
+        return self._provenance_ledger
+
+    def attach_provenance_ledger(
+        self, provenance_ledger: ProvenanceLedger | None
+    ) -> None:
+        """Attach or detach the ledger used to persist execution denials."""
+        self._provenance_ledger = provenance_ledger
 
     def record(
         self,
@@ -231,14 +265,90 @@ class PolicyAuditLog:
         )
 
         with self._lock:
-            self._entries.append(entry)
+            self._retain(entry)
             self._total_recorded += 1
             if result.decision == PolicyDecision.ALLOW:
                 self._total_allowed += 1
             elif result.decision == PolicyDecision.DENY:
                 self._total_denied += 1
 
+        if self._is_actionable_denial(entry):
+            self._record_provenance_denial(entry)
+
         return entry
+
+    @staticmethod
+    def _is_actionable_denial(entry: AuditEntry) -> bool:
+        """Return whether an entry represents a blocked execution attempt."""
+        return entry.decision in {
+            PolicyDecision.DENY,
+            PolicyDecision.REQUIRE_APPROVAL,
+        } and not entry.action.startswith("list_")
+
+    def _retain(self, entry: AuditEntry) -> None:
+        """Retain an entry while protecting execution denials from list noise.
+
+        The caller holds ``self._lock``. If the bounded log is full, the
+        oldest routine entry is evicted first. A routine entry is discarded
+        when every retained slot already contains an actionable denial. Only
+        a newer actionable denial may evict the oldest protected denial.
+        """
+        if self._max_entries == 0:
+            self._dropped_entries += 1
+            return
+        if len(self._entries) < self._max_entries:
+            self._entries.append(entry)
+            return
+
+        for index, retained in enumerate(self._entries):
+            if not self._is_actionable_denial(retained):
+                del self._entries[index]
+                self._entries.append(entry)
+                return
+
+        if self._is_actionable_denial(entry):
+            self._entries.popleft()
+            self._entries.append(entry)
+        else:
+            self._dropped_entries += 1
+
+    def _record_provenance_denial(self, entry: AuditEntry) -> None:
+        """Append a safe, tamper-evident denial record when a ledger exists."""
+        ledger = self._provenance_ledger
+        if ledger is None:
+            return
+
+        from fastmcp.server.security.provenance.records import ProvenanceAction
+
+        try:
+            ledger.record(
+                action=ProvenanceAction.ACCESS_DENIED,
+                actor_id=entry.actor_id or "anonymous",
+                resource_id=entry.resource_id,
+                input_data={
+                    "action": entry.action,
+                    "resource_id": entry.resource_id,
+                },
+                metadata={
+                    "decision": entry.decision.value,
+                    "policy_id": entry.policy_id,
+                    "reason": entry.reason,
+                    "requested_action": entry.action,
+                    "constraints": list(entry.constraints),
+                    "tags": sorted(entry.tags),
+                    "environment": entry.environment,
+                    "risk": entry.risk,
+                    "principal_type": entry.principal_type,
+                    "resource_type": entry.resource_type,
+                },
+            )
+        except Exception:
+            # Audit persistence must not replace the policy result or turn a
+            # deterministic denial into a server error.
+            logger.exception(
+                "Failed to persist policy denial for %s to provenance",
+                entry.resource_id,
+            )
 
     def query(
         self,
@@ -356,6 +466,7 @@ class PolicyAuditLog:
             "total_recorded": self._total_recorded,
             "total_allowed": self._total_allowed,
             "total_denied": self._total_denied,
+            "dropped_entries": self._dropped_entries,
             "current_allow": allow_count,
             "current_deny": deny_count,
             "current_defer": defer_count,

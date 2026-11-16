@@ -19,6 +19,12 @@ from fastmcp.server.security.contracts.schema import (
 )
 from fastmcp.server.security.gateway.marketplace import Marketplace
 from fastmcp.server.security.gateway.models import ServerCapability, TrustLevel
+from fastmcp.server.security.policy.audit import PolicyAuditLog
+from fastmcp.server.security.policy.provider import (
+    PolicyDecision,
+    PolicyEvaluationContext,
+    PolicyResult,
+)
 from fastmcp.server.security.provenance.ledger import ProvenanceLedger
 from fastmcp.server.security.provenance.records import ProvenanceAction
 from fastmcp.server.security.reflexive.analyzer import (
@@ -114,6 +120,35 @@ class TestProvenanceLedgerPersistence:
         assert ledger2.record_count == 2
         assert ledger2.verify_chain()
         assert ledger2.verify_tree()
+
+    def test_policy_denial_persists_across_sqlite_restart(self, tmp_path):
+        db = str(tmp_path / "policy-denials.db")
+        backend1 = SQLiteBackend(db)
+        ledger1 = ProvenanceLedger("policy-denials", backend=backend1)
+        audit = PolicyAuditLog(provenance_ledger=ledger1)
+        audit.record(
+            PolicyEvaluationContext(
+                actor_id="agent-1",
+                action="call_tool",
+                resource_id="admin-reset",
+            ),
+            PolicyResult(
+                decision=PolicyDecision.DENY,
+                reason="blocked",
+                policy_id="admin-policy",
+            ),
+        )
+        backend1.close()
+
+        backend2 = SQLiteBackend(db)
+        ledger2 = ProvenanceLedger("policy-denials", backend=backend2)
+        records = ledger2.get_records(action=ProvenanceAction.ACCESS_DENIED)
+        assert len(records) == 1
+        assert records[0].resource_id == "admin-reset"
+        assert records[0].metadata["policy_id"] == "admin-policy"
+        assert ledger2.verify_chain()
+        assert ledger2.verify_tree()
+        backend2.close()
 
 
 # ── ExchangeLog ──────────────────────────────────────────────────

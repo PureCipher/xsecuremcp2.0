@@ -13,6 +13,8 @@ from fastmcp.server.security.policy.provider import (
     PolicyEvaluationContext,
     PolicyResult,
 )
+from fastmcp.server.security.provenance.ledger import ProvenanceLedger
+from fastmcp.server.security.provenance.records import ProvenanceAction
 
 
 def _ctx(
@@ -167,6 +169,93 @@ class TestBoundedCapacity:
     def test_max_entries_property(self):
         log = PolicyAuditLog(max_entries=500)
         assert log.max_entries == 500
+
+    def test_execution_denial_survives_routine_list_traffic(self):
+        log = PolicyAuditLog(max_entries=3)
+        log.record(
+            _ctx(resource_id="admin-reset", action="call_tool"),
+            _result(decision=PolicyDecision.DENY),
+        )
+
+        for i in range(10):
+            log.record(
+                _ctx(resource_id=f"tool-{i}", action="list_tools"),
+                _result(decision=PolicyDecision.ALLOW),
+            )
+
+        denials = log.query(
+            action="call_tool",
+            resource_id="admin-reset",
+            decision=PolicyDecision.DENY,
+        )
+        assert len(denials) == 1
+        assert log.size == 3
+
+    def test_routine_entry_is_dropped_when_capacity_contains_only_denials(self):
+        log = PolicyAuditLog(max_entries=2)
+        for resource_id in ("first", "second"):
+            log.record(
+                _ctx(resource_id=resource_id, action="call_tool"),
+                _result(decision=PolicyDecision.DENY),
+            )
+
+        log.record(
+            _ctx(resource_id="routine", action="list_tools"),
+            _result(decision=PolicyDecision.ALLOW),
+        )
+
+        assert [entry["resource_id"] for entry in log.export()] == [
+            "first",
+            "second",
+        ]
+        assert log.dropped_entries == 1
+
+    def test_new_denial_replaces_oldest_denial_at_capacity(self):
+        log = PolicyAuditLog(max_entries=2)
+        for resource_id in ("first", "second", "third"):
+            log.record(
+                _ctx(resource_id=resource_id, action="call_tool"),
+                _result(decision=PolicyDecision.DENY),
+            )
+
+        assert [entry["resource_id"] for entry in log.export()] == [
+            "second",
+            "third",
+        ]
+
+
+class TestDurableDenialEvidence:
+    def test_execution_denial_is_written_to_provenance(self):
+        ledger = ProvenanceLedger("policy-denials")
+        log = PolicyAuditLog(provenance_ledger=ledger)
+
+        log.record(
+            _ctx(resource_id="admin-reset", action="call_tool"),
+            _result(
+                decision=PolicyDecision.DENY,
+                reason="administrative operation blocked",
+                policy_id="admin-policy",
+            ),
+        )
+
+        records = ledger.get_records(action=ProvenanceAction.ACCESS_DENIED)
+        assert len(records) == 1
+        assert records[0].resource_id == "admin-reset"
+        assert records[0].metadata["policy_id"] == "admin-policy"
+        assert records[0].metadata["requested_action"] == "call_tool"
+        assert ledger.verify_chain()
+        assert ledger.verify_tree()
+
+    def test_discovery_filter_denial_is_not_written_to_provenance(self):
+        ledger = ProvenanceLedger("policy-denials")
+        log = PolicyAuditLog(provenance_ledger=ledger)
+
+        log.record(
+            _ctx(resource_id="hidden", action="list_tools"),
+            _result(decision=PolicyDecision.DENY),
+        )
+
+        assert ledger.get_records(action=ProvenanceAction.ACCESS_DENIED) == []
 
 
 # ── Query functionality ────────────────────────────────────────────

@@ -91,6 +91,10 @@ class TestContextFields:
 
 
 class TestCrossWiring:
+    def test_policy_denials_share_provenance_ledger(self, full_ctx):
+        assert full_ctx.policy_audit_log is not None
+        assert full_ctx.policy_audit_log.provenance_ledger is full_ctx.provenance_ledger
+
     def test_marketplace_has_registry(self, full_ctx):
         """ToolMarketplace should be wired to the same TrustRegistry."""
         assert full_ctx.tool_marketplace._trust_registry is full_ctx.registry

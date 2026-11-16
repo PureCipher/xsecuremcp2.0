@@ -278,6 +278,13 @@ class SecurityOrchestrator:
                 ledger.attach_event_bus(bus_for_components)
             ctx.provenance_ledger = ledger
 
+            # Policy evaluation happens before provenance middleware, so a
+            # denied operation never reaches that middleware. Bridge the
+            # policy audit log directly to the same ledger to preserve denied
+            # attempts in the tamper-evident, optionally persistent chain.
+            if ctx.policy_audit_log is not None:
+                ctx.policy_audit_log.attach_provenance_ledger(ledger)
+
             from fastmcp.server.security.middleware.provenance_recording import (
                 ProvenanceRecordingMiddleware,
             )
