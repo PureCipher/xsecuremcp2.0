@@ -73,6 +73,9 @@ from fastmcp.server.security.policy.policies.compliance_rule import (
     ComplianceRuleSpec,
     MetadataCheck,
 )
+from fastmcp.server.security.policy.policies.email_recipient_domains import (
+    EmailRecipientDomainPolicy,
+)
 from fastmcp.server.security.policy.policies.ferpa_request import FerpaRequestPolicy
 from fastmcp.server.security.policy.policies.gdpr_request import GdprRequestPolicy
 from fastmcp.server.security.policy.policies.hipaa_request import HipaaRequestPolicy
@@ -141,6 +144,44 @@ def _build_rate_limit(config: dict[str, Any]) -> RateLimitPolicy:
         window_seconds=config.get("window_seconds", 3600),
         policy_id=config.get("policy_id", "rate-limit-policy"),
         version=config.get("version", "1.0.0"),
+    )
+
+
+def _required_string_list(config: dict[str, Any], key: str) -> list[str]:
+    raw = config.get(key)
+    if (
+        not isinstance(raw, list)
+        or not raw
+        or any(not isinstance(value, str) or not value.strip() for value in raw)
+    ):
+        raise ValueError(f"{key} must be a nonempty list of strings")
+    return [value.strip() for value in raw]
+
+
+def _build_email_recipient_domains(
+    config: dict[str, Any],
+) -> EmailRecipientDomainPolicy:
+    allowed_domains = _required_string_list(config, "allowed_domains")
+    tool_patterns = _required_string_list(config, "tool_patterns")
+    argument_paths = _required_string_list(config, "argument_paths")
+    allow_subdomains = config.get("allow_subdomains", False)
+    require_recipient = config.get("require_recipient", True)
+    max_recipients = config.get("max_recipients", 100)
+    if type(allow_subdomains) is not bool:
+        raise ValueError("allow_subdomains must be a boolean")
+    if type(require_recipient) is not bool:
+        raise ValueError("require_recipient must be a boolean")
+    if type(max_recipients) is not int:
+        raise ValueError("max_recipients must be an integer")
+    return EmailRecipientDomainPolicy(
+        allowed_domains=set(allowed_domains),
+        tool_patterns=set(tool_patterns),
+        argument_paths=tuple(argument_paths),
+        allow_subdomains=allow_subdomains,
+        require_recipient=require_recipient,
+        max_recipients=max_recipients,
+        policy_id=str(config.get("policy_id", "email-recipient-domain-policy")),
+        version=str(config.get("version", "1.0.0")),
     )
 
 
@@ -774,6 +815,80 @@ def _register_builtins() -> None:
                 "version": "1.0.0",
                 "max_requests": 200,
                 "window_seconds": 3600,
+            },
+        ),
+        PolicyTypeDescriptor(
+            type_key="email_recipient_domains",
+            aliases=("recipient_domains",),
+            factory=_build_email_recipient_domains,
+            display_name="Email Recipient Domains",
+            description=(
+                "Parse every email recipient and restrict delivery to approved "
+                "DNS domains"
+            ),
+            category="data_control",
+            field_specs={
+                "allowed_domains": {
+                    "label": "Allowed email domains",
+                    "type": "string_list",
+                    "description": "Exact DNS domains permitted for recipients.",
+                    "required": True,
+                    "example": ["acme.com"],
+                },
+                "tool_patterns": {
+                    "label": "Protected tools",
+                    "type": "string_list",
+                    "description": "Exact tool names or glob patterns to protect.",
+                    "required": True,
+                    "example": ["send_email", "gmail_send_*"],
+                },
+                "argument_paths": {
+                    "label": "Recipient argument paths",
+                    "type": "string_list",
+                    "description": (
+                        "Dotted paths containing recipient strings or lists, "
+                        "such as to or content.cc."
+                    ),
+                    "required": True,
+                    "example": ["to", "cc", "bcc"],
+                },
+                "allow_subdomains": {
+                    "label": "Allow subdomains",
+                    "type": "bool",
+                    "description": (
+                        "Permit recipients below an allowed domain on DNS label "
+                        "boundaries."
+                    ),
+                    "required": False,
+                    "default": False,
+                },
+                "require_recipient": {
+                    "label": "Require a recipient",
+                    "type": "bool",
+                    "description": "Deny matching calls that contain no recipients.",
+                    "required": False,
+                    "default": True,
+                },
+                "max_recipients": {
+                    "label": "Maximum recipients",
+                    "type": "int",
+                    "description": "Maximum parsed recipients in one tool call.",
+                    "required": False,
+                    "default": 100,
+                    "minimum": 1,
+                    "maximum": 1000,
+                },
+            },
+            starter_config={
+                "type": "email_recipient_domains",
+                "policy_id": "internal-email-recipients",
+                "version": "1.0.0",
+                "allowed_domains": ["acme.com"],
+                "tool_patterns": ["send_email"],
+                "argument_paths": ["to", "cc", "bcc"],
+                "allow_subdomains": False,
+                "require_recipient": True,
+                "max_recipients": 100,
             },
         ),
         PolicyTypeDescriptor(

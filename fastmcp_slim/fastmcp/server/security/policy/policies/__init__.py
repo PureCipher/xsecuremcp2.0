@@ -10,6 +10,9 @@ from fastmcp.server.security.policy.policies.allowlist import (
     AllowlistPolicy,
     DenylistPolicy,
 )
+from fastmcp.server.security.policy.policies.email_recipient_domains import (
+    EmailRecipientDomainPolicy,
+)
 from fastmcp.server.security.policy.policies.rate_limit import RateLimitPolicy
 from fastmcp.server.security.policy.policies.rbac import RoleBasedPolicy
 from fastmcp.server.security.policy.policies.resource_scoped import (
@@ -21,6 +24,7 @@ __all__ = [
     "AllowlistPolicy",
     "AttributeBasedPolicy",
     "DenylistPolicy",
+    "EmailRecipientDomainPolicy",
     "RateLimitPolicy",
     "ResourceScopedPolicy",
     "RoleBasedPolicy",

@@ -32,6 +32,9 @@ from fastmcp.server.security.policy.policies.ccpa_request import CcpaRequestPoli
 from fastmcp.server.security.policy.policies.compliance_rule import (
     ComplianceRulePolicy,
 )
+from fastmcp.server.security.policy.policies.email_recipient_domains import (
+    EmailRecipientDomainPolicy,
+)
 from fastmcp.server.security.policy.policies.ferpa_request import FerpaRequestPolicy
 from fastmcp.server.security.policy.policies.gdpr_request import GdprRequestPolicy
 from fastmcp.server.security.policy.policies.hipaa_request import HipaaRequestPolicy
@@ -130,6 +133,13 @@ def describe_policy_config(config: dict[str, Any]) -> str:
             f"Limits each actor to {config.get('max_requests', 100)} requests "
             f"per {config.get('window_seconds', 3600)} seconds."
         )
+    if policy_type in {"email_recipient_domains", "recipient_domains"}:
+        domains = list(config.get("allowed_domains") or [])
+        tools = list(config.get("tool_patterns") or [])
+        return (
+            f"Restricts {len(tools)} tool pattern(s) to {len(domains)} approved "
+            "email domain(s)."
+        )
     if policy_type in {"time_based", "temporal"}:
         days = list(config.get("allowed_days") or [])
         if days:
@@ -224,6 +234,19 @@ def policy_provider_to_config(provider: PolicyProvider) -> dict[str, Any]:
             "type": "rate_limit",
             "max_requests": provider.max_requests,
             "window_seconds": provider.window_seconds,
+            "policy_id": provider.policy_id,
+            "version": provider.version,
+        }
+
+    if isinstance(provider, EmailRecipientDomainPolicy):
+        return {
+            "type": "email_recipient_domains",
+            "allowed_domains": sorted(provider.allowed_domains),
+            "tool_patterns": sorted(provider.tool_patterns),
+            "argument_paths": list(provider.argument_paths),
+            "allow_subdomains": provider.allow_subdomains,
+            "require_recipient": provider.require_recipient,
+            "max_recipients": provider.max_recipients,
             "policy_id": provider.policy_id,
             "version": provider.version,
         }

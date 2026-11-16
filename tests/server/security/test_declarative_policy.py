@@ -639,6 +639,7 @@ class TestSchema:
             "denylist",
             "rbac",
             "rate_limit",
+            "email_recipient_domains",
             "time_based",
             "abac",
             "resource_scoped",

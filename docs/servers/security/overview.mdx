@@ -289,6 +289,11 @@ Every field is `None` unless its corresponding config section was provided. The 
 | `CertificationConfig` | `CertificationPipeline` | Auto-wired to marketplace |
 | `GatewayConfig` | `Marketplace` + `AuditAPI` | `register_tools` |
 
+For outbound mail tools, use the built-in
+[`EmailRecipientDomainPolicy`](../../email-recipient-domain-policy.md) to parse
+every recipient and restrict delivery to approved domains. It supports both
+Python configuration and declarative policy management.
+
 Each config class also accepts a pre-built component instance. This is useful when you need to configure a component before bootstrap:
 
 ```python
