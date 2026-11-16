@@ -6,11 +6,15 @@ used to detect and respond to anomalous agent behavior.
 
 from __future__ import annotations
 
+import math
 import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import Enum
-from typing import Any
+from enum import Enum, StrEnum
+from typing import Any, Literal
+
+BEHAVIORAL_OBSERVATION_SCHEMA_VERSION: Literal["1.0"] = "1.0"
 
 
 class DriftSeverity(Enum):
@@ -46,6 +50,101 @@ class EscalationAction(Enum):
     SUSPEND_AGENT = "suspend_agent"
     REVOKE_CONTRACT = "revoke_contract"
     SHUTDOWN = "shutdown"
+
+
+class BehavioralMetric(StrEnum):
+    """Canonical metric names emitted by ReflexiveMiddleware in v1."""
+
+    CALLS_PER_MINUTE = "calls_per_minute"
+    LATENCY_MS = "latency_ms"
+    ERROR_RATE = "error_rate"
+    SCOPE_EXPANSION = "scope_expansion"
+
+
+@dataclass(frozen=True)
+class BehavioralObservation:
+    """Versioned input contract for one Reflexive Core observation.
+
+    The existing :meth:`BehavioralAnalyzer.observe` positional interface remains
+    available. This envelope gives integrations a strict, serializable v1 shape
+    without changing that interface.
+    """
+
+    actor_id: str
+    metric_name: BehavioralMetric
+    value: float
+    metadata: dict[str, Any] = field(default_factory=dict)
+    schema_version: Literal["1.0"] = BEHAVIORAL_OBSERVATION_SCHEMA_VERSION
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.actor_id, str) or not self.actor_id.strip():
+            raise ValueError("BehavioralObservation.actor_id must be non-empty")
+        if not isinstance(self.metric_name, BehavioralMetric):
+            raise TypeError("BehavioralObservation.metric_name must be canonical")
+        if isinstance(self.value, bool) or not isinstance(self.value, (int, float)):
+            raise TypeError("BehavioralObservation.value must be a number")
+        value = float(self.value)
+        if not math.isfinite(value) or value < 0:
+            raise ValueError(
+                "BehavioralObservation.value must be finite and non-negative"
+            )
+        if self.metric_name is BehavioralMetric.ERROR_RATE and value > 1:
+            raise ValueError("BehavioralObservation.error_rate must be between 0 and 1")
+        if not isinstance(self.metadata, dict):
+            raise TypeError("BehavioralObservation.metadata must be an object")
+        if self.schema_version != BEHAVIORAL_OBSERVATION_SCHEMA_VERSION:
+            raise ValueError("Unsupported BehavioralObservation schema version")
+        object.__setattr__(self, "value", value)
+        object.__setattr__(self, "metadata", dict(self.metadata))
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the BehavioralObservation v1 envelope."""
+
+        payload: dict[str, Any] = {
+            "schema_version": self.schema_version,
+            "actor_id": self.actor_id,
+            "metric_name": self.metric_name.value,
+            "value": self.value,
+        }
+        if self.metadata:
+            payload["metadata"] = dict(self.metadata)
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, Any]) -> BehavioralObservation:
+        """Strictly parse a BehavioralObservation v1 envelope."""
+
+        allowed = {
+            "schema_version",
+            "actor_id",
+            "metric_name",
+            "value",
+            "metadata",
+        }
+        required = {"schema_version", "actor_id", "metric_name", "value"}
+        unknown = set(payload) - allowed
+        missing = required - set(payload)
+        if unknown:
+            raise ValueError(
+                "Unknown BehavioralObservation field(s): " + ", ".join(sorted(unknown))
+            )
+        if missing:
+            raise ValueError(
+                "Missing BehavioralObservation field(s): " + ", ".join(sorted(missing))
+            )
+        if payload["schema_version"] != BEHAVIORAL_OBSERVATION_SCHEMA_VERSION:
+            raise ValueError("Unsupported BehavioralObservation schema version")
+        try:
+            metric_name = BehavioralMetric(payload["metric_name"])
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Unknown BehavioralObservation metric_name") from exc
+        metadata = payload.get("metadata", {})
+        return cls(
+            actor_id=payload["actor_id"],
+            metric_name=metric_name,
+            value=payload["value"],
+            metadata=metadata,
+        )
 
 
 @dataclass(frozen=True)

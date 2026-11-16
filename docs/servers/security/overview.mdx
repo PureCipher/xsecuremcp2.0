@@ -25,7 +25,7 @@ SecureMCP is organized into composable layers that can be used independently or 
 
 **Compliance** — `ComplianceReporter` runs automated checks against configurable frameworks and generates reports with findings, severity classifications, and remediation guidance.
 
-**Behavioral Analysis** — `BehavioralAnalyzer` detects drift from established baselines using sliding-window detectors. `EscalationEngine` triggers actions (alerts, blocks, reviews) when thresholds are crossed.
+**Behavioral Analysis** — `BehavioralAnalyzer` detects drift from established baselines using statistical and sliding-window detectors. `EscalationEngine` triggers configured actions when thresholds are crossed, and the optional introspection engine turns threat state into execution verdicts. See the versioned [Reflexive Core contract](/servers/security/reflexive-core).
 
 **Consent** — `ConsentGraph` tracks who granted what permissions to whom, with delegation chains and temporal scoping.
 
@@ -277,7 +277,7 @@ Every field is `None` unless its corresponding config section was provided. The 
 | `PolicyConfig` | `PolicyEngine` | `providers` (list of policy providers) |
 | `ContractConfig` | `ContextBroker` | `require_for_list`, `crypto_handler` |
 | `ProvenanceConfig` | `ProvenanceLedger` | `record_list_operations` |
-| `ReflexiveConfig` | `BehavioralAnalyzer` + `EscalationEngine` | `window_size`, rules |
+| `ReflexiveConfig` | `BehavioralAnalyzer` + `EscalationEngine` | `sigma_thresholds`, `min_samples`, `escalation_rules` |
 | `ConsentConfig` | `ConsentGraph` | `resource_owner`, `require_for_list` |
 | `FederatedConsentConfig` | `FederatedConsentGraph` | `institution_id`, jurisdiction policies, optional peer coordination |
 | `RegistryConfig` | `TrustRegistry` | Pass a pre-built `registry` instance, or let it create one |

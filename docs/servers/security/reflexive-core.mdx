@@ -1,0 +1,154 @@
+---
+title: Reflexive Core contract
+description: BehavioralObservation v1 metrics, drift processing, threat scoring, and execution verdicts
+---
+
+The Reflexive Core builds a statistical baseline for each actor and metric, detects behavioral drift, records a decaying threat score, and can gate an operation before it executes. This page defines the stable **BehavioralObservation v1** contract while documenting the current verdict behavior exactly.
+
+BehavioralObservation v1 covers the four metrics emitted by `ReflexiveMiddleware`. The lower-level `BehavioralAnalyzer.observe()` method still accepts extension metric names for custom detectors, but those names are outside the v1 compatibility contract.
+
+## BehavioralObservation v1
+
+The public JSON Schema is available at [`/schemas/behavioral-observation/v1.json`](/schemas/behavioral-observation/v1.json). A serialized observation looks like this:
+
+```json
+{
+  "schema_version": "1.0",
+  "actor_id": "deployment-agent",
+  "metric_name": "latency_ms",
+  "value": 42.5,
+  "metadata": {
+    "operation": "call_tool"
+  }
+}
+```
+
+| Field | Type | Required | Contract |
+|---|---|---:|---|
+| `schema_version` | string | yes | Must be exactly `"1.0"`. |
+| `actor_id` | string | yes | Stable, non-empty actor identity. Middleware derives this from the authenticated access-token principal and falls back to `anonymous`. |
+| `metric_name` | string enum | yes | One of the four canonical metrics below. |
+| `value` | number | yes | Finite and non-negative. `error_rate` is additionally limited to `0..1`. |
+| `metadata` | object | no | Metric-specific context. The built-in sigma calculation does not use it, but emitted drift events retain it. |
+
+Unknown fields are rejected by the v1 schema and the Python model.
+
+### Canonical metrics
+
+| Metric | Unit and current middleware behavior |
+|---|---|
+| `calls_per_minute` | Number of tool calls or resource reads recorded for the actor in the preceding 60-second monotonic window, including the current call. |
+| `latency_ms` | Tool-call wall-clock latency in milliseconds. The current resource and prompt paths do not emit this metric. |
+| `error_rate` | A per-operation sample: `0.0` for a successful tool call and `1.0` for a failed tool call or resource read. Despite the name, the observation itself is not a pre-aggregated rolling percentage. |
+| `scope_expansion` | Current distinct known scope size when a new tool or resource is first accessed. Scope size includes known tools, resources, and prompts, although a new prompt does not currently emit this observation. Metadata identifies `new_tool` or `new_resource`. |
+
+### Python model and adapter
+
+Use the typed envelope when an integration needs the versioned contract:
+
+```python
+from fastmcp.server.security.reflexive import (
+    BehavioralAnalyzer,
+    BehavioralMetric,
+    BehavioralObservation,
+)
+
+analyzer = BehavioralAnalyzer()
+observation = BehavioralObservation(
+    actor_id="deployment-agent",
+    metric_name=BehavioralMetric.LATENCY_MS,
+    value=42.5,
+    metadata={"operation": "call_tool"},
+)
+events = analyzer.observe_v1(observation)
+```
+
+`BehavioralObservation.to_dict()` emits the schema above, and `from_dict()` parses it strictly. `observe_v1()` delegates to the existing interface without changing its behavior:
+
+```python
+events = analyzer.observe(
+    actor_id,
+    metric_name,
+    value,
+    metadata=metadata,
+)
+```
+
+The first three arguments are required. `metadata` is optional and keyword-only. The return value is `list[DriftEvent]`; an empty list means no detector reported drift. Recording an observation does not itself update an `ActorProfileManager` threat score or evaluate escalation rules. `ReflexiveMiddleware` performs those steps for every returned event.
+
+## Baseline and drift semantics
+
+The built-in analyzer maintains one `BehavioralBaseline` per `(actor_id, metric_name)` pair.
+
+- Drift detection begins after `min_samples` existing samples; the default is 10.
+- Deviation is evaluated before the new value updates the baseline.
+- The running mean and sample variance use Welford's algorithm.
+- A zero standard deviation or fewer than five baseline samples produces zero computed deviation.
+- Default severity boundaries are 2 sigma (`low`), 3 (`medium`), 4 (`high`), and 5 (`critical`). The highest crossed boundary wins.
+- The built-in sigma detector currently emits `frequency_spike` as the drift type for every generic metric and preserves the actual name in `metadata.metric_name`. Pluggable detectors may emit more specific drift types.
+- The anomalous value still updates the baseline after detection.
+
+The analyzer returns and persists drift events independently of escalation. `EscalationEngine` has no rules by default. A configured rule must match the drift type and minimum severity, reach its per-actor threshold count, and be outside its rule cooldown before its action is added to escalation history.
+
+## Threat score and verdicts
+
+`ActorProfileManager.record_drift()` adds a default weight based on drift severity:
+
+| Drift severity | Score added |
+|---|---:|
+| `info` | 0 |
+| `low` | 1 |
+| `medium` | 3 |
+| `high` | 7 |
+| `critical` | 15 |
+
+The existing score is exponentially decayed before each addition and again when read. The default decay rate has an approximate ten-minute half-life. The resulting score maps to these internal threat levels and default execution verdicts:
+
+| Threat score | Threat level | Execution verdict | Behavioral risk projection |
+|---:|---|---|---|
+| `< 5` | `none` | `proceed` | `normal` |
+| `5..<15` | `low` | `proceed` | `normal` |
+| `15..<30` | `medium` | `require_confirmation` | `elevated` |
+| `30..<50` | `high` | `throttle` | `elevated` |
+| `>= 50` | `critical` | `halt` | `critical` |
+
+The three-state projection is the stable v1 presentation vocabulary. The four `ExecutionVerdict` values remain the enforcement contract because elevated risk has two distinct responses.
+
+### Escalation precedence
+
+`get_execution_verdict(actor_id, operation="", resource_id="")` combines the score-derived threat level with unique action values from recent escalation history. Precedence is deterministic:
+
+1. `suspend_agent`, `shutdown`, or a critical threat level → `halt`
+2. `throttle` or a high threat level → `throttle`
+3. `require_confirmation` or a medium threat level → `require_confirmation`
+4. otherwise → `proceed`
+
+Escalation actions do not currently have a separate expiry time. Cooldown controls when a rule can trigger again; it does not deactivate a triggered action. The introspection engine consults the actions present in the escalation engine's recent history window, which defaults to 100 records.
+
+`revoke_contract` and other escalation actions can make the full introspection result non-compliant without independently changing the execution verdict. `operation` and `resource_id` are reserved context parameters in v1; the current verdict mapping does not branch on either value.
+
+### Monitoring-only mode
+
+`IntrospectionConfig.enable_pre_execution_gating` defaults to `False`. In that mode, `get_execution_verdict()` always returns `proceed`, even when full `introspect()` reports a computed elevated or critical verdict. Set it to `True` to enforce confirmation, throttling, and halt decisions in `ReflexiveMiddleware`.
+
+The orchestrator gives middleware and introspection the same `ActorProfileManager`, so drift events recorded during execution are visible to pre-execution verdict checks.
+
+## Introspection and accountability
+
+`introspect(actor_id)` returns the current score, threat level, drift counts, recent escalation actions, compliance status, execution verdict, dynamic constraints, and assessment timestamp. It also appends an accountability entry. Post-execution middleware can bind the same assessment to a provenance operation.
+
+When the security HTTP API is enabled, authenticated callers can use:
+
+| Endpoint | Result |
+|---|---|
+| `GET /security/reflexive/introspect/{actor_id}` | Full introspection result |
+| `GET /security/reflexive/verdict/{actor_id}/{operation}` | Current execution verdict |
+| `GET /security/reflexive/threat-level/{actor_id}` | Score and internal threat level |
+| `GET /security/reflexive/constraints/{actor_id}` | Dynamic constraint identifiers |
+| `GET /security/reflexive/accountability` | Introspection and provenance-binding history |
+
+Non-administrators are bound to their authenticated actor identity. Administrators may inspect another actor explicitly.
+
+## Compatibility policy
+
+BehavioralObservation v1 will retain its required fields, canonical metric names, and units. New optional metadata keys may be added without a version change. Renaming a field, changing a unit, changing a required field, or adding another canonical metric requires a new schema version. Custom analyzer metrics remain supported by the lower-level API but make no v1 compatibility claim.

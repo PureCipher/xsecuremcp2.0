@@ -89,7 +89,9 @@ class PublisherAuthorVerification:
             "verified": "Publisher manifest author and signing key verified.",
             "not_applicable": "Publisher author signing does not apply to curator attestations.",
         }
-        return messages.get(self.status, "Publisher author-signature verification failed.")
+        return messages.get(
+            self.status, "Publisher author-signature verification failed."
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -180,9 +182,11 @@ def canonicalize_public_key(value: Any) -> tuple[str, str, Ed25519PublicKey]:
         encoding=serialization.Encoding.PEM,
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
     ).decode("ascii")
-    fingerprint = base64.urlsafe_b64encode(hashlib.sha256(der).digest()).decode(
-        "ascii"
-    ).rstrip("=")
+    fingerprint = (
+        base64.urlsafe_b64encode(hashlib.sha256(der).digest())
+        .decode("ascii")
+        .rstrip("=")
+    )
     return canonical_pem, f"pcpk_{fingerprint}", key
 
 
@@ -362,7 +366,10 @@ def validate_stored_publisher_identity(
     if not enrolled:
         return True, "Publisher author signing is not enrolled."
     evidence = (metadata or {}).get("publisher_identity")
-    if not isinstance(evidence, dict) or evidence.get("author_signature_verified") is not True:
+    if (
+        not isinstance(evidence, dict)
+        or evidence.get("author_signature_verified") is not True
+    ):
         return False, "The staged listing has no verified publisher author signature."
     key_id = evidence.get("signing_key_id")
     if not isinstance(key_id, str):
@@ -455,7 +462,9 @@ async def _request_object(request: Any) -> dict[str, Any]:
     return body
 
 
-def _serialize_key(record: dict[str, Any], *, include_public_key: bool) -> dict[str, Any]:
+def _serialize_key(
+    record: dict[str, Any], *, include_public_key: bool
+) -> dict[str, Any]:
     payload = {
         "key_id": record["key_id"],
         "algorithm": record["algorithm"],

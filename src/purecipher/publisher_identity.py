@@ -156,7 +156,9 @@ async def fetch_https_proof(url: str) -> str:
         UnsafeOutboundURLError,
         OutboundResponseTooLargeError,
     ) as exc:
-        raise DomainProofError("The HTTPS proof endpoint could not be verified") from exc
+        raise DomainProofError(
+            "The HTTPS proof endpoint could not be verified"
+        ) from exc
     try:
         return body.decode("utf-8")
     except UnicodeDecodeError as exc:
@@ -176,7 +178,9 @@ def _public_address_resolver(host: str, port: int) -> list[tuple]:
         try:
             address = ipaddress.ip_address(str(entry[4][0]))
         except (IndexError, TypeError, ValueError) as exc:
-            raise OSError("Resolver returned an invalid publisher proof address") from exc
+            raise OSError(
+                "Resolver returned an invalid publisher proof address"
+            ) from exc
         if not address.is_global:
             raise OSError("Publisher proof hosts must resolve only to public addresses")
     return entries
@@ -402,7 +406,9 @@ def mount_publisher_identity(registry: Any, prefix: str) -> None:
             for item in active
         ):
             return _response(
-                {"error": "An active challenge already exists for this domain and method"},
+                {
+                    "error": "An active challenge already exists for this domain and method"
+                },
                 409,
             )
         challenge_id = secrets.token_urlsafe(18)
@@ -444,7 +450,9 @@ def mount_publisher_identity(registry: Any, prefix: str) -> None:
             return _response({"error": "Verification challenge not found"}, 404)
         now = datetime.now(UTC)
         if item.get("status") != "pending":
-            return _response({"error": "Verification challenge is no longer active"}, 409)
+            return _response(
+                {"error": "Verification challenge is no longer active"}, 409
+            )
         if not _active_challenge(item, now=now):
             return _response({"error": "Verification challenge has expired"}, 410)
         if int(item.get("attempts", 0)) >= MAX_VERIFICATION_ATTEMPTS:
@@ -460,7 +468,9 @@ def mount_publisher_identity(registry: Any, prefix: str) -> None:
             try:
                 registry._workspace.save(item, expected=item["revision"])
             except (ValueError, UniqueViolation):
-                return _response({"error": "Challenge changed; reload and try again"}, 409)
+                return _response(
+                    {"error": "Challenge changed; reload and try again"}, 409
+                )
             return _response({"error": str(exc)}, 422)
 
         current = registry._workspace.get(item["id"])

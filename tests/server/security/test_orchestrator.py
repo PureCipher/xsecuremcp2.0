@@ -11,6 +11,7 @@ from fastmcp.server.security.config import (
     ConsentConfig,
     ContractConfig,
     GatewayConfig,
+    IntrospectionConfig,
     PolicyConfig,
     ProvenanceConfig,
     ReflexiveConfig,
@@ -144,6 +145,20 @@ class TestBootstrapReflexive:
         assert isinstance(ctx.escalation_engine, EscalationEngine)
         assert len(ctx.middleware) == 1
         assert isinstance(ctx.middleware[0], ReflexiveMiddleware)
+
+    def test_introspection_and_middleware_share_actor_profile_state(self):
+        cfg = SecurityConfig(
+            reflexive=ReflexiveConfig(),
+            introspection=IntrospectionConfig(enable_pre_execution_gating=True),
+        )
+        ctx = SecurityOrchestrator.bootstrap(cfg)
+
+        assert ctx.introspection_engine is not None
+        assert isinstance(ctx.middleware[0], ReflexiveMiddleware)
+        assert (
+            ctx.middleware[0].profile_manager
+            is ctx.introspection_engine.profile_manager
+        )
 
 
 class TestBootstrapConsent:

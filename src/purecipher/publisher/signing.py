@@ -71,10 +71,14 @@ def sign_manifest(
     """Create the detached signature accepted by PureCipher Registry."""
 
     parsed = _parse_manifest(manifest)
-    public_pem = private_key.public_key().public_bytes(
-        serialization.Encoding.PEM,
-        serialization.PublicFormat.SubjectPublicKeyInfo,
-    ).decode("ascii")
+    public_pem = (
+        private_key.public_key()
+        .public_bytes(
+            serialization.Encoding.PEM,
+            serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode("ascii")
+    )
     _canonical, key_id, _public_key = canonicalize_public_key(public_pem)
     payload = canonical_json(manifest_signature_payload(parsed)).encode("utf-8")
     return PublisherManifestSignature(
@@ -123,10 +127,14 @@ def bind_signing_key(
     headers = {"accept": "application/json"}
     if resolved_token:
         headers["authorization"] = f"Bearer {resolved_token}"
-    public_pem = private_key.public_key().public_bytes(
-        serialization.Encoding.PEM,
-        serialization.PublicFormat.SubjectPublicKeyInfo,
-    ).decode("ascii")
+    public_pem = (
+        private_key.public_key()
+        .public_bytes(
+            serialization.Encoding.PEM,
+            serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode("ascii")
+    )
     owns_client = client is None
     http_client = client or httpx.Client(
         base_url=normalized_base_url,
@@ -145,9 +153,7 @@ def bind_signing_key(
             raise ValueError("Registry returned an invalid key challenge")
         challenge_id = challenge.get("challenge_id")
         canonical_payload = challenge.get("canonical_payload")
-        if not isinstance(challenge_id, str) or not isinstance(
-            canonical_payload, str
-        ):
+        if not isinstance(challenge_id, str) or not isinstance(canonical_payload, str):
             raise ValueError("Registry returned an invalid key challenge")
         proof = base64.b64encode(
             private_key.sign(canonical_payload.encode("utf-8"))
