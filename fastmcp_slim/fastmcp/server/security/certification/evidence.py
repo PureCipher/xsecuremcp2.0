@@ -11,10 +11,16 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+from fastmcp.server.security.contracts.crypto import (
+    ContractCryptoHandler,
+    SignatureInfo,
+)
 
 if TYPE_CHECKING:
     from fastmcp.server.security.certification.attestation import ValidationReport
@@ -84,6 +90,7 @@ class CertificationTestEvidence:
     results: tuple[CertificationTestResult, ...]
     evidence_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     generated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    signature: SignatureInfo | None = None
 
     def __post_init__(self) -> None:
         for field_name in (
@@ -91,20 +98,25 @@ class CertificationTestEvidence:
             "suite_version",
             "runner_id",
             "manifest_digest",
-            "validation_report_id",
             "evidence_id",
         ):
             value = getattr(self, field_name)
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(f"{field_name} must be nonempty")
+        if not isinstance(self.source, CertificationEvidenceSource):
+            raise ValueError("source must be a CertificationEvidenceSource")
+        if not isinstance(self.validation_report_id, str):
+            raise ValueError("validation_report_id must be a string")
         if (
-            not isinstance(self.source, CertificationEvidenceSource)
-            or not isinstance(self.generated_at, datetime)
+            self.source is not CertificationEvidenceSource.PUBLISHER
+            and not self.validation_report_id.strip()
+        ):
+            raise ValueError("validation_report_id must be nonempty")
+        if (
+            not isinstance(self.generated_at, datetime)
             or self.generated_at.tzinfo is None
             or self.generated_at.utcoffset() is None
         ):
-            if not isinstance(self.source, CertificationEvidenceSource):
-                raise ValueError("source must be a CertificationEvidenceSource")
             raise ValueError("generated_at must be timezone-aware")
         object.__setattr__(self, "results", tuple(self.results))
         if not self.results:
@@ -113,6 +125,8 @@ class CertificationTestEvidence:
             not isinstance(result, CertificationTestResult) for result in self.results
         ):
             raise ValueError("results must contain CertificationTestResult values")
+        if self.signature is not None and not isinstance(self.signature, SignatureInfo):
+            raise ValueError("signature must be a SignatureInfo")
 
     @property
     def passed(self) -> bool:
@@ -134,7 +148,9 @@ class CertificationTestEvidence:
             for status in CertificationTestStatus
         }
 
-    def to_dict(self) -> dict[str, Any]:
+    def signable_payload(self) -> dict[str, Any]:
+        """Return the canonical publisher-runner signature payload."""
+
         return {
             "evidence_id": self.evidence_id,
             "suite_id": self.suite_id,
@@ -144,10 +160,23 @@ class CertificationTestEvidence:
             "manifest_digest": self.manifest_digest,
             "validation_report_id": self.validation_report_id,
             "generated_at": self.generated_at.isoformat(),
-            "passed": self.passed,
-            "counts": self.counts,
             "results": [result.to_dict() for result in self.results],
         }
+
+    def to_dict(self) -> dict[str, Any]:
+        payload = {
+            **self.signable_payload(),
+            "passed": self.passed,
+            "counts": self.counts,
+        }
+        if self.signature is not None:
+            payload["signature"] = {
+                "algorithm": self.signature.algorithm.value,
+                "signer_id": self.signature.signer_id,
+                "signature": self.signature.signature,
+                "key_id": self.signature.key_id,
+            }
+        return payload
 
     @property
     def digest(self) -> str:
@@ -157,6 +186,161 @@ class CertificationTestEvidence:
             self.to_dict(), sort_keys=True, separators=(",", ":"), ensure_ascii=True
         ).encode("utf-8")
         return hashlib.sha256(payload).hexdigest()
+
+
+@dataclass(frozen=True)
+class TrustedPublisherTestRunner:
+    """Operator trust policy for one publisher functional-test runner."""
+
+    runner_id: str
+    signer_id: str
+    crypto_handler: ContractCryptoHandler
+    allowed_suite_ids: frozenset[str]
+    key_id: str = ""
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.runner_id, str) or not self.runner_id.strip():
+            raise ValueError("runner_id must be nonempty")
+        if not isinstance(self.signer_id, str) or not self.signer_id.strip():
+            raise ValueError("signer_id must be nonempty")
+        if not isinstance(self.crypto_handler, ContractCryptoHandler):
+            raise ValueError("crypto_handler must be a ContractCryptoHandler")
+        if isinstance(self.allowed_suite_ids, str):
+            raise ValueError("allowed_suite_ids must be a collection of suite IDs")
+        object.__setattr__(self, "allowed_suite_ids", frozenset(self.allowed_suite_ids))
+        if not self.allowed_suite_ids or any(
+            not isinstance(suite_id, str) or not suite_id.strip()
+            for suite_id in self.allowed_suite_ids
+        ):
+            raise ValueError("allowed_suite_ids must contain nonempty strings")
+        if not isinstance(self.key_id, str):
+            raise ValueError("key_id must be a string")
+
+
+class PublisherEvidenceVerifier:
+    """Verify publisher functional-test evidence against trusted CI runners.
+
+    A publisher can submit evidence produced before the registry creates its
+    validation report, so ``validation_report_id`` may be blank. The evidence
+    must still be signed and bound to the exact manifest digest; the registry's
+    signed attestation subsequently binds its digest to the generated report.
+    """
+
+    def __init__(
+        self,
+        runners: Iterable[TrustedPublisherTestRunner],
+        *,
+        max_evidence_age: timedelta = timedelta(hours=24),
+        future_clock_skew: timedelta = timedelta(minutes=5),
+        max_evidence_records: int = 8,
+    ) -> None:
+        runner_list = tuple(runners)
+        if any(
+            not isinstance(runner, TrustedPublisherTestRunner) for runner in runner_list
+        ):
+            raise ValueError("runners must contain TrustedPublisherTestRunner values")
+        self._runners = {runner.runner_id: runner for runner in runner_list}
+        if len(self._runners) != len(runner_list):
+            raise ValueError("Trusted publisher runner IDs must be unique")
+        if not self._runners:
+            raise ValueError("At least one trusted publisher runner is required")
+        if max_evidence_age <= timedelta(0):
+            raise ValueError("max_evidence_age must be positive")
+        if future_clock_skew < timedelta(0):
+            raise ValueError("future_clock_skew cannot be negative")
+        if max_evidence_records < 1:
+            raise ValueError("max_evidence_records must be positive")
+        self._max_evidence_age = max_evidence_age
+        self._future_clock_skew = future_clock_skew
+        self._max_evidence_records = max_evidence_records
+
+    def verify_all(
+        self,
+        evidence: Iterable[CertificationTestEvidence],
+        *,
+        manifest_digest: str,
+        validation_report_id: str,
+        now: datetime | None = None,
+    ) -> list[CertificationTestEvidence]:
+        """Return verified evidence or reject the entire supplied batch."""
+
+        items = list(evidence)
+        if any(not isinstance(item, CertificationTestEvidence) for item in items):
+            raise ValueError(
+                "Publisher evidence must contain CertificationTestEvidence values"
+            )
+        if len(items) > self._max_evidence_records:
+            raise ValueError("Too many publisher test evidence records")
+        evidence_ids = [item.evidence_id for item in items]
+        if len(set(evidence_ids)) != len(evidence_ids):
+            raise ValueError("Publisher test evidence IDs must be unique")
+        checked_at = now or datetime.now(UTC)
+        if (
+            not isinstance(checked_at, datetime)
+            or checked_at.tzinfo is None
+            or checked_at.utcoffset() is None
+        ):
+            raise ValueError("Evidence verification time must be timezone-aware")
+        return [
+            self.verify(
+                item,
+                manifest_digest=manifest_digest,
+                validation_report_id=validation_report_id,
+                now=checked_at,
+            )
+            for item in items
+        ]
+
+    def verify(
+        self,
+        evidence: CertificationTestEvidence,
+        *,
+        manifest_digest: str,
+        validation_report_id: str,
+        now: datetime | None = None,
+    ) -> CertificationTestEvidence:
+        """Verify one evidence record without trusting publisher assertions."""
+
+        if evidence.source is not CertificationEvidenceSource.PUBLISHER:
+            raise ValueError("Publisher test evidence must use the publisher source")
+        signature = evidence.signature
+        if signature is None:
+            raise ValueError("Publisher test evidence must be signed")
+        runner = self._runners.get(evidence.runner_id)
+        if runner is None:
+            raise ValueError("Publisher test evidence runner is not trusted")
+        if evidence.suite_id not in runner.allowed_suite_ids:
+            raise ValueError("Publisher test evidence suite is not trusted")
+        if signature.signer_id != runner.signer_id:
+            raise ValueError("Publisher test evidence signer does not match the runner")
+        if signature.algorithm is not runner.crypto_handler.algorithm:
+            raise ValueError(
+                "Publisher test evidence signature algorithm is not trusted"
+            )
+        if signature.key_id != runner.key_id:
+            raise ValueError("Publisher test evidence key is not trusted")
+        if evidence.manifest_digest != manifest_digest:
+            raise ValueError("Publisher test evidence manifest binding does not match")
+        if (
+            evidence.validation_report_id
+            and evidence.validation_report_id != validation_report_id
+        ):
+            raise ValueError("Publisher test evidence report binding does not match")
+
+        checked_at = now or datetime.now(UTC)
+        if (
+            not isinstance(checked_at, datetime)
+            or checked_at.tzinfo is None
+            or checked_at.utcoffset() is None
+        ):
+            raise ValueError("Evidence verification time must be timezone-aware")
+        if evidence.generated_at > checked_at + self._future_clock_skew:
+            raise ValueError("Publisher test evidence generation time is in the future")
+        if checked_at - evidence.generated_at > self._max_evidence_age:
+            raise ValueError("Publisher test evidence has expired")
+        if not runner.crypto_handler.verify(evidence.signable_payload(), signature):
+            raise ValueError("Publisher test evidence signature is invalid")
+        return evidence
 
 
 @runtime_checkable
@@ -275,17 +459,27 @@ def assurance_tier_for_evidence(
 ) -> AssuranceTier:
     """Return the highest fully passing operator-provided evidence tier."""
 
-    if not evidence or not all(item.passed for item in evidence):
+    standard = [
+        item
+        for item in evidence
+        if item.source is CertificationEvidenceSource.SECUREMCP
+    ]
+    if not standard or not all(item.passed for item in standard):
         return AssuranceTier.STATIC_ANALYSIS
 
-    sources = {item.source for item in evidence}
-    if CertificationEvidenceSource.REVIEWER in sources:
+    publisher = [
+        item
+        for item in evidence
+        if item.source is CertificationEvidenceSource.PUBLISHER
+    ]
+    reviewer = [
+        item for item in evidence if item.source is CertificationEvidenceSource.REVIEWER
+    ]
+    if reviewer and all(item.passed for item in reviewer):
         return AssuranceTier.MANUAL_REVIEWED
-    if CertificationEvidenceSource.PUBLISHER in sources:
+    if publisher and all(item.passed for item in publisher):
         return AssuranceTier.PUBLISHER_TESTED
-    if CertificationEvidenceSource.SECUREMCP in sources:
-        return AssuranceTier.STANDARD_TESTED
-    return AssuranceTier.STATIC_ANALYSIS
+    return AssuranceTier.STANDARD_TESTED
 
 
 __all__ = [
@@ -295,6 +489,8 @@ __all__ = [
     "CertificationTestResult",
     "CertificationTestStatus",
     "CertificationTestSuite",
+    "PublisherEvidenceVerifier",
     "StandardCertificationTestSuite",
+    "TrustedPublisherTestRunner",
     "assurance_tier_for_evidence",
 ]

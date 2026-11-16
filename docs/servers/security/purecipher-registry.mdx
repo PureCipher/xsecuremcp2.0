@@ -345,9 +345,10 @@ The registry will:
 
 1. validate and score the manifest
 2. run the deterministic SecureMCP standard evidence suite over the validation report
-3. bind the resulting assurance tier and test-evidence digest into the signed attestation
-4. reject the submission if it fails certification or misses the minimum required level
-5. publish accepted tools into the verified catalog
+3. verify any supplied publisher evidence against operator-trusted CI runners
+4. bind the resulting assurance tier and test-evidence digest into the signed attestation
+5. reject the submission if it fails certification or misses the minimum required level
+6. publish accepted tools into the verified catalog
 
 Preflight responses expose both score forms:
 
@@ -363,9 +364,10 @@ outcome:
 - `static_analysis` means only manifest validation evidence is available
 - `standard_tested` means the built-in SecureMCP suite completed without a
   failed or errored test
-- `publisher_tested` and `manual_reviewed` are reserved for separately trusted
-  publisher runners and reviewer workflows; a publisher cannot self-assert
-  either tier through manifest metadata
+- `publisher_tested` means all supplied functional tests passed and their
+  evidence was signed by an operator-trusted publisher runner
+- `manual_reviewed` is reserved for a separately trusted reviewer workflow; a
+  publisher cannot self-assert either higher tier through manifest metadata
 
 The standard suite does not execute publisher code or contact publisher
 endpoints. It emits stable, manifest-bound results for required fields,
@@ -374,6 +376,45 @@ practices. Its complete evidence record is returned under
 `report.test_evidence`; the signed attestation contains the corresponding
 `test_evidence_digest` so evidence cannot be replaced without invalidating the
 signature.
+
+Both `POST /registry/preflight` and `POST /registry/submit` accept a
+`publisher_test_evidence` array. The registry must first be configured with the
+runner's verification key and allowed suite IDs:
+
+```python
+from fastmcp.server.security.certification.evidence import (
+    PublisherEvidenceVerifier,
+    TrustedPublisherTestRunner,
+)
+
+evidence_verifier = PublisherEvidenceVerifier((
+    TrustedPublisherTestRunner(
+        runner_id="acme-ci",
+        signer_id="purecipher-ci/acme",
+        crypto_handler=runner_public_key_verifier,
+        allowed_suite_ids=frozenset({"acme-functional"}),
+        key_id="acme-ci-2026-11",
+    ),
+))
+registry = PureCipherRegistry(
+    signing_secret=registry_attestation_secret,
+    publisher_evidence_verifier=evidence_verifier,
+)
+```
+
+Prefer an asymmetric runner key in production so the registry stores only its
+public key. The publisher signs `CertificationTestEvidence.signable_payload()`
+and sends `evidence.to_dict()`. Evidence created before preflight may leave
+`validation_report_id` blank, but it must contain the SHA-256 digest of the
+complete serialized manifest. Preserve `manifest_id`, `created_at`, and data
+flow IDs when sending that manifest. The registry rejects unsigned, stale,
+future-dated, tampered, duplicate, untrusted-runner, unapproved-suite, and
+wrong-manifest records. It limits each request to eight evidence records and
+each record to 256 results.
+
+When a custom `SecurityConfig` is used, set the verifier on its
+`CertificationConfig` or pre-built `CertificationPipeline`; do not also pass a
+verifier to `PureCipherRegistry`.
 
 ## Publisher Launchpad
 

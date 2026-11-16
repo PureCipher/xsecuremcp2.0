@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -19,6 +19,8 @@ from fastmcp.server.security.certification.evidence import (
     CertificationTestEvidence,
     CertificationTestResult,
     CertificationTestStatus,
+    PublisherEvidenceVerifier,
+    TrustedPublisherTestRunner,
     assurance_tier_for_evidence,
 )
 from fastmcp.server.security.certification.manifest import (
@@ -29,9 +31,11 @@ from fastmcp.server.security.certification.manifest import (
     SecurityManifest,
 )
 from fastmcp.server.security.certification.pipeline import CertificationPipeline
+from fastmcp.server.security.config import CertificationConfig
 from fastmcp.server.security.contracts.crypto import (
     ContractCryptoHandler,
     SigningAlgorithm,
+    compute_digest,
 )
 from fastmcp.server.security.gateway.tool_marketplace import ToolMarketplace
 
@@ -68,6 +72,55 @@ def _crypto() -> ContractCryptoHandler:
         algorithm=SigningAlgorithm.HMAC_SHA256,
         secret_key=b"certification-evidence-test-key",
     )
+
+
+def _publisher_crypto() -> ContractCryptoHandler:
+    return ContractCryptoHandler(
+        algorithm=SigningAlgorithm.HMAC_SHA256,
+        secret_key=b"trusted-publisher-runner-key",
+    )
+
+
+def _publisher_verifier() -> PublisherEvidenceVerifier:
+    return PublisherEvidenceVerifier(
+        (
+            TrustedPublisherTestRunner(
+                runner_id="acme-ci",
+                signer_id="purecipher-ci/acme",
+                crypto_handler=_publisher_crypto(),
+                allowed_suite_ids=frozenset({"acme-functional"}),
+            ),
+        )
+    )
+
+
+def _publisher_evidence(
+    manifest: SecurityManifest,
+    *,
+    status: CertificationTestStatus = CertificationTestStatus.PASSED,
+    generated_at: datetime | None = None,
+) -> CertificationTestEvidence:
+    evidence = CertificationTestEvidence(
+        suite_id="acme-functional",
+        suite_version="1.0.0",
+        source=CertificationEvidenceSource.PUBLISHER,
+        runner_id="acme-ci",
+        manifest_digest=compute_digest(manifest.to_dict()),
+        validation_report_id="",
+        generated_at=generated_at or datetime.now(UTC),
+        results=(
+            CertificationTestResult(
+                test_id="weather-round-trip",
+                status=status,
+                summary="Publisher integration test result",
+            ),
+        ),
+    )
+    signature = _publisher_crypto().sign(
+        evidence.signable_payload(),
+        signer_id="purecipher-ci/acme",
+    )
+    return replace(evidence, signature=signature)
 
 
 @pytest.mark.parametrize(
@@ -313,3 +366,118 @@ def test_one_failed_evidence_record_prevents_tier_promotion():
         )
         is AssuranceTier.STATIC_ANALYSIS
     )
+
+
+def test_trusted_publisher_evidence_promotes_assurance_tier():
+    manifest = _manifest()
+    pipeline = CertificationPipeline(
+        crypto_handler=_crypto(),
+        publisher_evidence_verifier=_publisher_verifier(),
+    )
+
+    result = pipeline.certify(
+        manifest,
+        publisher_evidence=(_publisher_evidence(manifest),),
+    )
+
+    assert result.assurance_tier is AssuranceTier.PUBLISHER_TESTED
+    assert len(result.report.test_evidence) == 2
+    publisher_evidence = result.report.test_evidence[1]
+    assert publisher_evidence.source is CertificationEvidenceSource.PUBLISHER
+    assert publisher_evidence.signature is not None
+    assert publisher_evidence.to_dict()["signature"]["signer_id"] == (
+        "purecipher-ci/acme"
+    )
+    assert result.attestation.assurance_tier is AssuranceTier.PUBLISHER_TESTED
+    assert pipeline.verify_attestation(result.attestation, manifest).valid is True
+
+
+def test_certification_config_propagates_publisher_evidence_verifier():
+    manifest = _manifest()
+    pipeline = CertificationConfig(
+        crypto_handler=_crypto(),
+        publisher_evidence_verifier=_publisher_verifier(),
+    ).get_pipeline()
+
+    result = pipeline.certify(
+        manifest,
+        publisher_evidence=(_publisher_evidence(manifest),),
+    )
+
+    assert result.assurance_tier is AssuranceTier.PUBLISHER_TESTED
+
+
+def test_failed_publisher_tests_do_not_erase_standard_assurance():
+    manifest = _manifest()
+    result = CertificationPipeline(
+        crypto_handler=_crypto(),
+        publisher_evidence_verifier=_publisher_verifier(),
+    ).certify(
+        manifest,
+        publisher_evidence=(
+            _publisher_evidence(
+                manifest,
+                status=CertificationTestStatus.FAILED,
+            ),
+        ),
+    )
+
+    assert result.assurance_tier is AssuranceTier.STANDARD_TESTED
+    assert result.report.test_evidence[0].passed is True
+    assert result.report.test_evidence[1].passed is False
+
+
+def test_publisher_evidence_is_rejected_without_a_trust_policy():
+    manifest = _manifest()
+
+    with pytest.raises(ValueError, match="not enabled"):
+        CertificationPipeline(crypto_handler=_crypto()).certify(
+            manifest,
+            publisher_evidence=(_publisher_evidence(manifest),),
+        )
+
+
+@pytest.mark.parametrize(
+    ("mutate", "error"),
+    [
+        (
+            lambda evidence: replace(evidence, suite_version="tampered"),
+            "signature is invalid",
+        ),
+        (
+            lambda evidence: replace(evidence, manifest_digest="0" * 64),
+            "manifest binding does not match",
+        ),
+        (
+            lambda evidence: replace(evidence, runner_id="untrusted-ci"),
+            "runner is not trusted",
+        ),
+        (
+            lambda evidence: replace(evidence, validation_report_id="wrong-report"),
+            "report binding does not match",
+        ),
+    ],
+)
+def test_publisher_evidence_tampering_fails_closed(mutate, error):
+    manifest = _manifest()
+    evidence = mutate(_publisher_evidence(manifest))
+
+    with pytest.raises(ValueError, match=error):
+        CertificationPipeline(
+            crypto_handler=_crypto(),
+            publisher_evidence_verifier=_publisher_verifier(),
+        ).certify(manifest, publisher_evidence=(evidence,))
+
+
+def test_expired_publisher_evidence_is_rejected():
+    manifest = _manifest()
+    evidence = _publisher_evidence(
+        manifest,
+        generated_at=datetime.now(UTC) - timedelta(days=2),
+    )
+
+    with pytest.raises(ValueError, match="expired"):
+        CertificationPipeline(
+            crypto_handler=_crypto(),
+            publisher_evidence_verifier=_publisher_verifier(),
+        ).certify(manifest, publisher_evidence=(evidence,))

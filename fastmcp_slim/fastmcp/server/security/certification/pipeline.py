@@ -26,6 +26,7 @@ from fastmcp.server.security.certification.evidence import (
     CertificationTestResult,
     CertificationTestStatus,
     CertificationTestSuite,
+    PublisherEvidenceVerifier,
     StandardCertificationTestSuite,
     assurance_tier_for_evidence,
 )
@@ -95,6 +96,9 @@ class CertificationPipeline:
             deterministic SecureMCP standard suite runs over every validation
             report. Pass an empty sequence to retain static-analysis-only
             assurance.
+        publisher_evidence_verifier: Trust policy for publisher-supplied
+            functional-test evidence. Publisher evidence is rejected when no
+            verifier is configured.
         require_crypto_for_valid: If True (default), an attestation can
             only be marked ``VALID`` when a ``crypto_handler`` is
             configured to actually sign it. With no handler the
@@ -116,6 +120,7 @@ class CertificationPipeline:
         min_level_for_signing: CertificationLevel = CertificationLevel.BASIC,
         require_crypto_for_valid: bool = True,
         test_suites: Sequence[CertificationTestSuite] | None = None,
+        publisher_evidence_verifier: PublisherEvidenceVerifier | None = None,
     ) -> None:
         self._issuer_id = issuer_id
         self._crypto = crypto_handler
@@ -125,6 +130,7 @@ class CertificationPipeline:
         self._event_bus = event_bus
         self._min_level_for_signing = min_level_for_signing
         self._require_crypto_for_valid = require_crypto_for_valid
+        self._publisher_evidence_verifier = publisher_evidence_verifier
         self._test_suites = (
             tuple(test_suites)
             if test_suites is not None
@@ -158,6 +164,7 @@ class CertificationPipeline:
         manifest: SecurityManifest,
         *,
         requested_level: CertificationLevel | None = None,
+        publisher_evidence: Sequence[CertificationTestEvidence] | None = None,
     ) -> CertificationResult:
         """Run the full certification pipeline for a manifest.
 
@@ -170,6 +177,8 @@ class CertificationPipeline:
         Args:
             manifest: The security manifest to certify.
             requested_level: If set, certify at this level (must be ≤ max).
+            publisher_evidence: Signed, manifest-bound functional-test evidence
+                produced by an operator-trusted publisher CI runner.
 
         Returns:
             CertificationResult with the report and attestation.
@@ -187,6 +196,20 @@ class CertificationPipeline:
             report,
             manifest_digest=manifest_digest,
         )
+        supplied_evidence = tuple(publisher_evidence or ())
+        if supplied_evidence:
+            if self._publisher_evidence_verifier is None:
+                raise ValueError(
+                    "Publisher test evidence is not enabled for this certification "
+                    "pipeline"
+                )
+            test_evidence.extend(
+                self._publisher_evidence_verifier.verify_all(
+                    supplied_evidence,
+                    manifest_digest=manifest_digest,
+                    validation_report_id=report.report_id,
+                )
+            )
         report.test_evidence = test_evidence
         report.assurance_tier = assurance_tier_for_evidence(test_evidence)
         test_evidence_digest = (

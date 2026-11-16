@@ -14,7 +14,10 @@ from typing import TYPE_CHECKING, Any
 
 from fastmcp.server.security.alerts.bus import SecurityEventBus
 from fastmcp.server.security.certification.attestation import CertificationLevel
-from fastmcp.server.security.certification.evidence import CertificationTestSuite
+from fastmcp.server.security.certification.evidence import (
+    CertificationTestSuite,
+    PublisherEvidenceVerifier,
+)
 from fastmcp.server.security.certification.pipeline import CertificationPipeline
 from fastmcp.server.security.certification.validator import ManifestValidator
 from fastmcp.server.security.compliance.reports import (
@@ -560,6 +563,8 @@ class CertificationConfig:
         test_suites: Optional operator-configured assurance evidence suites. The
             built-in standard suite is used when this is None; an empty tuple
             explicitly selects static-analysis-only assurance.
+        publisher_evidence_verifier: Optional trusted-runner policy for signed
+            publisher functional-test evidence.
     """
 
     pipeline: CertificationPipeline | None = None
@@ -568,6 +573,7 @@ class CertificationConfig:
     validator: ManifestValidator | None = None
     min_level_for_signing: CertificationLevel = CertificationLevel.BASIC
     test_suites: tuple[CertificationTestSuite, ...] | None = None
+    publisher_evidence_verifier: PublisherEvidenceVerifier | None = None
 
     def get_pipeline(
         self,
@@ -588,6 +594,7 @@ class CertificationConfig:
             event_bus=event_bus,
             min_level_for_signing=self.min_level_for_signing,
             test_suites=self.test_suites,
+            publisher_evidence_verifier=self.publisher_evidence_verifier,
         )
 
 

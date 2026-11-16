@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Generic, TypedDict, cast
@@ -15,6 +16,13 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, RedirectResponse, Response
 
 from fastmcp.server.security.certification.attestation import CertificationLevel
+from fastmcp.server.security.certification.evidence import (
+    CertificationEvidenceSource,
+    CertificationTestEvidence,
+    CertificationTestResult,
+    CertificationTestStatus,
+    PublisherEvidenceVerifier,
+)
 from fastmcp.server.security.certification.manifest import (
     DataClassification,
     DataFlowDeclaration,
@@ -25,6 +33,7 @@ from fastmcp.server.security.certification.manifest import (
 from fastmcp.server.security.certification.pipeline import CertificationPipeline
 from fastmcp.server.security.contracts.crypto import (
     ContractCryptoHandler,
+    SignatureInfo,
     SigningAlgorithm,
 )
 from fastmcp.server.security.gateway.tool_marketplace import (
@@ -238,19 +247,21 @@ def _parse_manifest(data: dict[str, Any]) -> SecurityManifest:
     """Build a SecurityManifest from plain JSON-compatible input."""
 
     permissions = {PermissionScope(value) for value in data.get("permissions", [])}
-    data_flows = [
-        DataFlowDeclaration(
-            source=flow["source"],
-            destination=flow["destination"],
-            classification=DataClassification(
+    data_flows: list[DataFlowDeclaration] = []
+    for flow in data.get("data_flows", []):
+        flow_kwargs: dict[str, Any] = {
+            "source": flow["source"],
+            "destination": flow["destination"],
+            "classification": DataClassification(
                 flow.get("classification", DataClassification.INTERNAL.value)
             ),
-            description=flow.get("description", ""),
-            transforms=list(flow.get("transforms", [])),
-            retention=flow.get("retention", "none"),
-        )
-        for flow in data.get("data_flows", [])
-    ]
+            "description": flow.get("description", ""),
+            "transforms": list(flow.get("transforms", [])),
+            "retention": flow.get("retention", "none"),
+        }
+        if "flow_id" in flow:
+            flow_kwargs["flow_id"] = flow["flow_id"]
+        data_flows.append(DataFlowDeclaration(**flow_kwargs))
     resource_access = [
         ResourceAccessDeclaration(
             resource_pattern=access["resource_pattern"],
@@ -263,22 +274,40 @@ def _parse_manifest(data: dict[str, Any]) -> SecurityManifest:
         )
         for access in data.get("resource_access", [])
     ]
-    return SecurityManifest(
-        tool_name=data.get("tool_name", ""),
-        version=data.get("version", "0.0.0"),
-        author=data.get("author", ""),
-        description=data.get("description", ""),
-        permissions=permissions,
-        data_flows=data_flows,
-        resource_access=resource_access,
-        max_execution_time_seconds=data.get("max_execution_time_seconds", 60.0),
-        idempotent=data.get("idempotent", False),
-        deterministic=data.get("deterministic", False),
-        requires_consent=data.get("requires_consent", False),
-        dependencies=list(data.get("dependencies", [])),
-        tags=set(data.get("tags", [])),
-        metadata=dict(data.get("metadata", {})),
-    )
+    manifest_kwargs: dict[str, Any] = {
+        "tool_name": data.get("tool_name", ""),
+        "version": data.get("version", "0.0.0"),
+        "author": data.get("author", ""),
+        "description": data.get("description", ""),
+        "permissions": permissions,
+        "data_flows": data_flows,
+        "resource_access": resource_access,
+        "max_execution_time_seconds": data.get("max_execution_time_seconds", 60.0),
+        "idempotent": data.get("idempotent", False),
+        "deterministic": data.get("deterministic", False),
+        "requires_consent": data.get("requires_consent", False),
+        "dependencies": list(data.get("dependencies", [])),
+        "tags": set(data.get("tags", [])),
+        "metadata": dict(data.get("metadata", {})),
+    }
+    if "manifest_id" in data:
+        manifest_kwargs["manifest_id"] = data["manifest_id"]
+    if "created_at" in data:
+        created_at = data["created_at"]
+        if not isinstance(created_at, str):
+            raise ValueError("`manifest.created_at` must be an ISO 8601 timestamp")
+        try:
+            parsed_created_at = datetime.fromisoformat(
+                created_at.replace("Z", "+00:00")
+            )
+        except ValueError as exc:
+            raise ValueError(
+                "`manifest.created_at` must be an ISO 8601 timestamp"
+            ) from exc
+        if parsed_created_at.tzinfo is None or parsed_created_at.utcoffset() is None:
+            raise ValueError("`manifest.created_at` must be timezone-aware")
+        manifest_kwargs["created_at"] = parsed_created_at
+    return SecurityManifest(**manifest_kwargs)
 
 
 def _coerce_level(
@@ -297,6 +326,151 @@ def _coerce_categories(values: list[str] | set[str] | None) -> set[ToolCategory]
     if not values:
         return set()
     return {ToolCategory(value) for value in values}
+
+
+def _bounded_string(
+    value: Any,
+    field_name: str,
+    *,
+    max_length: int,
+    allow_empty: bool = False,
+) -> str:
+    if not isinstance(value, str):
+        raise ValueError(f"`{field_name}` must be a string")
+    if not allow_empty and not value.strip():
+        raise ValueError(f"`{field_name}` must be nonempty")
+    if len(value) > max_length:
+        raise ValueError(f"`{field_name}` is too long")
+    return value
+
+
+def _parse_publisher_test_evidence(value: Any) -> tuple[CertificationTestEvidence, ...]:
+    """Strictly parse signed publisher evidence from an HTTP request body."""
+
+    if value is None:
+        return ()
+    if not isinstance(value, list):
+        raise ValueError("`publisher_test_evidence` must be an array")
+    if len(value) > 8:
+        raise ValueError("Too many publisher test evidence records")
+
+    parsed: list[CertificationTestEvidence] = []
+    for index, raw in enumerate(value):
+        field_prefix = f"publisher_test_evidence[{index}]"
+        if not isinstance(raw, dict):
+            raise ValueError(f"`{field_prefix}` must be an object")
+        results_raw = raw.get("results")
+        if not isinstance(results_raw, list) or not results_raw:
+            raise ValueError(f"`{field_prefix}.results` must be a nonempty array")
+        if len(results_raw) > 256:
+            raise ValueError(f"`{field_prefix}.results` contains too many entries")
+
+        results: list[CertificationTestResult] = []
+        for result_index, result_raw in enumerate(results_raw):
+            result_prefix = f"{field_prefix}.results[{result_index}]"
+            if not isinstance(result_raw, dict):
+                raise ValueError(f"`{result_prefix}` must be an object")
+            results.append(
+                CertificationTestResult(
+                    test_id=_bounded_string(
+                        result_raw.get("test_id"),
+                        f"{result_prefix}.test_id",
+                        max_length=256,
+                    ),
+                    status=CertificationTestStatus(result_raw.get("status")),
+                    summary=_bounded_string(
+                        result_raw.get("summary", ""),
+                        f"{result_prefix}.summary",
+                        max_length=1024,
+                        allow_empty=True,
+                    ),
+                )
+            )
+
+        signature_raw = raw.get("signature")
+        if not isinstance(signature_raw, dict):
+            raise ValueError(f"`{field_prefix}.signature` must be an object")
+        signature = SignatureInfo(
+            algorithm=SigningAlgorithm(signature_raw.get("algorithm")),
+            signer_id=_bounded_string(
+                signature_raw.get("signer_id"),
+                f"{field_prefix}.signature.signer_id",
+                max_length=256,
+            ),
+            signature=_bounded_string(
+                signature_raw.get("signature"),
+                f"{field_prefix}.signature.signature",
+                max_length=16384,
+            ),
+            key_id=_bounded_string(
+                signature_raw.get("key_id", ""),
+                f"{field_prefix}.signature.key_id",
+                max_length=256,
+                allow_empty=True,
+            ),
+        )
+        generated_at_raw = _bounded_string(
+            raw.get("generated_at"),
+            f"{field_prefix}.generated_at",
+            max_length=64,
+        )
+        try:
+            generated_at = datetime.fromisoformat(
+                generated_at_raw.replace("Z", "+00:00")
+            )
+        except ValueError as exc:
+            raise ValueError(
+                f"`{field_prefix}.generated_at` must be an ISO 8601 timestamp"
+            ) from exc
+
+        manifest_digest = _bounded_string(
+            raw.get("manifest_digest"),
+            f"{field_prefix}.manifest_digest",
+            max_length=64,
+        )
+        if len(manifest_digest) != 64 or any(
+            character not in "0123456789abcdef" for character in manifest_digest
+        ):
+            raise ValueError(
+                f"`{field_prefix}.manifest_digest` must be a lowercase SHA-256 digest"
+            )
+        evidence = CertificationTestEvidence(
+            suite_id=_bounded_string(
+                raw.get("suite_id"), f"{field_prefix}.suite_id", max_length=256
+            ),
+            suite_version=_bounded_string(
+                raw.get("suite_version"),
+                f"{field_prefix}.suite_version",
+                max_length=128,
+            ),
+            source=CertificationEvidenceSource(raw.get("source")),
+            runner_id=_bounded_string(
+                raw.get("runner_id"), f"{field_prefix}.runner_id", max_length=256
+            ),
+            manifest_digest=manifest_digest,
+            validation_report_id=_bounded_string(
+                raw.get("validation_report_id", ""),
+                f"{field_prefix}.validation_report_id",
+                max_length=256,
+                allow_empty=True,
+            ),
+            results=tuple(results),
+            evidence_id=_bounded_string(
+                raw.get("evidence_id"),
+                f"{field_prefix}.evidence_id",
+                max_length=256,
+            ),
+            generated_at=generated_at,
+            signature=signature,
+        )
+        if evidence.source is not CertificationEvidenceSource.PUBLISHER:
+            raise ValueError(f"`{field_prefix}.source` must be `publisher`")
+        if "passed" in raw and raw["passed"] is not evidence.passed:
+            raise ValueError(f"`{field_prefix}.passed` does not match its results")
+        if "counts" in raw and raw["counts"] != evidence.counts:
+            raise ValueError(f"`{field_prefix}.counts` does not match its results")
+        parsed.append(evidence)
+    return tuple(parsed)
 
 
 def _level_index(level: CertificationLevel) -> int:
@@ -450,6 +624,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         mount_security_api: bool = True,
         require_moderation: bool = False,
         persistence_path: str | None = None,
+        publisher_evidence_verifier: PublisherEvidenceVerifier | None = None,
         security: SecurityConfig | None = None,
         auth_settings: RegistryAuthSettings | None = None,
         require_resolved_principal: bool | None = None,
@@ -477,6 +652,11 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         if security is None and signing_secret is None:
             raise ValueError(
                 "`signing_secret` is required when `security` is not provided."
+            )
+        if security is not None and publisher_evidence_verifier is not None:
+            raise ValueError(
+                "Configure publisher evidence verification on the custom security "
+                "certification pipeline instead of passing both options."
             )
 
         self._issuer_id = issuer_id
@@ -599,6 +779,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             minimum_certification=minimum_certification,
             require_moderation=require_moderation,
             persistence_path=persistence_path,
+            publisher_evidence_verifier=publisher_evidence_verifier,
             enable_contracts=enable_contracts,
             enable_consent=enable_consent,
             enable_provenance=enable_provenance,
@@ -717,6 +898,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         minimum_certification: CertificationLevel,
         require_moderation: bool,
         persistence_path: str | None,
+        publisher_evidence_verifier: PublisherEvidenceVerifier | None = None,
         enable_contracts: bool = True,
         enable_consent: bool = True,
         enable_provenance: bool = True,
@@ -808,6 +990,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     issuer_id=issuer_id,
                     crypto_handler=crypto,
                     min_level_for_signing=minimum_certification,
+                    publisher_evidence_verifier=publisher_evidence_verifier,
                 )
             ),
             contracts=contracts_config,
@@ -5782,6 +5965,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         metadata: dict[str, Any] | None = None,
         changelog: str = "",
         requested_level: CertificationLevel | None = None,
+        publisher_test_evidence: Sequence[CertificationTestEvidence] = (),
         attestation_kind: Any = None,
         upstream_ref: Any = None,
         curator_id: str = "",
@@ -5832,6 +6016,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             categories=categories,
             metadata=metadata,
             requested_level=effective_requested_level,
+            publisher_test_evidence=publisher_test_evidence,
         )
         if not preflight.ready_for_publish:
             return RegistrySubmissionResult(
@@ -6399,12 +6584,14 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         categories: set[ToolCategory] | None = None,
         metadata: dict[str, Any] | None = None,
         requested_level: CertificationLevel | None = None,
+        publisher_test_evidence: Sequence[CertificationTestEvidence] = (),
     ) -> RegistryPreflightResult:
         """Validate a submission without publishing it."""
 
         result = self._certification_pipeline().certify(
             manifest,
             requested_level=requested_level,
+            publisher_evidence=publisher_test_evidence,
         )
         level_order = list(CertificationLevel)
         meets_minimum = level_order.index(
@@ -9597,6 +9784,9 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     metadata=dict(body.get("metadata", {})),
                     changelog=body.get("changelog", ""),
                     requested_level=_coerce_level(body.get("requested_level")),
+                    publisher_test_evidence=_parse_publisher_test_evidence(
+                        body.get("publisher_test_evidence")
+                    ),
                 )
             except (KeyError, TypeError, ValueError) as exc:
                 return JSONResponse(
@@ -9637,6 +9827,9 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     categories=categories,
                     metadata=metadata,
                     requested_level=_coerce_level(body.get("requested_level")),
+                    publisher_test_evidence=_parse_publisher_test_evidence(
+                        body.get("publisher_test_evidence")
+                    ),
                 )
             except (KeyError, TypeError, ValueError) as exc:
                 return JSONResponse(

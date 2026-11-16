@@ -27,7 +27,9 @@ from fastmcp.server.security.certification.evidence import (
     CertificationTestResult,
     CertificationTestStatus,
     CertificationTestSuite,
+    PublisherEvidenceVerifier,
     StandardCertificationTestSuite,
+    TrustedPublisherTestRunner,
 )
 from fastmcp.server.security.certification.validator import ManifestValidator
 from fastmcp.server.security.certification.pipeline import CertificationPipeline
@@ -46,10 +48,12 @@ __all__ = [
     "DataFlowDeclaration",
     "ManifestValidator",
     "PermissionScope",
+    "PublisherEvidenceVerifier",
     "ResourceAccessDeclaration",
     "SecurityManifest",
     "StandardCertificationTestSuite",
     "ToolAttestation",
+    "TrustedPublisherTestRunner",
     "ValidationFinding",
     "ValidationReport",
     "ValidationSeverity",

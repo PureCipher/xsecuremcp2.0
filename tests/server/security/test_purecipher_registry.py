@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC
+from dataclasses import replace
+from datetime import UTC, datetime
 from typing import Any, cast
 
 import pytest
@@ -10,6 +11,14 @@ from starlette.testclient import TestClient
 
 from fastmcp import Client
 from fastmcp.server.security.certification.attestation import CertificationLevel
+from fastmcp.server.security.certification.evidence import (
+    CertificationEvidenceSource,
+    CertificationTestEvidence,
+    CertificationTestResult,
+    CertificationTestStatus,
+    PublisherEvidenceVerifier,
+    TrustedPublisherTestRunner,
+)
 from fastmcp.server.security.certification.manifest import (
     DataClassification,
     DataFlowDeclaration,
@@ -17,8 +26,14 @@ from fastmcp.server.security.certification.manifest import (
     ResourceAccessDeclaration,
     SecurityManifest,
 )
+from fastmcp.server.security.contracts.crypto import (
+    ContractCryptoHandler,
+    SigningAlgorithm,
+    compute_digest,
+)
 from purecipher import PureCipherRegistry, ToolCategory
 from purecipher.auth import RegistryAuthSettings
+from purecipher.registry import _parse_manifest
 
 TEST_SIGNING_SECRET = "purecipher-registry-signing-secret-for-tests"
 TEST_JWT_SECRET = "purecipher-registry-jwt-secret-for-tests"
@@ -96,7 +111,59 @@ def _auth_settings() -> RegistryAuthSettings:
     )
 
 
+def _publisher_runner_crypto() -> ContractCryptoHandler:
+    return ContractCryptoHandler(
+        algorithm=SigningAlgorithm.HMAC_SHA256,
+        secret_key=b"registry-trusted-publisher-runner-key",
+    )
+
+
+def _publisher_evidence_verifier() -> PublisherEvidenceVerifier:
+    return PublisherEvidenceVerifier(
+        (
+            TrustedPublisherTestRunner(
+                runner_id="acme-ci",
+                signer_id="purecipher-ci/acme",
+                crypto_handler=_publisher_runner_crypto(),
+                allowed_suite_ids=frozenset({"acme-functional"}),
+            ),
+        )
+    )
+
+
+def _signed_publisher_evidence(manifest: SecurityManifest) -> dict[str, Any]:
+    evidence = CertificationTestEvidence(
+        suite_id="acme-functional",
+        suite_version="1.0.0",
+        source=CertificationEvidenceSource.PUBLISHER,
+        runner_id="acme-ci",
+        manifest_digest=compute_digest(manifest.to_dict()),
+        validation_report_id="",
+        generated_at=datetime.now(UTC),
+        results=(
+            CertificationTestResult(
+                test_id="weather-round-trip",
+                status=CertificationTestStatus.PASSED,
+                summary="Live publisher integration passed",
+            ),
+        ),
+    )
+    signature = _publisher_runner_crypto().sign(
+        evidence.signable_payload(),
+        signer_id="purecipher-ci/acme",
+    )
+    return replace(evidence, signature=signature).to_dict()
+
+
 class TestPureCipherRegistry:
+    def test_manifest_json_round_trip_preserves_digest_fields(self):
+        manifest = _manifest()
+
+        restored = _parse_manifest(manifest.to_dict())
+
+        assert restored.to_dict() == manifest.to_dict()
+        assert compute_digest(restored.to_dict()) == compute_digest(manifest.to_dict())
+
     def test_constructor_mounts_registry_routes(self):
         registry = PureCipherRegistry(
             signing_secret=TEST_SIGNING_SECRET,
@@ -1541,6 +1608,97 @@ class TestPureCipherRegistry:
             recipe_ids = {recipe["recipe_id"] for recipe in payload["install_recipes"]}
             assert "mcp_client_http" in recipe_ids
             assert "docker_compose" in recipe_ids
+
+    def test_http_preflight_accepts_trusted_publisher_test_evidence(self):
+        manifest = _manifest()
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            publisher_evidence_verifier=_publisher_evidence_verifier(),
+        )
+
+        with TestClient(registry.http_app()) as client:
+            response = client.post(
+                "/registry/preflight",
+                json={
+                    "manifest": manifest.to_dict(),
+                    "requested_level": "basic",
+                    "publisher_test_evidence": [_signed_publisher_evidence(manifest)],
+                },
+            )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["assurance_tier"] == "publisher_tested"
+        assert payload["attestation"]["assurance_tier"] == "publisher_tested"
+        assert len(payload["report"]["test_evidence"]) == 2
+        assert (
+            payload["report"]["test_evidence"][1]["signature"]["signer_id"]
+            == "purecipher-ci/acme"
+        )
+
+    def test_http_submit_binds_trusted_publisher_test_evidence(self):
+        manifest = _manifest()
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            publisher_evidence_verifier=_publisher_evidence_verifier(),
+        )
+
+        with TestClient(registry.http_app()) as client:
+            response = client.post(
+                "/registry/submit",
+                json={
+                    "manifest": manifest.to_dict(),
+                    "display_name": "Weather Lookup",
+                    "requested_level": "basic",
+                    "publisher_test_evidence": [_signed_publisher_evidence(manifest)],
+                },
+            )
+
+        assert response.status_code == 201
+        payload = response.json()
+        assert payload["accepted"] is True
+        assert payload["report"]["assurance_tier"] == "publisher_tested"
+        assert payload["attestation"]["assurance_tier"] == "publisher_tested"
+        assert payload["listing"]["tool_name"] == manifest.tool_name
+
+    def test_http_preflight_rejects_tampered_publisher_test_evidence(self):
+        manifest = _manifest()
+        evidence = _signed_publisher_evidence(manifest)
+        evidence["results"][0]["summary"] = "tampered after signing"
+        registry = PureCipherRegistry(
+            signing_secret=TEST_SIGNING_SECRET,
+            publisher_evidence_verifier=_publisher_evidence_verifier(),
+        )
+
+        with TestClient(registry.http_app()) as client:
+            response = client.post(
+                "/registry/preflight",
+                json={
+                    "manifest": manifest.to_dict(),
+                    "publisher_test_evidence": [evidence],
+                },
+            )
+
+        assert response.status_code == 400
+        assert response.json()["error"] == (
+            "Publisher test evidence signature is invalid"
+        )
+
+    def test_http_preflight_rejects_publisher_evidence_without_trust_policy(self):
+        manifest = _manifest()
+        registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
+
+        with TestClient(registry.http_app()) as client:
+            response = client.post(
+                "/registry/preflight",
+                json={
+                    "manifest": manifest.to_dict(),
+                    "publisher_test_evidence": [_signed_publisher_evidence(manifest)],
+                },
+            )
+
+        assert response.status_code == 400
+        assert "not enabled" in response.json()["error"]
 
     def test_http_registry_tools_search(self):
         registry = PureCipherRegistry(signing_secret=TEST_SIGNING_SECRET)
