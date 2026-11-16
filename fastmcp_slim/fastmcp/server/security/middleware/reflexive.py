@@ -32,6 +32,7 @@ from fastmcp.server.security.reflexive.analyzer import (
     EscalationEngine,
 )
 from fastmcp.server.security.reflexive.models import (
+    BehavioralMetric,
     DriftEvent,
     ExecutionVerdict,
 )
@@ -230,7 +231,9 @@ class ReflexiveMiddleware(Middleware):
         call_rate = self._compute_call_rate(actor_id)
 
         # Observe call frequency
-        drift_events = self.analyzer.observe(actor_id, "calls_per_minute", call_rate)
+        drift_events = self.analyzer.observe(
+            actor_id, BehavioralMetric.CALLS_PER_MINUTE.value, call_rate
+        )
 
         # Observe scope expansion
         if is_new_tool:
@@ -238,7 +241,7 @@ class ReflexiveMiddleware(Middleware):
             drift_events.extend(
                 self.analyzer.observe(
                     actor_id,
-                    "scope_expansion",
+                    BehavioralMetric.SCOPE_EXPANSION.value,
                     float(scope_size),
                     metadata={"new_tool": tool_name},
                 )
@@ -251,10 +254,16 @@ class ReflexiveMiddleware(Middleware):
             latency = (time.monotonic() - start) * 1000  # ms
 
             # Observe latency
-            drift_events.extend(self.analyzer.observe(actor_id, "latency_ms", latency))
+            drift_events.extend(
+                self.analyzer.observe(
+                    actor_id, BehavioralMetric.LATENCY_MS.value, latency
+                )
+            )
 
             # Observe success (0 = success for error rate)
-            drift_events.extend(self.analyzer.observe(actor_id, "error_rate", 0.0))
+            drift_events.extend(
+                self.analyzer.observe(actor_id, BehavioralMetric.ERROR_RATE.value, 0.0)
+            )
 
             self._process_drift(drift_events)
 
@@ -265,8 +274,14 @@ class ReflexiveMiddleware(Middleware):
 
         except Exception:
             latency = (time.monotonic() - start) * 1000
-            drift_events.extend(self.analyzer.observe(actor_id, "latency_ms", latency))
-            drift_events.extend(self.analyzer.observe(actor_id, "error_rate", 1.0))
+            drift_events.extend(
+                self.analyzer.observe(
+                    actor_id, BehavioralMetric.LATENCY_MS.value, latency
+                )
+            )
+            drift_events.extend(
+                self.analyzer.observe(actor_id, BehavioralMetric.ERROR_RATE.value, 1.0)
+            )
             self._process_drift(drift_events)
             raise
 
@@ -301,7 +316,9 @@ class ReflexiveMiddleware(Middleware):
 
         self._record_call(actor_id)
         call_rate = self._compute_call_rate(actor_id)
-        drift_events = self.analyzer.observe(actor_id, "calls_per_minute", call_rate)
+        drift_events = self.analyzer.observe(
+            actor_id, BehavioralMetric.CALLS_PER_MINUTE.value, call_rate
+        )
 
         # Observe scope expansion
         if is_new_resource:
@@ -309,7 +326,7 @@ class ReflexiveMiddleware(Middleware):
             drift_events.extend(
                 self.analyzer.observe(
                     actor_id,
-                    "scope_expansion",
+                    BehavioralMetric.SCOPE_EXPANSION.value,
                     float(scope_size),
                     metadata={"new_resource": resource_uri},
                 )
@@ -324,7 +341,9 @@ class ReflexiveMiddleware(Middleware):
 
             return result
         except Exception:
-            drift_events.extend(self.analyzer.observe(actor_id, "error_rate", 1.0))
+            drift_events.extend(
+                self.analyzer.observe(actor_id, BehavioralMetric.ERROR_RATE.value, 1.0)
+            )
             self._process_drift(drift_events)
             raise
 

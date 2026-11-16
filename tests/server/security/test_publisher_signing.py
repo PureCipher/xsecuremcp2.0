@@ -31,10 +31,14 @@ KEYS = f"{IDENTITY}/keys"
 
 
 def _public_pem(private_key: Ed25519PrivateKey) -> str:
-    return private_key.public_key().public_bytes(
-        serialization.Encoding.PEM,
-        serialization.PublicFormat.SubjectPublicKeyInfo,
-    ).decode("ascii")
+    return (
+        private_key.public_key()
+        .public_bytes(
+            serialization.Encoding.PEM,
+            serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode("ascii")
+    )
 
 
 def _signature(private_key: Ed25519PrivateKey, manifest) -> dict[str, str]:
@@ -147,7 +151,9 @@ def test_manifest_signature_is_required_verified_and_manifest_bound():
         _verify_domain(client, app)
         key = _bind_key(client, private_key)
 
-        unsigned = client.post("/registry/preflight", json={"manifest": manifest.to_dict()})
+        unsigned = client.post(
+            "/registry/preflight", json={"manifest": manifest.to_dict()}
+        )
         assert unsigned.status_code == 200
         assert unsigned.json()["ready_for_publish"] is False
         assert unsigned.json()["publisher_identity"]["author_signature_status"] == (
@@ -231,10 +237,16 @@ def test_key_rotation_revocation_and_domain_expiry_prevent_downgrade():
         )
 
         new_signature = _signature(new_key, manifest)
-        assert client.post(
-            "/registry/preflight",
-            json={"manifest": manifest.to_dict(), "publisher_signature": new_signature},
-        ).json()["ready_for_publish"] is True
+        assert (
+            client.post(
+                "/registry/preflight",
+                json={
+                    "manifest": manifest.to_dict(),
+                    "publisher_signature": new_signature,
+                },
+            ).json()["ready_for_publish"]
+            is True
+        )
 
         client.post(
             f"{KEYS}/{new['key_id']}",
@@ -274,9 +286,10 @@ def test_key_rotation_revocation_and_domain_expiry_prevent_downgrade():
             "domain_verification_required"
         )
         assert app.get_publisher_profile("alice")["signing_key_bound"] is False
-        assert active["key_id"] not in app.get_publisher_profile("alice")[
-            "signing_key_ids"
-        ]
+        assert (
+            active["key_id"]
+            not in app.get_publisher_profile("alice")["signing_key_ids"]
+        )
 
 
 def test_signing_key_cannot_be_reused_by_another_publisher():
@@ -315,9 +328,7 @@ def test_pending_challenges_cannot_bypass_active_key_limit():
         for private_key, challenge in zip(
             private_keys[:5], challenges[:5], strict=True
         ):
-            proof = private_key.sign(
-                challenge["canonical_payload"].encode("utf-8")
-            )
+            proof = private_key.sign(challenge["canonical_payload"].encode("utf-8"))
             completed = client.post(
                 f"{KEYS}/challenges/{challenge['challenge_id']}/complete",
                 json={"signature": base64.b64encode(proof).decode("ascii")},
@@ -420,10 +431,14 @@ def test_revoked_key_blocks_staged_release_approval():
 
 def test_only_ed25519_and_strict_signature_shapes_are_accepted():
     rsa_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    rsa_pem = rsa_key.public_key().public_bytes(
-        serialization.Encoding.PEM,
-        serialization.PublicFormat.SubjectPublicKeyInfo,
-    ).decode("ascii")
+    rsa_pem = (
+        rsa_key.public_key()
+        .public_bytes(
+            serialization.Encoding.PEM,
+            serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode("ascii")
+    )
     with pytest.raises(ValueError, match="Only Ed25519"):
         canonicalize_public_key(rsa_pem)
 

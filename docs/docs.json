@@ -137,6 +137,7 @@
                     "pages": [
                       "servers/security/overview",
                       "servers/security/settings",
+                      "servers/security/reflexive-core",
                       "servers/security/purecipher-registry",
                       "servers/security/purecipher-publisher"
                     ],

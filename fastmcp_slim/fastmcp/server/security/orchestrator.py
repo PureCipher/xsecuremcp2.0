@@ -314,10 +314,17 @@ class SecurityOrchestrator:
             )
 
             introspection_engine = None
+            profile_manager = None
             if config.introspection is not None:
+                from fastmcp.server.security.reflexive.profiles import (
+                    ActorProfileManager,
+                )
+
+                profile_manager = ActorProfileManager()
                 introspection_engine = config.introspection.get_introspection_engine(
                     analyzer=analyzer,
                     escalation_engine=escalation_engine,
+                    profile_manager=profile_manager,
                 )
                 ctx.introspection_engine = introspection_engine
                 logger.debug("Introspection engine enabled")
@@ -327,6 +334,7 @@ class SecurityOrchestrator:
                     analyzer=analyzer,
                     escalation_engine=escalation_engine,
                     bypass_stdio=bypass_stdio,
+                    profile_manager=profile_manager,
                     introspection_engine=introspection_engine,
                 )
             )

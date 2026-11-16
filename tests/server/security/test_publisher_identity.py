@@ -106,9 +106,7 @@ async def test_proof_verifier_requires_exact_dns_or_https_value():
         token,
         https_fetch=https_fetch,
     )
-    assert urls == [
-        "https://example.com/.well-known/purecipher-verification.txt"
-    ]
+    assert urls == ["https://example.com/.well-known/purecipher-verification.txt"]
 
     async def missing(_name):
         return ("wrong",)
@@ -152,9 +150,7 @@ def test_domain_proof_becomes_public_without_leaking_challenge(monkeypatch):
         )
         assert app.get_publisher_profile("alice")["domain_verified"] is False
 
-        verified = client.post(
-            f"{BASE}/challenges/{challenge['challenge_id']}/verify"
-        )
+        verified = client.post(f"{BASE}/challenges/{challenge['challenge_id']}/verify")
         assert verified.status_code == 200, verified.text
         assert verified.json()["identity"]["domain"] == "example.com"
         assert calls[0][0:2] == (
@@ -234,9 +230,7 @@ def test_verified_domain_is_exclusive_and_admin_can_require_new_proof(monkeypatc
         )
 
         login(client, "bob")
-        bob = _create_challenge(
-            client, domain="example.com", method="https_well_known"
-        )
+        bob = _create_challenge(client, domain="example.com", method="https_well_known")
         conflict = client.post(f"{BASE}/challenges/{bob['challenge_id']}/verify")
         assert conflict.status_code == 409
         assert "another publisher" in conflict.json()["error"]
@@ -311,7 +305,12 @@ def test_failed_expired_and_cross_owner_challenges_are_bounded(monkeypatch):
         item = app._workspace.get(key)
         item["expires_at"] = (datetime.now(UTC) - timedelta(minutes=1)).isoformat()
         app._workspace.save(item, expected=item["revision"])
-        assert client.post(f"{BASE}/challenges/{expired['challenge_id']}/verify").status_code == 410
+        assert (
+            client.post(
+                f"{BASE}/challenges/{expired['challenge_id']}/verify"
+            ).status_code
+            == 410
+        )
 
 
 def test_only_publishers_manage_challenges_and_only_admins_revoke():
@@ -361,7 +360,11 @@ def test_public_identity_aggregation_ignores_expired_revoked_and_invalid_records
     result = verified_publisher_identities(
         [
             base,
-            {**base, "domain": "expired.example", "verification_expires_at": now.isoformat()},
+            {
+                **base,
+                "domain": "expired.example",
+                "verification_expires_at": now.isoformat(),
+            },
             {**base, "domain": "revoked.example", "status": "revoked"},
             {**base, "domain": 123},
             {**base, "owner": None},
@@ -391,9 +394,7 @@ def test_challenge_and_verified_identity_persist_in_postgres(registry_dsn, monke
         app._workspace = WorkspaceStore(registry_dsn)
         loaded = client.get(BASE).json()["challenges"]
         assert loaded[0]["challenge_id"] == challenge["challenge_id"]
-        response = client.post(
-            f"{BASE}/challenges/{challenge['challenge_id']}/verify"
-        )
+        response = client.post(f"{BASE}/challenges/{challenge['challenge_id']}/verify")
         assert response.status_code == 200, response.text
         app._workspace = WorkspaceStore(registry_dsn)
         assert app.get_publisher_profile("alice")["verified_domains"] == [

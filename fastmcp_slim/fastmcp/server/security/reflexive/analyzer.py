@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 from fastmcp.server.security.reflexive.models import (
     BehavioralBaseline,
+    BehavioralObservation,
     DriftEvent,
     DriftSeverity,
     DriftType,
@@ -288,6 +289,16 @@ class BehavioralAnalyzer:
                 )
 
         return events
+
+    def observe_v1(self, observation: BehavioralObservation) -> list[DriftEvent]:
+        """Record a strict BehavioralObservation v1 envelope."""
+
+        return self.observe(
+            observation.actor_id,
+            observation.metric_name.value,
+            observation.value,
+            metadata=observation.metadata,
+        )
 
     def _classify_severity(self, deviation: float) -> DriftSeverity | None:
         """Classify deviation into a severity level.

@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:purecipher:schema:behavioral-observation:v1",
+  "title": "BehavioralObservation v1",
+  "description": "One canonical behavioral metric observation for the SecureMCP Reflexive Core.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "actor_id", "metric_name", "value"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0",
+      "description": "BehavioralObservation contract version."
+    },
+    "actor_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Stable identifier for the actor being observed."
+    },
+    "metric_name": {
+      "type": "string",
+      "enum": [
+        "calls_per_minute",
+        "latency_ms",
+        "error_rate",
+        "scope_expansion"
+      ],
+      "description": "Canonical v1 metric name."
+    },
+    "value": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Finite, non-negative metric value in the unit defined by metric_name."
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Optional metric-specific context. Values do not affect the built-in sigma calculation."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "metric_name": {
+            "const": "error_rate"
+          }
+        },
+        "required": ["metric_name"]
+      },
+      "then": {
+        "properties": {
+          "value": {
+            "maximum": 1
+          }
+        }
+      }
+    }
+  ]
+}

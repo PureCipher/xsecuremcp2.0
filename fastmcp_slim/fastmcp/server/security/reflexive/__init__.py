@@ -21,7 +21,10 @@ from fastmcp.server.security.reflexive.introspection import (
     IntrospectionEngine,
 )
 from fastmcp.server.security.reflexive.models import (
+    BEHAVIORAL_OBSERVATION_SCHEMA_VERSION,
     BehavioralBaseline,
+    BehavioralMetric,
+    BehavioralObservation,
     ComplianceStatus,
     DEFAULT_THREAT_THRESHOLDS,
     DriftEvent,
@@ -39,12 +42,15 @@ from fastmcp.server.security.reflexive.profiles import (
 )
 
 __all__ = [
+    "BEHAVIORAL_OBSERVATION_SCHEMA_VERSION",
     "DEFAULT_THREAT_THRESHOLDS",
     "ActorProfile",
     "ActorProfileManager",
     "AnomalyDetector",
     "BehavioralAnalyzer",
     "BehavioralBaseline",
+    "BehavioralMetric",
+    "BehavioralObservation",
     "ComplianceStatus",
     "ConfirmationRequiredError",
     "DriftEvent",
