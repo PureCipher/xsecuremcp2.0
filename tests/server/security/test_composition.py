@@ -60,6 +60,24 @@ class _ConstraintPolicy:
         return "1.0.0"
 
 
+class _ApprovalPolicy:
+    """Policy that always requires an approval gate."""
+
+    async def evaluate(self, context: PolicyEvaluationContext) -> PolicyResult:
+        return PolicyResult(
+            decision=PolicyDecision.REQUIRE_APPROVAL,
+            reason="Approval required",
+            policy_id="approval-policy",
+            constraints=["ticket:required"],
+        )
+
+    async def get_policy_id(self) -> str:
+        return "approval-policy"
+
+    async def get_policy_version(self) -> str:
+        return "1.0.0"
+
+
 # ── AllOf Tests ────────────────────────────────────────────────
 
 
@@ -87,6 +105,12 @@ class TestAllOf:
         policy = AllOf(AllowAllPolicy(), _DeferPolicy())
         result = asyncio.get_event_loop().run_until_complete(policy.evaluate(_ctx()))
         assert result.decision == PolicyDecision.ALLOW
+
+    def test_approval_is_not_downgraded_to_allow(self):
+        policy = AllOf(AllowAllPolicy(), _ApprovalPolicy())
+        result = asyncio.get_event_loop().run_until_complete(policy.evaluate(_ctx()))
+        assert result.decision == PolicyDecision.REQUIRE_APPROVAL
+        assert result.constraints == ["ticket:required"]
 
     def test_empty_policies_allows(self):
         policy = AllOf()
@@ -167,6 +191,12 @@ class TestNot:
         policy = Not(_DeferPolicy())
         result = asyncio.get_event_loop().run_until_complete(policy.evaluate(_ctx()))
         assert result.decision == PolicyDecision.DEFER
+
+    def test_approval_is_not_inverted_to_allow(self):
+        policy = Not(_ApprovalPolicy())
+        result = asyncio.get_event_loop().run_until_complete(policy.evaluate(_ctx()))
+        assert result.decision == PolicyDecision.REQUIRE_APPROVAL
+        assert result.constraints == ["ticket:required"]
 
     def test_constraints_preserved_on_allow(self):
         inner = _ConstraintPolicy(["c1"])

@@ -44,7 +44,8 @@ class AllOf:
 
     Semantics:
     - If ANY child returns DENY → DENY (short-circuit optional).
-    - If ALL children return ALLOW → ALLOW (constraints merged).
+    - Otherwise, if ANY child requires approval → REQUIRE_APPROVAL.
+    - If ALL decisive children return ALLOW → ALLOW (constraints merged).
     - DEFER is treated as ALLOW for AND purposes.
 
     Example::
@@ -73,6 +74,7 @@ class AllOf:
         """Evaluate all children with AND logic."""
         merged_constraints: list[str] = []
         reasons: list[str] = []
+        pending_approval: PolicyResult | None = None
 
         for policy in self.policies:
             result = await _resolve(policy.evaluate(context))
@@ -87,9 +89,22 @@ class AllOf:
                     constraints=result.constraints,
                 )
 
+            if result.decision == PolicyDecision.REQUIRE_APPROVAL:
+                if pending_approval is None:
+                    pending_approval = result
+                merged_constraints.extend(result.constraints)
+
             if result.decision == PolicyDecision.ALLOW:
                 merged_constraints.extend(result.constraints)
                 reasons.append(result.reason)
+
+        if pending_approval is not None:
+            return PolicyResult(
+                decision=PolicyDecision.REQUIRE_APPROVAL,
+                reason=pending_approval.reason,
+                policy_id=self.policy_id,
+                constraints=merged_constraints,
+            )
 
         return PolicyResult(
             decision=PolicyDecision.ALLOW,
@@ -182,6 +197,7 @@ class Not:
     - ALLOW → DENY
     - DENY → ALLOW
     - DEFER → DEFER (unchanged)
+    - REQUIRE_APPROVAL → REQUIRE_APPROVAL (authorization gates are not inverted)
 
     Example::
 
@@ -209,10 +225,13 @@ class Not:
         result = await _resolve(self.policy.evaluate(context))
         assert isinstance(result, PolicyResult)
 
-        if result.decision == PolicyDecision.DEFER:
+        if result.decision in {
+            PolicyDecision.DEFER,
+            PolicyDecision.REQUIRE_APPROVAL,
+        }:
             return PolicyResult(
-                decision=PolicyDecision.DEFER,
-                reason=f"Inverted (deferred): {result.reason}",
+                decision=result.decision,
+                reason=f"Not composition preserved {result.decision.value}: {result.reason}",
                 policy_id=self.policy_id,
                 constraints=result.constraints,
             )

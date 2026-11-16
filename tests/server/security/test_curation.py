@@ -1711,6 +1711,20 @@ class TestCuratorProxyHosting:
 
         assert isinstance(proxy, SecureMCP)
 
+    def test_build_proxy_refuses_listing_without_observed_tools(self):
+        from fastmcp.server.security.gateway.tool_marketplace import HostingMode
+        from purecipher.curation import (
+            ProxyHostingError,
+            build_curator_proxy_server,
+        )
+
+        listing = self._curated_listing(
+            hosting_mode=HostingMode.PROXY,
+            observed_tools=["curated"],
+        )
+        with pytest.raises(ProxyHostingError, match="no curator-observed tools"):
+            build_curator_proxy_server(listing)
+
     def test_build_proxy_refuses_catalog_listing(self):
         from fastmcp.server.security.gateway.tool_marketplace import HostingMode
         from purecipher.curation import (
@@ -1756,6 +1770,7 @@ class TestCuratorProxyHosting:
             tool_name="pypi-curated",
             attestation_kind=AttestationKind.CURATOR,
             hosting_mode=HostingMode.PROXY,
+            metadata={"introspection": {"tool_names": ["convert_document"]}},
             upstream_ref=UpstreamRef(
                 channel=UpstreamChannel.PYPI,
                 identifier="markitdown-mcp",
@@ -1854,6 +1869,7 @@ class TestCuratorProxyHosting:
             tool_name="npm-curated",
             attestation_kind=AttestationKind.CURATOR,
             hosting_mode=HostingMode.PROXY,
+            metadata={"introspection": {"tool_names": ["read_file"]}},
             upstream_ref=UpstreamRef(
                 channel=UpstreamChannel.NPM,
                 identifier="@modelcontextprotocol/server-filesystem",
@@ -1969,6 +1985,7 @@ class TestCuratorProxyHosting:
             tool_name="docker-curated",
             attestation_kind=AttestationKind.CURATOR,
             hosting_mode=HostingMode.PROXY,
+            metadata={"introspection": {"tool_names": ["run"]}},
             upstream_ref=UpstreamRef(
                 channel=UpstreamChannel.DOCKER,
                 identifier="ghcr.io/example/mcp",

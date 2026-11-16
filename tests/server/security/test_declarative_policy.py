@@ -692,22 +692,59 @@ class TestSchema:
 
 
 class TestEdgeCases:
-    @pytest.mark.anyio
-    async def test_empty_policies_list_in_all_of(self):
-        """AllOf with no children should still work."""
-        policy = load_policy(
-            {
-                "composition": "all_of",
-                "policies": [],
-            }
-        )
-        result = await policy.evaluate(_ctx())
-        # AllOf with no children → depends on implementation
-        assert result.decision in (
-            PolicyDecision.ALLOW,
-            PolicyDecision.DENY,
-            PolicyDecision.DEFER,
-        )
+    def test_empty_policies_list_in_all_of_is_rejected(self):
+        with pytest.raises(ValueError, match="at least one child policy"):
+            load_policy(
+                {
+                    "composition": "all_of",
+                    "policies": [],
+                }
+            )
+
+    @pytest.mark.parametrize(
+        "config, field",
+        [
+            ({"type": "denylist", "denied": ["admin"], "denyed": []}, "denyed"),
+            (
+                {
+                    "type": "rate_limit",
+                    "max_requests": 10,
+                    "window_second": 60,
+                },
+                "window_second",
+            ),
+            (
+                {
+                    "composition": "all_of",
+                    "policies": [{"type": "allow_all"}],
+                    "polices": [],
+                },
+                "polices",
+            ),
+        ],
+    )
+    def test_unknown_policy_fields_are_rejected(self, config, field):
+        with pytest.raises(ValueError, match=field):
+            load_policy(config)
+
+    def test_composition_requires_explicit_composition_key(self):
+        with pytest.raises(ValueError, match="missing required 'composition'"):
+            load_policy({"policies": [{"type": "allow_all"}]})
+
+    def test_unknown_nested_policy_field_is_rejected(self):
+        with pytest.raises(ValueError, match="denyed"):
+            load_policy(
+                {
+                    "type": "resource_scoped",
+                    "resource_rules": {
+                        "admin": {
+                            "type": "denylist",
+                            "denied": ["admin"],
+                            "denyed": ["root"],
+                        }
+                    },
+                }
+            )
 
     @pytest.mark.anyio
     async def test_single_policy_in_all_of(self):

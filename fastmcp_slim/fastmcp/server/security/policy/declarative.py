@@ -1004,6 +1004,26 @@ _COMPOSITION_MAP = {
     "not": "not",
 }
 
+_COMMON_POLICY_KEYS = {"type", "policy_id", "version"}
+_COMMON_COMPOSITION_KEYS = {"composition", "policies", "policy_id", "version"}
+_COMPOSITION_EXTRA_KEYS = {
+    "all_of": set(),
+    "any_of": {"require_minimum"},
+    "first_match": {"default_decision"},
+    "not": set(),
+}
+_TYPE_EXTRA_KEYS = {
+    "pci_request": {"max_evidence_age_seconds"},
+    "ccpa_request": {"max_evidence_age_seconds"},
+    "soc2_request": {"max_evidence_age_seconds"},
+    "gdpr_request": {"max_evidence_age_seconds"},
+    "hipaa_request": {"max_evidence_age_seconds"},
+    "published_tools": {"max_evidence_age_seconds"},
+    "strict_change": {"max_evidence_age_seconds"},
+    "zero_trust": {"max_evidence_age_seconds"},
+    "ferpa_request": {"max_evidence_age_seconds"},
+}
+
 
 # ── Helpers ───────────────────────────────────────────────────────
 
@@ -1013,6 +1033,90 @@ def _parse_decision(value: str) -> PolicyDecision:
     return PolicyDecision(value.lower())
 
 
+def _reject_unknown_config_keys(config: dict[str, Any], *, path: str = "root") -> None:
+    """Reject ambiguous or ignored declarative policy fields.
+
+    Declarative policy files are an authorization boundary. Silently ignoring a
+    misspelled field can turn a restrictive policy into an empty, permissive one,
+    so every node is checked against the registered schema before construction.
+    """
+    is_composite = "composition" in config or "policies" in config
+    if is_composite:
+        if "composition" not in config:
+            raise ValueError(f"{path} is missing required 'composition'")
+        if "policies" not in config:
+            raise ValueError(f"{path} is missing required 'policies'")
+
+        raw_composition = config["composition"]
+        if not isinstance(raw_composition, str):
+            raise ValueError(f"{path}.composition must be a string")
+        composition = _COMPOSITION_MAP.get(raw_composition.lower())
+        if composition is None:
+            raise ValueError(
+                f"Unknown composition: {raw_composition!r}. "
+                f"Available: {sorted(_COMPOSITION_MAP.keys())}"
+            )
+
+        allowed = _COMMON_COMPOSITION_KEYS | _COMPOSITION_EXTRA_KEYS[composition]
+        unknown = sorted(set(config) - allowed)
+        if unknown:
+            raise ValueError(f"Unknown policy field(s) at {path}: {unknown}")
+
+        children = config["policies"]
+        if not isinstance(children, list):
+            raise ValueError(f"{path}.policies must be a list")
+        if not children:
+            raise ValueError(f"{path}.policies must contain at least one child policy")
+        if composition == "not" and len(children) != 1:
+            raise ValueError("'not' composition requires exactly one child policy")
+        for index, child in enumerate(children):
+            if not isinstance(child, dict):
+                raise ValueError(f"{path}.policies[{index}] must be an object")
+            _reject_unknown_config_keys(child, path=f"{path}.policies[{index}]")
+        return
+
+    raw_type = config.get("type")
+    if not isinstance(raw_type, str) or not raw_type:
+        unknown = sorted(set(config) - _COMMON_POLICY_KEYS)
+        detail = f"; unknown fields: {unknown}" if unknown else ""
+        raise ValueError(
+            f"{path} must include a non-empty 'type' or a composition{detail}"
+        )
+    descriptor = _registry.get(raw_type)
+    if descriptor is None:
+        raise ValueError(
+            f"Unknown policy type: {raw_type!r}. Available types: {_registry.type_keys}"
+        )
+
+    allowed = (
+        _COMMON_POLICY_KEYS
+        | set(descriptor.field_specs)
+        | set(descriptor.starter_config)
+        | _TYPE_EXTRA_KEYS.get(descriptor.type_key, set())
+    )
+    unknown = sorted(set(config) - allowed)
+    if unknown:
+        raise ValueError(f"Unknown policy field(s) at {path}: {unknown}")
+
+    if descriptor.type_key == "resource_scoped":
+        raw_rules = config.get("resource_rules", {})
+        if isinstance(raw_rules, dict):
+            for resource_id, child in raw_rules.items():
+                if not isinstance(child, dict):
+                    raise ValueError(
+                        f"{path}.resource_rules[{resource_id!r}] must be an object"
+                    )
+                _reject_unknown_config_keys(
+                    child,
+                    path=f"{path}.resource_rules[{resource_id!r}]",
+                )
+        default = config.get("default")
+        if default is not None:
+            if not isinstance(default, dict):
+                raise ValueError(f"{path}.default must be an object")
+            _reject_unknown_config_keys(default, path=f"{path}.default")
+
+
 def _build_single_policy(config: dict[str, Any]) -> PolicyProvider:
     """Build a single PolicyProvider from a config dict.
 
@@ -1020,6 +1124,8 @@ def _build_single_policy(config: dict[str, Any]) -> PolicyProvider:
     ``composition`` key. Delegates to the plugin registry for
     type lookup.
     """
+    _reject_unknown_config_keys(config)
+
     # If it has a "composition" or "policies" key, it's a composite
     if "composition" in config or "policies" in config:
         return _build_composite(config)

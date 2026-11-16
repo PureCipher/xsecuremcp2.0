@@ -176,6 +176,17 @@ def _build_proxy_security_config(
     # these don't go through the policy engine in our middleware, but
     # we explicitly note the contract here.
 
+    if not observed_tools:
+        logger.error(
+            "Curator listing %s has no observed tools; refusing to mount "
+            "the proxy until introspection establishes an allowlist.",
+            listing.listing_id,
+        )
+        raise ProxyHostingError(
+            f"Listing {listing.listing_id!r} has no curator-observed tools; "
+            "re-run introspection before enabling proxy hosting."
+        )
+
     flags = _listing_enforcement_flags(listing)
 
     # The provider order below is deliberate: the capability bundle
@@ -196,27 +207,14 @@ def _build_proxy_security_config(
             )
         )
 
-    if observed_tools:
-        providers.append(
-            AllowlistPolicy(
-                allowed=observed_tools,
-                policy_id=f"curator-allowlist-{listing.listing_id}",
-            )
+    providers.append(
+        AllowlistPolicy(
+            allowed=observed_tools,
+            policy_id=f"curator-allowlist-{listing.listing_id}",
         )
+    )
 
-    if providers:
-        policy = PolicyConfig(providers=providers, fail_closed=True)
-    else:
-        # No observed tools and no capability policy — open policy +
-        # warning. Keeps the proxy usable while making the operator
-        # aware of the gap.
-        logger.warning(
-            "Curator listing %s has no observed tools recorded; the "
-            "proxy will not enforce a tool allowlist. Re-run "
-            "introspection to populate the observed surface.",
-            listing.listing_id,
-        )
-        policy = PolicyConfig(fail_closed=False)
+    policy = PolicyConfig(providers=providers, fail_closed=True)
 
     if shared_context is not None:
         from fastmcp.server.security.config import ReflexiveConfig
