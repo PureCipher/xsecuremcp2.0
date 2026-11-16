@@ -198,8 +198,9 @@ class ContextBroker:
             },
         )
 
-        # Merge agent terms with server default terms
-        all_terms = list(self.default_terms) + list(request.proposed_terms)
+        # Server defaults are mandatory and win any term-id collision with an
+        # agent proposal.
+        all_terms = self._terms_for_round(request.proposed_terms)
 
         # Evaluate terms
         accepted_terms, rejected_reasons = await self._evaluate_terms(
@@ -229,6 +230,7 @@ class ContextBroker:
 
         # All terms accepted — create contract
         contract = await self._create_contract(session, accepted_terms)
+        session.current_terms = accepted_terms
         session.contract = contract
         session.status = NegotiationStatus.ACCEPTED
 
@@ -251,6 +253,40 @@ class ContextBroker:
     ) -> ContractNegotiationResponse:
         """Continue an existing negotiation session."""
         session = self._sessions[request.session_id]
+
+        if request.agent_id != session.agent_id:
+            return ContractNegotiationResponse(
+                request_id=request.request_id,
+                session_id=session.session_id,
+                status=NegotiationStatus.REJECTED,
+                reason="Negotiation session belongs to a different agent",
+            )
+
+        # Acceptance is terminal for a negotiation session. Retrying the
+        # request is idempotent and returns the original contract instead of
+        # creating a weaker replacement contract from a new proposal.
+        if session.status == NegotiationStatus.ACCEPTED:
+            if session.contract is None:
+                return ContractNegotiationResponse(
+                    request_id=request.request_id,
+                    session_id=session.session_id,
+                    status=NegotiationStatus.REJECTED,
+                    reason="Accepted negotiation session has no contract",
+                )
+            return ContractNegotiationResponse(
+                request_id=request.request_id,
+                session_id=session.session_id,
+                status=NegotiationStatus.ACCEPTED,
+                contract=session.contract,
+            )
+
+        if session.status == NegotiationStatus.REJECTED:
+            return ContractNegotiationResponse(
+                request_id=request.request_id,
+                session_id=session.session_id,
+                status=NegotiationStatus.REJECTED,
+                reason="Negotiation session is already rejected",
+            )
 
         # Check session timeout
         elapsed = datetime.now(timezone.utc) - session.last_activity
@@ -292,9 +328,16 @@ class ContextBroker:
             data={"round": session.round_count},
         )
 
+        # Re-apply server defaults on every round and retain any required term
+        # already accepted into the session's current counter-proposal.
+        all_terms = self._terms_for_round(
+            request.proposed_terms,
+            prior_terms=session.current_terms,
+        )
+
         # Evaluate the new proposal
         accepted_terms, rejected_reasons = await self._evaluate_terms(
-            request.proposed_terms, request.context
+            all_terms, request.context
         )
 
         if rejected_reasons:
@@ -318,6 +361,7 @@ class ContextBroker:
 
         # All accepted
         contract = await self._create_contract(session, accepted_terms)
+        session.current_terms = accepted_terms
         session.contract = contract
         session.status = NegotiationStatus.ACCEPTED
 
@@ -334,6 +378,36 @@ class ContextBroker:
             status=NegotiationStatus.ACCEPTED,
             contract=contract,
         )
+
+    def _terms_for_round(
+        self,
+        proposed_terms: list[ContractTerm],
+        *,
+        prior_terms: list[ContractTerm] | None = None,
+    ) -> list[ContractTerm]:
+        """Build one round's terms with server and required terms preserved.
+
+        Terms are de-duplicated by ``term_id``. Server defaults take priority,
+        then required terms from the previous counter-proposal, then the
+        agent's current proposal. This prevents a caller from replacing or
+        dropping a mandatory term by reusing its identifier.
+        """
+        merged: list[ContractTerm] = []
+        seen: set[str] = set()
+
+        def append(term: ContractTerm) -> None:
+            if term.term_id not in seen:
+                seen.add(term.term_id)
+                merged.append(term)
+
+        for term in self.default_terms:
+            append(term)
+        for term in prior_terms or []:
+            if term.required:
+                append(term)
+        for term in proposed_terms:
+            append(term)
+        return merged
 
     async def _evaluate_terms(
         self,

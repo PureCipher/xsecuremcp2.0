@@ -150,6 +150,117 @@ class TestContextBrokerSessions:
         assert resp2.status == NegotiationStatus.ACCEPTED
 
     @pytest.mark.anyio
+    async def test_continued_session_preserves_defaults_and_required_terms(self):
+        default_term = ContractTerm(
+            term_id="server-default",
+            description="Weather only",
+            constraint={"allowed_resources": ["weather_lookup"]},
+            required=True,
+        )
+        required_agent_term = ContractTerm(
+            term_id="agent-required",
+            description="Audit receipt",
+            required=True,
+        )
+        call_count = 0
+
+        def evaluator(terms, context):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return terms, ["Continue negotiation"]
+            return terms, []
+
+        broker = ContextBroker(
+            server_id="srv",
+            default_terms=[default_term],
+            term_evaluator=evaluator,
+        )
+        first = await broker.negotiate(
+            ContractNegotiationRequest(
+                agent_id="agt",
+                proposed_terms=[required_agent_term],
+            )
+        )
+        assert first.status == NegotiationStatus.COUNTER
+
+        second = await broker.negotiate(
+            ContractNegotiationRequest(
+                session_id=first.session_id,
+                agent_id="agt",
+                proposed_terms=[],
+            )
+        )
+        assert second.status == NegotiationStatus.ACCEPTED
+        assert second.contract is not None
+        assert [term.term_id for term in second.contract.terms] == [
+            "server-default",
+            "agent-required",
+        ]
+
+    @pytest.mark.anyio
+    async def test_accepted_session_retry_returns_original_contract(self):
+        default_term = ContractTerm(
+            term_id="server-default",
+            required=True,
+            constraint={"allowed_resources": ["weather_lookup"]},
+        )
+        broker = ContextBroker(server_id="srv", default_terms=[default_term])
+        first = await broker.negotiate(
+            ContractNegotiationRequest(agent_id="agt", proposed_terms=[])
+        )
+        assert first.contract is not None
+
+        second = await broker.negotiate(
+            ContractNegotiationRequest(
+                session_id=first.session_id,
+                agent_id="agt",
+                proposed_terms=[],
+            )
+        )
+        assert second.status == NegotiationStatus.ACCEPTED
+        assert second.contract is first.contract
+        assert [term.term_id for term in second.contract.terms] == ["server-default"]
+        assert broker.active_contract_count == 1
+
+    @pytest.mark.anyio
+    async def test_agent_cannot_continue_another_agents_session(self):
+        broker = ContextBroker(server_id="srv")
+        first = await broker.negotiate(
+            ContractNegotiationRequest(agent_id="alice", proposed_terms=[])
+        )
+        response = await broker.negotiate(
+            ContractNegotiationRequest(
+                session_id=first.session_id,
+                agent_id="mallory",
+                proposed_terms=[],
+            )
+        )
+        assert response.status == NegotiationStatus.REJECTED
+        assert "different agent" in response.reason
+
+    @pytest.mark.anyio
+    async def test_server_default_wins_term_id_collision(self):
+        default_term = ContractTerm(
+            term_id="server-default",
+            required=True,
+            constraint={"allowed_resources": ["weather_lookup"]},
+        )
+        replacement = ContractTerm(
+            term_id="server-default",
+            constraint={"allowed_resources": ["read_inbox"]},
+        )
+        broker = ContextBroker(server_id="srv", default_terms=[default_term])
+        response = await broker.negotiate(
+            ContractNegotiationRequest(
+                agent_id="agt",
+                proposed_terms=[replacement],
+            )
+        )
+        assert response.contract is not None
+        assert response.contract.terms == [default_term]
+
+    @pytest.mark.anyio
     async def test_max_rounds_exceeded(self):
         """Session rejected after max rounds."""
 
