@@ -204,6 +204,16 @@ def decide(registry, listing_id, candidate_id, action, actor, reason):
                 )
             if fingerprint(record["snapshot"]) != record["snapshot_digest"]:
                 raise ValueError("Candidate integrity check failed")
+            from purecipher.publisher_signing import validate_stored_publisher_identity
+
+            identity_valid, identity_reason = validate_stored_publisher_identity(
+                registry,
+                author=str(record["snapshot"].get("author") or ""),
+                manifest=record["snapshot"].get("manifest"),
+                metadata=record["snapshot"].get("metadata"),
+            )
+            if not identity_valid:
+                raise ValueError(identity_reason)
             old = copy.deepcopy(before)
             for key in ("release_records", "publisher_setup"):
                 old.pop(key, None)

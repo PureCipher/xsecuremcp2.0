@@ -233,6 +233,12 @@ def mount_workspace(registry, prefix):
     from purecipher.publisher_drafts import mount_publisher_drafts
 
     mount_publisher_drafts(registry, prefix)
+    from purecipher.publisher_identity import mount_publisher_identity
+
+    mount_publisher_identity(registry, prefix)
+    from purecipher.publisher_signing import mount_publisher_signing
+
+    mount_publisher_signing(registry, prefix)
     from purecipher.publisher_profile import mount_publisher_profile
 
     mount_publisher_profile(registry, prefix)

@@ -93,6 +93,18 @@ from purecipher.openapi_store import (
 )
 from purecipher.policy_routes import mount_registry_policy_routes
 from purecipher.product_connections import mount_product_connections
+from purecipher.publisher_identity import (
+    verified_publisher_identities,
+    verify_domain_proof,
+)
+from purecipher.publisher_signing import (
+    PublisherAuthorVerification,
+    PublisherManifestSignature,
+    parse_publisher_manifest_signature,
+    public_signing_bindings,
+    validate_stored_publisher_identity,
+    verify_publisher_author_signature,
+)
 from purecipher.publishers import (
     get_public_publisher_profile,
     list_public_publishers,
@@ -217,6 +229,7 @@ class RegistryPreflightResult:
     report: Any
     attestation: Any
     manual_review: ManualReviewAssessment
+    publisher_identity: PublisherAuthorVerification
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize the preflight result for HTTP responses."""
@@ -233,6 +246,7 @@ class RegistryPreflightResult:
             "manual_review_required": self.manual_review.required,
             "manual_review_risk": self.manual_review.risk.value,
             "manual_review": self.manual_review.to_dict(),
+            "publisher_identity": self.publisher_identity.to_dict(),
             "manifest_digest": self.manifest_digest,
             "install_ready": self.install_ready,
             "install_recipes": list(self.install_recipes),
@@ -729,6 +743,9 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         if schema_managed_by_migrations:
             migrate_registry_database(persistence_path)
         self._workspace = WorkspaceStore(persistence_path)
+        # External identity proof is kept behind an injectable verifier so
+        # tests and private deployments can provide a controlled resolver.
+        self._publisher_domain_verifier = verify_domain_proof
         self._notification_feed = RegistryNotificationFeed(
             persistence_path,
             ensure_schema=not schema_managed_by_migrations,
@@ -4018,6 +4035,20 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             and account.get("active") is True
         }
 
+    def _publisher_identity_details(self) -> dict[str, dict[str, Any]]:
+        """Return registry-derived public domain and signing-key bindings."""
+
+        details = verified_publisher_identities(
+            self._workspace.list_kind("publisher-domain-identity")
+        )
+        signing = public_signing_bindings(
+            self._workspace.list_kind("publisher-signing-key"),
+            details,
+        )
+        for username, binding in signing.items():
+            details.setdefault(username, {}).update(binding)
+        return details
+
     def list_publishers(self, *, limit: int = 200) -> dict[str, Any]:
         """Return registered publishers with published-listing metrics."""
 
@@ -4030,6 +4061,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 item["owner"]: item
                 for item in self._workspace.list_kind("publisher-profile")
             },
+            publisher_identities=self._publisher_identity_details(),
             limit=limit,
         )
         return {
@@ -4051,6 +4083,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 item["owner"]: item
                 for item in self._workspace.list_kind("publisher-profile")
             },
+            publisher_identities=self._publisher_identity_details(),
         )
         if profile is None:
             return {
@@ -5929,6 +5962,19 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             action is ModerationAction.APPROVE
             and listing is not None
             and listing.status is PublishStatus.PENDING_REVIEW
+        ):
+            identity_valid, identity_reason = validate_stored_publisher_identity(
+                self,
+                author=listing.author,
+                manifest=listing.manifest,
+                metadata=listing.metadata,
+            )
+            if not identity_valid:
+                return {"error": identity_reason, "status": 400}
+        if (
+            action is ModerationAction.APPROVE
+            and listing is not None
+            and listing.status is PublishStatus.PENDING_REVIEW
             and isinstance(existing_review, dict)
             and listing.attestation is not None
             and listing.attestation.assurance_tier is not AssuranceTier.MANUAL_REVIEWED
@@ -6096,6 +6142,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         changelog: str = "",
         requested_level: CertificationLevel | None = None,
         publisher_test_evidence: Sequence[CertificationTestEvidence] = (),
+        publisher_signature: PublisherManifestSignature | None = None,
         manual_review_requested: bool = False,
         attestation_kind: Any = None,
         upstream_ref: Any = None,
@@ -6126,6 +6173,11 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         if upstream_ref is not None and not isinstance(upstream_ref, UpstreamRef):
             raise TypeError("upstream_ref must be an UpstreamRef")
 
+        # Registry-derived identity evidence always replaces publisher metadata.
+        # A manifest or request body cannot self-assert author verification.
+        metadata = dict(metadata or {})
+        metadata.pop("publisher_identity", None)
+
         # Curator-attested listings cap the certification tier at BASIC.
         # The registry observed the protocol surface and signed the
         # attestation, but it did NOT review the upstream's source —
@@ -6148,6 +6200,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             metadata=metadata,
             requested_level=effective_requested_level,
             publisher_test_evidence=publisher_test_evidence,
+            publisher_signature=publisher_signature,
             attestation_kind=kind,
             manual_review_requested=manual_review_requested,
         )
@@ -6160,9 +6213,12 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 manifest_digest=preflight.manifest_digest,
             )
 
+        if preflight.publisher_identity.verified:
+            metadata["publisher_identity"] = preflight.publisher_identity.to_dict()
+
         from purecipher.source_traceability import validate_source
 
-        if metadata is not None and "source_evidence" in metadata:
+        if "source_evidence" in metadata:
             metadata = {
                 **metadata,
                 "source_evidence": validate_source(metadata["source_evidence"]),
@@ -6665,6 +6721,9 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                 if raw_attestation_kind == "author"
                 else AttestationKind.CURATOR
             ),
+            publisher_signature=parse_publisher_manifest_signature(
+                body.get("publisher_signature")
+            ),
             upstream_ref=preview.upstream_ref,
             curator_id=curator_id,
             hosting_mode=hosting_mode,
@@ -6730,6 +6789,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         metadata: dict[str, Any] | None = None,
         requested_level: CertificationLevel | None = None,
         publisher_test_evidence: Sequence[CertificationTestEvidence] = (),
+        publisher_signature: PublisherManifestSignature | None = None,
         attestation_kind: AttestationKind = AttestationKind.AUTHOR,
         manual_review_requested: bool = False,
     ) -> RegistryPreflightResult:
@@ -6757,7 +6817,22 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             score_threshold_percent=self._manual_review_score_threshold,
             exception_requested=manual_review_requested,
         )
+        publisher_identity = (
+            verify_publisher_author_signature(self, manifest, publisher_signature)
+            if attestation_kind is AttestationKind.AUTHOR
+            else PublisherAuthorVerification(
+                required=False,
+                signature_supplied=publisher_signature is not None,
+                verified=False,
+                status="not_applicable",
+                manifest_digest=result.manifest_digest,
+            )
+        )
 
+        resolved_metadata = dict(metadata or {})
+        resolved_metadata.pop("publisher_identity", None)
+        if publisher_identity.verified:
+            resolved_metadata["publisher_identity"] = publisher_identity.to_dict()
         preview_listing = ToolListing(
             tool_name=manifest.tool_name,
             display_name=display_name or manifest.tool_name,
@@ -6768,7 +6843,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             manifest=manifest,
             attestation=result.attestation if result.is_certified else None,
             metadata={
-                **(metadata or {}),
+                **resolved_metadata,
                 "issuer_id": self._issuer_id,
                 "verified_registry": "purecipher",
                 "manual_review": review_assessment.to_dict(),
@@ -6794,6 +6869,8 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             summary = (
                 "Certification failed. Resolve validation blockers before publishing."
             )
+        elif not publisher_identity.satisfied:
+            summary = publisher_identity.message
         elif finding_count:
             suffix = "s" if finding_count != 1 else ""
             summary = (
@@ -6812,7 +6889,8 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
         return RegistryPreflightResult(
             ready_for_publish=result.is_certified
             and meets_minimum
-            and not result.report.has_errors,
+            and not result.report.has_errors
+            and publisher_identity.satisfied,
             summary=summary,
             requested_level=(requested_level or self.minimum_certification).value,
             effective_certification_level=result.certification_level.value,
@@ -6831,6 +6909,7 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
             report=result.report,
             attestation=result.attestation,
             manual_review=review_assessment,
+            publisher_identity=publisher_identity,
         )
 
     def verify_tool(
@@ -9956,6 +10035,9 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     publisher_test_evidence=_parse_publisher_test_evidence(
                         body.get("publisher_test_evidence")
                     ),
+                    publisher_signature=parse_publisher_manifest_signature(
+                        body.get("publisher_signature")
+                    ),
                     manual_review_requested=_coerce_request_bool(
                         body.get("manual_review_requested"),
                         "manual_review_requested",
@@ -10002,6 +10084,9 @@ class PureCipherRegistry(SecureMCP[LifespanResultT], Generic[LifespanResultT]):
                     requested_level=_coerce_level(body.get("requested_level")),
                     publisher_test_evidence=_parse_publisher_test_evidence(
                         body.get("publisher_test_evidence")
+                    ),
+                    publisher_signature=parse_publisher_manifest_signature(
+                        body.get("publisher_signature")
                     ),
                     manual_review_requested=_coerce_request_bool(
                         body.get("manual_review_requested"),
